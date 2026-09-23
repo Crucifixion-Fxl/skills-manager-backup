@@ -1,0 +1,106 @@
+# ninedata-datasource.yaml.tmpl —— Crossplane DataSource CR
+#
+# 把 Crossplane 创建的 RDS / Aurora（或现有数据库）注册到 ninedata.addx.live，让开发者
+# WebUI 自助 SQL 查询 / schema 变更。**provider-ninedata + ProviderConfig
+# 已由运维在每集群预置**，开发者只关心写 CR。
+#
+# ⚠️ **仅海外集群可用**（US + EU 6 集群）：cn-tech-service / cn-prod / cn-dev
+# 还没 NineData CN license，**STOP** 这些集群跑 ninedata workflow。
+#
+# ⚠️ **50 slot 商业配额硬限制**：整 org 共 50 slots。提交前找运维（qlv）确认剩余。
+# 失败 create 也会留 orphan record，需要运维 DB DELETE 清。
+#
+# 必填槽位：
+#   {{app}}             kebab-case
+#   {{env_keyword}}     如 staging-us / prod-us / prod-eu
+#   {{env}}             staging | prod（CR 命名 + envId 解析）
+#   {{region_zh}}       NineData WebUI 显示名前缀：`美国` / `欧洲`
+#                       US 集群（aws-002/302/769 us-tech-service / us-prod / us-data）→ 美国
+#                       EU 集群（aws-010/740/769 eu-tech-service / eu-prod / eu-data）→ 欧洲
+#   {{datasource_type}} MySQL | PostgreSQL | Redis
+#   {{namespace}}       app 部署 namespace（hostFromSecretRef 等 4 个 Secret ref 都在此 ns）
+#   {{db_conn_secret}}  DataSource-ready K8s Secret 名，必须含 host / port /
+#                       username / password。RDS 原始 Secret 满足时可直接用
+#                       <app>-rds-conn；Aurora 通常先用
+#                       ninedata-conn-external-secret.yaml.tmpl 派生 <app>-ninedata-conn。
+#   {{management_policies_block}} prod 时为完整、缩进两格的 managementPolicies 块；
+#                                 staging/dev 留空。
+#
+# 选填槽位：
+#   {{env_id}}          env-dev（staging/dev）| env-product（prod）
+#                       NineData system env 只有这两个，**不要**写 env-staging / env-prod
+#
+# 多个 gotchas（违反必挂）：
+#
+# 1. `cloudProfile` 3 字段必填（AWS RDS 海外固定 env=AWS / instanceType=Aurora / cloudInstanceType=URL）
+#    不写 → 默认 env=IDC → executor 当 SSH 跳板机序列化 → SQL 查询 pod 报
+#    `Connect failed! username is required`。WebUI 查询误以为 OK（不走 executor）
+#
+# 2. `cloudProfile.accessAlias: aws-overseas` 必填（海外固定）
+#    不写 → SQL 变更 + 备份任务挂，报
+#    `Init source connector failed, error message:Connect failed! username is required` +
+#    `AccessKey must not be null`（跟 #3 文案一样但调用栈不同）
+#
+# 3. `regionId: ninedata-cn-hangzhou` **不要改**（不管 RDS 实际在哪个 AWS region）
+#    这是 NineData 自建 region 表唯一一行；OpenAPI 静默改写 bug 已由 provider v0.1.6+ patch 回。
+#    改 → MinIO client 构造 NPE `AccessKey must not be null`（in io.minio.MinioClient）
+#
+# 4. **`deletionPolicy` 不要设**（v0.1.2+ CRD 不接受）。要 Orphan 语义改 `managementPolicies` 去掉 Delete
+#
+# 5. `hostFromSecretRef` 只读**本集群** Secret——DataSource CR 必须跟 RDS 在同集群
+#
+# 6. **`db_conn_secret` 必须含 `host` / `username` / `password` key**
+#    Aurora 原始 Secret 暴露 endpoint / master_username / attribute.master_password，
+#    老 RDS 也可能只有 endpoint。先用 ninedata-conn-external-secret.yaml.tmpl 从
+#    Vault DB_* 派生 DataSource-ready Secret；**不要**直接 key: endpoint（NineData
+#    不接受 host:port 复合值）。
+
+apiVersion: ninedata.crossplane.io/v1alpha1
+kind: DataSource
+metadata:
+  name: {{app}}-{{env_keyword}}-db
+spec:
+{{management_policies_block}}
+
+  forProvider:
+    datasourceType: {{datasource_type}}
+    name: {{region_zh}}-{{env}}-{{app}}-实例     # WebUI 显示名，强制中文格式
+
+    hostFromSecretRef:
+      name: {{db_conn_secret}}
+      namespace: {{namespace}}
+      key: host                                   # **不是** endpoint（host:port 复合不接受）
+    portFromSecretRef:
+      name: {{db_conn_secret}}
+      namespace: {{namespace}}
+      key: port
+    usernameFromSecretRef:
+      name: {{db_conn_secret}}
+      namespace: {{namespace}}
+      key: username
+    passwordSecretRef:
+      name: {{db_conn_secret}}
+      namespace: {{namespace}}
+      key: password
+
+    envId: {{env_id}}                             # env-dev | env-product，**只此两值**
+    regionId: ninedata-cn-hangzhou                # 唯一合法值，不要改
+    networkType: Public                           # 运维侧已配 NineData → RDS 网络路径
+
+    cloudProfile:                                  # AWS RDS 海外固定下面 4 字段
+      env: AWS
+      instanceType: Aurora                         # AWS RDS 全部用 Aurora（MySQL/PG/Aurora 都通）
+      cloudInstanceType: URL                       # host 是 DNS endpoint
+      accessAlias: aws-overseas                    # 海外固定；CN 暂无 alias
+
+  providerConfigRef:
+    name: ninedata-overseas
+    kind: ClusterProviderConfig
+
+# 部署后：
+#   1. kubectl get datasource <name>，等 Ready=True + SYNCED=True
+#   2. 看 annotation crossplane.io/external-name 得 NineData ds-xxxxxx ID
+#   3. 登 ninedata.addx.live → 数据源管理 → 应看到 "<region_zh>-<env>-<app>-实例"
+#   4. 开发者按需在 NineData WebUI 申请查询 / DDL 权限
+#
+# 任何失败模式 → troubleshooting/ninedata-datasource-issues.md

@@ -1,0 +1,11 @@
+{
+  "endpoint": "https://your-ninedata-domain.example.com",
+  "accessKeyId": "replace-with-access-key-id",
+  "accessKeySecret": "replace-with-access-key-secret",
+  "defaultDsId": "replace-with-default-datasource-id",
+  "defaultDbName": "replace-with-default-database-name",
+  "defaultSchemaName": "replace-with-default-schema-name",
+  "source": "NINEDATA_SKILL",
+  "defaultPageSize": 50,
+  "defaultLanguage": "enus"
+}

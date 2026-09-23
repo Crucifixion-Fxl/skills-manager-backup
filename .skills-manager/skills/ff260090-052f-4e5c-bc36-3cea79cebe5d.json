@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "ff260090-052f-4e5c-bc36-3cea79cebe5d",
+  "path": "dagster",
+  "path_key": "dagster",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/dagster",
+    "branch": null
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "skill": "customer-care",
+  "description": "真实业务场景 Prompt，覆盖 Skill 文档的三条核心价值：删除约束、排障流程、发布流程。评估方式：对每个 prompt 以 with-skill vs without-skill 两种上下文分别运行，对比关键点清单是否命中。",
+  "base_url": "https://customer-care-admin-staging.addx.live",
+  "test_cases": [
+    {
+      "id": "delete_fact_with_refs",
+      "prompt": "帮我把 fact `bind_fail_password_err_cnt` 删掉。",
+      "must_hit": [
+        "先扫描 /api/recipes 的 conditionJson 是否含 'facts.bind_fail_password_err_cnt'",
+        "也要扫 /api/scenes 的 entryEventWhere",
+        "若存在引用 → 不执行 DELETE，先列出引用点让用户处理",
+        "若确认无引用 → DELETE /api/facts/{id}"
+      ],
+      "must_not": [
+        "直接调 DELETE 然后被 409 打回",
+        "假设无引用就删"
+      ]
+    },
+    {
+      "id": "diagnose_popup_missing",
+      "prompt": "App 上 `device_bind_fail` 场景的弹窗这两天一直不触发，帮我排查原因。",
+      "must_hit": [
+        "GET /api/rules/bundle?env=prod 查当前 S3 生效规则里是否有这个 scene + recipes",
+        "GET /api/scenes 看 Admin DB 的 entryEvent 是否与线上一致；关注 changeStatus 是否有未发布改动",
+        "检查 GrowthBook feature `scene.device_bind_fail` 的 featureEnabled 状态",
+        "给出排查优先级：rules → feature 开关 → fatigue → SDK 缓存"
+      ],
+      "must_not": [
+        "让用户去看 App 日志就结束",
+        "建议直接改数据库"
+      ]
+    },
+    {
+      "id": "publish_to_prod",
+      "prompt": "我在 Admin 上改了 `device_bind_fail` 的 recipe，想发到 prod。怎么做？",
+      "must_hit": [
+        "POST /api/publish-orders/preview 预览组装结果 + diff",
+        "用 POST /api/dryrun/simulate（Mode A）跑关键事件序列本地验证",
+        "POST /api/publish-orders 会自动发到 staging（状态 staging_ok）",
+        "staging 环境业务侧验证",
+        "POST /api/publish-orders/{id}/approve-prod → 触发飞书审批（若 FEISHU_APPROVAL_CODE 配置）",
+        "不要绕过审批直接写 S3"
+      ],
+      "must_not": [
+        "建议用 Mode B 批量跑 5 万条事件（同步接口会阻塞）",
+        "让用户手动改 rules_package 表"
+      ]
+    }
+  ]
+}

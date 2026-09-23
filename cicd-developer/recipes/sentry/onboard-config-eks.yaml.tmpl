@@ -1,0 +1,53 @@
+# sentry-onboard-config-eks.yaml.tmpl
+#
+# Sentry 自助接入的 ConfigMap —— **EKS 集群专用**（所有 EKS 集群通用）。
+# 新接入按 references/data/sentry-instances.yaml 选择本区域 prod Sentry。
+# staging 使用同应用 PROJECT_SLUG，以 SDK environment 区分；backend/admin 用区域 relay DSN_HOST，
+# 移动端/浏览器须验证品牌公网 host；应用 ENV / Vault 路径仍为 staging。
+# TKE cn-main 用 onboard-config-tke.yaml.tmpl 不走本模板。
+#
+# sentry-onboard Job 读它拿到 project 元数据 + Vault 配置。
+# 是 sentry 自助 4 件套之一（其余 3 个：SA、Job、ExternalSecret）。
+#
+# 必填槽位：
+#   {{app}}              Vault 路径中的 app 段；默认也是 Sentry project slug
+#   {{platform}}         Sentry platform slug（node / java-spring-boot / python-django / go / ...）
+#   {{instance}}         INSTANCE key：us-prod / eu-prod / cn-prod（旧 staging key 仅作历史排障）
+#   {{team}}             Sentry 内真实存在的 team slug；必须按目标 org 查询确认，不能默认 `sentry`
+#   {{sentry_app_type}}  backend / admin / mobile-app / web-frontend
+#   {{env}}              dev | staging | pre | prod（Vault 路径 env 段）
+#   {{vault_addr}}       目标集群对应 Vault URL，必须是完整 URL（含 https://）
+#   {{vault_k8s_mount}}  Vault JWT auth mount 名（如 jwt-eks-tech-service）
+#
+# 选填槽位：
+#   {{project_slug}}     Sentry project slug；留空/省略时默认 app，不能用它替换 APP
+#   {{dsn_host}}         已验证的 ingest hostname，不含 scheme/port/path；C 端 prod 品牌 relay 优先
+#                        两字段都需已核验支持的不可变镜像；旧镜像会静默忽略
+#   {{brand}}            mobile-app / web-frontend + ENV=prod 时**必填**
+#                        值：kiwibit / vicoo / vicohome / safemo
+#
+# ⭐ VAULT_PATH_SCHEMA 强制 `platform`（新接入）—— Vault 写到
+# `secret/{env}/sentry/application/{app}/project`，跟 ExternalSecret 必须对齐。
+# 老应用维持 legacy（写 `secret/{env}/app/<app>/sentry-dsn`）—— 本模板不覆盖。
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{app}}-sentry-onboard-config
+data:
+  APP: {{app}}
+  # PROJECT_SLUG: "{{project_slug}}"  # 需显式项目路由且镜像支持时启用
+  # DSN_HOST: "{{dsn_host}}"          # 仅需显式 ingest host 且镜像支持时启用
+  PLATFORM: {{platform}}
+  INSTANCE: {{instance}}
+  TEAM: {{team}}
+  APP_TYPE: {{sentry_app_type}}
+  ENV: {{env}}
+  # BRAND: {{brand}}                     # 仅 mobile-app / web-frontend + ENV=prod 必填，否则去掉这行
+
+  VAULT_PATH_SCHEMA: platform            # 强制（新接入 platform；老应用 legacy 才省略此字段）
+
+  VAULT_ADDR: "{{vault_addr}}"
+  VAULT_K8S_ROLE: "sentry-onboard"
+  VAULT_K8S_MOUNT: "{{vault_k8s_mount}}"
+  VAULT_K8S_TOKEN_PATH: "/var/run/secrets/vault/token"

@@ -1,0 +1,24 @@
+# TechDocs（MkDocs）—— 仓根模板，从 service-catalog-onboarding skill scripts/ 抽出
+# 用法：cp $SKILL_DIR/scripts/mkdocs.yml.template <repo>/mkdocs.yml，然后改 site_name
+# 不写显式 nav —— MkDocs 从 docs/ 目录结构自动生成（URL 来自文件路径，techdocs-entity-path 引用的就是这个）
+# 显式 nav 只在确实需要改顺序/标签时塞少数条目；不要全文件重排（每加新 doc 又漏更新）
+site_name: "<改成 repo 的中文标题>"
+docs_dir: docs
+
+exclude_docs: |
+  *.yaml
+  *.yml
+  *.json
+
+plugins:
+  - techdocs-core
+
+markdown_extensions:
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+hooks:
+  - mermaid_hook.py

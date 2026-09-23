@@ -1,0 +1,4 @@
+interface:
+  display_name: "User Research Monitor"
+  short_description: "Monitor survey response quality and report readiness"
+  default_prompt: "Use $user-research-monitor to assess survey responses and report readiness."

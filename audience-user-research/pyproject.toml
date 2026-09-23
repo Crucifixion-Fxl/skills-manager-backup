@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "user-research-skill"
+version = "0.2.0"
+description = "Personal Agent Skill and fixed-operation Audience API client"
+requires-python = ">=3.9"
+dependencies = []
+
+[project.scripts]
+user-research-api = "user_research.cli:main"
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "ruff==0.11.13"]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.package-data]
+user_research = ["contracts/*.json"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]

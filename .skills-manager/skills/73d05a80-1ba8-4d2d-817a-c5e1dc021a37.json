@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "73d05a80-1ba8-4d2d-817a-c5e1dc021a37",
+  "path": "story-craftsman",
+  "path_key": "story-craftsman",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/story-craftsman",
+    "branch": null
+  }
+}

@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+# Verify a PVC-backed CI cache root is mounted and writable.
+#
+# Slots:
+#   {{env_var_name}}     environment variable containing the cache root path
+#   {{friendly_name}}    human-readable cache name for log output
+
+set -euo pipefail
+
+env_var_name="{{env_var_name}}"
+cache_root="${!env_var_name:-}"
+
+if [ -z "${cache_root}" ]; then
+    echo "ERROR: ${env_var_name} is not set." >&2
+    echo "       Configure it in GitLab CI/CD Variables." >&2
+    exit 1
+fi
+
+if ! mkdir -p "${cache_root}"; then
+    echo "ERROR: failed to create ${cache_root}" >&2
+    exit 1
+fi
+
+if [ "${CI_CACHE_SKIP_MOUNT_CHECK:-0}" = "1" ]; then
+    if [ "${CI:-}" = "true" ] || [ "${GITLAB_CI:-}" = "true" ]; then
+        echo "ERROR: CI_CACHE_SKIP_MOUNT_CHECK=1 must not be set in CI." >&2
+        exit 1
+    fi
+    echo "WARN: skipping mount-point verification for ${cache_root}" >&2
+else
+    if ! command -v findmnt >/dev/null 2>&1; then
+        echo "ERROR: findmnt not found; install util-linux in the CI image." >&2
+        exit 1
+    fi
+
+    mount_info="$(findmnt -T "${cache_root}" -no TARGET,FSTYPE 2>/dev/null || true)"
+    if [ -z "${mount_info}" ]; then
+        echo "ERROR: findmnt could not resolve a mount point for ${cache_root}." >&2
+        exit 1
+    fi
+
+    mount_target="$(echo "${mount_info}" | awk '{print $1}')"
+    mount_fstype="$(echo "${mount_info}" | awk '{print $2}')"
+
+    if [ "${mount_target}" = "/" ]; then
+        echo "ERROR: ${cache_root} resolves to rootfs ('/'); PVC is not mounted." >&2
+        exit 1
+    fi
+
+    case "${mount_fstype}" in
+        overlay|overlay2|tmpfs)
+            echo "ERROR: ${cache_root} is on temporary filesystem ${mount_fstype}; PVC is missing." >&2
+            exit 1
+            ;;
+    esac
+
+    echo "PVC mount verified: target=${mount_target} fstype=${mount_fstype}"
+fi
+
+if ! mkdir -p "${cache_root}/.locks"; then
+    echo "ERROR: failed to create ${cache_root}/.locks" >&2
+    exit 1
+fi
+
+probe_file=""
+if ! probe_file="$(mktemp -p "${cache_root}" .write_probe.XXXXXX 2>/dev/null)"; then
+    echo "ERROR: ${cache_root} is not writable by the job user." >&2
+    exit 1
+fi
+rm -f "${probe_file}"
+
+echo "{{friendly_name}} cache root: ${cache_root}"

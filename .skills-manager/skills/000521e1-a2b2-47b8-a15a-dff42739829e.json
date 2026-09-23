@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "000521e1-a2b2-47b8-a15a-dff42739829e",
+  "path": "zendesk-helpcenter",
+  "path_key": "zendesk-helpcenter",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/zendesk-helpcenter",
+    "branch": null
+  }
+}

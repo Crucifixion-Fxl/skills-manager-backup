@@ -1,0 +1,208 @@
+{
+  "contract_revision": "audience-project-v3",
+  "contract_state": "published_operations",
+  "operations": [
+    {
+      "name": "list_project_audience_assets",
+      "method": "GET",
+      "path": "/api/platform/v3/projects/{project_id}/audience-sync/audience-assets",
+      "path_parameters": [
+        "project_id"
+      ],
+      "query_parameters": [
+        "query",
+        "limit",
+        "cursor"
+      ],
+      "required_query_parameters": [],
+      "required_body": [],
+      "optional_body": []
+    },
+    {
+      "name": "list_project_syncs",
+      "method": "GET",
+      "path": "/api/platform/v3/projects/{project_id}/audience-sync/syncs",
+      "path_parameters": [
+        "project_id"
+      ],
+      "query_parameters": [
+        "limit",
+        "cursor",
+        "status"
+      ],
+      "required_query_parameters": [],
+      "required_body": [],
+      "optional_body": []
+    },
+    {
+      "name": "get_project_sync",
+      "method": "GET",
+      "path": "/api/platform/v3/projects/{project_id}/audience-sync/syncs/{sync_request_id}",
+      "path_parameters": [
+        "project_id",
+        "sync_request_id"
+      ],
+      "query_parameters": [],
+      "required_query_parameters": [],
+      "required_body": [],
+      "optional_body": []
+    },
+    {
+      "name": "get_project_sync_capabilities",
+      "method": "GET",
+      "path": "/api/platform/v3/projects/{project_id}/audience-sync/capabilities",
+      "path_parameters": [
+        "project_id"
+      ],
+      "query_parameters": [],
+      "required_query_parameters": [],
+      "required_body": [],
+      "optional_body": []
+    },
+    {
+      "name": "get_query_capabilities",
+      "method": "GET",
+      "path": "/api/platform/v3/projects/{project_id}/audience-sync/query-capabilities",
+      "path_parameters": [
+        "project_id"
+      ],
+      "query_parameters": [],
+      "required_query_parameters": [],
+      "required_body": [],
+      "optional_body": []
+    },
+    {
+      "name": "validate_audience_query",
+      "method": "POST",
+      "path": "/api/platform/v3/projects/{project_id}/audience-sync/queries/validate",
+      "path_parameters": [
+        "project_id"
+      ],
+      "query_parameters": [],
+      "required_query_parameters": [],
+      "required_body": [
+        "criteria"
+      ],
+      "optional_body": []
+    },
+    {
+      "name": "create_audience_query",
+      "method": "POST",
+      "path": "/api/platform/v3/projects/{project_id}/audience-sync/queries",
+      "path_parameters": [
+        "project_id"
+      ],
+      "query_parameters": [],
+      "required_query_parameters": [],
+      "required_body": [
+        "criteria",
+        "idempotency_key",
+        "name"
+      ],
+      "optional_body": []
+    },
+    {
+      "name": "get_audience_query",
+      "method": "GET",
+      "path": "/api/platform/v3/projects/{project_id}/audience-sync/queries/{plan_id}",
+      "path_parameters": [
+        "plan_id",
+        "project_id"
+      ],
+      "query_parameters": [],
+      "required_query_parameters": [],
+      "required_body": [],
+      "optional_body": []
+    },
+    {
+      "name": "preview_audience_query",
+      "method": "POST",
+      "path": "/api/platform/v3/projects/{project_id}/audience-sync/queries/{plan_id}/preview",
+      "path_parameters": [
+        "plan_id",
+        "project_id"
+      ],
+      "query_parameters": [],
+      "required_query_parameters": [],
+      "required_body": [],
+      "optional_body": []
+    },
+    {
+      "name": "materialize_audience_query",
+      "method": "POST",
+      "path": "/api/platform/v3/projects/{project_id}/audience-sync/queries/{plan_id}/materializations",
+      "path_parameters": [
+        "plan_id",
+        "project_id"
+      ],
+      "query_parameters": [],
+      "required_query_parameters": [],
+      "required_body": [
+        "expected_member_count",
+        "idempotency_key",
+        "preview_attestation_id"
+      ],
+      "optional_body": []
+    },
+    {
+      "name": "get_audience_query_materialization",
+      "method": "GET",
+      "path": "/api/platform/v3/projects/{project_id}/audience-sync/queries/{plan_id}/materializations/{request_id}",
+      "path_parameters": [
+        "plan_id",
+        "request_id",
+        "project_id"
+      ],
+      "query_parameters": [],
+      "required_query_parameters": [],
+      "required_body": [],
+      "optional_body": []
+    },
+    {
+      "name": "sync_audience_query",
+      "method": "POST",
+      "path": "/api/platform/v3/projects/{project_id}/audience-sync/queries/{plan_id}/syncs",
+      "path_parameters": [
+        "plan_id",
+        "project_id"
+      ],
+      "query_parameters": [],
+      "required_query_parameters": [],
+      "required_body": [
+        "confirmed",
+        "destination_id",
+        "destination_revision",
+        "expected_member_count",
+        "idempotency_key",
+        "materialization_request_id",
+        "materialization_run_id"
+      ],
+      "optional_body": []
+    },
+    {
+      "name": "get_audience_query_sync",
+      "method": "GET",
+      "path": "/api/platform/v3/projects/{project_id}/audience-sync/queries/{plan_id}/syncs/{request_id}",
+      "path_parameters": [
+        "plan_id",
+        "request_id",
+        "project_id"
+      ],
+      "query_parameters": [],
+      "required_query_parameters": [],
+      "required_body": [],
+      "optional_body": []
+    },
+    {
+      "name": "get_project_personal_key_context",
+      "method": "GET",
+      "path": "/api/platform/v3/personal-key",
+      "path_parameters": [],
+      "query_parameters": [],
+      "required_query_parameters": [],
+      "required_body": [],
+      "optional_body": []
+    }
+  ],
+  "schema_version": 2
+}

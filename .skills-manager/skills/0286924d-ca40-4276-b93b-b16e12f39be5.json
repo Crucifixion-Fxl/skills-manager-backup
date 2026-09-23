@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "0286924d-ca40-4276-b93b-b16e12f39be5",
+  "path": "engagement-h5-paywall-creation",
+  "path_key": "engagement-h5-paywall-creation",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/engagement-h5-paywall-creation",
+    "branch": null
+  }
+}

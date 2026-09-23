@@ -1,0 +1,9 @@
+clusters:
+  aws-125710977284-sg-devops:
+    rwx_storage_class: efs-sc
+    backend: EFS-CSI
+    notes: |
+      Verify archive mode, uid/gid mapping, and executable bits after extract.
+      If cached files are executed, run shell chmod repair and sample verification.
+      addx-things observed hcc_riscv32 files landing as mode 0644; chmod repair fixed execution.
+      Do not assume one fixed root cause.

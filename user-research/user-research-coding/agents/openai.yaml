@@ -1,0 +1,4 @@
+interface:
+  display_name: "User Research Coding"
+  short_description: "Code open-ended research text into auditable themes"
+  default_prompt: "Use $user-research-coding to analyze these open-ended research responses with an auditable codebook and produce a compact coding package."

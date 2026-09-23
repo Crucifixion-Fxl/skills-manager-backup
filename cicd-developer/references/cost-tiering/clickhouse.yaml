@@ -1,0 +1,54 @@
+# cost-tiering/clickhouse.yaml
+#
+# ClickHouse 单节点 StatefulSet 的成本分档。
+#
+# 消费方：workflows/new-stateful-service.md（针对 ClickHouse 类）
+#
+# Schema 同 rds.yaml。
+
+notes: |
+  当前自助模板只覆盖单节点 StatefulSet。
+  多节点需要配 Keeper，先找运维评估，不在本模板范围。
+  serviceType **永远** ClusterIP——ClickHouse native 协议无 auth 层，不可对外暴露 Ingress。
+  自 2026-06-01 起，新部署应用 **staging / tech-service**（6 集群 us/eu/cn-staging + tech-us/eu/cn）
+  不再按本表创建 app-owned ClickHouse/PVC，也不允许用 StatefulSet+PVC 自托管绕过（hard-rule #29 + #30）；
+  应通过 kind:Database Composition 在 shared ClickHouse 实例上拿到自己的 database+user，凭证落在
+  secret/{env}/clickhouse/application/{app}/<key>（platform-resource-credential，region-less），
+  app 用 ExternalSecret 读取。**shared ClickHouse 实例本身已于 2026-06-04 部署到全 6 集群**
+  （每集群一个 shared ClickHouse StatefulSet，Synced/Healthy/私有），但 **kind:Database 消费 Composition
+  尚未落地** → 未落地前 STOP，把"补可复用消费层 + 自动 per-app 凭据交付"路由到 Ops Todo
+  （不是再建实例，也不是在平台仓为当前 app 手搓凭证）。
+  legacy app-owned ClickHouse 仅保留用于迁移/平台用途。
+  **本表服务于平台自身的 shared ClickHouse StatefulSet（#30 豁免）+ 明确正当的自管 stateful 服务**，
+  不是给业务 app 顺手自建数据库。prod（无 shared-middleware）的 ClickHouse 需求走 ops 评估。
+
+immutable: []
+
+dev: &ch_min
+  replicas: 1
+  cpu_requests: 500m
+  cpu_limits: "2"
+  memory_requests: 2Gi
+  memory_limits: 4Gi
+  ephemeral_storage_requests: 1Gi
+  ephemeral_storage_limits: 2Gi
+  pvc_size: 20Gi
+  pvc_storage_class: gp3
+  backup: false
+  service_type: ClusterIP
+
+staging: *ch_min
+pre: *ch_min
+
+prod:
+  replicas: 1
+  cpu_requests: "1"
+  cpu_limits: "4"
+  memory_requests: 4Gi
+  memory_limits: 8Gi
+  ephemeral_storage_requests: 2Gi
+  ephemeral_storage_limits: 4Gi
+  pvc_size: null                      # 估算公式：qps * bytes * retention_days * 86400 * 0.1压缩比 * 5headroom
+  pvc_storage_class: gp3
+  backup: business-decision           # 可重建 -> off；不可重建 -> 定时 BACKUP TO S3 Job
+  service_type: ClusterIP

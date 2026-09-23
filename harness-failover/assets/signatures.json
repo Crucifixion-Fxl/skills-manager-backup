@@ -1,0 +1,19 @@
+{
+  "_comment": "Data-driven error signatures. To teach the skill a new error: add an entry here AND a real sample in tests/fixtures/samples.json (test_every_signature_has_a_matching_sample_fixture enforces it). Order matters: first match wins. kind: quota = harness exhausted (switch away), transient = short rate limit (ignore), auth = needs human login. reset: how to read the recovery time out of the message.",
+  "signatures": [
+    {"id": "grok-402-balance", "harness": "grok", "kind": "quota",
+     "pattern": "402 Payment Required|usage balance exhausted", "reset": "none", "verified": true},
+    {"id": "glm-1308", "harness": "claude", "provider": "glm", "kind": "quota",
+     "pattern": "\\[1308\\]", "reset": "cn-datetime", "verified": true},
+    {"id": "glm-1310", "harness": "claude", "provider": "glm", "kind": "quota",
+     "pattern": "\\[1310\\]", "reset": "cn-datetime", "verified": true},
+    {"id": "glm-1302", "harness": "claude", "provider": "glm", "kind": "transient",
+     "pattern": "\\[1302\\]", "reset": "none", "verified": false},
+    {"id": "claude-usage-limit", "harness": "claude", "kind": "quota",
+     "pattern": "hit your (weekly |5-hour |session |monthly )?limit", "reset": "resets", "verified": true},
+    {"id": "claude-auth", "harness": "claude", "kind": "auth",
+     "pattern": "authentication failed|Please re-authenticate|run claude /login", "reset": "none", "verified": true},
+    {"id": "codex-usage-limit", "harness": "codex", "kind": "quota",
+     "pattern": "hit your usage limit|usage limit reached|insufficient_quota", "reset": "none", "verified": false}
+  ]
+}

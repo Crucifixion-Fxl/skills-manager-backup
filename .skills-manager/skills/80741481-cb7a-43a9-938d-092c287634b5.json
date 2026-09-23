@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "80741481-cb7a-43a9-938d-092c287634b5",
+  "path": "dagster-python-asset-register",
+  "path_key": "dagster-python-asset-register",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/dagster-python-asset-register",
+    "branch": null
+  }
+}

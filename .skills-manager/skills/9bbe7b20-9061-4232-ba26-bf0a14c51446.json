@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "9bbe7b20-9061-4232-ba26-bf0a14c51446",
+  "path": "reply-feishu",
+  "path_key": "reply-feishu",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/lark/reply-feishu",
+    "branch": null
+  }
+}

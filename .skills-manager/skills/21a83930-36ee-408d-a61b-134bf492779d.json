@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "21a83930-36ee-408d-a61b-134bf492779d",
+  "path": "uat-story-writer",
+  "path_key": "uat-story-writer",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/uat-story-writer",
+    "branch": null
+  }
+}

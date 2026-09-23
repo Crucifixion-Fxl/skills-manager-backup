@@ -1,0 +1,34 @@
+{
+  "channel_id": "00000000-0000-4000-8000-000000000000",
+  "publisher_pubkey": "0000000000000000000000000000000000000000000000000000000000000001",
+  "since": "2026-09-14T00:00:00Z",
+  "include_confidential": false,
+  "exclude": [
+    {
+      "assignee_username": "example-excluded-user"
+    }
+  ],
+  "diff": {
+    "enabled": false,
+    "private": false
+  },
+  "agent_pubkeys": [
+    "0000000000000000000000000000000000000000000000000000000000000003"
+  ],
+  "people": {
+    "example-maintainer": "0000000000000000000000000000000000000000000000000000000000000002"
+  },
+  "gitlab": {
+    "base_url": "https://gitlab.example.test",
+    "token_env": "EXAMPLE_PROJECT_1234_GITLAB_TOKEN",
+    "bot_user_id": 9001,
+    "bot_username": "project_1234_bot_0123456789abcdef0123456789abcdef",
+    "projects": [
+      1234
+    ]
+  },
+  "buzz": {
+    "cli_path": "/opt/buzz/buzz-0.5.23/usr/bin/buzz",
+    "cli_sha256": "c8ad1f50b2e22ad09c7f291ed56c067b3283b559d4c8b12ba656577203c10cdb"
+  }
+}

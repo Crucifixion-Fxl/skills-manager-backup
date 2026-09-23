@@ -1,0 +1,4 @@
+interface:
+  display_name: "Paywall 头图"
+  short_description: "按 Issue、PRD 或描述生成头图，并交付到 CMS Staging"
+  default_prompt: "使用 $paywall-hero，根据 Issue、PRD 或我的描述制作 Paywall 头图；选定版本后上传 CMS Staging，并将操作结果同步到 Issue。"

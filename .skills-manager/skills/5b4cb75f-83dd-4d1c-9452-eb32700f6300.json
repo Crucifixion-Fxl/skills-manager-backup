@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "5b4cb75f-83dd-4d1c-9452-eb32700f6300",
+  "path": "architecture-smell-scan",
+  "path_key": "architecture-smell-scan",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/architecture-smell-scan",
+    "branch": null
+  }
+}

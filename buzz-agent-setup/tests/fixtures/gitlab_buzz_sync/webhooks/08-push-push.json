@@ -1,0 +1,50 @@
+{
+  "body": {
+    "after": "07a9dd7e9e1991a0be385aa10f368f2d4dea0957",
+    "before": "0000000000000000000000000000000000000000",
+    "checkout_sha": "07a9dd7e9e1991a0be385aa10f368f2d4dea0957",
+    "commits": [],
+    "event_name": "push",
+    "message": null,
+    "object_kind": "push",
+    "project": {
+      "avatar_url": null,
+      "ci_config_path": null,
+      "default_branch": "main",
+      "description": null,
+      "git_http_url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot.git",
+      "git_ssh_url": "ssh://[REDACTED]:2224/buzz-sync-test/pilot.git",
+      "homepage": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot",
+      "http_url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot.git",
+      "id": 2,
+      "name": "pilot",
+      "namespace": "buzz-sync-test",
+      "path_with_namespace": "buzz-sync-test/pilot",
+      "ssh_url": "ssh://[REDACTED]:2224/buzz-sync-test/pilot.git",
+      "url": "ssh://[REDACTED]:2224/buzz-sync-test/pilot.git",
+      "visibility_level": 0,
+      "web_url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot"
+    },
+    "project_id": 2,
+    "push_options": {},
+    "ref": "refs/heads/feature/1-draft-0913082019",
+    "ref_protected": false,
+    "repository": {
+      "description": null,
+      "git_http_url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot.git",
+      "git_ssh_url": "ssh://[REDACTED]:2224/buzz-sync-test/pilot.git",
+      "homepage": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot",
+      "name": "pilot",
+      "url": "ssh://[REDACTED]:2224/buzz-sync-test/pilot.git",
+      "visibility_level": 0
+    },
+    "total_commits_count": 0,
+    "user_avatar": null,
+    "user_email": null,
+    "user_id": 6,
+    "user_name": "Buzz Sync Developer (localstack)",
+    "user_username": "buzz-sync-dev"
+  },
+  "event_header": "Push Hook",
+  "received_at": "2026-09-13T08:21:18.835840+00:00"
+}

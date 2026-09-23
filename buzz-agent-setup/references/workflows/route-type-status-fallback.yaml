@@ -1,0 +1,23 @@
+# Compatibility candidate for relay 0.2.1 only. Do not enable this rule together
+# with the default Desk `gitlab_buzz_route_reply.py --scan-once` gate.
+#
+# The deployed X-Route-Secret literal is readable by Channel members who can read
+# Workflow definitions. It is only a per-Channel anti-abuse bearer for the HTTPS
+# endpoint: never put a GitLab token, Buzz key, Vault token or reused secret here.
+name: Route one issue type and status through the compatibility service
+trigger:
+  on: message_posted
+  filter: >
+    trigger_author == "<publisher-hex-pubkey>"
+    && str_starts_with(trigger_text,
+      "[gitlab-notify:v1][object:issue][type:<type>][status:<status>][state:opened][change:routing]")
+steps:
+  - id: assign
+    action: call_webhook
+    url: <route-reply-url>/v1/route-replies
+    headers:
+      X-Route-Secret: "<route-secret>"
+    body: |
+      {"channel_id":"{{trigger.channel_id}}",
+       "message_id":"{{trigger.message_id}}",
+       "route_id":"feature-ready"}

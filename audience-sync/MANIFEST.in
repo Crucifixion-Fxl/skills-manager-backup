@@ -1,0 +1,4 @@
+include SKILL.md
+recursive-include agents *.yaml
+recursive-include contracts *.json
+recursive-include references *.md

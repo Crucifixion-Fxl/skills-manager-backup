@@ -1,0 +1,70 @@
+# Crossplane S3 RolePolicy — IAM permissions for Crossplane to manage app S3 buckets.
+#
+# Required slots:
+#   {{app}}          kebab-case
+#   {{purpose}}      bucket purpose suffix, e.g. data / assets / logs
+#   {{partition}}    aws | aws-cn
+#   {{bucket_name}}  exact bucket name
+#
+# S3 management needs explicit bucket/lifecycle/encryption/public-access APIs.
+# Keep the resource scoped to the exact bucket, keep object data-plane actions
+# out of the provider identity, and deny bucket deletion even if another policy
+# is attached later.
+
+apiVersion: iam.aws.m.upbound.io/v1beta1
+kind: RolePolicy
+metadata:
+  name: crossplane-app-{{app}}-s3-{{purpose}}
+spec:
+  forProvider:
+    policy: |
+      {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Sid": "ManageBucketConfiguration",
+            "Effect": "Allow",
+            "Action": [
+              "s3:CreateBucket",
+              "s3:GetAccelerateConfiguration",
+              "s3:GetBucketAcl",
+              "s3:GetBucketCORS",
+              "s3:GetBucketLocation",
+              "s3:GetBucketLogging",
+              "s3:GetBucketNotification",
+              "s3:GetBucketObjectLockConfiguration",
+              "s3:GetBucketOwnershipControls",
+              "s3:GetBucketPolicy",
+              "s3:GetBucketPolicyStatus",
+              "s3:GetBucketPublicAccessBlock",
+              "s3:GetBucketRequestPayment",
+              "s3:GetBucketTagging",
+              "s3:GetBucketVersioning",
+              "s3:GetBucketWebsite",
+              "s3:GetEncryptionConfiguration",
+              "s3:GetLifecycleConfiguration",
+              "s3:GetReplicationConfiguration",
+              "s3:ListBucket",
+              "s3:PutBucketObjectLockConfiguration",
+              "s3:PutBucketPolicy",
+              "s3:PutBucketPublicAccessBlock",
+              "s3:PutBucketTagging",
+              "s3:PutBucketVersioning",
+              "s3:PutEncryptionConfiguration",
+              "s3:PutLifecycleConfiguration"
+            ],
+            "Resource": "arn:{{partition}}:s3:::{{bucket_name}}"
+          },
+          {
+            "Sid": "DenyBucketDeletion",
+            "Effect": "Deny",
+            "Action": "s3:DeleteBucket",
+            "Resource": "arn:{{partition}}:s3:::{{bucket_name}}"
+          }
+        ]
+      }
+    roleRef:
+      name: crossplane-app-{{app}}
+  providerConfigRef:
+    name: default
+    kind: ClusterProviderConfig

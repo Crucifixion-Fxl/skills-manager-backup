@@ -1,0 +1,154 @@
+apiVersion: migrations.addx.io/v1alpha1
+kind: LegacyTargetHandoffEvidence
+spec:
+  mode: legacy-live
+  environment: staging
+  target_branch: staging
+  enforcement_mode: {{enforcement_mode}}
+  # activation_mode: stop-source (default, source scaled to zero before the
+  # target starts) or parallel (stateless request/response services without
+  # consumer-group ownership: source stays at rollback replicas through
+  # activation; source_scale_authorization/source_zero close NOT_INVOKED and
+  # rollback source rows close NOT_APPLICABLE).
+  activation_mode: {{activation_mode}}
+  app: {{app}}
+  source:
+    context: {{source_context}}
+    cluster_fingerprint: {{source_cluster_fingerprint}}
+    namespace: {{source_namespace}}
+    controller:
+      apiVersion: {{evidence_source_controller_api_version}}
+      kind: {{evidence_source_controller_kind}}
+      name: {{app}}
+    rollback_replicas: {{evidence_source_rollback_replicas}}
+  target:
+    context: {{target_context}}
+    cluster_fingerprint: {{target_cluster_fingerprint}}
+    namespace: {{target_namespace}}
+    controller:
+      apiVersion: {{evidence_target_controller_api_version}}
+      kind: {{evidence_target_controller_kind}}
+      name: {{app}}
+    approved_replicas: {{evidence_target_approved_replicas}}
+  handoff_status: PREPARING
+  rollback_status: NOT_INVOKED
+  # CE-guarded degraded enforcement authorization. Only when
+  # enforcement_mode is ce-guarded, uncomment and fill this closed row; omit
+  # the field entirely when enforcement_mode is sre-policy. Fill all fields
+  # with the same discipline as evidence rows (stable reference, canonical UTC,
+  # bounded actor, sanitized state, status VERIFIED).
+  # ce_guarded_authorization:
+  #   evidence_ref: <stable internal GitLab MR/issue URL or immutable safe ID>
+  #   timestamp_utc: <canonical UTC timestamp>
+  #   actor: <bounded sanitized actor>
+  #   observed_state: <bounded sanitized evidence>
+  #   status: VERIFIED
+  events:
+    preparation:
+      evidence_ref: null
+      timestamp_utc: null
+      actor: null
+      observed_state: null
+      status: PENDING
+    writer_fence_authorization:
+      evidence_ref: null
+      timestamp_utc: null
+      actor: null
+      observed_state: null
+      status: PENDING
+    writer_fence_result:
+      evidence_ref: null
+      timestamp_utc: null
+      actor: null
+      observed_state: null
+      status: PENDING
+    source_scale_authorization:
+      evidence_ref: null
+      timestamp_utc: null
+      actor: null
+      observed_state: null
+      status: PENDING
+    source_zero:
+      evidence_ref: null
+      timestamp_utc: null
+      actor: null
+      observed_state: null
+      status: PENDING
+    activation_authorization:
+      evidence_ref: null
+      timestamp_utc: null
+      actor: null
+      observed_state: null
+      status: PENDING
+    activation_transition:
+      evidence_ref: null
+      timestamp_utc: null
+      actor: null
+      observed_state: null
+      status: PENDING
+    activation_result:
+      evidence_ref: null
+      timestamp_utc: null
+      actor: null
+      observed_state: null
+      status: PENDING
+    traffic_authorization:
+      evidence_ref: null
+      timestamp_utc: null
+      actor: null
+      observed_state: null
+      status: PENDING
+    traffic_result:
+      evidence_ref: null
+      timestamp_utc: null
+      actor: null
+      observed_state: null
+      status: PENDING
+    runtime_acceptance:
+      evidence_ref: null
+      timestamp_utc: null
+      actor: null
+      observed_state: null
+      status: PENDING
+    rollback_authorization:
+      evidence_ref: null
+      timestamp_utc: null
+      actor: null
+      observed_state: null
+      status: PENDING
+    rollback_traffic_isolation:
+      evidence_ref: null
+      timestamp_utc: null
+      actor: null
+      observed_state: null
+      status: PENDING
+    rollback_target_zero:
+      evidence_ref: null
+      timestamp_utc: null
+      actor: null
+      observed_state: null
+      status: PENDING
+    rollback_source_restore:
+      evidence_ref: null
+      timestamp_utc: null
+      actor: null
+      observed_state: null
+      status: PENDING
+    rollback_source_ready:
+      evidence_ref: null
+      timestamp_utc: null
+      actor: null
+      observed_state: null
+      status: PENDING
+    rollback_route_restore:
+      evidence_ref: null
+      timestamp_utc: null
+      actor: null
+      observed_state: null
+      status: PENDING
+    rollback_writer_policy:
+      evidence_ref: null
+      timestamp_utc: null
+      actor: null
+      observed_state: null
+      status: PENDING

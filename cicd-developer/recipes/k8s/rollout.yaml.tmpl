@@ -1,0 +1,102 @@
+# Argo Rollout — stateless service canonical template (Tier 1, equivalent to RollingUpdate
+# plus rollout history). Business rollback follows the image pin/verification
+# contract in references/business-image-rollback.md; UI actions alone do not
+# coordinate Argo CD and Image Updater. About 95% of services use Tier 1; do NOT pick
+# Tier 2 (ALB weighted canary + Prometheus analysis) unless ALL of these are true:
+#   - prod traffic >= 1 qps sustained (1m window has enough requests for rate())
+#   - replicas >= 3 (setWeight 20 needs that granularity)
+#   - user-facing service (external API, payment, core path)
+#   - app exports Prometheus /metrics with 5xx / latency counters
+#
+# DO NOT add a partial canary (steps: [setWeight: 0, pause: {}]) without trafficRouting +
+# AnalysisTemplate. That third pattern is broken — rollouts get stuck at CanaryPauseStep
+# forever and stable RS keeps serving the old image.
+#
+# Required slots (workflow MUST fill all of these):
+#   {{app}}            kebab-case, matches GitLab repo name
+#   {{env}}            base sentinel "__overlay__"; each overlay MUST replace it with
+#                      the env keyword (e.g. staging-us / prod-cn) for fluent-bit-base
+#                      log routing
+#   {{container_port}} integer port the container listens on
+#   {{health_path}}    HTTP path returning 200 when healthy (e.g. /health, /actuator/health)
+#
+# Optional slots (workflow MAY override defaults; pin to a slot if user explicitly requests):
+#   {{replicas}}                 default 1 (single-replica services); set 2+ for HA
+#   {{cpu_requests}}             default 100m
+#   {{cpu_limits}}               default 500m
+#   {{memory_requests}}          default 256Mi
+#   {{memory_limits}}            default 512Mi
+#   {{liveness_initial_delay}}   default 15
+#   {{readiness_initial_delay}}  default 5
+#
+# DO NOT add `nodeSelector: kubernetes.io/arch: amd64`. Default rollout supports both
+# arches; Karpenter NodePool picks amd64 or arm64 spot at scheduling time, ~25% cheaper.
+# Exception: target cluster is TKE (single-arch), workflow generates an overlay-level
+# override; the base template stays multi-arch.
+#
+# DO NOT add canary steps. If user wants Tier 2 (ALB weighted canary + Prometheus
+# AnalysisTemplate auto-judge), v2 currently does NOT ship the recipe yet — the four
+# YAML manifests (canary Rollout + canaryService + stableService + AnalysisTemplate)
+# need to be authored per-app for now. STOP and emit an Ops Todo:
+#   "Author Tier 2 canary manifests for {{app}} (4 manifests: Rollout w/ trafficRouting,
+#    canaryService, stableService, AnalysisTemplate). Tier 2 admission gate items:
+#    prod traffic >= 1 qps sustained / replicas >= 3 / user-facing service /
+#    app exports Prometheus /metrics w/ 5xx + latency counters. Missing any = STOP."
+# Until a Tier 2 recipe lands in v2, do not invent one here from memory.
+
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: {{app}}
+spec:
+  revisionHistoryLimit: 5
+  replicas: {{replicas}}
+  selector:
+    matchLabels:
+      app: {{app}}
+  strategy:
+    canary:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: {{app}}              # REQUIRED for fluent-bit-base log routing (see references/logging/README.md)
+        env: {{env}}              # base uses __overlay__; overlay patch writes the env keyword
+        # Karpenter do-not-disrupt for slow-start single-replica workloads:
+        #   set on the overlay if {{replicas}} == 1 AND startup > 30s.
+        # See cluster-autoscaler.kubernetes.io/safe-to-evict annotation in overlay.
+    spec:
+      imagePullSecrets:
+        - name: harbor-registry-secret  # Kyverno auto-syncs to every namespace
+      containers:
+        - name: {{app}}
+          # `:latest` is a placeholder; overlay's images: block + Image Updater rewrite
+          # newName/newTag at sync time. Writing `:latest` literally here makes
+          # first-sync / missing-override scenarios fail-loud at Kyverno admission
+          # (which checks the actually-rendered tag), not silently pull random latest.
+          image: {{app}}:latest
+          ports:
+            - containerPort: {{container_port}}
+          livenessProbe:
+            httpGet:
+              path: {{health_path}}
+              port: {{container_port}}
+            initialDelaySeconds: {{liveness_initial_delay}}
+            periodSeconds: 20
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: {{health_path}}
+              port: {{container_port}}
+            initialDelaySeconds: {{readiness_initial_delay}}
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: {{cpu_requests}}
+              memory: {{memory_requests}}
+            limits:
+              cpu: {{cpu_limits}}
+              memory: {{memory_limits}}
+          # envFrom + env are appended by the overlay when the workflow attaches
+          # ConfigMap / Secret refs (ExternalSecret-managed). Base stays minimal.

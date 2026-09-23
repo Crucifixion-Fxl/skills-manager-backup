@@ -1,0 +1,51 @@
+# sentry-onboard-config-tke.yaml.tmpl
+#
+# Sentry 自助接入的 ConfigMap —— **TKE cn-main 专用**。
+# 跟 onboard-config-eks.yaml.tmpl 的差异（references/sentry/README.md TKE 差异表）：
+#   - VAULT_K8S_MOUNT 固定 `jwt-tke-cn-main`（TKE 专用 JWT auth mount）
+#   - VAULT_ADDR 固定 `https://vault-cn-internal.addx.live`（TKE 集群内网直连）
+#
+# 必填槽位：
+#   {{app}}              Vault 路径中的 app 段；默认也是 Sentry project slug
+#   {{platform}}         Sentry platform slug（node / java-spring-boot / python-django / go / ...）
+#   {{team}}             Sentry 内真实存在的 team slug；必须按目标 org 查询确认，不能默认 `sentry`
+#   {{sentry_app_type}}  backend / admin / mobile-app / web-frontend
+#   {{env}}              来自 target.env，staging-cn-tke=staging，prod-cn-tke=prod
+#
+# 选填槽位：
+#   {{project_slug}}     Sentry project slug；留空/省略时默认 app，不能用它替换 APP
+#   {{dsn_host}}         已验证的 ingest hostname，不含 scheme/port/path；C 端 prod 品牌 relay 优先
+#                        两字段都需已核验支持的不可变镜像；旧镜像会静默忽略
+#   {{brand}}            mobile-app / web-frontend + ENV=prod 时**必填**
+#                        值：kiwibit / vicoo / vicohome / safemo
+#
+# 固定值（TKE cn-main 同时支持 staging/prod 应用，ENV 单独传入）：
+#   INSTANCE         cn-prod（staging 使用同应用 PROJECT_SLUG，以 SDK environment 区分）
+#   VAULT_ADDR       https://vault-cn-internal.addx.live
+#   VAULT_K8S_MOUNT  jwt-tke-cn-main
+#   VAULT_K8S_ROLE   sentry-onboard
+#   VAULT_K8S_TOKEN_PATH /var/run/secrets/vault/token
+#
+# ⭐ VAULT_PATH_SCHEMA 强制 `platform`（同 EKS 变体）。
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{app}}-sentry-onboard-config
+data:
+  APP: {{app}}
+  # PROJECT_SLUG: "{{project_slug}}"  # 需显式项目路由且镜像支持时启用
+  # DSN_HOST: "{{dsn_host}}"          # 仅需显式 ingest host 且镜像支持时启用
+  PLATFORM: {{platform}}
+  INSTANCE: cn-prod
+  TEAM: {{team}}
+  APP_TYPE: {{sentry_app_type}}
+  ENV: {{env}}
+  # BRAND: {{brand}}                     # 仅 mobile-app / web-frontend + ENV=prod 必填
+
+  VAULT_PATH_SCHEMA: platform
+
+  VAULT_ADDR: "https://vault-cn-internal.addx.live"
+  VAULT_K8S_ROLE: "sentry-onboard"
+  VAULT_K8S_MOUNT: "jwt-tke-cn-main"
+  VAULT_K8S_TOKEN_PATH: "/var/run/secrets/vault/token"

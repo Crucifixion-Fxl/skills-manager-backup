@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "3b41c4db-4ca0-402b-9094-1f184e5fd707",
+  "path": "project-positioning",
+  "path_key": "project-positioning",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/project-positioning",
+    "branch": null
+  }
+}

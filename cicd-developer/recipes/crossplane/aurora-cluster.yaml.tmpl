@@ -1,0 +1,72 @@
+# crossplane-aurora-cluster.yaml.tmpl
+#
+# Crossplane Aurora Cluster（v2 namespaced m.upbound.io）。
+#
+# Aurora 由 Cluster（控制 writer/reader endpoint + 备份 + 加密）+ 一个或多个
+# ClusterInstance（实际算节点）组成。本模板写 Cluster；ClusterInstance 用
+# crossplane-aurora-clusterinstance.yaml.tmpl。
+#
+# 必填槽位：
+#   {{app}}                 kebab-case
+#   {{env_keyword}}         如 staging-us
+#   {{namespace}}           K8s namespace（Cluster、Password Secret、connection Secret 都在这里）
+#   {{engine}}              aurora-postgresql | aurora-mysql
+#   {{engine_version}}      具体 minor；默认取 cost-tiering/aurora.yaml -> engine_contracts：
+#                           aurora-mysql "8.0.mysql_aurora.3.10.3" / aurora-postgresql "16.14"
+#   {{database_name}}       Aurora 用 databaseName（不是 RDS Instance 的 dbName）
+#   {{username}}            DB 用户名（snake_case，无 hyphen）
+#   {{backup_retention}}    从 cost-tiering/aurora.yaml
+#   {{storage_encrypted}}   从 cost-tiering/aurora.yaml（prod=true，immutable）
+#   {{deletion_protection}} 从 cost-tiering/aurora.yaml（prod=true）
+#   {{skip_final_snapshot}} 从 cost-tiering/aurora.yaml（prod=false）
+#   {{region}}              AWS region
+#   {{rds_security_group}}  跟 RDS 共用（从同集群其它 app 应用仓 overlay 的 rds-instance.yaml 或 crossplane-infra legacy RDS YAML 复制）
+#   {{management_policies}} YAML inline list；prod 为 ["Observe","Create","Update","LateInitialize"]，其余为 ["*"]
+#   {{final_snapshot_identifier_line}} prod 的完整 YAML 行；非 prod 留空
+#
+# 锁定的规则：
+#   1. metadata.annotations.crossplane.io/external-name 是 AWS DB cluster identifier。
+#      当前 v2 Cluster CRD 没有 forProvider.identifier 字段，不要写。
+#   2. m.upbound.io 没有 spec.deletionPolicy 字段——用 managementPolicies 控制
+#      prod: 去掉 "Delete" → managementPolicies: [Observe, Create, Update, LateInitialize]
+#   3. **不要** 写 manageMasterUserPassword: true（password 进 AWS Secrets Manager，
+#      PushSecret 读不到）。用 ESO Password Generator + passwordSecretRef（A1 链路）
+#   4. writeConnectionSecretToRef 只在 Cluster 上设置；当前 m.upbound.io v2
+#      只接受 name，不接受 namespace；Secret 写到 Cluster 所在 namespace。
+#   5. 不写 ec2:Describe* / kms:CreateGrant 等 IAM extras——同 RDS RolePolicy 规则
+
+apiVersion: rds.aws.m.upbound.io/v1beta1
+kind: Cluster
+metadata:
+  name: {{app}}-{{env_keyword}}-aurora
+  namespace: {{namespace}}
+  annotations:
+    crossplane.io/external-name: {{app}}-{{env_keyword}}-aurora
+spec:
+  managementPolicies: {{management_policies}}
+  forProvider:
+    engine: {{engine}}
+    engineVersion: "{{engine_version}}"
+    databaseName: {{database_name}}
+    masterUsername: {{username}}
+    masterPasswordSecretRef:
+      name: {{app}}-aurora-password    # ESO Password Generator 链生成
+      key: password
+    backupRetentionPeriod: {{backup_retention}}
+    storageEncrypted: {{storage_encrypted}}
+    deletionProtection: {{deletion_protection}}
+    skipFinalSnapshot: {{skip_final_snapshot}}
+{{final_snapshot_identifier_line}}
+    dbSubnetGroupName: crossplane-default
+    vpcSecurityGroupIds:
+      - {{rds_security_group}}
+    region: {{region}}
+    tags:
+      app: {{app}}
+      env: {{env_keyword}}
+      managed-by: crossplane
+  writeConnectionSecretToRef:
+    name: {{app}}-aurora-conn          # 含 writer + reader endpoint
+  providerConfigRef:
+    name: {{app}}
+    kind: ClusterProviderConfig

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "1f4fcdea-3e53-4986-9e79-af5eb36aaf87",
+  "path": "delivery-progress-analysis",
+  "path_key": "delivery-progress-analysis",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/delivery-progress-analysis",
+    "branch": null
+  }
+}

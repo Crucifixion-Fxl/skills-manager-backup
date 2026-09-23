@@ -1,0 +1,15 @@
+{
+  "body": {
+    "message": "403 Forbidden"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "request": {
+    "as": "bot",
+    "method": "GET",
+    "path": "projects/2/feature_flags",
+    "query": {}
+  },
+  "status": 403
+}

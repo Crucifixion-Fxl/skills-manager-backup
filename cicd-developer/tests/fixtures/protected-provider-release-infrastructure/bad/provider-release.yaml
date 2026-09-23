@@ -1,0 +1,50 @@
+schemaVersion: v1
+kind: ProtectedProviderReleaseInfrastructureCandidate
+metadata:
+  name: provider-upjet-gcp-release
+spec:
+  providerSource:
+    repository: arbitrary/provider
+    protectedRef: feature
+  runner:
+    protectedTag: shared-runner
+    dedicated: false
+    sharedRunnerReuse: allowed
+    gitops:
+      mode: direct
+      repository: DEV/k8s
+      path: cicd/runners/shared/
+      authorityEvidence: untracked
+  registry:
+    host: harbor.example.invalid
+    project: broad-project
+    repositories: [base/provider-family-gcp, arbitrary/provider]
+    robot:
+      allow: [pull, push, delete, admin]
+      deny: []
+  credentials:
+    delivery: environment
+    mountMode: docker-config-json
+    profilePath: /tmp/profile
+    usernamePath: /tmp/user
+    passwordPath: /tmp/password
+  evidenceVerifier:
+    binaryPath: /tmp/verifier
+    checksum:
+      algorithm: sha256
+      value: missing
+    trustRoot: ""
+    requiredBindings: [signature]
+  vulnerabilityPolicy:
+    maximumCritical: 1
+    maximumHigh: 1
+    exceptionAuthority: anyone
+  release:
+    immutableTagsOnly: false
+    retention: delete-old-tags
+    publish: automatic
+  rollout:
+    sync: automatic
+    prune: true
+    delete: true
+    install: automatic

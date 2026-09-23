@@ -1,0 +1,168 @@
+# suspended-one-shot-artifact-handoff-job.yaml.tmpl
+#
+# Guarded one-shot variant for an immutable task image that has no shell or
+# cannot remain alive for artifact transfer. Registration must remain
+# suspend=true / approval=pending. The operator transfers artifacts only
+# through Kubernetes API exec against the artifact-stage or artifact-relay
+# helper after re-checking Job UID, Pod owner UID, container state and digest.
+#
+# Required slots:
+#   {{one_shot_job_name}}       unique immutable Job name
+#   {{namespace}}               existing owning Application namespace
+#   {{app}}                     app label used by logging
+#   {{env_keyword}}             environment label
+#   {{sync_wave}}               registration ordering after prerequisites
+#   {{active_deadline_seconds}} finite deadline
+#   {{service_account_name}}    default unless reviewed cloud identity is required
+#   {{node_selector_block}}     complete pod-spec nodeSelector block
+#   {{run_as_user}}             one non-root UID supported by all three containers
+#   {{artifact_helper_image}}   shell/checksum helper image at an immutable digest
+#   {{artifact_stage_script_file_name}} ConfigMap-projected import/stage script
+#   {{artifact_run_image}}      shell-less task image at an immutable digest
+#   {{artifact_run_command_block}} complete command/args block
+#   {{artifact_run_env_block}}  complete env list
+#   {{artifact_relay_script_file_name}} ConfigMap-projected export/ack script
+#   {{cpu_requests}}, {{memory_requests}}, {{ephemeral_storage_requests}}
+#   {{cpu_limits}}, {{memory_limits}}, {{ephemeral_storage_limits}}
+#   {{script_config_map_name}}  app-scoped generated ConfigMap
+#   {{work_size_limit}}         bounded shared artifact volume
+#   {{temp_size_limit}}         bounded /tmp volume
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{one_shot_job_name}}
+  namespace: {{namespace}}
+  annotations:
+    argocd.argoproj.io/sync-wave: "{{sync_wave}}"
+    ops.addx.io/execution-approval: pending
+    ops.addx.io/artifact-handoff: "true"
+  labels:
+    app: {{app}}
+    app.kubernetes.io/name: {{app}}
+    app.kubernetes.io/component: one-shot-job
+spec:
+  suspend: true
+  completions: 1
+  parallelism: 1
+  backoffLimit: 0
+  activeDeadlineSeconds: {{active_deadline_seconds}}
+  template:
+    metadata:
+      labels:
+        app: {{app}}
+        env: {{env_keyword}}
+        app.kubernetes.io/name: {{app}}
+        app.kubernetes.io/component: one-shot-job
+    spec:
+      automountServiceAccountToken: false
+      serviceAccountName: {{service_account_name}}
+      restartPolicy: Never
+      terminationGracePeriodSeconds: 30
+{{node_selector_block}}
+      imagePullSecrets:
+        - name: harbor-registry-secret
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{run_as_user}}
+        runAsGroup: {{run_as_user}}
+        fsGroup: {{run_as_user}}
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: artifact-stage
+          image: {{artifact_helper_image}}
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - /opt/one-shot/{{artifact_stage_script_file_name}}
+          resources:
+            requests:
+              cpu: {{cpu_requests}}
+              memory: {{memory_requests}}
+              ephemeral-storage: {{ephemeral_storage_requests}}
+            limits:
+              cpu: {{cpu_limits}}
+              memory: {{memory_limits}}
+              ephemeral-storage: {{ephemeral_storage_limits}}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: script
+              mountPath: /opt/one-shot
+              readOnly: true
+            - name: work
+              mountPath: /work
+            - name: temp
+              mountPath: /tmp
+      containers:
+        - name: run
+          image: {{artifact_run_image}}
+          imagePullPolicy: IfNotPresent
+{{artifact_run_command_block}}
+          env:
+{{artifact_run_env_block}}
+          resources:
+            requests:
+              cpu: {{cpu_requests}}
+              memory: {{memory_requests}}
+              ephemeral-storage: {{ephemeral_storage_requests}}
+            limits:
+              cpu: {{cpu_limits}}
+              memory: {{memory_limits}}
+              ephemeral-storage: {{ephemeral_storage_limits}}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: work
+              mountPath: /work
+            - name: temp
+              mountPath: /tmp
+        - name: artifact-relay
+          image: {{artifact_helper_image}}
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - /opt/one-shot/{{artifact_relay_script_file_name}}
+          resources:
+            requests:
+              cpu: {{cpu_requests}}
+              memory: {{memory_requests}}
+              ephemeral-storage: {{ephemeral_storage_requests}}
+            limits:
+              cpu: {{cpu_limits}}
+              memory: {{memory_limits}}
+              ephemeral-storage: {{ephemeral_storage_limits}}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: script
+              mountPath: /opt/one-shot
+              readOnly: true
+            - name: work
+              mountPath: /work
+            - name: temp
+              mountPath: /tmp
+      volumes:
+        - name: script
+          configMap:
+            name: {{script_config_map_name}}
+            defaultMode: 0555
+        - name: work
+          emptyDir:
+            sizeLimit: {{work_size_limit}}
+        - name: temp
+          emptyDir:
+            sizeLimit: {{temp_size_limit}}

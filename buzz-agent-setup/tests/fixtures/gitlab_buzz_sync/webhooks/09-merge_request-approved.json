@@ -1,0 +1,171 @@
+{
+  "body": {
+    "changes": {},
+    "event_type": "merge_request",
+    "labels": [
+      {
+        "color": "#428BCA",
+        "created_at": "2026-09-13 07:40:05 UTC",
+        "description": null,
+        "group_id": null,
+        "id": 1,
+        "project_id": 2,
+        "template": false,
+        "title": "type::feature",
+        "type": "ProjectLabel",
+        "updated_at": "2026-09-13 07:40:05 UTC"
+      }
+    ],
+    "object_attributes": {
+      "action": "approved",
+      "assignee_id": null,
+      "assignee_ids": [],
+      "author_id": 6,
+      "blocking_discussions_resolved": true,
+      "created_at": "2026-09-13 08:21:15 UTC",
+      "description": "Closes #1",
+      "detailed_merge_status": "preparing",
+      "draft": false,
+      "first_contribution": true,
+      "head_pipeline_id": null,
+      "human_time_change": null,
+      "human_time_estimate": null,
+      "human_total_time_spent": null,
+      "id": 1,
+      "iid": 1,
+      "labels": [
+        {
+          "color": "#428BCA",
+          "created_at": "2026-09-13 07:40:05 UTC",
+          "description": null,
+          "group_id": null,
+          "id": 1,
+          "project_id": 2,
+          "template": false,
+          "title": "type::feature",
+          "type": "ProjectLabel",
+          "updated_at": "2026-09-13 07:40:05 UTC"
+        }
+      ],
+      "last_commit": {
+        "author": {
+          "email": "[REDACTED]",
+          "name": "Buzz Sync Developer (localstack)"
+        },
+        "id": "33a2250fbe88eda7ee825409bc1d43b7f7a5af7a",
+        "message": "fix: second recording commit 0913082019",
+        "timestamp": "2026-09-13T08:21:14+00:00",
+        "title": "fix: second recording commit 0913082019",
+        "url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot/-/commit/33a2250fbe88eda7ee825409bc1d43b7f7a5af7a"
+      },
+      "last_edited_at": null,
+      "last_edited_by_id": null,
+      "merge_commit_sha": null,
+      "merge_error": null,
+      "merge_params": {
+        "force_remove_source_branch": null
+      },
+      "merge_status": "preparing",
+      "merge_user_id": null,
+      "merge_when_pipeline_succeeds": false,
+      "milestone_id": 1,
+      "prepared_at": null,
+      "reviewer_ids": [
+        7
+      ],
+      "source": {
+        "avatar_url": null,
+        "ci_config_path": null,
+        "default_branch": "main",
+        "description": null,
+        "git_http_url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot.git",
+        "git_ssh_url": "ssh://[REDACTED]:2224/buzz-sync-test/pilot.git",
+        "homepage": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot",
+        "http_url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot.git",
+        "id": 2,
+        "name": "pilot",
+        "namespace": "buzz-sync-test",
+        "path_with_namespace": "buzz-sync-test/pilot",
+        "ssh_url": "ssh://[REDACTED]:2224/buzz-sync-test/pilot.git",
+        "url": "ssh://[REDACTED]:2224/buzz-sync-test/pilot.git",
+        "visibility_level": 0,
+        "web_url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot"
+      },
+      "source_branch": "feature/1-recording-0913082019",
+      "source_project_id": 2,
+      "state": "opened",
+      "state_id": 1,
+      "target": {
+        "avatar_url": null,
+        "ci_config_path": null,
+        "default_branch": "main",
+        "description": null,
+        "git_http_url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot.git",
+        "git_ssh_url": "ssh://[REDACTED]:2224/buzz-sync-test/pilot.git",
+        "homepage": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot",
+        "http_url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot.git",
+        "id": 2,
+        "name": "pilot",
+        "namespace": "buzz-sync-test",
+        "path_with_namespace": "buzz-sync-test/pilot",
+        "ssh_url": "ssh://[REDACTED]:2224/buzz-sync-test/pilot.git",
+        "url": "ssh://[REDACTED]:2224/buzz-sync-test/pilot.git",
+        "visibility_level": 0,
+        "web_url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot"
+      },
+      "target_branch": "main",
+      "target_project_id": 2,
+      "time_change": 0,
+      "time_estimate": 0,
+      "title": "Recording MR 0913082019 cc @buzz-sync-maintainer",
+      "total_time_spent": 0,
+      "updated_at": "2026-09-13 08:21:15 UTC",
+      "updated_by_id": null,
+      "url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot/-/merge_requests/1",
+      "work_in_progress": false
+    },
+    "object_kind": "merge_request",
+    "project": {
+      "avatar_url": null,
+      "ci_config_path": null,
+      "default_branch": "main",
+      "description": null,
+      "git_http_url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot.git",
+      "git_ssh_url": "ssh://[REDACTED]:2224/buzz-sync-test/pilot.git",
+      "homepage": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot",
+      "http_url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot.git",
+      "id": 2,
+      "name": "pilot",
+      "namespace": "buzz-sync-test",
+      "path_with_namespace": "buzz-sync-test/pilot",
+      "ssh_url": "ssh://[REDACTED]:2224/buzz-sync-test/pilot.git",
+      "url": "ssh://[REDACTED]:2224/buzz-sync-test/pilot.git",
+      "visibility_level": 0,
+      "web_url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot"
+    },
+    "repository": {
+      "description": null,
+      "homepage": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot",
+      "name": "pilot",
+      "url": "ssh://[REDACTED]:2224/buzz-sync-test/pilot.git"
+    },
+    "reviewers": [
+      {
+        "avatar_url": null,
+        "email": "[REDACTED]",
+        "id": 7,
+        "name": "Buzz Sync Maintainer (localstack)",
+        "username": "buzz-sync-maintainer"
+      }
+    ],
+    "user": {
+      "avatar_url": null,
+      "email": "[REDACTED]",
+      "id": 7,
+      "name": "Buzz Sync Maintainer (localstack)",
+      "username": "buzz-sync-maintainer"
+    }
+  },
+  "event_header": "Merge Request Hook",
+  "received_at": "2026-09-13T08:21:20.419727+00:00"
+}

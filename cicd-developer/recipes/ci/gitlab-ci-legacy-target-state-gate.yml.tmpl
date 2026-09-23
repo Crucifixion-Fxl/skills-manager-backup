@@ -1,0 +1,241 @@
+# CE-guarded legacy-live target state gate. Rendered INTO the candidate
+# application `.gitlab-ci.yml` ONLY when the GitLab instance cannot host the
+# SRE-owned pipeline execution policy (GitLab CE, `/api/v4/version` reports
+# `enterprise: false`) and the migration owner recorded a closed
+# `spec.ce_guarded_authorization` row in the handoff evidence artifact.
+# Candidate CI is a degraded fallback: the job is shadowable by candidate
+# maintainers, MR pipelines are not merged-result bound, and no independent
+# CODEOWNER approval can be enforced. Replace this job with the SRE-owned
+# policy from gitlab-ci-legacy-target-lock.yml.tmpl when the instance gains
+# pipeline execution policies; until then it stays mandatory in candidate CI
+# and any MR that removes, weakens, or bypasses it is a STOP.
+legacy-target-state-gate:
+  stage: .pre
+  inherit:
+    default: false
+    variables: false
+  image:
+    name: "{{legacy_lock_validation_image}}@sha256:{{legacy_lock_validation_image_digest}}"
+    entrypoint: [""]
+  before_script: []
+  after_script: []
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "staging" && $CI_MERGE_REQUEST_TARGET_BRANCH_PROTECTED == "true"'
+    - if: '$CI_COMMIT_BRANCH == "staging" && $CI_COMMIT_REF_PROTECTED == "true"'
+  script:
+    - |
+      set -eu
+      PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      export PATH
+
+      git_bin=/usr/bin/git
+      python_bin=/usr/bin/python3
+      kubectl_bin=/usr/local/bin/kubectl
+      mktemp_bin=/usr/bin/mktemp
+      rm_bin=/usr/bin/rm
+      cmp_bin=/usr/bin/cmp
+      mkdir_bin=/usr/bin/mkdir
+      touch_bin=/usr/bin/touch
+      validator_root=/opt/addx/cicd-developer/validators
+      dormant_validator="$validator_root/check_dormant_target.py"
+      evidence_validator="$validator_root/check_legacy_target_handoff_evidence.py"
+      validator_launcher='import runpy,sys; root="/opt/addx/cicd-developer/validators"; sys.path.insert(0,root); script=sys.argv.pop(1); runpy.run_path(script,run_name="__main__")'
+
+      run_validator() {
+        case "$1" in
+          "$dormant_validator"|"$evidence_validator") ;;
+          *)
+            echo "FAIL: legacy target gate requested an unapproved validator"
+            exit 2
+            ;;
+        esac
+        "$python_bin" -I -c "$validator_launcher" "$@"
+      }
+
+      for binary in "$git_bin" "$python_bin" "$kubectl_bin" "$mktemp_bin" "$rm_bin" "$cmp_bin" "$mkdir_bin" "$touch_bin"; do
+        if [ ! -x "$binary" ] || [ -L "$binary" ]; then
+          echo "FAIL: legacy target validation image lacks a fixed regular executable"
+          exit 2
+        fi
+      done
+      for validator in "$dormant_validator" "$evidence_validator" "$validator_root/_legacy_target_common.py"; do
+        if [ ! -f "$validator" ] || [ -L "$validator" ]; then
+          echo "FAIL: legacy target validation image lacks the fixed regular validator bundle"
+          exit 2
+        fi
+      done
+      validation_digest={{legacy_lock_validation_image_digest}}
+      case "$validation_digest" in
+        *[!0-9a-f]*)
+          echo "FAIL: legacy target validation image digest is not exact lowercase sha256"
+          exit 2
+          ;;
+      esac
+      if [ "${#validation_digest}" -ne 64 ]; then
+        echo "FAIL: legacy target validation image digest is not exact lowercase sha256"
+        exit 2
+      fi
+
+      gate_tmp="$($mktemp_bin -d)"
+      cleanup() {
+        "$git_bin" -C "$gate_tmp/repository" worktree remove --force "$gate_tmp/candidate" >/dev/null 2>&1 || true
+        "$git_bin" -C "$gate_tmp/repository" worktree remove --force "$gate_tmp/baseline" >/dev/null 2>&1 || true
+        "$rm_bin" -rf -- "$gate_tmp"
+      }
+      trap cleanup EXIT HUP INT TERM
+
+      export HOME="$gate_tmp/home"
+      export XDG_CONFIG_HOME="$gate_tmp/xdg"
+      "$mkdir_bin" -m 700 "$HOME" "$XDG_CONFIG_HOME"
+      "$touch_bin" "$gate_tmp/global.gitconfig"
+      export GIT_CONFIG_NOSYSTEM=1
+      export GIT_CONFIG_GLOBAL="$gate_tmp/global.gitconfig"
+      export GIT_NO_REPLACE_OBJECTS=1
+      export GIT_TERMINAL_PROMPT=0
+      export GIT_CONFIG_COUNT=4
+      export GIT_CONFIG_KEY_0=protocol.file.allow
+      export GIT_CONFIG_VALUE_0=never
+      export GIT_CONFIG_KEY_1=core.hooksPath
+      export GIT_CONFIG_VALUE_1=/dev/null
+      export GIT_CONFIG_KEY_2=filter.lfs.required
+      export GIT_CONFIG_VALUE_2=false
+      export GIT_CONFIG_KEY_3=filter.lfs.smudge
+      export GIT_CONFIG_VALUE_3=cat
+
+      candidate_sha="${CI_COMMIT_SHA:-}"
+      case "$candidate_sha" in
+        *[!0-9a-f]*)
+          echo "FAIL: legacy target gate lacks an exact candidate SHA"
+          exit 2
+          ;;
+      esac
+      if [ "${#candidate_sha}" -ne 40 ]; then
+        echo "FAIL: legacy target gate lacks an exact candidate SHA"
+        exit 2
+      fi
+      if [ "${CI_PIPELINE_SOURCE:-}" = merge_request_event ]; then
+        case "${CI_MERGE_REQUEST_EVENT_TYPE:-}" in
+          basic|detached) ;;
+          *)
+            echo "FAIL: legacy target gate requires a basic/detached protected-staging MR pipeline"
+            exit 2
+            ;;
+        esac
+        if [ "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-}" != staging ] \
+          || [ "${CI_MERGE_REQUEST_TARGET_BRANCH_PROTECTED:-}" != true ]; then
+          echo "FAIL: legacy target gate requires a basic/detached protected-staging MR pipeline"
+          exit 2
+        fi
+        # CE has no merged-result pipelines: the MR head pipeline cannot bind
+        # merge parents. The baseline is the protected target-branch tip at
+        # pipeline creation; it may advance before merge (documented TOCTOU
+        # residual risk of CE-guarded enforcement). Never treat a stale-base
+        # pipeline as evidence for a later merge. GitLab 18 CE exposes only
+        # CI_MERGE_REQUEST_DIFF_BASE_SHA (the diff base, here the target tip);
+        # older releases expose CI_MERGE_REQUEST_TARGET_BRANCH_SHA.
+        baseline_sha="${CI_MERGE_REQUEST_TARGET_BRANCH_SHA:-${CI_MERGE_REQUEST_DIFF_BASE_SHA:-}}"
+      else
+        if [ "${CI_COMMIT_BRANCH:-}" != staging ] || [ "${CI_COMMIT_REF_PROTECTED:-}" != true ]; then
+          echo "FAIL: legacy target gate is outside protected staging"
+          exit 2
+        fi
+        baseline_sha="${CI_COMMIT_BEFORE_SHA:-}"
+        case "$baseline_sha" in
+          ""|0000000000000000000000000000000000000000)
+            baseline_sha="$($git_bin -C "$CI_PROJECT_DIR" rev-parse "$candidate_sha^")"
+            ;;
+        esac
+      fi
+      case "$baseline_sha" in
+        *[!0-9a-f]*)
+          echo "FAIL: legacy target gate lacks an exact trusted BASELINE SHA"
+          exit 2
+          ;;
+      esac
+      if [ "${#baseline_sha}" -ne 40 ]; then
+        echo "FAIL: legacy target gate lacks an exact trusted BASELINE SHA"
+        exit 2
+      fi
+
+      # Candidate variables can influence neither Git/Python nor the shell after
+      # this point. Candidate content is consumed only as bounded data.
+      unset PYTHONPATH PYTHONHOME PYTHONSTARTUP PYTHONINSPECT BASH_ENV ENV CDPATH GIT_DIR GIT_WORK_TREE GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_ASKPASS SSH_ASKPASS GIT_SSH GIT_SSH_COMMAND GIT_CONFIG_SYSTEM GIT_CONFIG_LOCAL CI_JOB_TOKEN CI_REPOSITORY_URL CI_DEPLOY_USER CI_DEPLOY_PASSWORD DOCKER_AUTH_CONFIG HARBOR_PASSWORD HARBOR_TOKEN KUBECONFIG VAULT_TOKEN AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN GITLAB_TOKEN GITLAB_PRIVATE_TOKEN GOOGLE_APPLICATION_CREDENTIALS AZURE_CLIENT_SECRET
+
+      source_git_common_dir="$($git_bin -C "$CI_PROJECT_DIR" rev-parse --path-format=absolute --git-common-dir)"
+      source_object_dir="$source_git_common_dir/objects"
+      if [ ! -d "$source_object_dir" ] || [ -L "$source_object_dir" ]; then
+        echo "FAIL: runner object store is not one fixed regular directory"
+        exit 2
+      fi
+      "$git_bin" init --quiet "$gate_tmp/repository"
+      export GIT_ALTERNATE_OBJECT_DIRECTORIES="$source_object_dir"
+      "$git_bin" -C "$gate_tmp/repository" -c advice.detachedHead=false worktree add --detach "$gate_tmp/candidate" "$candidate_sha"
+      "$git_bin" -C "$gate_tmp/repository" -c advice.detachedHead=false worktree add --detach "$gate_tmp/baseline" "$baseline_sha"
+      for checkout in candidate baseline; do
+        if [ "$($git_bin -C "$gate_tmp/$checkout" rev-parse HEAD)" != "$([ "$checkout" = candidate ] && echo "$candidate_sha" || echo "$baseline_sha")" ] \
+          || [ -n "$($git_bin -C "$gate_tmp/$checkout" status --porcelain=v1 --untracked-files=all)" ] \
+          || [ -n "$($git_bin -C "$gate_tmp/$checkout" replace -l)" ]; then
+          echo "FAIL: detached validation worktree is not exact and clean"
+          exit 2
+        fi
+      done
+
+      "$git_bin" -C "$gate_tmp/candidate" diff --no-renames --name-only -z "$baseline_sha" "$candidate_sha" -- >"$gate_tmp/changed-paths"
+      "$git_bin" -C "$gate_tmp/candidate" ls-files -z -- >"$gate_tmp/candidate-tracked-paths"
+      run_validator "$dormant_validator" \
+        --app {{app}} \
+        --namespace {{target_namespace}} \
+        --expected-kind {{evidence_target_controller_kind}} \
+        --phase kustomize-closure \
+        --repository-root "$gate_tmp/candidate" \
+        --overlay "{{target_overlay}}" \
+        --tracked-paths-file "$gate_tmp/candidate-tracked-paths"
+      (
+        cd "$gate_tmp/candidate"
+        "$kubectl_bin" kustomize --load-restrictor=LoadRestrictionsRootOnly "{{target_overlay}}" >"$gate_tmp/candidate.yaml"
+      )
+
+      if [ -d "$gate_tmp/baseline/{{target_overlay}}" ]; then
+        if [ ! -f "$gate_tmp/baseline/{{legacy_handoff_evidence_path}}" ] \
+          || [ -L "$gate_tmp/baseline/{{legacy_handoff_evidence_path}}" ]; then
+          echo "FAIL: trusted BASELINE lacks regular handoff evidence"
+          exit 2
+        fi
+        "$git_bin" -C "$gate_tmp/baseline" ls-files -z -- >"$gate_tmp/baseline-tracked-paths"
+        run_validator "$dormant_validator" \
+          --app {{app}} \
+          --namespace {{target_namespace}} \
+          --expected-kind {{evidence_target_controller_kind}} \
+          --phase kustomize-closure \
+          --repository-root "$gate_tmp/baseline" \
+          --overlay "{{target_overlay}}" \
+          --tracked-paths-file "$gate_tmp/baseline-tracked-paths"
+        (
+          cd "$gate_tmp/baseline"
+          "$kubectl_bin" kustomize --load-restrictor=LoadRestrictionsRootOnly "{{target_overlay}}" >"$gate_tmp/baseline.yaml"
+        )
+        run_validator "$dormant_validator" \
+          --app {{app}} \
+          --namespace {{target_namespace}} \
+          --expected-kind {{evidence_target_controller_kind}} \
+          --phase branch-guard \
+          --baseline-render "$gate_tmp/baseline.yaml" \
+          --baseline-evidence "$gate_tmp/baseline/{{legacy_handoff_evidence_path}}" \
+          --evidence-file "$gate_tmp/candidate/{{legacy_handoff_evidence_path}}" \
+          --evidence-path "{{legacy_handoff_evidence_path}}" \
+          --changed-paths-file "$gate_tmp/changed-paths" \
+          --allowed-transition-prefix "{{target_overlay}}/" \
+          "$gate_tmp/candidate.yaml"
+      else
+        if [ -e "$gate_tmp/baseline/{{legacy_handoff_evidence_path}}" ]; then
+          echo "FAIL: bootstrap BASELINE has evidence without target overlay"
+          exit 2
+        fi
+        run_validator "$evidence_validator" --phase bootstrap \
+          "$gate_tmp/candidate/{{legacy_handoff_evidence_path}}"
+        run_validator "$dormant_validator" \
+          --app {{app}} \
+          --namespace {{target_namespace}} \
+          --expected-kind {{evidence_target_controller_kind}} \
+          --phase dormant "$gate_tmp/candidate.yaml"
+      fi

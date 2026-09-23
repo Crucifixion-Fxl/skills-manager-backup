@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "6df080b5-15b8-4e78-9ee0-634b96247fac",
+  "path": "retro-collector",
+  "path_key": "retro-collector",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/retro-collector",
+    "branch": null
+  }
+}

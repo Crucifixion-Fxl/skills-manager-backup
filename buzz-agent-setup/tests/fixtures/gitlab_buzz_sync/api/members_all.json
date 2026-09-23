@@ -1,0 +1,114 @@
+{
+  "body": [
+    {
+      "access_level": 50,
+      "avatar_url": null,
+      "created_at": "2026-09-13T07:37:18.791Z",
+      "expires_at": null,
+      "id": 1,
+      "locked": false,
+      "name": "Administrator",
+      "public_email": null,
+      "state": "active",
+      "username": "root",
+      "web_url": "http://gitlab.localstack.test:8929/root"
+    },
+    {
+      "access_level": 20,
+      "avatar_url": null,
+      "created_at": "2026-09-13T07:37:22.898Z",
+      "created_by": {
+        "avatar_url": null,
+        "id": 1,
+        "locked": false,
+        "name": "Administrator",
+        "public_email": null,
+        "state": "active",
+        "username": "root",
+        "web_url": "http://gitlab.localstack.test:8929/root"
+      },
+      "expires_at": null,
+      "id": 4,
+      "locked": false,
+      "name": "Buzz Sync Bot (localstack)",
+      "public_email": null,
+      "state": "active",
+      "username": "buzz-sync-bot",
+      "web_url": "http://gitlab.localstack.test:8929/buzz-sync-bot"
+    },
+    {
+      "access_level": 30,
+      "avatar_url": null,
+      "created_at": "2026-09-13T08:09:39.438Z",
+      "created_by": {
+        "avatar_url": null,
+        "id": 1,
+        "locked": false,
+        "name": "Administrator",
+        "public_email": null,
+        "state": "active",
+        "username": "root",
+        "web_url": "http://gitlab.localstack.test:8929/root"
+      },
+      "expires_at": null,
+      "id": 6,
+      "locked": false,
+      "name": "Buzz Sync Developer (localstack)",
+      "public_email": null,
+      "state": "active",
+      "username": "buzz-sync-dev",
+      "web_url": "http://gitlab.localstack.test:8929/buzz-sync-dev"
+    },
+    {
+      "access_level": 40,
+      "avatar_url": null,
+      "created_at": "2026-09-13T08:09:39.683Z",
+      "created_by": {
+        "avatar_url": null,
+        "id": 1,
+        "locked": false,
+        "name": "Administrator",
+        "public_email": null,
+        "state": "active",
+        "username": "root",
+        "web_url": "http://gitlab.localstack.test:8929/root"
+      },
+      "expires_at": null,
+      "id": 7,
+      "locked": false,
+      "name": "Buzz Sync Maintainer (localstack)",
+      "public_email": null,
+      "state": "active",
+      "username": "buzz-sync-maintainer",
+      "web_url": "http://gitlab.localstack.test:8929/buzz-sync-maintainer"
+    },
+    {
+      "access_level": 20,
+      "avatar_url": null,
+      "created_at": "2026-09-13T08:21:26.759Z",
+      "expires_at": null,
+      "id": 8,
+      "locked": false,
+      "name": "rec-expiring-0913082019",
+      "public_email": null,
+      "state": "active",
+      "username": "project_2_bot_e86bc9c81e44c6b969f715a6ccdb3632",
+      "web_url": "http://gitlab.localstack.test:8929/project_2_bot_e86bc9c81e44c6b969f715a6ccdb3632"
+    }
+  ],
+  "headers": {
+    "content-type": "application/json",
+    "x-next-page": "",
+    "x-page": "1",
+    "x-per-page": "100",
+    "x-total": "5",
+    "x-total-pages": "1"
+  },
+  "request": {
+    "as": "bot",
+    "method": "GET",
+    "path": "projects/2/members/all",
+    "query": {}
+  },
+  "status": 200
+}

@@ -1,0 +1,31 @@
+{
+  "body": {
+    "approved": true,
+    "approved_by": [
+      {
+        "user": {
+          "avatar_url": null,
+          "id": 7,
+          "locked": false,
+          "name": "Buzz Sync Maintainer (localstack)",
+          "public_email": null,
+          "state": "active",
+          "username": "buzz-sync-maintainer",
+          "web_url": "http://gitlab.localstack.test:8929/buzz-sync-maintainer"
+        }
+      }
+    ],
+    "user_can_approve": false,
+    "user_has_approved": false
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "request": {
+    "as": "bot",
+    "method": "GET",
+    "path": "projects/2/merge_requests/1/approvals",
+    "query": {}
+  },
+  "status": 200
+}

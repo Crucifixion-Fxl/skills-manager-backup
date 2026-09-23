@@ -1,0 +1,523 @@
+{
+  "contract_revision": "user-research-project-v3",
+  "operations": [
+    {
+      "method": "GET",
+      "name": "get_project_personal_key_context",
+      "path": "/api/platform/v3/personal-key",
+      "path_parameters": [],
+      "query_parameters": []
+    },
+    {
+      "method": "GET",
+      "name": "personal_action_configuration_get",
+      "path": "/api/platform/v3/projects/{project_id}/ideas/{idea_id}/actions/{action_kind}/configuration",
+      "path_parameters": [
+        "action_kind",
+        "idea_id",
+        "project_id"
+      ],
+      "query_parameters": []
+    },
+    {
+      "method": "PUT",
+      "name": "personal_action_configuration_put",
+      "path": "/api/platform/v3/projects/{project_id}/ideas/{idea_id}/actions/{action_kind}/configuration",
+      "path_parameters": [
+        "action_kind",
+        "idea_id",
+        "project_id"
+      ],
+      "query_parameters": []
+    },
+    {
+      "method": "GET",
+      "name": "personal_audience_sync_capabilities",
+      "path": "/api/platform/v3/projects/{project_id}/audience-sync/capabilities",
+      "path_parameters": [
+        "project_id"
+      ],
+      "query_parameters": []
+    },
+    {
+      "method": "POST",
+      "name": "personal_idea_create",
+      "path": "/api/platform/v3/projects/{project_id}/ideas",
+      "path_parameters": [
+        "project_id"
+      ],
+      "query_parameters": []
+    },
+    {
+      "method": "GET",
+      "name": "personal_idea_get",
+      "path": "/api/platform/v3/projects/{project_id}/ideas/{idea_id}",
+      "path_parameters": [
+        "idea_id",
+        "project_id"
+      ],
+      "query_parameters": []
+    },
+    {
+      "method": "GET",
+      "name": "personal_idea_list",
+      "path": "/api/platform/v3/projects/{project_id}/ideas",
+      "path_parameters": [
+        "project_id"
+      ],
+      "query_parameters": [
+        "limit",
+        "offset"
+      ]
+    },
+    {
+      "method": "PATCH",
+      "name": "personal_idea_update",
+      "path": "/api/platform/v3/projects/{project_id}/ideas/{idea_id}",
+      "path_parameters": [
+        "idea_id",
+        "project_id"
+      ],
+      "query_parameters": []
+    },
+    {
+      "method": "GET",
+      "name": "personal_research_journey_aggregate",
+      "path": "/api/platform/v3/projects/{project_id}/research/{research_id}/journey/aggregate",
+      "path_parameters": [
+        "project_id",
+        "research_id"
+      ],
+      "query_parameters": [
+        "form_id"
+      ]
+    },
+    {
+      "method": "POST",
+      "name": "personal_research_journey_campaign_draft",
+      "path": "/api/platform/v3/projects/{project_id}/research/{research_id}/journey/campaign-draft",
+      "path_parameters": [
+        "project_id",
+        "research_id"
+      ],
+      "query_parameters": []
+    },
+    {
+      "method": "POST",
+      "name": "personal_research_journey_create",
+      "path": "/api/platform/v3/projects/{project_id}/research",
+      "path_parameters": [
+        "project_id"
+      ],
+      "query_parameters": []
+    },
+    {
+      "method": "POST",
+      "name": "personal_research_journey_form",
+      "path": "/api/platform/v3/projects/{project_id}/research/{research_id}/journey/form",
+      "path_parameters": [
+        "project_id",
+        "research_id"
+      ],
+      "query_parameters": []
+    },
+    {
+      "method": "POST",
+      "name": "personal_research_journey_form_publish",
+      "path": "/api/platform/v3/projects/{project_id}/research/{research_id}/journey/form/publish",
+      "path_parameters": [
+        "project_id",
+        "research_id"
+      ],
+      "query_parameters": []
+    },
+    {
+      "method": "GET",
+      "name": "personal_research_journey_idea_summary",
+      "path": "/api/platform/v3/projects/{project_id}/ideas/{idea_id}/research-summary",
+      "path_parameters": [
+        "idea_id",
+        "project_id"
+      ],
+      "query_parameters": []
+    },
+    {
+      "method": "GET",
+      "name": "personal_research_journey_idea_summary_csv",
+      "path": "/api/platform/v3/projects/{project_id}/ideas/{idea_id}/research-summary/responses.csv",
+      "path_parameters": [
+        "idea_id",
+        "project_id"
+      ],
+      "query_parameters": []
+    },
+    {
+      "method": "GET",
+      "name": "personal_research_journey_links",
+      "path": "/api/platform/v3/projects/{project_id}/research/{research_id}/journey/links",
+      "path_parameters": [
+        "project_id",
+        "research_id"
+      ],
+      "query_parameters": [
+        "batch",
+        "form_id",
+        "limit",
+        "offset"
+      ]
+    },
+    {
+      "method": "GET",
+      "name": "personal_research_journey_list",
+      "path": "/api/platform/v3/projects/{project_id}/research",
+      "path_parameters": [
+        "project_id"
+      ],
+      "query_parameters": [
+        "idea_id",
+        "limit",
+        "offset"
+      ]
+    },
+    {
+      "method": "POST",
+      "name": "personal_research_journey_operation",
+      "path": "/api/platform/v3/projects/{project_id}/research/{research_id}/journey/operations",
+      "path_parameters": [
+        "project_id",
+        "research_id"
+      ],
+      "query_parameters": []
+    },
+    {
+      "method": "PATCH",
+      "name": "personal_research_journey_rename",
+      "path": "/api/platform/v3/projects/{project_id}/research/{research_id}",
+      "path_parameters": [
+        "project_id",
+        "research_id"
+      ],
+      "query_parameters": []
+    },
+    {
+      "method": "GET",
+      "name": "personal_research_journey_response_rate",
+      "path": "/api/platform/v3/projects/{project_id}/research/{research_id}/journey/response-rate",
+      "path_parameters": [
+        "project_id",
+        "research_id"
+      ],
+      "query_parameters": [
+        "form_id"
+      ]
+    },
+    {
+      "method": "GET",
+      "name": "personal_research_journey_responses",
+      "path": "/api/platform/v3/projects/{project_id}/research/{research_id}/journey/responses",
+      "path_parameters": [
+        "project_id",
+        "research_id"
+      ],
+      "query_parameters": [
+        "expected_answer_snapshot_id",
+        "expected_watermark",
+        "form_id",
+        "limit",
+        "offset"
+      ]
+    },
+    {
+      "method": "GET",
+      "name": "personal_research_journey_responses_csv",
+      "path": "/api/platform/v3/projects/{project_id}/research/{research_id}/journey/responses.csv",
+      "path_parameters": [
+        "project_id",
+        "research_id"
+      ],
+      "query_parameters": [
+        "form_id"
+      ]
+    },
+    {
+      "method": "GET",
+      "name": "personal_research_journey_status",
+      "path": "/api/platform/v3/projects/{project_id}/research/{research_id}/journey",
+      "path_parameters": [
+        "project_id",
+        "research_id"
+      ],
+      "query_parameters": []
+    },
+    {
+      "method": "POST",
+      "name": "personal_research_prepare_selection",
+      "path": "/api/platform/v3/projects/{project_id}/research/{research_id}/selections",
+      "path_parameters": [
+        "project_id",
+        "research_id"
+      ],
+      "query_parameters": []
+    },
+    {
+      "method": "GET",
+      "name": "personal_research_query_capabilities",
+      "path": "/api/platform/v3/projects/{project_id}/research/query-capabilities",
+      "path_parameters": [
+        "project_id"
+      ],
+      "query_parameters": []
+    },
+    {
+      "method": "GET",
+      "name": "personal_research_readiness",
+      "path": "/api/platform/v3/projects/{project_id}/research/readiness",
+      "path_parameters": [
+        "project_id"
+      ],
+      "query_parameters": []
+    },
+    {
+      "method": "GET",
+      "name": "personal_voc_capabilities",
+      "path": "/api/platform/v3/projects/{project_id}/actions/voc/capabilities",
+      "path_parameters": [
+        "project_id"
+      ],
+      "query_parameters": []
+    },
+    {
+      "method": "GET",
+      "name": "personal_voc_execution_get",
+      "path": "/api/platform/v3/projects/{project_id}/ideas/{idea_id}/actions/voc/executions/{platform_run_id}",
+      "path_parameters": [
+        "idea_id",
+        "platform_run_id",
+        "project_id"
+      ],
+      "query_parameters": []
+    },
+    {
+      "method": "POST",
+      "name": "personal_voc_execution_start",
+      "path": "/api/platform/v3/projects/{project_id}/ideas/{idea_id}/actions/voc/executions",
+      "path_parameters": [
+        "idea_id",
+        "project_id"
+      ],
+      "query_parameters": []
+    },
+    {
+      "method": "PATCH",
+      "name": "personal_voc_rename",
+      "path": "/api/platform/v3/projects/{project_id}/ideas/{idea_id}/voc/{voc_id}/title",
+      "path_parameters": [
+        "idea_id",
+        "project_id",
+        "voc_id"
+      ],
+      "query_parameters": []
+    },
+    {
+      "method": "GET",
+      "name": "project_apify_actor_detail",
+      "path": "/api/platform/v3/projects/{project_id}/providers/apify/actors/{actor_id}",
+      "path_parameters": [
+        "actor_id",
+        "project_id"
+      ],
+      "query_parameters": []
+    },
+    {
+      "method": "GET",
+      "name": "project_apify_actor_schema",
+      "path": "/api/platform/v3/projects/{project_id}/providers/apify/actors/{actor_id}/input-schema",
+      "path_parameters": [
+        "actor_id",
+        "project_id"
+      ],
+      "query_parameters": []
+    },
+    {
+      "method": "GET",
+      "name": "project_apify_actor_search",
+      "path": "/api/platform/v3/projects/{project_id}/providers/apify/actors",
+      "path_parameters": [
+        "project_id"
+      ],
+      "query_parameters": [
+        "limit",
+        "offset",
+        "search"
+      ]
+    },
+    {
+      "method": "GET",
+      "name": "project_get_current_report",
+      "path": "/api/platform/v3/projects/{project_id}/reports/current",
+      "path_parameters": [
+        "project_id"
+      ],
+      "query_parameters": [
+        "idea_id",
+        "parent_id",
+        "parent_kind",
+        "source_mode"
+      ]
+    },
+    {
+      "method": "GET",
+      "name": "project_get_report_source",
+      "path": "/api/platform/v3/projects/{project_id}/report-sources/current",
+      "path_parameters": [
+        "project_id"
+      ],
+      "query_parameters": [
+        "idea_id",
+        "parent_id",
+        "parent_kind",
+        "source_mode"
+      ]
+    },
+    {
+      "method": "POST",
+      "name": "project_publish_report",
+      "path": "/api/platform/v3/projects/{project_id}/reports",
+      "path_parameters": [
+        "project_id"
+      ],
+      "query_parameters": []
+    },
+    {
+      "method": "PATCH",
+      "name": "project_rename_idea",
+      "path": "/api/platform/v3/projects/{project_id}/ideas/{idea_id}/title",
+      "path_parameters": [
+        "idea_id",
+        "project_id"
+      ],
+      "query_parameters": []
+    },
+    {
+      "method": "PATCH",
+      "name": "project_rename_research",
+      "path": "/api/platform/v3/projects/{project_id}/research/{research_id}/title",
+      "path_parameters": [
+        "project_id",
+        "research_id"
+      ],
+      "query_parameters": []
+    },
+    {
+      "method": "PATCH",
+      "name": "project_rename_research_audience",
+      "path": "/api/platform/v3/projects/{project_id}/research-audience-assets/{asset_id}/title",
+      "path_parameters": [
+        "asset_id",
+        "project_id"
+      ],
+      "query_parameters": []
+    },
+    {
+      "method": "GET",
+      "name": "project_report_download",
+      "path": "/api/platform/v3/projects/{project_id}/reports/current/download",
+      "path_parameters": [
+        "project_id"
+      ],
+      "query_parameters": [
+        "idea_id",
+        "parent_id",
+        "parent_kind",
+        "source_mode"
+      ]
+    },
+    {
+      "method": "GET",
+      "name": "project_voc_dataset_export",
+      "path": "/api/platform/v3/projects/{project_id}/ideas/{idea_id}/voc/{voc_id}/datasets/{dataset_id}/export",
+      "path_parameters": [
+        "dataset_id",
+        "idea_id",
+        "project_id",
+        "voc_id"
+      ],
+      "query_parameters": [
+        "format"
+      ]
+    },
+    {
+      "method": "GET",
+      "name": "project_voc_dataset_items",
+      "path": "/api/platform/v3/projects/{project_id}/ideas/{idea_id}/voc/{voc_id}/datasets/{dataset_id}/items",
+      "path_parameters": [
+        "dataset_id",
+        "idea_id",
+        "project_id",
+        "voc_id"
+      ],
+      "query_parameters": [
+        "limit",
+        "offset"
+      ]
+    },
+    {
+      "method": "GET",
+      "name": "project_voc_dataset_list",
+      "path": "/api/platform/v3/projects/{project_id}/ideas/{idea_id}/voc/{voc_id}/datasets",
+      "path_parameters": [
+        "idea_id",
+        "project_id",
+        "voc_id"
+      ],
+      "query_parameters": []
+    },
+    {
+      "method": "GET",
+      "name": "project_voc_dataset_metadata",
+      "path": "/api/platform/v3/projects/{project_id}/ideas/{idea_id}/voc/{voc_id}/datasets/{dataset_id}",
+      "path_parameters": [
+        "dataset_id",
+        "idea_id",
+        "project_id",
+        "voc_id"
+      ],
+      "query_parameters": []
+    },
+    {
+      "method": "GET",
+      "name": "project_voc_discovery",
+      "path": "/api/platform/v3/projects/{project_id}/ideas/{idea_id}/voc",
+      "path_parameters": [
+        "idea_id",
+        "project_id"
+      ],
+      "query_parameters": [
+        "kind",
+        "limit",
+        "offset"
+      ]
+    },
+    {
+      "method": "GET",
+      "name": "project_voc_native_read",
+      "path": "/api/platform/v3/projects/{project_id}/ideas/{idea_id}/voc/runs/{request_id}",
+      "path_parameters": [
+        "idea_id",
+        "project_id",
+        "request_id"
+      ],
+      "query_parameters": []
+    },
+    {
+      "method": "POST",
+      "name": "project_voc_native_start",
+      "path": "/api/platform/v3/projects/{project_id}/ideas/{idea_id}/voc/runs",
+      "path_parameters": [
+        "idea_id",
+        "project_id"
+      ],
+      "query_parameters": []
+    }
+  ]
+}

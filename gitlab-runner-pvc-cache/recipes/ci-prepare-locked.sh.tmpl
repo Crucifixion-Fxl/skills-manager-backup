@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+# Lock-held wrapper around a prepare/download command for PVC-backed cache.
+#
+# Slots:
+#   {{env_var_name}}       environment variable containing cache root
+#   {{prepare_command}}    shell command that populates or refreshes cache
+#   {{repair_permissions}} "true" when cached files may be executed
+
+set -euo pipefail
+
+env_var_name="{{env_var_name}}"
+cache_root="${!env_var_name:-}"
+
+if [ -z "${cache_root}" ]; then
+    # Local fallback: do not require PVC env var outside CI.
+    exec bash -c '{{prepare_command}}'
+fi
+
+mkdir -p "${cache_root}/.locks"
+WAIT_TIMEOUT="${CI_CACHE_LOCK_TIMEOUT:-1800}"
+
+repair_cached_executable_permissions() {
+    find "${cache_root}" -type d ! -perm -555 -exec chmod a+rx {} +
+    find "${cache_root}" \
+        \( -path "*/bin/*" -o -path "*/sbin/*" -o -path "*/libexec/*" \) \
+        -type f ! -perm -555 -exec chmod a+rx {} +
+
+    sample="$(
+        find "${cache_root}" \
+            \( -path "*/bin/*" -o -path "*/sbin/*" -o -path "*/libexec/*" \) \
+            -type f -print -quit 2>/dev/null
+    )"
+    if [ -n "${sample}" ] && [ ! -x "${sample}" ]; then
+        echo "ERROR: chmod failed or executable bit was not applied: ${sample}" >&2
+        ls -la "${sample}" >&2 || true
+        exit 1
+    fi
+}
+
+run_prepare() {
+    bash -c '{{prepare_command}}'
+    if [ "{{repair_permissions}}" = "true" ]; then
+        repair_cached_executable_permissions
+    fi
+}
+
+if command -v flock >/dev/null 2>&1; then
+    lock_file="${cache_root}/.locks/prepare.lock"
+    exec 9>"${lock_file}"
+    if ! flock -x -w "${WAIT_TIMEOUT}" 9; then
+        echo "ERROR: failed to acquire cache lock within ${WAIT_TIMEOUT}s: ${lock_file}" >&2
+        exit 1
+    fi
+    run_prepare
+    exit 0
+fi
+
+echo "WARN: flock not found; falling back to mkdir lock." >&2
+lock_dir="${cache_root}/.locks/prepare.lock.d"
+acquired=0
+for _ in $(seq 1 "${WAIT_TIMEOUT}"); do
+    if mkdir "${lock_dir}" 2>/dev/null; then
+        echo "$$" > "${lock_dir}/pid"
+        trap "rm -rf '${lock_dir}'" EXIT INT TERM
+        acquired=1
+        break
+    fi
+    sleep 1
+done
+
+if [ "${acquired}" != "1" ]; then
+    echo "ERROR: failed to acquire cache lock within ${WAIT_TIMEOUT}s: ${lock_dir}" >&2
+    echo "       If no prepare is running, an operator can inspect and clear ${cache_root}/.locks/" >&2
+    exit 1
+fi
+
+run_prepare

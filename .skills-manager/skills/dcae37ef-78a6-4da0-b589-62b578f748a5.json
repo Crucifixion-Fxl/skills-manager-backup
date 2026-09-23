@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "dcae37ef-78a6-4da0-b589-62b578f748a5",
+  "path": "k8s-security-scan",
+  "path_key": "k8s-security-scan",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/k8s-security-scan",
+    "branch": null
+  }
+}

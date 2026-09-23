@@ -1,0 +1,21 @@
+# sentry-onboard-sa.yaml.tmpl
+#
+# Sentry 自助接入的 ServiceAccount —— sentry-onboard Job 用这个 SA 拿 K8s JWT，
+# 再用 JWT 调 Vault auth/jwt 换 Vault token。
+#
+# 集群侧前置（运维一次性配，见 references/sentry/README.md）：
+#   - Vault JWT auth method 启用
+#   - Vault role `sentry-onboard` 允许 app-scoped SA：`<app>-sentry-onboard`
+#   - Vault policy `sentry-onboard` narrow 权限：
+#       ① 读 `secret/cicd/sentry/{tokens,endpoints}`
+#       ② 按 ConfigMap.VAULT_PATH_SCHEMA 选用：
+#          legacy   → 读写 `secret/{env}/app/{app}/sentry-dsn`
+#          platform → 读写 `secret/{env}/sentry/application/{app}/project`
+#
+# 必填槽位：
+#   {{app}}              kebab-case；用于 app-scoped ServiceAccount 名
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{app}}-sentry-onboard

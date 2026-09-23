@@ -1,0 +1,30 @@
+# Per-target static-web verification gate.
+#
+# Append one rendered copy before the matching image-build snippet.
+# Required slots:
+#   {{target_key}}          target env keyword
+#   {{node_verify_image}}   exact Harbor base Node image for verification runner
+#   {{static_verify_runner_tag}} audited credential-free amd64 runner
+#   {{branch}}              target branch
+#   {{build_script}}        exact package.json script key
+#   {{static_output_dir}}    reviewed repository-relative bundle directory
+
+verify:{{target_key}}:static-web:
+  stage: test
+  image:
+    name: {{node_verify_image}}
+    entrypoint: [""]
+  tags:
+    - {{static_verify_runner_tag}}
+  script:
+    - test ! -e /kaniko/.docker-secret/config.json
+    - test ! -e /kaniko/.docker/config.json
+    - test ! -e /var/run/secrets/kubernetes.io/serviceaccount/token
+    - test -z "${AWS_ACCESS_KEY_ID:-}${AWS_SECRET_ACCESS_KEY:-}${GOOGLE_APPLICATION_CREDENTIALS:-}${AZURE_CLIENT_SECRET:-}${KUBECONFIG:-}"
+    - npm ci
+    - npm run {{build_script}}
+    - test -d "{{static_output_dir}}"
+    - test -n "$(find "{{static_output_dir}}" -type f -print -quit)"
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "{{branch}}"'
+    - if: '$CI_COMMIT_BRANCH == "{{branch}}"'

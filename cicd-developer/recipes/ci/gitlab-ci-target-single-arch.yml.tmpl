@@ -1,0 +1,42 @@
+# per-target single-arch snippet
+#
+# 用于 TKE / GKE 等 single-arch-amd64 集群。Per target 渲染 1 个 job：
+#   build:{{target_key}}  —— amd64 runner kaniko build + push 终态 tag（无 manifest fan-in）
+#
+# 必填槽位：
+#   {{target_key}}              env_keyword 或 cluster shortname
+#                               e.g. prod-cn-tke / prod-eu-data
+#   {{harbor_image_path}}       该 target 的业务镜像 push 路径，两种写法（见 hard-rules #25）：
+#                               - B 默认（runner 决定 host）：${IMAGE_BASE}/<env>-<region>/<app>
+#                                 IMAGE_BASE=${HARBOR_REGISTRY}/cicd，host 由 runner tag 决定
+#                               - A（字面 host，单 target / grandfather）：
+#                                 harbor-cn.addx.live/cicd/prod-cn/<app>
+#                               解析出的 host MUST match overlay newName + Application image-list
+#                               （部署侧永远是字面 host，不展开 ${IMAGE_BASE}）。
+#   {{runner_tag_amd64}}        该 target 集群对应 amd64 runner tag
+#                               来源 clusters.yaml 的 runner_tags[0]
+#   {{branch}}                  CI 触发分支（main / prod / staging / pre / dev / master）
+#   {{dockerfile_path}}         service profile 用 Dockerfile；static-web profile
+#                               用该 target 专属 Dockerfile.<env-keyword>
+# Image tags:
+#   - single-arch job pushes final tag `${CI_COMMIT_SHORT_SHA}`
+#   - final tag MUST match the Application's `allow-tags: regexp:^[a-f0-9]{7,40}$`
+#     so ArgoCD Image Updater can select it. Env separation lives in IMAGE_PATH
+#     (`cicd/<env>-<region>/<app>`), not in the tag string.
+#
+# Rollout 也不写 `nodeSelector.kubernetes.io/arch`（集群本就单 arch，写了多余）。
+# Application annotation `app.platforms` uses `linux/amd64`
+# （完成 CI/artifact 证据后，按 new-service.md Step 11 的 Application 填槽写入）。
+
+build:{{target_key}}:
+  extends: .kaniko-build
+  tags:
+    - {{runner_tag_amd64}}
+  variables:
+    IMAGE_PATH: {{harbor_image_path}}
+    ARCH: amd64
+    DOCKERFILE: {{dockerfile_path}}
+  rules:
+    - if: $CI_COMMIT_BRANCH == "{{branch}}"
+      variables:
+        IMAGE_TAG: ${CI_COMMIT_SHORT_SHA}

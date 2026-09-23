@@ -1,0 +1,4 @@
+interface:
+  display_name: "Domain Workspace Onboarding"
+  short_description: "Govern domain workspace admission and lifecycle"
+  default_prompt: "Use $domain-workspace-onboarding to assess and govern a domain workspace onboarding request."

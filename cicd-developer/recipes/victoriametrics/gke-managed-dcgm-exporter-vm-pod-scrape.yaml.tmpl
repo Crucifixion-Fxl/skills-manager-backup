@@ -1,0 +1,29 @@
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMPodScrape
+metadata:
+  name: gke-managed-dcgm-exporter
+  namespace: victoria-metrics
+  labels:
+    app.kubernetes.io/part-of: victoria-metrics
+    app.kubernetes.io/name: gke-managed-dcgm-exporter
+    monitoring.addx.io/profile: cluster
+spec:
+  namespaceSelector:
+    matchNames:
+      - gke-managed-system
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: gke-managed-dcgm-exporter
+  podMetricsEndpoints:
+    - port: metrics
+      path: /metrics
+      scheme: http
+      interval: 30s
+      scrapeTimeout: 10s
+      filterRunning: true
+      honorLabels: true
+      metricRelabelConfigs:
+        - action: keep
+          sourceLabels:
+            - __name__
+          regex: '^DCGM_.*'

@@ -1,0 +1,97 @@
+# Non-deployable, review-only candidate. This is not a Kubernetes object and must
+# never be submitted to an API server.
+schemaVersion: v1
+kind: ProtectedProviderReleaseInfrastructureCandidate
+metadata:
+  name: provider-upjet-gcp-release
+spec:
+  providerSource:
+    repository: {{provider_source}}
+    protectedRef: {{protected_ref}}
+  runner:
+    protectedTag: {{protected_runner_tag}}
+    dedicated: true
+    sharedRunnerReuse: forbidden
+    registration:
+      tokenSource: unresolved-admin-prerequisite
+      owner: unresolved-admin-prerequisite
+      tokenReadOrReuse: forbidden
+    controls:
+      protected: required
+      locked: required
+      runUntagged: false
+      broadDockerConfig: forbidden
+      privileged: forbidden-unless-exact-approved-recipe
+      serviceAccountOverride: forbidden-unless-exact-approved-recipe
+    gitops:
+      mode: gitops-only
+      coordinatedPair: required
+      authorityEvidence:
+        overlay:
+          repository: {{overlay_authority_repository}}
+          protectedRef: {{overlay_authority_ref}}
+          commit: {{overlay_authority_commit}}
+          parentPath: {{overlay_authority_parent_path}}
+        application:
+          repository: {{application_authority_repository}}
+          protectedRef: {{application_authority_ref}}
+          commit: {{application_authority_commit}}
+          parentPath: {{application_authority_parent_path}}
+      plannedAdditions:
+        overlay:
+          repository: {{overlay_repository}}
+          parentPath: {{overlay_parent_path}}
+          desiredFile: {{overlay_desired_file}}
+          runnerTag: {{protected_runner_tag}}
+          childPrecondition: absent-before-additive-creation
+        application:
+          repository: {{application_repository}}
+          parentPath: {{application_parent_path}}
+          desiredFile: {{application_desired_file}}
+          chartPath: cicd/apps/gitlab-runner
+          runnerTag: {{protected_runner_tag}}
+          childPrecondition: absent-before-additive-creation
+  registry:
+    host: {{registry_host}}
+    project: {{registry_project}}
+    repositories:
+{{release_repositories_block}}
+    robot:
+      allow:
+        - pull
+        - push
+      deny:
+        - delete
+        - admin
+        - project-admin
+        - repository-create
+  credentials:
+    delivery: vault-or-eso
+    mountMode: path-files-only
+    profilePath: .release-secrets/profile.json
+    usernamePath: .release-secrets/harbor-username
+    passwordPath: .release-secrets/harbor-password
+  evidenceVerifier:
+    binaryPath: .release-tools/verify-release-evidence
+    checksum:
+      algorithm: sha256
+      value: sha256:{{verifier_checksum}}
+    trustRoot: {{verifier_trust_root}}
+    requiredBindings:
+      - signature
+      - provenance
+      - source-ref
+      - source-commit
+  vulnerabilityPolicy:
+    maximumCritical: 0
+    maximumHigh: 0
+    exceptionAuthority: {{scanner_exception_authority}}
+  release:
+    immutableTagsOnly: true
+    retention: retain-immutable-release-evidence
+    publish: separately-approved
+  rollout:
+    sync: manual-only
+    prune: false
+    delete: false
+    install: separately-approved

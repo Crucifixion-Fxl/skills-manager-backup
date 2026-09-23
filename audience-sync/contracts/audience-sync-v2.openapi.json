@@ -1,0 +1,1974 @@
+{
+  "components": {
+    "schemas": {
+      "AudienceSyncAudienceSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "audience_detail_url": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "pattern": "^https://[^\\s?#]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "format": "uri",
+            "title": "Audience Detail Url"
+          },
+          "audience_filter": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AudienceSyncFilter"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "audience_filter_hash": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audience Filter Hash"
+          },
+          "audience_id": {
+            "pattern": "^aud_[a-f0-9]{26}$",
+            "title": "Audience Id",
+            "type": "string"
+          },
+          "criteria_summary": {
+            "anyOf": [
+              {
+                "maxLength": 4000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Criteria Summary"
+          },
+          "latest_materialization": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AudienceSyncMaterialization"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+            "title": "Name",
+            "type": "string"
+          },
+          "product_scope": {
+            "$ref": "#/components/schemas/ProductScope"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "required": [
+          "audience_id",
+          "name",
+          "product_scope"
+        ],
+        "title": "AudienceSyncAudienceSummary",
+        "type": "object"
+      },
+      "AudienceSyncAuthoritativeAudience": {
+        "additionalProperties": false,
+        "properties": {
+          "audience_detail_url": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "pattern": "^https://[^\\s?#]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "format": "uri",
+            "title": "Audience Detail Url"
+          },
+          "audience_filter": {
+            "$ref": "#/components/schemas/AudienceSyncFilter"
+          },
+          "audience_filter_hash": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Audience Filter Hash",
+            "type": "string"
+          },
+          "audience_id": {
+            "pattern": "^aud_[a-f0-9]{26}$",
+            "title": "Audience Id",
+            "type": "string"
+          },
+          "criteria_summary": {
+            "anyOf": [
+              {
+                "maxLength": 4000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Criteria Summary"
+          },
+          "latest_materialization": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AudienceSyncMaterialization"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+            "title": "Name",
+            "type": "string"
+          },
+          "product_scope": {
+            "$ref": "#/components/schemas/ProductScope"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "required": [
+          "audience_id",
+          "name",
+          "product_scope",
+          "audience_filter_hash",
+          "audience_filter"
+        ],
+        "title": "AudienceSyncAuthoritativeAudience",
+        "type": "object"
+      },
+      "AudienceSyncCapabilities": {
+        "additionalProperties": false,
+        "properties": {
+          "brevo_configured": {
+            "title": "Brevo Configured",
+            "type": "boolean"
+          },
+          "brevo_effect_ready": {
+            "title": "Brevo Effect Ready",
+            "type": "boolean"
+          },
+          "contract_revision": {
+            "const": "audience-sync-v2",
+            "title": "Contract Revision",
+            "type": "string"
+          },
+          "create_audience_available": {
+            "const": true,
+            "title": "Create Audience Available",
+            "type": "boolean"
+          },
+          "definition_available": {
+            "title": "Definition Available",
+            "type": "boolean"
+          },
+          "destinations": {
+            "items": {
+              "$ref": "#/components/schemas/AudienceSyncDestination"
+            },
+            "maxItems": 20,
+            "title": "Destinations",
+            "type": "array"
+          },
+          "exact_materialization_run_required": {
+            "const": true,
+            "default": true,
+            "title": "Exact Materialization Run Required",
+            "type": "boolean"
+          },
+          "mailchimp_configured": {
+            "title": "Mailchimp Configured",
+            "type": "boolean"
+          },
+          "mailchimp_effect_ready": {
+            "title": "Mailchimp Effect Ready",
+            "type": "boolean"
+          },
+          "materialization_available": {
+            "title": "Materialization Available",
+            "type": "boolean"
+          },
+          "max_members": {
+            "title": "Max Members",
+            "type": "null"
+          },
+          "product_scope": {
+            "$ref": "#/components/schemas/ProductScope"
+          }
+        },
+        "required": [
+          "contract_revision",
+          "product_scope",
+          "create_audience_available",
+          "definition_available",
+          "materialization_available",
+          "brevo_configured",
+          "brevo_effect_ready",
+          "mailchimp_configured",
+          "mailchimp_effect_ready",
+          "destinations"
+        ],
+        "title": "AudienceSyncCapabilities",
+        "type": "object"
+      },
+      "AudienceSyncCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "audience_filter": {
+            "$ref": "#/components/schemas/AudienceSyncFilter"
+          },
+          "idempotency_key": {
+            "maxLength": 128,
+            "minLength": 8,
+            "pattern": "^[A-Za-z0-9_.-]+$",
+            "title": "Idempotency Key",
+            "type": "string"
+          },
+          "name": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+            "title": "Name",
+            "type": "string"
+          },
+          "product_scope": {
+            "$ref": "#/components/schemas/ProductScope"
+          }
+        },
+        "required": [
+          "name",
+          "product_scope",
+          "audience_filter",
+          "idempotency_key"
+        ],
+        "title": "AudienceSyncCreateRequest",
+        "type": "object"
+      },
+      "AudienceSyncCreateResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "audience": {
+            "$ref": "#/components/schemas/AudienceSyncAuthoritativeAudience"
+          },
+          "outcome": {
+            "enum": [
+              "created",
+              "idempotent"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          }
+        },
+        "required": [
+          "audience",
+          "outcome"
+        ],
+        "title": "AudienceSyncCreateResponse",
+        "type": "object"
+      },
+      "AudienceSyncDestination": {
+        "additionalProperties": false,
+        "properties": {
+          "destination_id": {
+            "pattern": "^[a-z][a-z0-9_.-]{2,63}$",
+            "title": "Destination Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "brevo",
+              "mailchimp"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "destination_id",
+          "kind",
+          "label"
+        ],
+        "title": "AudienceSyncDestination",
+        "type": "object"
+      },
+      "AudienceSyncFilter": {
+        "additionalProperties": false,
+        "description": "The shared typed filter with a strict Personal-agent boundary.",
+        "properties": {
+          "active_within_days": {
+            "anyOf": [
+              {
+                "maximum": 3650.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Within Days"
+          },
+          "app_score_max": {
+            "anyOf": [
+              {
+                "maximum": 5.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "App Score Max"
+          },
+          "app_score_min": {
+            "anyOf": [
+              {
+                "maximum": 5.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "App Score Min"
+          },
+          "cities": {
+            "items": {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 50,
+            "title": "Cities",
+            "type": "array"
+          },
+          "countries": {
+            "items": {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 50,
+            "title": "Countries",
+            "type": "array"
+          },
+          "cuids": {
+            "items": {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 50,
+            "title": "Cuids",
+            "type": "array"
+          },
+          "device_quantity_max": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Quantity Max"
+          },
+          "device_quantity_min": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Quantity Min"
+          },
+          "device_share_types": {
+            "items": {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 50,
+            "title": "Device Share Types",
+            "type": "array"
+          },
+          "device_types": {
+            "items": {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 50,
+            "title": "Device Types",
+            "type": "array"
+          },
+          "email_domains": {
+            "items": {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 50,
+            "title": "Email Domains",
+            "type": "array"
+          },
+          "feeder_device_user": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "is_feeder_bird_device_user",
+            "title": "Feeder Device User"
+          },
+          "first_bind_serial_numbers": {
+            "items": {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 50,
+            "title": "First Bind Serial Numbers",
+            "type": "array"
+          },
+          "first_bound_at_from": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Inclusive first_bind_request_complete_timestamp lower bound",
+            "title": "First Bound At From"
+          },
+          "first_bound_at_to": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Inclusive first_bind_request_complete_timestamp upper bound",
+            "title": "First Bound At To"
+          },
+          "first_purchase_at_from": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Inclusive first_purchase_time lower bound",
+            "title": "First Purchase At From"
+          },
+          "first_purchase_at_to": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Inclusive first_purchase_time upper bound",
+            "title": "First Purchase At To"
+          },
+          "free_trial": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "current_effective_free_trial",
+            "title": "Free Trial"
+          },
+          "languages": {
+            "items": {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 50,
+            "title": "Languages",
+            "type": "array"
+          },
+          "last_purchase_at_from": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Inclusive last_purchase_time lower bound",
+            "title": "Last Purchase At From"
+          },
+          "last_purchase_at_to": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Inclusive last_purchase_time upper bound",
+            "title": "Last Purchase At To"
+          },
+          "materialization_limit": {
+            "anyOf": [
+              {
+                "const": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional closed staging smoke cap for exact materialization",
+            "title": "Materialization Limit"
+          },
+          "paid_amount_max": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paid Amount Max"
+          },
+          "paid_amount_min": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paid Amount Min"
+          },
+          "paid_count_max": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paid Count Max"
+          },
+          "paid_count_min": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paid Count Min"
+          },
+          "paid_user": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "is_real_paid_user",
+            "title": "Paid User"
+          },
+          "platforms": {
+            "items": {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 50,
+            "title": "Platforms",
+            "type": "array"
+          },
+          "refund_amount_max": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refund Amount Max"
+          },
+          "refund_amount_min": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refund Amount Min"
+          },
+          "refund_count_max": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refund Count Max"
+          },
+          "refund_count_min": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refund Count Min"
+          },
+          "registered_at_from": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Inclusive regist_time lower bound",
+            "title": "Registered At From"
+          },
+          "registered_at_to": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Inclusive regist_time upper bound",
+            "title": "Registered At To"
+          },
+          "registered_only": {
+            "default": true,
+            "description": "Exclude anonymous users",
+            "title": "Registered Only",
+            "type": "boolean"
+          },
+          "serial_numbers": {
+            "items": {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 50,
+            "title": "Serial Numbers",
+            "type": "array"
+          },
+          "sku_ids": {
+            "items": {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 50,
+            "title": "Sku Ids",
+            "type": "array"
+          },
+          "sku_names": {
+            "items": {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 50,
+            "title": "Sku Names",
+            "type": "array"
+          },
+          "subscription_statuses": {
+            "items": {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 50,
+            "title": "Subscription Statuses",
+            "type": "array"
+          },
+          "tenants": {
+            "items": {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 50,
+            "title": "Tenants",
+            "type": "array"
+          },
+          "tier_service_types": {
+            "items": {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 50,
+            "title": "Tier Service Types",
+            "type": "array"
+          },
+          "timezones": {
+            "items": {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 50,
+            "title": "Timezones",
+            "type": "array"
+          }
+        },
+        "title": "AudienceSyncFilter",
+        "type": "object"
+      },
+      "AudienceSyncMaterialization": {
+        "additionalProperties": false,
+        "properties": {
+          "audience_filter_hash": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audience Filter Hash"
+          },
+          "checked_at": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checked At"
+          },
+          "materialization_request_id": {
+            "anyOf": [
+              {
+                "pattern": "^amrq_[a-f0-9]{26}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Materialization Request Id"
+          },
+          "materialization_run_id": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,159}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Materialization Run Id"
+          },
+          "member_count": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Member Count"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "launching",
+              "succeeded",
+              "failed",
+              "outcome_unknown"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "AudienceSyncMaterialization",
+        "type": "object"
+      },
+      "AudienceSyncMaterializationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_audience_filter_hash": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Expected Audience Filter Hash",
+            "type": "string"
+          },
+          "idempotency_key": {
+            "maxLength": 128,
+            "minLength": 8,
+            "pattern": "^[A-Za-z0-9_.-]+$",
+            "title": "Idempotency Key",
+            "type": "string"
+          },
+          "product_scope": {
+            "$ref": "#/components/schemas/ProductScope"
+          }
+        },
+        "required": [
+          "product_scope",
+          "expected_audience_filter_hash",
+          "idempotency_key"
+        ],
+        "title": "AudienceSyncMaterializationRequest",
+        "type": "object"
+      },
+      "AudienceSyncMaterializationResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "audience_id": {
+            "pattern": "^aud_[a-f0-9]{26}$",
+            "title": "Audience Id",
+            "type": "string"
+          },
+          "idempotent": {
+            "title": "Idempotent",
+            "type": "boolean"
+          },
+          "materialization": {
+            "$ref": "#/components/schemas/AudienceSyncMaterialization"
+          },
+          "product_scope": {
+            "$ref": "#/components/schemas/ProductScope"
+          }
+        },
+        "required": [
+          "audience_id",
+          "product_scope",
+          "materialization",
+          "idempotent"
+        ],
+        "title": "AudienceSyncMaterializationResponse",
+        "type": "object"
+      },
+      "AudienceSyncPreviewRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "product_scope": {
+            "$ref": "#/components/schemas/ProductScope"
+          }
+        },
+        "required": [
+          "product_scope"
+        ],
+        "title": "AudienceSyncPreviewRequest",
+        "type": "object"
+      },
+      "AudienceSyncPreviewResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "audience_filter_hash": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Audience Filter Hash",
+            "type": "string"
+          },
+          "audience_id": {
+            "pattern": "^aud_[a-f0-9]{26}$",
+            "title": "Audience Id",
+            "type": "string"
+          },
+          "criteria_summary": {
+            "maxLength": 4000,
+            "title": "Criteria Summary",
+            "type": "string"
+          },
+          "member_count": {
+            "minimum": 0.0,
+            "title": "Member Count",
+            "type": "integer"
+          },
+          "partition_dt": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Partition Dt"
+          },
+          "product_scope": {
+            "$ref": "#/components/schemas/ProductScope"
+          }
+        },
+        "required": [
+          "audience_id",
+          "product_scope",
+          "audience_filter_hash",
+          "criteria_summary",
+          "member_count"
+        ],
+        "title": "AudienceSyncPreviewResponse",
+        "type": "object"
+      },
+      "AudienceSyncRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "audience_id": {
+            "pattern": "^aud_[a-f0-9]{26}$",
+            "title": "Audience Id",
+            "type": "string"
+          },
+          "destination_id": {
+            "pattern": "^[a-z][a-z0-9_.-]{2,63}$",
+            "title": "Destination Id",
+            "type": "string"
+          },
+          "expected_member_count": {
+            "minimum": 0.0,
+            "title": "Expected Member Count",
+            "type": "integer"
+          },
+          "idempotency_key": {
+            "maxLength": 128,
+            "minLength": 8,
+            "pattern": "^[A-Za-z0-9_.-]+$",
+            "title": "Idempotency Key",
+            "type": "string"
+          },
+          "materialization_run_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,159}$",
+            "title": "Materialization Run Id",
+            "type": "string"
+          },
+          "product_scope": {
+            "$ref": "#/components/schemas/ProductScope"
+          }
+        },
+        "required": [
+          "product_scope",
+          "audience_id",
+          "materialization_run_id",
+          "expected_member_count",
+          "destination_id",
+          "idempotency_key"
+        ],
+        "title": "AudienceSyncRequest",
+        "type": "object"
+      },
+      "AudienceSyncSaveRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "audience_filter": {
+            "$ref": "#/components/schemas/AudienceSyncFilter"
+          },
+          "expected_audience_filter_hash": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Expected Audience Filter Hash",
+            "type": "string"
+          },
+          "idempotency_key": {
+            "maxLength": 128,
+            "minLength": 8,
+            "pattern": "^[A-Za-z0-9_.-]+$",
+            "title": "Idempotency Key",
+            "type": "string"
+          },
+          "name": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+            "title": "Name",
+            "type": "string"
+          },
+          "product_scope": {
+            "$ref": "#/components/schemas/ProductScope"
+          }
+        },
+        "required": [
+          "name",
+          "product_scope",
+          "audience_filter",
+          "expected_audience_filter_hash",
+          "idempotency_key"
+        ],
+        "title": "AudienceSyncSaveRequest",
+        "type": "object"
+      },
+      "AudienceSyncSaveResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "audience": {
+            "$ref": "#/components/schemas/AudienceSyncAuthoritativeAudience"
+          },
+          "outcome": {
+            "enum": [
+              "updated",
+              "idempotent"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          }
+        },
+        "required": [
+          "audience",
+          "outcome"
+        ],
+        "title": "AudienceSyncSaveResponse",
+        "type": "object"
+      },
+      "AudienceSyncSearchRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "limit": {
+            "default": 20,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "default": 0,
+            "maximum": 2000.0,
+            "minimum": 0.0,
+            "title": "Offset",
+            "type": "integer"
+          },
+          "product_scope": {
+            "$ref": "#/components/schemas/ProductScope"
+          },
+          "query": {
+            "default": "",
+            "maxLength": 100,
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "product_scope"
+        ],
+        "title": "AudienceSyncSearchRequest",
+        "type": "object"
+      },
+      "AudienceSyncSearchResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AudienceSyncAudienceSummary"
+            },
+            "maxItems": 100,
+            "title": "Items",
+            "type": "array"
+          },
+          "next_offset": {
+            "anyOf": [
+              {
+                "maximum": 2000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Offset"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "AudienceSyncSearchResponse",
+        "type": "object"
+      },
+      "AudienceSyncStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "added_count": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Added Count"
+          },
+          "applied_count": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Applied Count"
+          },
+          "audience_id": {
+            "anyOf": [
+              {
+                "pattern": "^aud_[a-f0-9]{26}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audience Id"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "compliance_skipped_count": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Compliance Skipped Count"
+          },
+          "dagster_run_id": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,159}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dagster Run Id"
+          },
+          "destination_id": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z][a-z0-9_.-]{2,63}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Destination Id"
+          },
+          "idempotent": {
+            "default": false,
+            "title": "Idempotent",
+            "type": "boolean"
+          },
+          "materialization_run_id": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,159}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Materialization Run Id"
+          },
+          "missing_alias_count": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Missing Alias Count"
+          },
+          "product_scope": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProductScope"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "provider_kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "brevo",
+                  "mailchimp"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Kind"
+          },
+          "provider_resource_url": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "pattern": "^https://[^\\s@/?#]+(?:[/?#][^\\s]*)?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Platform-generated link to the authoritative provider resource; emitted only after successful provider readback.",
+            "format": "uri",
+            "title": "Provider Resource Url"
+          },
+          "removed_count": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Removed Count"
+          },
+          "resolved_count": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved Count"
+          },
+          "safe_error_code": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z][a-z0-9_.-]{1,127}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Safe Error Code"
+          },
+          "skipped_count": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skipped Count"
+          },
+          "source_count": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Count"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "succeeded",
+              "failed",
+              "reconcile_required",
+              "outcome_unknown"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "sync_request_id": {
+            "pattern": "^asrq_[a-f0-9]{26}$",
+            "title": "Sync Request Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sync_request_id",
+          "status"
+        ],
+        "title": "AudienceSyncStatus",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "ProductScope": {
+        "enum": [
+          "vicohome",
+          "kiwibit"
+        ],
+        "title": "ProductScope",
+        "type": "string"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "AudiencePersonalAPIKey": {
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "description": "Fixed aggregate-only Audience definition, materialization, and provider handoff facade.",
+    "title": "Audience Sync Personal API",
+    "version": "audience-sync-v2"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/platform/v2/audience-sync/audiences": {
+      "post": {
+        "operationId": "create_audience",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AudienceSyncCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AudienceSyncCreateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "AudiencePersonalAPIKey": []
+          }
+        ],
+        "summary": "Create Audience",
+        "tags": [
+          "audience-sync-public-v2"
+        ]
+      }
+    },
+    "/api/platform/v2/audience-sync/audiences/search": {
+      "post": {
+        "operationId": "search_audiences",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AudienceSyncSearchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AudienceSyncSearchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "AudiencePersonalAPIKey": []
+          }
+        ],
+        "summary": "Search Audiences",
+        "tags": [
+          "audience-sync-public-v2"
+        ]
+      }
+    },
+    "/api/platform/v2/audience-sync/audiences/{audience_id}": {
+      "put": {
+        "operationId": "save_audience",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "audience_id",
+            "required": true,
+            "schema": {
+              "pattern": "^aud_[a-f0-9]{26}$",
+              "title": "Audience Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AudienceSyncSaveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AudienceSyncSaveResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "AudiencePersonalAPIKey": []
+          }
+        ],
+        "summary": "Save Audience",
+        "tags": [
+          "audience-sync-public-v2"
+        ]
+      }
+    },
+    "/api/platform/v2/audience-sync/audiences/{audience_id}/materializations": {
+      "post": {
+        "operationId": "materialize_audience",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "audience_id",
+            "required": true,
+            "schema": {
+              "pattern": "^aud_[a-f0-9]{26}$",
+              "title": "Audience Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AudienceSyncMaterializationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AudienceSyncMaterializationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "AudiencePersonalAPIKey": []
+          }
+        ],
+        "summary": "Materialize Audience",
+        "tags": [
+          "audience-sync-public-v2"
+        ]
+      }
+    },
+    "/api/platform/v2/audience-sync/audiences/{audience_id}/preview": {
+      "post": {
+        "operationId": "preview_audience",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "audience_id",
+            "required": true,
+            "schema": {
+              "pattern": "^aud_[a-f0-9]{26}$",
+              "title": "Audience Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AudienceSyncPreviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AudienceSyncPreviewResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "AudiencePersonalAPIKey": []
+          }
+        ],
+        "summary": "Preview Audience",
+        "tags": [
+          "audience-sync-public-v2"
+        ]
+      }
+    },
+    "/api/platform/v2/audience-sync/capabilities": {
+      "get": {
+        "operationId": "get_sync_capabilities",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "product_scope",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ProductScope"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AudienceSyncCapabilities"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "AudiencePersonalAPIKey": []
+          }
+        ],
+        "summary": "Get Sync Capabilities",
+        "tags": [
+          "audience-sync-public-v2"
+        ]
+      }
+    },
+    "/api/platform/v2/audience-sync/materializations/{materialization_request_id}": {
+      "get": {
+        "operationId": "get_materialization",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "materialization_request_id",
+            "required": true,
+            "schema": {
+              "pattern": "^amrq_[a-f0-9]{26}$",
+              "title": "Materialization Request Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "product_scope",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ProductScope"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AudienceSyncMaterializationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "AudiencePersonalAPIKey": []
+          }
+        ],
+        "summary": "Get Materialization",
+        "tags": [
+          "audience-sync-public-v2"
+        ]
+      }
+    },
+    "/api/platform/v2/audience-sync/syncs": {
+      "post": {
+        "operationId": "sync_audience",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AudienceSyncRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AudienceSyncStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "AudiencePersonalAPIKey": []
+          }
+        ],
+        "summary": "Sync Audience",
+        "tags": [
+          "audience-sync-public-v2"
+        ]
+      }
+    },
+    "/api/platform/v2/audience-sync/syncs/{sync_request_id}": {
+      "get": {
+        "operationId": "get_audience_sync",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sync_request_id",
+            "required": true,
+            "schema": {
+              "pattern": "^asrq_[a-f0-9]{26}$",
+              "title": "Sync Request Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "product_scope",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ProductScope"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AudienceSyncStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "AudiencePersonalAPIKey": []
+          }
+        ],
+        "summary": "Get Audience Sync",
+        "tags": [
+          "audience-sync-public-v2"
+        ]
+      }
+    }
+  },
+  "x-audience-sync-contract-revision": "audience-sync-v2"
+}

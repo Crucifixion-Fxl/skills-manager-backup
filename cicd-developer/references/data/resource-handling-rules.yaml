@@ -1,0 +1,226 @@
+# resource-handling-rules.yaml
+#
+# 决策"哪些资源 workflow 自动处理 / 哪些必须外移到运维"。
+#
+# 消费方：
+#   - workflows/interview-cd-requirements.md Step 4（探测声明的资源）
+#   - workflows/new-service.md Step 10（生成 Ops Todo）
+#
+# 核心原则：**不要默认推 Crossplane**。先看应用代码 / 配置——大多数应用只
+# 需要 Vault ExternalSecret 注入已有连接串，不需要新建云资源。
+#
+# Schema：
+#   crossplane_decision_tree   先做的判断：连接已有 vs 需要新建
+#   auto_handled[]             workflow 自动产出的资源
+#   ops_handoff[]              workflow 不做、必须外移的资源
+#   secret_classification      自动凭据 vs 人工提供凭据
+#   escalation_triggers        以下任一命中升级为 GitLab issue
+
+# =============================================================================
+# Crossplane 决策树 —— 不默认推 Crossplane
+# =============================================================================
+crossplane_decision_tree:
+  question: 应用 config 里写的是什么？
+  branches:
+
+    - if: DSN / 连接串 / Addrs（如 MySQL.DSN, Redis.Addrs）
+      then: 连已有 DB / Cache → **不需要** Crossplane
+      action: 用 Vault ExternalSecret 注入连接信息 + 生成"运维密钥清单"
+
+    - if: S3 / Bucket 操作（s3.PutObject、AWS SDK）
+      then: 需要 IRSA（Pod 级 AWS 权限）
+      action:
+        - "bucket 已存在且同 app/同账号 → 只 IRSA role + ServiceAccount（走 add-irsa-role workflow）"
+        - "bucket 已存在但归另一个 app/账号 → consumer 自己账号 IRSA + owner bucket 侧 BucketPolicy；bucket 本体仍在 owner 应用仓库 overlay"
+        - "bucket 在不同 partition（aws ↔ aws-cn）→ STOP；IRSA/OIDC/STS trust 不互通，走 Vault AK/SK 或云厂商原生凭据方案"
+        - "bucket 不存在 → Crossplane Bucket CR + IRSA（走 add-s3-bucket workflow）"
+
+    - if: S3 bucket 需要公网下载 / CDN
+      then: CloudFront OAC + private bucket policy
+      action:
+        - "普通 public-read-cache → 走 add-cloudfront workflow，两阶段 bootstrap + SourceArn hardening"
+        - "DNS / ACM / signed URL key material → 产 Ops Todo；不在 skill 内猜证书或密钥"
+        - "aws-cn / 非 AWS partition → STOP；commercial AWS CloudFront 方案不可直接套用"
+
+    - if: 需要新建 RDS / ElastiCache / Aurora
+      then: Crossplane CR + PushSecret → Vault → ExternalSecret
+      action:
+        - "新部署 staging/tech-service（6 集群 us/eu/cn-staging + tech-us/eu/cn）→ **禁止 app-owned**，只能消费 shared-middleware（hard-rule #29）。engine=mysql / redis / postgres → 走 kind:Database 自助（已上线，见 shared-middleware/README.md），不再 app-owned、不再 Ops Todo、不再 configmap 硬编码 endpoint（postgres 凭据落 .../rds/application/{app}/postgres，app 用自有 schema、public 不可写）。MSK(Kafka) SCRAM 凭据 → 走 KafkaScramCredential 自助，username/password/bootstrap_brokers_sasl_scram 落 .../kafka/application/{app}/sasl；broker 地址从 Vault 读，references/shared-middleware/kafka-brokers.yaml 或 live Crossplane status 只用于平台校验"
+        - "新部署 staging/tech-service 的 mariadb RDS / Aurora → 仍禁止 app-owned，STOP 产平台 Ops Todo（对应 kind:Database Composition 尚未部署）"
+        - "prod（prod-us/eu/cn，无 shared-middleware）或 legacy/迁移例外 → 走 add-rds / add-aurora / add-redis workflow 建 app-owned 托管实例（prod tier）"
+        - "**不允许**用 StatefulSet+PVC 自托管 mysql/redis/etc. 绕过上面的门禁（hard-rule #30，软约定需在 cd-requirements.md 写明理由）"
+
+    - if: 应用想用 StatefulSet+PVC 自托管数据库引擎（mysql/postgres/mongo/redis/clickhouse/kafka）
+      then: 默认改走平台路径，不要自托管（hard-rule #30，软约定）
+      action:
+        - "staging/tech-service → shared-middleware 自助（mysql/redis/postgres 走 kind:Database；MSK SCRAM 凭据走 KafkaScramCredential；其它引擎 STOP 产 Ops Todo）"
+        - "prod → app-owned 托管 RDS/Aurora/ElastiCache（cost-tiering prod tier），不是自托管 StatefulSet"
+        - "确有正当理由必须自建（上游只发 StatefulSet 形态 / 特殊一致性 / 第三方派生组件 / legacy 迁移）→ 在 cd-requirements.md 写明理由 + 备份/HA/升级方案，走 new-stateful-service.md + review"
+        - "平台自身 shared ClickHouse / 自建 Kafka 形态的 shared-middleware 组件豁免（本就是被消费的平台 StatefulSet）"
+
+    - if: 只是 HTTP API 调用
+      then: 不需要 AWS 资源
+      action:
+        - "外部 API key → Vault ExternalSecret"
+        - "内部服务 → K8s Service DNS"
+
+# =============================================================================
+# 自动处理的资源
+# 平台前置已就绪时，workflow 自动产出 / 声明
+# =============================================================================
+auto_handled:
+
+  - resource: RDS Instance
+    via: Crossplane CR + A1 password chain + PushSecret → Vault + ExternalSecret
+    workflow: workflows/add-rds.md
+    recipes: [crossplane-rds-instance, crossplane-rds-password-*, crossplane-rds-conn-push-secret]
+    notes: app-owned 时 RDS Instance CR 本体 + 密码/conn 链全放应用仓库 k8s/ overlay（namespaced CR 与 Secret 同 namespace）；per-app ProviderConfig / IAM RolePolicy 放 crossplane-infra。crossplane-infra 不再接受新增 DB CR；当前数据面 grandfather 仅 Harbor S3，不可作为 DB 模板
+    staging_rule: 新部署应用 staging/tech-service 的 MySQL/PostgreSQL → kind:Database 自助已上线（6 集群,provider-sql+provider-kubernetes vault 交付）,写 kind:Database{app,env,engine:mysql|postgres} 不再 app-owned（postgres 用自有 schema、public 不可写）;mariadb 等其它引擎仍 STOP 产 Ops Todo
+
+  - resource: Aurora Cluster
+    via: Crossplane CR + A1 password chain
+    workflow: workflows/add-aurora.md
+    recipes: [crossplane-aurora-*]
+    notes: app-owned 时 Aurora Cluster + ClusterInstance + 密码/conn 链全放应用仓库 k8s/ overlay；per-app ProviderConfig / IAM RolePolicy 放 crossplane-infra（同 RDS placement）
+    staging_rule: 新部署应用 staging 禁止 app-owned Aurora，需等待共享 Aurora 的 kind:Database Composition 部署，当前产平台 Ops Todo
+
+  - resource: ElastiCache Redis
+    via: Crossplane CR + conn-patcher（补 address）+ PushSecret
+    workflow: workflows/add-redis.md
+    recipes: [crossplane-elasticache-*]
+    notes: app-owned 时 ElastiCache CR 本体 + conn 链放应用仓库 k8s/ overlay；per-app ProviderConfig / IAM RolePolicy 放 crossplane-infra（同 RDS placement）
+    staging_rule: 新部署应用 staging/tech-service 的 Redis → kind:Database 自助已上线（6 集群,engine:redis,function-go-templating + provider-kubernetes）,写 kind:Database{app,env,engine:redis} 把共享 endpoint 推 vault secret/{env}/redis/application/{app}/connection(host/port),app 走 ExternalSecret 读,不再 app-owned/不再 configmap 硬编码。注:无 auth 共享实例,只发 endpoint 非真隔离
+
+  - resource: MSK(Kafka) SCRAM credential
+    via: platform.addx.io KafkaScramCredential + ESO Password + AWS Secrets Manager + ScramSecretAssociation + PushSecret
+    workflow: references/shared-middleware/README.md
+    recipes: []
+    notes: 仅创建 per-app SCRAM username/password/bootstrap_brokers_sasl_scram，不创建 Kafka topic/ACL/consumer group。bootstrap broker 地址由 Composition 从共享 MSK status.atProvider.bootstrapBrokersSaslScram 读取并推到同一 Vault path；references/shared-middleware/kafka-brokers.yaml 或 live Crossplane status 只用于平台校验，禁止 addx.live CNAME。
+    staging_rule: 新部署应用 staging/tech-service 的 Kafka 凭据 → KafkaScramCredential 自助已上线（6 集群），写 KafkaScramCredential{app,env,region}，PushSecret 写 vault secret/{env}/kafka/application/{app}/sasl(username/password/bootstrap_brokers_sasl_scram)，app ExternalSecret 消费并映射 KAFKA_BROKERS；topic/ACL 治理仍 planned，需要显式治理则 Ops Todo。
+
+  - resource: S3 Bucket
+    via: Crossplane CR + IRSA + IAM Policy
+    workflow: workflows/add-s3-bucket.md
+    recipes: [crossplane-s3-*]
+
+  - resource: CloudFront / CDN（S3 private bucket public read）
+    via: CloudFront Distribution + OAC + BucketPolicy bootstrap/final hardening
+    workflow: workflows/add-cloudfront.md
+    recipes: [crossplane-cloudfront-*]
+    notes: Distribution / OAC / BucketPolicy 跟 app-owned S3 bucket 放应用仓库 overlay；per-app ProviderConfig / CloudFront RolePolicy 放 crossplane-infra；DNS / ACM / signed URL key material 仍是 Ops Todo
+
+  - resource: IRSA Role
+    via: Crossplane RolePolicy + ServiceAccount + RoleBinding
+    workflow: workflows/add-irsa-role.md
+    recipes: [crossplane-irsa-*]
+
+  - resource: CI Job Pod IRSA
+    via: Crossplane CI IRSA Role + CI ServiceAccount/RoleBinding + .gitlab-ci.yml KUBERNETES_*_OVERWRITE
+    workflow: workflows/add-ci-aws-irsa.md
+    recipes: [ci-irsa-*, serviceaccount-ci-irsa, gitlab-ci-aws-job]
+
+  - resource: K8s 运行时资源（Rollout / Service / Kustomize）
+    via: recipes 模板填空
+    workflow: workflows/new-service.md
+    recipes: [rollout, service, kustomization-base, kustomization-overlay]
+
+  - resource: ArgoCD Application
+    via: recipes 模板 + 写到 argocd-apps 仓库
+    workflow: workflows/new-service.md Step 11（app MR 合并并产真实 target SHA 后）
+    recipes: [argocd-application]
+
+  - resource: GitLab CI
+    via: shell（一次性）+ static-web per-target verify（适用时）+ per-target image snippet（dual-arch / single-arch）拼接；service 指向 Dockerfile，static-web verify 在 credential-free runner 使用 Harbor base Node 执行 exact npm ci/build + non-empty output gate，image job 指向 target 专属 Dockerfile.<env-keyword>
+    workflow: workflows/new-service.md Step 6
+    recipes: [gitlab-ci-shell, gitlab-ci-static-web-verify, gitlab-ci-target-dual-arch, gitlab-ci-target-single-arch]
+
+  - resource: Dockerfile / static-web Nginx runtime
+    via: service profile 按 $language 选根 Dockerfile；static-web profile 每 target 渲染 Dockerfile.<env-keyword> + 共用 nginx.conf
+    workflow: workflows/new-service.md Step 7
+    recipes: [dockerfile-go, dockerfile-node, dockerfile-python, dockerfile-java, dockerfile-static-web, dockerfile-static-web-port80, nginx-static]
+    notes: static-web 要求 tracked/synchronized package-lock + exact Node/Nginx semver；public bundle config 由 target script 选择，不插入 Dockerfile 自由文本；不得注入 Vault/ExternalSecret/Secret/CI secret/generated config
+
+  - resource: 自动凭据闭环（DB_HOST / DB_PORT / DB_USER / DB_PASSWORD 等）
+    via: Crossplane PushSecret + ExternalSecret
+    notes: 用户**无需**手工写 vault
+
+  - resource: 日志平台接入
+    via: Pod template 加 app + env 两个 label（fluent-bit-base 自动采集）
+    workflow: workflows/add-logging.md（现有应用补接入 / 迁移 / audit）；new-service / new-stateful-service 默认接入
+    notes: env 必须是 env keyword（如 staging-us），不是 staging/pre/prod 短环境；缺失或写短值会路由到错误 topic
+
+# =============================================================================
+# 必须外移的资源（产 Ops Todo）
+# =============================================================================
+ops_handoff:
+
+  - resource: DNS 解析（公网域名）
+    why: addx.live 托管在阿里云 DNS（不在 Route53），ops 账号管理
+    input_required: [ALB DNS name 或 hostname, 是否需 WAF, 是否需 from-office SG]
+    notes: 添加前必须按 CLAUDE.md 全局规则 #3 核查暴露面（裸奔 = 拒绝添加）
+
+  - resource: CloudFront custom domain DNS / ACM / signed URL key material
+    why: DNS 托管、证书签发 / 选择、KeyGroup / PublicKey 私钥材料不在应用仓库自助边界内
+    input_required: [hostname, us-east-1 ACM certificate ARN, CloudFront domain, signed URL / public read requirement]
+    notes: 基础 S3 private bucket + CloudFront OAC 走 add-cloudfront workflow；不允许为了公开下载关闭 S3 PublicAccessBlock
+
+  - resource: API Gateway / 网关路由
+    why: 网关配置不在应用仓库
+    input_required: [path / method / 后端 service]
+
+  - resource: ArgoCD Application 注册（非 self-managed 集群）
+    why: argocd-apps 仓库由平台 review
+    input_required: [对应集群目录、Application YAML 内容]
+    notes: workflow 会产出 YAML 但需要 MR 审批
+
+  - resource: 平台级权限与网络前置
+    why: SG / NACL / VPC peering / route table 是集群级
+    input_required: [来源 IP / CIDR, 目标资源]
+    notes: SecurityGroupIngressRule（放行 app 访问共享/跨账号资源——如 us-data RDS、NineData SG、跨服务 caller——的 SG 入站规则）现以 Crossplane CR（ec2.aws.m.upbound.io）形式在 **crossplane-infra 集中声明**（改的是共享 SG = 权限/爆炸半径，故中枢审批；**不放 app overlay、也不是手工 console op**）。裸 SG 创建 / NACL / VPC peering / route table 仍是手工平台前置。duplicate/InvalidPermission.Duplicate 见 troubleshooting/securitygroupingressrule-duplicate.md
+
+  - resource: 账号级 / 分区级 IAM trust
+    why: 跨账号 sts:AssumeRole 在源/目标账号都要改
+    input_required: [源 account, 目标 account, role name]
+
+  - resource: 特殊网络前置（NAT Gateway / VPC peering / Transit Gateway）
+    why: 跨 VPC / 跨 region 网络配置
+    input_required: [源 VPC, 目标 VPC, 期望流向]
+
+  - resource: 第三方控制台配置
+    why: Sentry org / Casdoor app / Feishu app / Payload CMS / GrowthBook 等需在第三方 UI 操作
+    input_required: 视具体平台
+
+  - resource: 未知资源（DocumentDB / Neptune 等）
+    why: 没有自助消费模板，运维评估后接入（ClickHouse 同此类；MSK SCRAM 凭据已走 KafkaScramCredential，但 topic/ACL 治理仍 planned）
+    input_required: 必须 [expected_data_volume, read_write_qps, retention_duration]（见 cost-tiering/_global.yaml）
+    staging_rule: 新部署应用 staging/tech-service 的 DocumentDB / ClickHouse —— **共享实例本身已于 2026-06-04 部署到全 6 集群**，但 kind:Database 自助**消费 Composition 尚未落地** → 当前仍 STOP 产平台 Ops Todo（内容是"补 per-app 消费层/凭据扇出"，不是"再建共享实例"，更不允许单 app 自建或 StatefulSet 自托管）。待消费 Composition 部署后改为自助侧通过 per-app 凭据消费。Neptune 等未列入 shared contract 的资源继续 STOP + Ops Todo。
+
+# =============================================================================
+# 密钥分类
+# =============================================================================
+secret_classification:
+
+  auto_populated:
+    - DB master password           # ESO Password Generator 自动生成
+    - DB connection info           # Crossplane PushSecret 自动推
+    - AWS IAM access key（业务 IRSA-incompatible 场景）# Crossplane 写
+    - Sentry DSN                   # sentry-onboard Job 自动签发
+
+  manual_populated:
+    - 第三方 API key（Stripe / Casdoor / Feishu / GrowthBook 等）
+    - app 自己签发的 webhook secret
+
+  gitops_only:
+    - 公网外部 DB 凭据（Tencent CDB / Aliyun RDS）
+    - 跨 app 共享的平台资源凭据（按 vault-cross-app-credential.yaml；无 provisioner 则 STOP）
+
+# =============================================================================
+# 升级为 GitLab issue 的触发条件
+# =============================================================================
+escalation_triggers:
+  - 平台前置缺失（如集群没装 ESO Generator）
+  - 资源不在应用仓库控制范围（如 DNS / 网关 / 平台注册）
+  - 涉及账号级 / 分区级权限
+  - 涉及第三方后台人工操作
+  - 涉及 DNS / 网关 / 平台注册
+  # 创建 issue 时 delegate `$gitlab-issue-sop`，不在本 skill 重新定义 issue 流程

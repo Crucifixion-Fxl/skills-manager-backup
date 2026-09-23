@@ -1,0 +1,71 @@
+// =============================================================================
+// Flutter 埋点注入模板 — tracking-lifecycle Step 4
+// 占位符: {{page}}, {{module}}, {{component}}, {{point}}, {{params}}, {{key}}
+// =============================================================================
+
+// --- import (注入到文件顶部) ---
+import 'package:event_tracker/event_tracker.dart';
+import 'package:visibility_detector/visibility_detector.dart';
+
+// =============================================================================
+// PV — 页面浏览
+// 注入位置: onPageShow() 生命周期回调（需 mixin PageVisibilityObserver）
+// =============================================================================
+@override
+void onPageShow() {
+  super.onPageShow();
+  NormalTracker.track(Event.pv(
+    page: '{{page}}',
+    data: { {{params}} },
+  ));
+}
+
+// =============================================================================
+// CLK — 点击事件
+// 注入位置: GestureDetector.onTap / 按钮回调，放在业务逻辑之前
+// =============================================================================
+GestureDetector(
+  onTap: () {
+    NormalTracker.track(Event.clk(
+      page: '{{page}}',
+      module: '{{module}}',
+      component: '{{component}}',
+      data: { {{params}} },
+    ));
+    // ... 业务逻辑
+  },
+  child: {{child}},
+)
+
+// =============================================================================
+// EXP — 曝光事件（列表元素）
+// 注入位置: build() 中用 VisibilityDetector 包裹目标 Widget
+// =============================================================================
+VisibilityDetector(
+  key: Key('{{key}}'),
+  onVisibilityChanged: (info) {
+    if (info.visibleFraction >= 0.5) {
+      NormalTracker.track(Event.pv(
+        page: '{{page}}',
+        data: { {{params}} },
+      ));
+    }
+  },
+  child: {{child}},
+)
+
+// =============================================================================
+// EXP — 曝光事件（静态元素，防重）
+// 注入位置: build() 方法内，使用 bool 标志防止重复上报
+// =============================================================================
+// 在 State 类中声明:
+bool _{{module}}ExposureTracked = false;
+
+// 在 build() 中:
+if (!_{{module}}ExposureTracked) {
+  _{{module}}ExposureTracked = true;
+  NormalTracker.track(Event.pv(
+    page: '{{page}}',
+    data: { {{params}} },
+  ));
+}

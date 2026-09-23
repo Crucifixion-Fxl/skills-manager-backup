@@ -1,0 +1,116 @@
+# service-catalog-onboarding skill: catalog-info.yaml 起步模板
+# 用法：cp $SKILL_DIR/scripts/catalog-info.yaml.template <repo>/catalog-info.yaml，逐项替换 <占位>
+# 完整规则见 SKILL.md；以 engagement 域为参考实例（services/value-added/engagement/catalog-info.yaml）。
+#
+# 三类字段（详见 SKILL.md §0）：
+#   A. 代码派生（API.spec.definition.$text 指 CI 生成的 OpenAPI / .proto） —— 不手写
+#   B. 自动发现（运行态注解，部署后取消注释填实际值） —— 只写关联注解，不写数据本身
+#   C. Curated（本文件，手写语义判断） —— Component 类型 / lifecycle / owner / tags / links
+#
+# Domain 实体声明位置（见 SKILL.md §0.5 canonical 规则）：
+#   • 如果本仓就是某个 Domain 的 owning monorepo（任何层级，不限叶子）→ 顶部加 kind: Domain 块
+#     （带 spec.subdomainOf: <父域>）。
+#   • 如果只是父域 / BU 级 / 跨多仓的纯聚合分组 → 在 engineering/architecture/catalog/domains.yaml 声明。
+# 下面按"本仓 = Domain owning repo"的最常见场景写；不是的话删掉 Domain 块。
+---
+# ─────────────── Domain（本仓是 owning repo 时声明，否则删掉本块）───────────────
+apiVersion: backstage.io/v1alpha1
+kind: Domain
+metadata:
+  name: <domain-name>            # kebab-case，与本仓业务领域对齐（如 engagement / vip / iot）
+  title: "<人读名>"
+  description: "<这个 Domain 是干什么的；DDD 限界上下文 / 业务能力一句话>"
+spec:
+  owner: "group:default/team-<name>"      # GitLab org discovery 接入后改真实 group
+  # subdomainOf: <parent-domain>          # 如果属于某个父域（如 monetization / content / devices）就加上
+
+---
+# ─────────────── System（一组协作完成某功能的 Component）───────────────
+apiVersion: backstage.io/v1alpha1
+kind: System
+metadata:
+  name: <system-name>            # 如 engagement-backend / engagement-console
+  description: "<这个 System 对外当一个东西介绍时是什么>"
+spec:
+  owner: "group:default/team-<name>"
+  domain: <domain-name>          # 指向上面声明的 Domain（或跨仓引用别的 Domain 名）
+
+---
+# ─────────────── Component（主，可独立 build/部署/拥有的软件单元）───────────────
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: <component-name>         # kebab-case，与仓名末段一致（如 engagement-service）
+  title: "<人读名>"
+  description: "<一句话说清干什么；不要写「待补」>"
+  tags:
+    - layer-vertical-product     # 恰好一个 layer-*（5 层架构，见 backend-service-architecture.md）
+    # - <能力关键词>             # 如 push / notification / iot —— AI 反查靠这个
+    # - no-direct-<channel>      # 业务方不能直连的底层（fcm / apns / stripe / growthbook 等）
+  links:
+    - title: 仓库
+      url: https://<gitlab-host>/<group>/<repo>     # ⚠️ 必须绝对 http(s) URL（不能是相对路径或 SSH URL）—— <gitlab-host> 换成你公司的 GitLab 域名
+      icon: github
+  annotations:
+    # ── TechDocs（推荐 Approach B：单 mkdocs + 深链） ──
+    backstage.io/techdocs-ref: dir:.                  # host Component：从仓根 mkdocs.yml 构建
+    # 其它 Component 用 techdocs-entity + techdocs-entity-path 深链到 host（不和 ref 同时写）：
+    # backstage.io/techdocs-entity: component:default/<host-component>
+    # backstage.io/techdocs-entity-path: /architecture/<system>/<component>/
+
+    # ── ADR（per-Component；详见 SKILL.md §4.1） ──
+    backstage.io/adr-location: docs/architecture/<system>/<component>/adrs
+
+    # ── CICD join key（必填；= ArgoCD Application metadata.labels.app） ──
+    a4x.io/cicd-app-name: <app-name>                  # ⚠️ 可能 ≠ Component 名（如仓 services/customer-care 产出 customer-care-api）
+
+    # ── 部署后取消注释（B 类运行态注解） ──
+    # backstage.io/kubernetes-id: <app-name>
+    # argocd/app-name: <argocd-app-name>
+    # sentry.io/project-slug: <org>/<project>
+    # prometheus.io/alert: <alertname>
+    # grafana/dashboard-selector: <label-selector>
+spec:
+  type: service                  # service / website / library / mobile-app / firmware
+  lifecycle: experimental        # production / experimental / deprecated
+  owner: "group:default/team-<name>"
+  system: <system-name>
+  providesApis:
+    - <api-name>                 # 引用下面 kind: API 的 metadata.name；§5.1 CI 反查 catalog 校验
+  # consumesApis:
+  #   - <other-api-name>         # 引用别人的 API（B 类可由 CI 扫 client 调用自动推断）
+  # dependsOn:
+  #   - resource:default/<resource-name>     # 你拥有的 Resource（DB / S3 / topic）
+  #   - component:default/<upstream>          # 语义依赖的上游 Component
+
+---
+# ─────────────── API（每个能力一个） ───────────────
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: <api-name>               # kebab-case；catalog 是 SSOT，无需预注册
+  description: "<这个能力干什么>"
+  tags: [<keyword>]              # 反查靠这个
+  annotations:
+    backstage.io/techdocs-ref: dir:.    # 让 API 实体页也有「Docs」标签
+spec:
+  type: openapi                  # openapi / grpc / asyncapi / graphql
+  lifecycle: experimental
+  owner: "group:default/team-<name>"
+  system: <system-name>
+  definition:
+    $text: ./api/<name>.openapi.json    # A 类：CI 生成的契约文件路径（FastAPI/go-zero/NestJS …）
+    # gRPC: $text 直接指 .proto；手写 OpenAPI 是 last resort，文件头要标 SSOT 原因（见 SKILL.md §3）
+
+---
+# ─────────────── Resource（你拥有的基础设施；按需添加） ───────────────
+# apiVersion: backstage.io/v1alpha1
+# kind: Resource
+# metadata:
+#   name: <resource-name>        # 如 <component>-db / <component>-bucket
+#   annotations:
+#     terasky.backstage.io/crossplane-claim: <namespace>/<claim-name>     # Crossplane 开的资源
+# spec:
+#   type: database               # database / s3-bucket / kafka-topic / external-channel
+#   owner: "group:default/team-<name>"
+#   system: <system-name>

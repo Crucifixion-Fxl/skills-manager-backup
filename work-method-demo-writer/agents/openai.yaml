@@ -1,0 +1,7 @@
+interface:
+  display_name: "Work Method Demo Writer"
+  short_description: "把工作方法写成产品级可视化 HTML demo 页面。"
+  default_prompt: "使用 $work-method-demo-writer 将这个工作方法整理成产品级 HTML 介绍页。"
+
+policy:
+  allow_implicit_invocation: true

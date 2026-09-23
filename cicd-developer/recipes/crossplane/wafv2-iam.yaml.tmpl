@@ -1,0 +1,88 @@
+# crossplane-wafv2-iam.yaml.tmpl
+#
+# WAFv2 专属 ProviderConfig + AssumeRoleChain IAM 方案。
+# WAFv2 **不在** CrossplaneAppBoundary 默认允许列表（permission-boundaries.yaml），
+# 必须走专属 chain，**不要** 扩 CrossplaneHubPolicy（污染基线）。
+#
+# 3 个资源在同一文件用 `---` 分隔：
+#   1. iam.Role (`crossplane-app-<app>-waf`)，信任 CrossplaneProviderRole assume
+#   2. iam.RolePolicy（挂 wafv2:* on Resource:*）
+#   3. ClusterProviderConfig (`<app>` 名，AssumeRoleChain 到上面的 Role)
+#
+# 必填槽位：
+#   {{app}}        kebab-case
+#   {{account_id}} 目标 AWS 账号 id
+#
+# 写到：crossplane-infra/<cluster_dir>/{$app}-waf-iam.yaml
+#
+# 配套：crossplane-wafv2-webacl.yaml.tmpl 引用 `providerConfigRef.name: {{app}}`（**不是** default）
+
+---
+apiVersion: iam.aws.m.upbound.io/v1beta1
+kind: Role
+metadata:
+  name: crossplane-app-{{app}}-waf
+spec:
+  forProvider:
+    assumeRolePolicy: |
+      {
+        "Version": "2012-10-17",
+        "Statement": [{
+          "Effect": "Allow",
+          "Principal": { "AWS": "arn:aws:iam::{{account_id}}:role/CrossplaneProviderRole" },
+          "Action": "sts:AssumeRole"
+        }]
+      }
+    permissionsBoundary: arn:aws:iam::{{account_id}}:policy/CrossplaneAppBoundary
+    tags:
+      managed-by: crossplane
+      app: {{app}}
+  providerConfigRef:
+    name: default
+    kind: ClusterProviderConfig
+
+---
+apiVersion: iam.aws.m.upbound.io/v1beta1
+kind: RolePolicy
+metadata:
+  name: crossplane-app-{{app}}-waf-wafv2
+spec:
+  forProvider:
+    policy: |
+      {
+        "Version": "2012-10-17",
+        "Statement": [{
+          "Effect": "Allow",
+          "Action": [
+            "wafv2:GetWebACL",
+            "wafv2:ListWebACLs",
+            "wafv2:CreateWebACL",
+            "wafv2:UpdateWebACL",
+            "wafv2:DeleteWebACL",
+            "wafv2:TagResource",
+            "wafv2:UntagResource",
+            "wafv2:ListTagsForResource"
+          ],
+          "Resource": "*"
+        }]
+      }
+    roleRef:
+      name: crossplane-app-{{app}}-waf
+  providerConfigRef:
+    name: default
+    kind: ClusterProviderConfig
+
+---
+apiVersion: aws.m.upbound.io/v1beta1
+kind: ClusterProviderConfig
+metadata:
+  name: {{app}}                              # WebACL 的 providerConfigRef.name 引用这个
+spec:
+  credentials:
+    source: IRSA
+  assumeRoleChain:
+    - roleARN: arn:aws:iam::{{account_id}}:role/crossplane-app-{{app}}-waf
+
+# 类似原则也适用 `s3:PutLifecycleConfiguration`：默认 HubPolicy `ManageS3Buckets` 不含
+# 此 action，BucketLifecycleConfiguration 用 default provider 也会 403——
+# 应该走 A 方案专属 role（同款结构 + 同款 chain）。

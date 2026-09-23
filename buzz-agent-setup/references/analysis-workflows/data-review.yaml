@@ -1,0 +1,21 @@
+# 工作日数据复盘。方法在 data-review-analysis。替换 <bi-name> 与站立受众 GitLab 用户名。
+name: data-review
+description: Weekday data-review analysis. Method lives in the Skill.
+trigger:
+  on: schedule
+  # relay 的星期字段 1=周日：周一=2，周一到周五=2-6；名字写法（MON、MON-FRI）未验证，不要用。
+  cron: "30 0 * * 2-6"
+steps:
+  - id: wake
+    action: send_message
+    text: >-
+      @<bi-name> 使用 $addx:data-review-analysis。
+      复盘对象：最近发布的需求；复盘周期：最近 3 个月；
+      分析时点：触发时；资产发现：full refresh。
+      最终报告走 helper，sources：person <channel_admin_username>、
+      person <pm_username>（缺席写未通知）。ack 不加站立受众。
+      最终报告发出后，对报告里「需要人处理」的每一项（最多 5 项，没有就不发），
+      在同一 Thread 再发一条行动消息：一句话写清事项和链接，sources 用该项的责任人
+      （GitLab 作者／assignee／reviewer 的用户名，作 person locator；不在 people_file 就写未通知）；
+      同一个人在同一 Thread 只通知一次。
+      最终报告超过约 8 行时按 references/feishu-doc-report.md 写成飞书文档（你自己的 bot 建、只读授权给群、发摘要），Buzz Thread 只发摘要和文档链接。

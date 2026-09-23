@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "owner_pubkey": "0000000000000000000000000000000000000000000000000000000000000000",
+  "buzz": {
+    "cli_path": "/abs/path/buzz-0.5.23/usr/bin/buzz",
+    "cli_sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "state_dir": "/abs/path/.local/state/buzz-join",
+  "request_ttl_seconds": 604800,
+  "agents": [
+    {
+      "name": "example-dev",
+      "env_file": "/abs/path/.config/buzz/agents/example-dev.env",
+      "unit": "buzz-local-example-dev.service",
+      "log_file": "/abs/path/.config/buzz/agents/example-dev.log",
+      "capabilities": {
+        "summary": "Example 业务研发：改代码、提 MR、查 CI",
+        "repos": ["example-group/example-service", "example-group/example-app"]
+      }
+    }
+  ]
+}

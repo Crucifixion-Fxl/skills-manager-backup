@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "59092039-df5b-4647-82e3-f70d647c2782",
+  "path": "prometheus",
+  "path_key": "prometheus",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/prometheus",
+    "branch": null
+  }
+}

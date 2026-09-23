@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "c70a643d-2190-4dcc-9742-3d82c4a4896b",
+  "path": "buzz-agent-setup",
+  "path_key": "buzz-agent-setup",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/buzz-agent-setup",
+    "branch": null
+  }
+}

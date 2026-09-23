@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-04-22T04:11:04.294510+00:00",
+  "script_version": "0.1.0",
+  "elapsed_seconds": 52.38,
+  "status": "needs_setup",
+  "phase": "config",
+  "error_code": "config_missing",
+  "error_message": "Config file not found at /nonexistent-orgs-for-test.yaml",
+  "context": {
+    "config_path": "/nonexistent-orgs-for-test.yaml"
+  },
+  "llm_next_action": "READ references/first-run-setup.md",
+  "instruction_for_llm": "READ references/first-run-setup.md",
+  "user_fix_options": [
+    "Create /nonexistent-orgs-for-test.yaml by running aws-sp-optimizer-discover"
+  ]
+}

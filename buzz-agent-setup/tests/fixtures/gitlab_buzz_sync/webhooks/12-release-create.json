@@ -1,0 +1,66 @@
+{
+  "body": {
+    "action": "create",
+    "assets": {
+      "count": 4,
+      "links": [],
+      "sources": [
+        {
+          "format": "zip",
+          "url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot/-/archive/rec-v0913082019/pilot-rec-v0913082019.zip"
+        },
+        {
+          "format": "tar.gz",
+          "url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot/-/archive/rec-v0913082019/pilot-rec-v0913082019.tar.gz"
+        },
+        {
+          "format": "tar.bz2",
+          "url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot/-/archive/rec-v0913082019/pilot-rec-v0913082019.tar.bz2"
+        },
+        {
+          "format": "tar",
+          "url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot/-/archive/rec-v0913082019/pilot-rec-v0913082019.tar"
+        }
+      ]
+    },
+    "commit": {
+      "author": {
+        "email": "[REDACTED]",
+        "name": "Administrator"
+      },
+      "id": "07a9dd7e9e1991a0be385aa10f368f2d4dea0957",
+      "message": "Initial commit",
+      "timestamp": "2026-09-13T07:37:19+00:00",
+      "title": "Initial commit",
+      "url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot/-/commit/07a9dd7e9e1991a0be385aa10f368f2d4dea0957"
+    },
+    "created_at": "2026-09-13 08:21:23 UTC",
+    "description": "recording release notes",
+    "id": 1,
+    "name": "Recording release 0913082019 @buzz-sync-maintainer",
+    "object_kind": "release",
+    "project": {
+      "avatar_url": null,
+      "ci_config_path": null,
+      "default_branch": "main",
+      "description": null,
+      "git_http_url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot.git",
+      "git_ssh_url": "ssh://[REDACTED]:2224/buzz-sync-test/pilot.git",
+      "homepage": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot",
+      "http_url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot.git",
+      "id": 2,
+      "name": "pilot",
+      "namespace": "buzz-sync-test",
+      "path_with_namespace": "buzz-sync-test/pilot",
+      "ssh_url": "ssh://[REDACTED]:2224/buzz-sync-test/pilot.git",
+      "url": "ssh://[REDACTED]:2224/buzz-sync-test/pilot.git",
+      "visibility_level": 0,
+      "web_url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot"
+    },
+    "released_at": "2026-09-13 08:21:23 UTC",
+    "tag": "rec-v0913082019",
+    "url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot/-/releases/rec-v0913082019"
+  },
+  "event_header": "Release Hook",
+  "received_at": "2026-09-13T08:21:23.838527+00:00"
+}

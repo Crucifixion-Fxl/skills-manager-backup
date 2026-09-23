@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "72815799-0f1e-4eb2-9024-a8e11aac7cf7",
+  "path": "microservice-integrate",
+  "path_key": "microservice-integrate",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/microservice-integrate",
+    "branch": null
+  }
+}

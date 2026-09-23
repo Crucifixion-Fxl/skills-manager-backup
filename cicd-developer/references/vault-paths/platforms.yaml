@@ -1,0 +1,188 @@
+# vault-paths/platforms.yaml
+#
+# Rule 2 (`platform-resource-credential`) 的 <platform> 枚举完整列表。
+#
+# 这是封闭枚举：workflow **不允许** 凭印象增加新值。新增 platform 走两步：
+#   1. 在本文件登记（covers / typical_keys / written_by 三字段必填）
+#   2. 在 vault-paths/rules.yaml Rule 2 的 regex 字段里把新 platform 名加进交替组
+#
+# 消费方：
+#   - workflows/*.md（按 kind 反查 platform 是否合法）
+#   - validators/check_vault_paths.py（regex 通过 vault-paths/rules.yaml 间接消费）
+#   - references/vault-paths/resolver.md（人工查 platform 含义）
+#
+# Schema：
+#   platforms:
+#     <name>:
+#       covers          这个 platform 覆盖的资源种类（跨云汇总按 service-class）
+#       typical_keys    PushSecret 通常会写的 key 名（不强制；workflow 按实际填）
+#       written_by      谁负责写入（Crossplane 自动 / 运维手工 / app 触发等）
+#       notes           边界情况、踩坑说明（可选）
+
+platforms:
+
+  aws:
+    covers: |
+      AWS IAM access key（IRSA-incompatible 场景）、S3 bucket 凭据、
+      其他 AWS 平台资源
+    typical_keys: [access_key_id, secret_access_key, bucket, region]
+    written_by: Crossplane / Platform Admin (aws-admin-<env>)
+
+  oci:
+    covers: OCI API signing keys and Object Storage S3-compatible Customer Secret Keys
+    typical_keys: [access_key, secret_key]
+    written_by: Platform Admin (oci-admin-<env>)
+    notes: |
+      typical_keys above describes S3-compatible Customer Secret Keys only.
+      API signing credentials instead use a private key and user/tenancy OCIDs, fingerprint and region;
+      field names follow the consuming client contract, not the Customer Secret Key pair.
+      Platform administrators issue, read and rotate credentials through vault-policies.
+      Application project membership grants no personnel access; ESO uses independent machine policies.
+
+  auth:
+    covers: Casdoor / OIDC 平台给 app 下发的 client secret
+    typical_keys: [client_id, client_secret, issuer_url]
+    written_by: Casdoor sync / Platform Admin (auth-admin-<env>)
+
+  rds:
+    covers: |
+      AWS RDS Instance、Tencent CynosDB、外部托管的 MySQL/PG（走 Crossplane）
+    typical_keys: [DB_HOST, DB_PORT, DB_USER, DB_PASSWORD]
+    written_by: |
+      Crossplane（PushSecret 从 <app>-rds-conn）/ 已登记 legacy provisioner
+    notes: |
+      ⚠️ mysql vs rds 区分：
+        rds = 云厂商托管 + Crossplane 闭环（PushSecret 自动写凭据）
+        mysql = 外部公网；必须由 GitOps owner claim/controller 自动签发或跨 app 引用已有 GitOps owner 路径
+      生成 Crossplane RDS YAML 时必须用 rds。第三方公网 MySQL 用 mysql。
+      mysql 分类本身不提供 provisioner；没有可复用 GitOps 能力时 STOP + Ops Todo，禁止人工建账号或写 Vault。
+
+  aurora:
+    covers: AWS Aurora Cluster + ClusterInstance
+    typical_keys: [DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_READER_HOST]
+    written_by: Crossplane（PushSecret 从 <app>-aurora-conn）
+    notes: |
+      独有 DB_READER_HOST（reader endpoint），workflow 写 ExternalSecret 别忘了 map。
+
+  redis:
+    covers: |
+      AWS ElastiCache（Cluster / ReplicationGroup）、Tencent Cloud Redis、
+      自建 Redis
+    typical_keys: [REDIS_HOST, REDIS_PORT, REDIS_AUTH_TOKEN]
+    written_by: |
+      Crossplane（PushSecret 从 <app>-redis-conn；conn-patcher 补 address 字段）
+
+  mongodb:
+    covers: AWS DocumentDB、MongoDB Atlas、自建 MongoDB
+    typical_keys: [MONGO_HOST, MONGO_PORT, MONGO_USER, MONGO_PASSWORD, MONGO_REPLICA_SET]
+    written_by: Crossplane / DBA 手工
+
+  kafka:
+    covers: AWS MSK、Tencent CKafka、自建 Kafka
+    typical_keys: [username, password, bootstrap_brokers_sasl_scram]
+    written_by: KafkaScramCredential Composition / Platform Admin
+    notes: |
+      shared MSK SCRAM 凭据当前固定写在
+      secret/{env}/kafka/application/{app}/sasl，key 为
+      username/password/bootstrap_brokers_sasl_scram。app ExternalSecret 通常将
+      bootstrap_brokers_sasl_scram 映射为 KAFKA_BROKERS 或 KAFKA_BOOTSTRAP_SERVERS。
+      地址事实来自共享 MSK status.atProvider.bootstrapBrokersSaslScram（aws kafka
+      get-bootstrap-brokers 的 BootstrapBrokerStringSaslScram，:9096），由
+      KafkaScramCredential Composition 自动推入 Vault；references/shared-middleware/
+      kafka-brokers.yaml 只作平台校验/刷新缓存。不要走 addx.live CNAME——TLS hostname
+      校验在 kafka-go 这类客户端会崩。
+
+  scylla:
+    covers: ScyllaDB 集群 / keyspace / per-app 用户凭据
+    typical_keys: [SCYLLA_CONTACT_POINTS, SCYLLA_PORT, SCYLLA_USERNAME, SCYLLA_PASSWORD, SCYLLA_KEYSPACE, SCYLLA_DATACENTER]
+    written_by: Platform Admin (scylla-admin-<env>) / DBA 手工写入
+    notes: |
+      ScyllaDB 凭据属于 platform-resource-credential：人员由平台管理员策略授权，路径固定为
+      secret/{env}/scylla/application/{app}/{key}。常用 key 末段为 connection。
+
+  nacos:
+    covers: |
+      Per-region Nacos hostnames clients should configure NACOS_SERVER_ADDR with:
+        us  -> nacos-us-tech-service.addx.live  (in us-eks-tech-service, account 002)
+        eu  -> nacos-eu-tech-service.addx.live  (in eu-eks-tech-service, account 010)
+        cn  -> nacos-cn-internal.addx.live      (in cn-main TKE, internal CLB)
+      Split-horizon DNS: VPC-internal lookup returns the internal NLB IP
+      (8848 HTTP API + 9848 gRPC); public lookup returns the public ALB
+      (port 443 console only, office SG). SDK clients pass the bare hostname;
+      the Nacos SDK adds :8848 by default.
+    typical_keys: [NACOS_SERVER_ADDR, NACOS_NAMESPACE_ID, NACOS_USERNAME, NACOS_PASSWORD, NACOS_GROUP]
+    written_by: Platform Admin（无 Crossplane provider，手工录入或 nacos-sync 服务）
+
+  elasticsearch:
+    covers: AWS OpenSearch、Tencent ES、自建 ES
+    typical_keys: [ES_ENDPOINT, ES_USERNAME, ES_PASSWORD]
+    written_by: Platform Admin
+
+  clickhouse:
+    covers: |
+      自建 ClickHouse（共享中间件实例上的 K8s StatefulSet，dev/staging 多 app 共用）、
+      ClickHouse Cloud
+    typical_keys: [CLICKHOUSE_HOST, CLICKHOUSE_PORT, CLICKHOUSE_USER, CLICKHOUSE_PASSWORD, CLICKHOUSE_DATABASE]
+    written_by: |
+      目标态由 Crossplane Composition 自动交付；现有 Platform Admin 写入仅限已登记 legacy，
+      新 app 在 Composition 上线前必须 STOP，禁止手工新增 per-app 资源
+    notes: |
+      共享 ClickHouse 是 K8s StatefulSet（非云托管），但凭据走 platform-resource-credential
+      的 per-app 路径，与 RDS/Redis 等一致：secret/{env}/clickhouse/application/{app}/{key}。
+
+  mysql:
+    covers: |
+      **外部公网** MySQL（NOT Crossplane 托管）—— Tencent CDB、Aliyun RDS、
+      第三方 SaaS MySQL
+    typical_keys: [DB_HOST, DB_PORT, DB_USER, DB_PASSWORD]
+    written_by: GitOps owner claim/controller；已登记 legacy provisioner 仅维持存量
+    notes: |
+      `mysql` 只是外部 MySQL 的 canonical 路径分类，不等于已有自动供给能力。
+      新建账号、授权或凭据路径必须由 GitOps 高层声明驱动；无对应 claim/Composition 时
+      STOP + Ops Todo。可跨 app 引用同 Vault 域内已有的 GitOps owner 路径，但必须复用
+      相同权限契约；写账号不能冒充只读账号，Ops/Builder Vault 之间也不能直接跨引用。
+
+  sentry:
+    covers: 各 region Sentry 平台为 app 签发的 DSN
+    typical_keys: [dsn]
+    written_by: sentry-onboard Job（自助链路自动）/ 应急 sentry-admin-<env>
+
+  feishu:
+    covers: 飞书开放平台为 app 下发的 OAuth / SDK 应用凭据
+    typical_keys: [FEISHU_APP_SECRET]
+    written_by: Business owner（飞书后台 SSoT）/ Platform Admin 手工写
+    notes: |
+      APP_ID / APPROVAL_CODE 是非敏感公开值——放业务 ConfigMap，**不**走 Vault。
+
+  payload:
+    covers: |
+      Payload CMS 平台为 app 签发的 API key
+      （跨 region 同 app 用同一组 key——CMS 单中心化部署）
+    typical_keys: [CMS_API_KEY, CMS_ACCESS_KEY, CMS_SECRET_KEY]
+    written_by: marketing-service 团队 / Platform Admin（CMS 后台签发后手工写）
+
+  growthbook:
+    covers: GrowthBook 平台为 app 下发的 admin API token
+    typical_keys: [GROWTHBOOK_API_TOKEN]
+    written_by: Platform Admin（GB 后台签发后手工写）
+
+  qdrant:
+    covers: |
+      自建 Qdrant 向量数据库（K8s StatefulSet，官方 Helm chart 部署），
+      Qdrant Cloud（SaaS）
+    typical_keys: [api-key, read-only-key]
+    written_by: |
+      ESO Password Generator（自动生成 api-key，PushSecret 到 Vault）
+    notes: |
+      Crossplane 无 qdrant provider，走自托管 Helm chart。凭据走
+      platform-resource-credential 的 per-app 路径，与 RDS/Redis 一致：
+      secret/{env}/qdrant/application/{app}/apikey。
+
+  zitadel:
+    covers: 自托管 Zitadel IAM 为 app 签发的机器用户 PAT（login-client / admin）
+    typical_keys: [ZITADEL_PAT]
+    written_by: zitadel sidecar 经 ESO PushSecret（external-secrets role 自动）/ 应急 Platform Admin
+    notes: |
+      凭据落 secret/{env}/zitadel/application/<app>/<key>：Zitadel 首启 FirstInstance 写出
+      PAT 文件、sidecar 推 Vault，app 经 ExternalSecret 消费。与 auth(Casdoor) 平台分开——
+      zitadel 是独立自托管 IAM，不混入 auth 命名空间。

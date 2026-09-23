@@ -1,0 +1,28 @@
+# K8s Service — ClusterIP exposure within the cluster.
+#
+# Required slots:
+#   {{app}}             kebab-case, matches Rollout selector
+#   {{port}}            external port (Service-side, what callers dial)
+#   {{target_port}}     container port (matches Rollout's containerPort)
+#
+# DO NOT add type: LoadBalancer here. External exposure goes through Ingress
+# (separate recipe); LoadBalancer Service bypasses ALB / WAF / SG policy.
+#
+# DO NOT add type: NodePort. Use Ingress for external access; port-forward
+# / temp debugging does not need a permanent NodePort.
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{app}}
+  labels:
+    app: {{app}}
+spec:
+  type: ClusterIP
+  selector:
+    app: {{app}}
+  ports:
+    - name: http
+      port: {{port}}
+      targetPort: {{target_port}}
+      protocol: TCP

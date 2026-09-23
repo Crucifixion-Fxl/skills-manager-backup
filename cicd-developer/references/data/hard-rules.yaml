@@ -1,0 +1,928 @@
+# hard-rules.yaml
+#
+# 部署硬红线。违反必被 admission webhook / Vault policy / Harbor / Kyverno
+# 拦下，或在 review 阶段被打回（#30 为 review 阶段软约定）。
+#
+# 来源：v1 cicd-developer/internal/guardrails.md（重写为结构化 yaml）。
+#
+# 消费方：
+#   - workflows/*.md（每 step 自检）
+#   - troubleshooting/*.md（诊断"为啥被拦"时反查）
+#   - validators/*.py（部分规则有对应 check）
+#
+# Schema：
+#   rules[]:
+#     id              整数编号（跟 v1 保持一致，便于跨文档引用）
+#     title           一句话总结
+#     enforced_by     拦截方式（Kyverno / Vault policy / Harbor / human review / CI）
+#     detail          展开说明（含为什么 + 边界）
+#     applies_to      哪些 workflow / 资源类型适用
+#     validator       本 skill 已有 validator 可校验时填脚本名
+
+rules:
+
+  - id: 1
+    title: 禁止在 CI 中直接 kubectl apply / helm install
+    enforced_by: human review
+    detail: CI 只构建镜像，部署由 ArgoCD 完成。
+
+  - id: 2
+    title: 禁止在代码中硬编码密钥
+    enforced_by: trufflehog credentials-scan / Vault policy
+    detail: 所有密钥通过 Vault + ExternalSecret 注入。
+
+  - id: 3
+    title: Crossplane providerConfigRef 必须指定 kind ClusterProviderConfig
+    enforced_by: Crossplane controller
+    detail: 不写 kind 会导致资源创建失败且无报错。
+    applies_to: [recipes/crossplane-*.yaml.tmpl]
+
+  - id: 4
+    title: Pod 实际运行的 image tag 不能是 :latest
+    enforced_by: Kyverno ClusterPolicy disallow-latest-tag (Enforce 模式)
+    detail: |
+      浮动 tag 破坏 GitOps 可追溯性 / 锁定回滚 / Image Updater 排序。
+      ⚠️ **针对 Pod 实际运行的资源，不针对源文件文本**——base/rollout.yaml 里写
+      `image: my-app:latest` 占位符完全 OK（被 overlay newName 改路径 + Image
+      Updater 写 Application image override `:<sha>` 替换）。
+      Pod 实际运行的镜像必须是 `$CI_COMMIT_SHA` 或语义化版本号。
+    applies_to: [recipes/k8s/rollout.yaml.tmpl]
+
+  - id: 5
+    title: ArgoCD Application 不放在应用仓库
+    enforced_by: human review
+    detail: 统一存放在 DEV/argocd-apps 平台仓库中。
+    applies_to: [workflows/new-service.md Step 11]
+
+  - id: 6
+    title: 应用 Git 仓库必须授权 Argocd-deploy
+    enforced_by: ArgoCD repository pull
+    detail: |
+      Reporter 权限足够 ArgoCD 拉代码；Image Updater 使用 `argocd` write-back，不写应用 Git。
+      不得为了镜像更新把 `Argocd-deploy` 提升到 Maintainer/Owner，不创建个人账号密码或额外
+      Git 写 Secret，也不调整 protected branch。项目已有更高角色应按独立权限治理处理，
+      不能作为新应用模板要求。
+
+  - id: 7
+    title: 新应用必须在 DEV/gitlab-vault-sync apps-registry 注册
+    enforced_by: Vault policy（未注册返 403）
+    detail: |
+      未注册写 secret/{env}/app/<app>/* 会被 Vault policy 返 403。
+      Builder 域和 Ops 域 registry 独立：
+        Builder：apps-registry.yaml → vault-cn.builder.addx.live
+        Ops US/EU/CN：k8s/ops/{cn,us,eu}/apps-registry.yaml → 对应 Ops Vault
+      别用 token 绕过——先注册。
+
+  - id: 7a
+    title: 禁止业务应用写 secret/cicd/*
+    enforced_by: Vault policy（业务 app 的 AppRole/JWT 不挂 cicd policy）
+    detail: |
+      cicd 路径是平台基础设施凭据区。业务 app 写 cicd 路径，PushSecret 直接 403。
+      跨 app 共享业务凭证按 vault-cross-app-credential.yaml 走 A/B 方案，
+      **不要** 走 `secret/cicd/<service>/<credential>` + 运维开 policy。
+    validator: check_vault_paths.py
+
+  - id: 7b
+    title: 禁止用 app 路径当"共享区"
+    enforced_by: human review
+    detail: |
+      `secret/{env}/app/shared/*` 违反"app 路径 == app 所有权"模型。
+      多 app 共享走 vault-cross-app-credential.yaml plan A（owner 路径跨引用）
+      或 plan B（双写自管路径），**不要** 伪造 `shared` 这种虚拟 app。
+    validator: check_vault_paths.py
+
+  - id: 7c
+    title: Developer 角色禁止跨 pre/prod 读取
+    enforced_by: Vault policy
+    detail: |
+      Developer 只能读 dev/staging；CLI/UI/API 试 pre/prod 返 403。
+      **不允许** 用 Maintainer+ token 代跑这种 workaround。
+      要读 prod 申请 Maintainer+。
+
+  - id: 7d
+    title: ESO reader/writer Vault key 禁止字面 secret/ 前缀
+    enforced_by: Kyverno forbid-eso-secret-literal-prefix / check_vault_paths.py
+    detail: |
+      ClusterSecretStore 已挂载 `spec.provider.vault.path: secret`。ExternalSecret 的
+      `remoteRef.key` / `extract.key` 和 PushSecret / ClusterPushSecret 的
+      `remoteRef.remoteKey` 都必须写 mount-relative key，例如
+      `prod/rds/application/superset/database`。
+      完整规范 Vault 路径仍是 `secret/prod/rds/application/superset/database`；只在 ESO
+      manifest 字段中移除首段。字面写 `secret/...` 会解析成 `secret/secret/...`，可能留下
+      v0 metadata husk，因此 admission 与 validator 都必须拒绝。
+    applies_to:
+      - recipes/crossplane/rds-password-push-secret.yaml.tmpl
+      - recipes/crossplane/rds-conn-push-secret.yaml.tmpl
+      - recipes/crossplane/aurora-conn-push-secret.yaml.tmpl
+      - recipes/k8s/external-secret.yaml.tmpl
+    validator: check_vault_paths.py
+
+  - id: 7e
+    title: 平台资源凭据必须由 GitOps provisioner 交付
+    enforced_by: workflow STOP / human review
+    detail: |
+      外部 MySQL、DB、缓存和队列的新账号、授权及 Vault platform path 必须由应用仓高层
+      claim/owner declaration 驱动 controller/Composition 自动交付。canonical Vault 路径不等于
+      允许人工 seed。无 provisioner 时 STOP + Ops Todo；禁止 DBA 手工建账号、Vault UI/CLI
+      写入、人工双写和 kubectl Secret。跨 app 只能引用同 Vault 域内、权限契约相同的既有
+      GitOps owner path；需要更小权限账号时必须新增 GitOps claim 能力。
+
+  - id: 8
+    title: Runner tag 必须指定目标集群
+    enforced_by: human review / CI 卡 pending
+    detail: |
+      用目标集群对应 tag，不要用通用 tag。runner_tags 列表见 clusters.yaml。
+
+  - id: 9
+    title: 禁止在 CI 中手动构造 Harbor 凭证 / 禁止项目级 HARBOR_* 覆盖变量
+    enforced_by: human review
+    detail: |
+      GitLab Runner 自动把 harbor credentials 挂载到 `/kaniko/.docker-secret/config.json`
+      （Kyverno 全 fleet 同步）；CI job 不应该 docker login，也不应该用 base64 拼 config.json。
+      **禁止设置项目级 / group 级 CI 变量 `HARBOR_REGISTRY` / `HARBOR_USERNAME` /
+      `HARBOR_PASSWORD` / `HARBOR_PUBLIC_IP`（scope `*`）覆盖 runner 注入的值**：项目变量
+      优先级压过 runner config.toml，会把 push host 钉死成某个账号，并把 Harbor robot 密码
+      写进项目变量（凭据泄露面）。`HARBOR_REGISTRY` 由 runner 注入（见 #25），凭据用平台挂载的
+      registry secret（见 #12）。
+
+  - id: 10
+    title: CN 集群 Dockerfile 禁止直接引用 Docker Hub
+    enforced_by: GFW / build 失败
+    detail: |
+      `FROM` 必须用 Harbor 基础镜像（`${HARBOR_REGISTRY}/base/<image>:<tag>`）。
+      base/ 没有该镜像 → 提 DEV/base-images images.yaml MR 加一行 → 找运维合并。
+      合并前先跑本地 / 用 US/EU 集群，不要在 CN 干等。
+
+  - id: 11
+    title: Harbor 镜像按环境分路径
+    enforced_by: human review
+    detail: |
+      `cicd/{staging|pre|prod}-<region>/<app>` 强制；**禁止扁平路径** `cicd/<app>`。
+      也禁止业务应用写到 `library/<app>`；Harbor 顶层项目只保留 base（基础镜像）
+      和 cicd（业务镜像）。
+      ArgoCD Image Updater `newest-build` 策略按 build 时间戳挑镜像，**不区分 Git 分支**——
+      多分支共推同一路径时，master build 时间戳更新就会被写进 staging Application
+      的 pod。Harbor 项目顶层只保留 `base`（基础镜像）和 `cicd`（业务镜像）。
+    rationale: 多分支或多环境共用同一 Harbor path 时，Image Updater 可能选中错误环境的最新镜像。
+
+  - id: 12
+    title: 禁止自建 Harbor imagePullSecret
+    enforced_by: human review / Kyverno auto-sync
+    detail: 用平台自动同步的 registry secret，**不要** 自建。
+
+  - id: 13
+    title: 新应用必须用 kind Rollout（不是 Deployment）
+    enforced_by: Kyverno require-rollout-for-new-apps (Enforce 模式)
+    detail: |
+      获得 ArgoCD UI 秒级回滚。默认 **Tier 1**（空 canary strategy，等价
+      RollingUpdate），只在满足准入门槛时升 Tier 2（ALB weighted + Prometheus
+      AnalysisTemplate 自动判定）。
+      Tier 2 准入门槛（必须 **同时** 满足，否则 AnalysisRun 永远空结果）：
+        - prod 流量 ≥ 1 qps 持续
+        - replicas ≥ 3
+        - 用户直接感知的服务
+        - app 已导出 Prometheus /metrics
+      低流量 staging / replicas ≤ 2 / 内部工具 强上 Tier 2 = rollout 卡死。
+    applies_to: [recipes/k8s/rollout.yaml.tmpl]
+
+  - id: 14
+    title: Crossplane RDS Instance 必须显式指定 identifier
+    enforced_by: human review / 灾难性后果（CR 误 match 别的 RDS）
+    detail: |
+      provider-aws-rds v2.0.0 不显式指定 identifier 时发送空 DescribeDBInstances
+      filter，AWS 返回账号所有 RDS，Crossplane 随便挑一个误 match。
+      `crossplane.io/external-name` annotation 和 `forProvider.identifier` **两个**
+      必须设且相等。
+    rationale: 缺少显式 identifier 会让 provider observe 到账号内错误 RDS，后续 reconcile 可能污染无关资源。
+
+  - id: 14a
+    title: 新建 app-owned MySQL RDS 必须使用当前 8.4 LTS family
+    enforced_by: workflow + recipe offline e2e + check_db_resource_contracts.py
+    validator: check_db_resource_contracts.py
+    detail: |
+      版本契约的 SSOT 是 `references/cost-tiering/rds.yaml -> engine_contracts.mysql`。
+      当前默认 `engineVersion: 8.4.10`，只允许 `8.4.x`；禁止继续从旧 manifest
+      复制 MySQL 8.0。`parameterGroupName: default.mysql8.4` 和
+      `optionGroupName: default:mysql-8-4` 必须与 engine version family 同时设置，
+      避免升级后继续绑定旧 family 的参数组或 option group。
+      非默认 8.4 minor 必须在 cd-requirements.md 记录理由，并通过每个 target
+      region 的 AWS `describe-db-engine-versions` 验证。
+      `check_db_resource_contracts.py` 只对已经声明 8.4.x 的 manifest 强制校验
+      parameter / option group；它不阻断存量 8.0，因为 validate.sh 会全目录扫描，
+      无法区分本次新增文件。新建版本门禁由 workflow、recipe 和 offline e2e 承担。
+    applies_to:
+      - workflows/add-rds.md
+      - recipes/crossplane/rds-instance.yaml.tmpl
+    rationale: MySQL 8.0 已不是新建 RDS 的公司基线；版本与参数组选错会导致创建失败或运行时行为漂移。
+
+  - id: 15
+    title: 禁止多个 ExternalSecret 写同一个 target Secret
+    enforced_by: human review
+    detail: 两个 ES 写同名 Secret 会互相覆盖；行为不确定。
+
+  - id: 16
+    title: DB Migration 必须优先用 ArgoCD PreSync hook Job
+    enforced_by: human review
+    detail: |
+      不要在 app 启动时跑 migration（多副本竞争 + 失败回滚难）。
+      用 PreSync hook 在 sync 前跑一次，成功才进下一阶段。
+      详细 4 条 redlines（写之前必读）：
+        1. 绝对不要让两个 ExternalSecret 写同一个 target Secret——触发 reconcile race 字段被反复擦写
+           （跟 hard rule #15 一致）
+        2. 不要在同一 commit 改 ExternalSecret（含 ConfigMap）+ 触发 migration 的东西（如镜像 tag）——
+           PreSync hook 跑在 ExternalSecret 同步**之前**，会拿到旧 Secret。正确：先 commit 改 ES，
+           再 commit 改 image
+        3. migration 二进制必须**幂等** —— Job 可能因 backoffLimit retry 或人工 retrigger sync 重跑
+        4. 拼 DATABASE_URL 必须 URL escape 密码 —— Vault 生成密码可能含 `:` `@` `/` `?` `#` 等
+           URL 保留字符，裸 `fmt.Sprintf` 会被 URL parser 误解析。
+           Go 用 `url.UserPassword(user, pass).String()`；Python `urllib.parse.quote(password, safe='')`
+    applies_to:
+      - workflows/add-db-migration.md
+      - recipes/db-migration/presync-hook.yaml.tmpl
+      - troubleshooting/db-migration-failures.md
+    references:
+      - references/db-migration/secret-patterns.md
+      - references/db-migration/timing-pitfalls.md
+
+  - id: 17
+    title: Crossplane CR 严禁写 crossplane.io/external-name ""
+    enforced_by: Crossplane controller / 同 #14 风险
+    detail: 空 annotation 触发同 #14 的误 match 风险。
+
+  - id: 18
+    title: 需要 CI 的仓库必须建在 group 下
+    enforced_by: GitLab runner（个人 namespace 不继承 group runner，CI 卡 pending）
+    detail: |
+      `DEV/` / `EM/` / `AUD/` 等按归属。禁止个人 namespace `<user>/xxx`。
+      个人 namespace 默认 `shared_runners_enabled: false`。
+
+  - id: 19
+    title: RDS / Aurora master password 走 vault platform 路径 + A1 ESO Password Generator
+    enforced_by: human review / 凭据链断裂
+    detail: |
+      凭据链：ESO Password Generator → ExternalSecret(refreshInterval=0, deletionPolicy=Retain)
+        → K8s Secret → PushSecret(IfNotExists)
+        → Vault secret/{env}/<rds|aurora>/application/<app>/master-password
+        → Crossplane passwordSecretRef
+      **A1 链路红线**（开发者必读）：
+        ① 禁手工 kubectl delete secret <app>-rds-password / <app>-aurora-password
+           （触发 generator 重生成 + vault IfNotExists 不更新 → K8s/vault 漂移 →
+           Crossplane ModifyDB 改 AWS 密码 → app 拉旧 vault 密码连不上）
+        ② 禁删 generator 型 ExternalSecret 再重建；Retain 只是不删 Secret，不保证重建不覆盖
+        ③ 禁改 generator spec
+        ④ ArgoCD prune namespace 前先备份 vault
+      应急通道：运维用 rds-admin-<env> role 登 vault 直接写 platform 路径（带外）。
+    applies_to:
+      - recipes/crossplane/rds-password-generator.yaml.tmpl
+      - recipes/crossplane/rds-password-external-secret.yaml.tmpl
+      - recipes/crossplane/rds-password-push-secret.yaml.tmpl
+    validator: check_eso_pushsecret_bug.py
+
+  - id: 20
+    title: Docker job 跨多分支必须按分支拆 KANIKO_DESTINATION
+    enforced_by: human review / 同 #11 反模式
+    detail: |
+      单 job rules 匹配 master/staging/feature 多条时，必须用 rules:variables 或
+      拆多 job，每分支推独立 Harbor 路径。反例 = 单一静态 KANIKO_DESTINATION +
+      rules:*docker-staging → 三分支共推一路径 → 踩 #11。
+    applies_to: [recipes/ci/gitlab-ci-target-dual-arch.yml.tmpl, recipes/ci/gitlab-ci-target-single-arch.yml.tmpl]
+
+  - id: 21
+    title: CI Job 调 AWS API 必须走 v4 Job Pod IRSA
+    enforced_by: human review / 安全审计
+    detail: |
+      禁止 GitLab CI variable 写死 AK/SK。禁止把 CI 跑在 application runtime ns
+      用 runtime SA 蹭权限。
+      接入：crossplane-infra 加 IRSA Role + 应用 overlay 加 SA（带
+      ci.gitlab.com/allowed-project annotation）+ RoleBinding 给 runner SA 跨 ns
+      起 pod 权限 + .gitlab-ci.yml 用 KUBERNETES_NAMESPACE_OVERWRITE / SA_OVERWRITE。
+      目标集群是否具备 v4 runner/RBAC 前置必须按当前 runner 配置核实，不能用历史 fleet 计数代替。
+    applies_to:
+      - workflows/add-ci-aws-irsa.md
+      - recipes/crossplane/ci-irsa-role.yaml.tmpl
+      - recipes/crossplane/ci-irsa-rolepolicy.yaml.tmpl
+      - recipes/k8s/serviceaccount-ci-irsa.yaml.tmpl
+      - recipes/ci/gitlab-ci-aws-job.yml.tmpl
+
+  - id: 22
+    title: 新应用必须满足 4 条 Kyverno baseline policy
+    enforced_by: Kyverno admission webhook（目标集群必须处于 Enforce 模式）
+    detail: |
+      ArgoCD-managed 资源（带 argocd.argoproj.io/tracking-id annotation）必须：
+        - disallow-latest-tag：image 显式 tag（`*:*` 模式），CI 推 $CI_COMMIT_SHA
+        - require-resources：containers + initContainers 都声明 resources.requests/limits.{cpu,memory}
+        - require-probes：containers 声明 livenessProbe + readinessProbe，
+                         且 **显式写 periodSeconds**（Argo Rollouts CRD 不走 K8s API
+                         server defaulting，省略会被判违规）。Job/CronJob 跳过本规则
+        - require-rollout-for-new-apps：新建 Deployment 默认拒，必须 kind: Rollout
+      现有资源在 policy 创建时自动 grandfather；仅新建/重建会被拦。
+
+  - id: 23
+    title: Kyverno 例外只能申请，不能自创
+    enforced_by: Kyverno features.policyExceptions.namespace='kyverno' 限定
+    detail: |
+      service team **不能** 在自己 ns 创 PolicyException。
+      必须 Deployment 的场景（无状态网关 / Flink 类准 stateful / 单实例工具）：
+        1. 在自己仓提 issue 说明服务名 + 为什么必须 Deployment
+        2. 平台方 review 后开 DEV/k8s rollout-exempt-deployments.yaml MR 加 entry
+        3. 永久豁免 PolicyException 覆盖三政策（53 名网关/Flink/数据基础设施）
+        4. 临时豁免 截止 2026-07-31 owner 修完后清理
+
+  - id: 24
+    title: base/Rollout pod template 必须显式 imagePullSecrets
+    enforced_by: 不显式挂 → ImagePullBackOff
+    detail: |
+      不能依赖 SA 默认挂载或 ns 自动注入。Argo Rollouts 创建的 Pod 走 default SA +
+      空 imagePullSecrets，从私有 Harbor 拉镜像走匿名 → 401 ImagePullBackOff。
+      `imagePullSecrets: [{name: harbor-registry-secret}]` base 写一次所有 overlay 继承。
+    rationale: Argo Rollouts 创建 Pod 时不能依赖 ServiceAccount 默认挂载；缺失 secret 会直接 ImagePullBackOff。
+    applies_to: [recipes/k8s/rollout.yaml.tmpl]
+
+  - id: 25
+    title: CI 业务镜像 push 目标 —— 默认 runner 注入 host；部署侧字面 host 三方一致
+    enforced_by: 不一致 → ImagePullBackOff
+    validator: check_deploy_image_host.py
+    detail: |
+      **业务镜像 push 目标（CI `IMAGE_PATH`）默认走 Option B：runner 决定 host。**
+      shell 里定义 `IMAGE_BASE: "${HARBOR_REGISTRY}/cicd"`，per-target job 写
+      `IMAGE_PATH=${IMAGE_BASE}/<env>-<region>/<app>`。host 由 runner config.toml 注入的
+      `HARBOR_REGISTRY` 决定，凭据由平台挂载到 `/kaniko/.docker-secret/config.json`
+      （Kyverno 全 fleet 同步，见 #9 / #12，CI job 不要自己 docker login）。
+      **runner tag → Harbor 基本是确定性映射**（见 clusters.yaml 每 cluster 的
+      harbor_url / runner_tags），所以"按部署目标集群挑 runner tag"就是在选 push 到哪个
+      Harbor。这是 fleet 主流写法，也和 #28 工具镜像走 `${HARBOR_REGISTRY}/base/...` 同源。
+      ⚠️ 不是严格 1:1:同一物理 Harbor 有 split-horizon DNS 别名（如 `registry-harbor-cn`
+      == `harbor-58989-cn-tech`），且有 legacy/utility runner tag（`kubernetes-sg` /
+      `sonar-scanner-sg` / `runner-sg-nat` 等）不在 clusters.yaml——所以自动化 tag→Harbor
+      断言要先建别名/legacy-tag 模型，否则会误杀存量仓（见下）。
+
+      **部署侧永远是字面 host，禁止写变量。** overlay `images[].newName` 与 Application
+      `image-list` / `spec.source.kustomize.images` image path 必须是字面
+      `<harbor_url>/cicd/<env>-<region>/<app>`（按 clusters.yaml 查 harbor_url），禁止
+      `flat cicd/<app>`。
+      kustomize 与 Image Updater **不展开** `${IMAGE_BASE}`，写变量进去会被当字面量 → 拉取 404。
+      `check_deploy_image_host.py` 校验业务仓 overlay `images[].newName` 是字面 host（含 `$` → FAIL）；
+      Application image-list 与 recovery seed 的字面 host 仍需对 argocd-apps 做交叉 review。
+      **但 "CI push 的 Harbor == 部署 pull 的 Harbor" 的 tag→Harbor 交叉断言仍是人工 review**——
+      自动化需先建上面的别名 + legacy/utility runner tag 模型（否则误杀存量仓，实测 158 仓里
+      `kubernetes-sg` / `sonar-scanner-sg` 等十几个 tag、`harbor-cn` / `harbor-us-internal` 等别名 host 都会被误判），列为 follow-up。
+
+      **三方一致不变量**：CI 选定的 runner tag 解析出的 Harbor（按 clusters.yaml）必须等于
+      部署侧 overlay newName / Application image-list 的字面 host。选错 runner 时 Option B 会成功 push 到
+      错 Harbor（runner 凭据永远匹配自身注入的 host），到部署期才 ImagePullBackOff（晚爆）；
+      **真·多 target 应用应加 post-build 部署校验**（rollout status / argocd app wait）把它
+      拉回流水线内。⚠️ 同账号跨区也会踩（如 390 的 us-staging vs eu-staging 仅靠 runner tag 区分）——
+      tag 打错会带**合法凭据**静默推到另一区，部署校验须打到正确集群才逮得住。
+
+      **Option A（字面 host）保留为可接受写法，单 target / 老应用尤其适用（grandfather，不强制迁）。**
+      `IMAGE_PATH=<harbor_url>/cicd/<env>-<region>/<app>` 明确 push host，但不能假设选错
+      runner 必然 401：部分平台凭据覆盖多个 Harbor，存量应用也可能有获批准的跨集群 pull。
+      A/B 都必须核对准确 runner、目标 Harbor artifact/digest 与部署 pull path，不能把
+      build 成功或预期认证失败代替这项证据。
+
+      **tag 规则（A/B 通用）**：选择 Image Updater 的业务 Application 必须带完整
+      `argocd-image-updater.argoproj.io/*` annotations：全局 `image-list` +
+      `write-back-method=argocd`，每个动态 alias 带 `update-strategy=newest-build`、SHA
+      `allow-tags`、`kustomize.image-name`、`platforms`（见 #27），并在
+      `spec.source.kustomize.images` 保存 recovery seed。禁止 `image-writeback.addx.io/*`
+      平台标签、`git-branch`、ImageUpdater CR/ApplicationSet/merger/Git credential 或
+      `.argocd-source-*` 新约定；`check_argocd_application.py` 机械校验。
+      生成 / 提交 Application 前 recovery seed `<tag>` 必须是 CI 已推送的真实 Git SHA，并有
+      对应 registry digest / platforms 证据；不得以 `0000000` 或 `PENDING` 生成 draft Application。
+      overlay `images[].newTag: 0000000` 只是 overlay/draft placeholder，不是最终 image override，也不是环境 tag。
+      **recovery seed 存在不代表 override 真正生效。** compatibility wrapper / 多层 Kustomization 会先运行
+      子层 image transformer；子层若已把短名（如 `flink`）改成完整 Harbor 路径，父层 Application
+      Application override 继续用 `flink=<path>:<sha>` 时可能零报错但不再命中。合并前必须用准确 source path、
+      准确 `spec.source.kustomize.images` 参数和 repo-server 同版本 Kustomize 渲染最终 manifest，断言 workload
+      `spec.image` 是预期的完整 path+SHA；只比较无 override 的两个 overlay render 不算通过。
+      对已有有状态 workload 的 orphan/adopt，若 live 已偏离 tag 且 re-pin 会触发 replacement，允许一个
+      **严格临时 freeze**：同一次变更中移除全部 IU 前缀注解和 Application image override，证明
+      无 override 的最终 workload `.spec` 与 live 规范化后逐字段相同，并在变更说明中记录单独的受控
+      restart/re-pin follow-up。新应用、普通发布、只删 seed 却保留 IU、或只删部分 IU 注解均不适用。
+      每个 `<alias>.allow-tags` 默认使用 `regexp:^[a-f0-9]{7,40}$`（单镜像模板 alias 为 `app`）；
+      validator 也接受语言更窄但仍只覆盖 7..40 位小写十六进制的 regex（如完整 SHA 的 `{40}`），
+      拒绝 `any`、非法 regex、环境前缀 tag，所以 CI 终态 tag 必须是纯 Git SHA
+      （`${CI_COMMIT_SHORT_SHA}` 或 `${CI_COMMIT_SHA}`）。dual-arch 的 `-amd64` / `-arm64`
+      只能用于中间 tag；manifest fan-in 输出的 TARGET_TAG 必须是纯 SHA。不要生成
+      `staging-${CI_COMMIT_SHORT_SHA}` / `prod-${CI_COMMIT_SHORT_SHA}` 这类终态 tag，否则 Image
+      Updater 永远不会选中。环境隔离靠 Harbor path `cicd/<env>-<region>/<app>`，不是靠 tag 前缀。
+      按 **部署目标集群** 挑 runner tag，不是"job 名字看起来像 prod-cn"。
+    rationale: |
+      runner tag 决定 push 的 Harbor；它与部署侧字面 host 不一致时目标集群拉不到同一镜像。
+      Option B 让 CI host 由 runner 注入（fleet 主流、零 host 漂移、和工具镜像同源），代价是选错
+      runner 时可能晚爆，用 post-build 部署校验补；Option A 字面 host 明确 push 目标，
+      作为可接受 / grandfather 写法保留。无论 A/B，部署侧 overlay newName、Application image-list
+      与 recovery seed 都必须使用一致的字面 host。
+
+  - id: 26
+    title: 新应用 CI 必须按 target 类型 dual / single arch 渲染
+    enforced_by: human review
+    detail: |
+      自 2026-05-12 起：
+        按 clusters.yaml 的准确 target.build_mode 选择，不按云厂商或“非 TKE”猜测。
+        dual-arch：三件套 build:<T>:amd64 + build:<T>:arm64 + manifest:<T>
+        single-arch-amd64：单 build job (amd64)，适用于已登记的 TKE/GKE/eu-prod-data 等目标。
+      **不允许** dual-arch target 的新应用走旧 single-arch + nodeSelector arch 模式——锁死 NodePool
+      单 arch 调度，失去 Karpenter spot 任挑 arm/amd 的成本优化（arm64 Graviton
+      ~25% 便宜 + spot 中标率提升）。
+      存量 `ALGO/addx_gpu_inference` 原地接管是限时例外：仅
+      `namespace-legacy-exceptions.yaml` 中
+      `addx-gpu-inference-shared-runtime-namespaces` 与
+      `algo-390-staging-service-discovery-namespaces` 下仅
+      `image_app=addx-gpu-inference` 的精确 Application/overlay 身份，可在登记
+      到期日前保持现行 `linux/amd64` 产物和调度语义。该例外不
+      授权新 target、新应用或删除现有 placement 约束；到期前必须完成 multi-arch
+      可行性验证、迁移或重新审批，不能从 GPU-infer 扩散到其他服务。
+    applies_to: [recipes/ci/gitlab-ci-target-dual-arch.yml.tmpl, recipes/ci/gitlab-ci-target-single-arch.yml.tmpl]
+
+  - id: 27
+    title: Harbor image manifest 含的 arch ⊇ 目标集群 NodePool 可起的 arch
+    enforced_by: 不满足 → 节点拉不到镜像
+    detail: |
+      clusters.yaml 中 build_mode=dual-arch 的目标：CI 产 multi-arch index；Rollout **不写**
+      nodeSelector.kubernetes.io/arch；Application annotation 配置
+      `<alias>.platforms: linux/amd64,linux/arm64`；Karpenter 任挑。
+      build_mode=single-arch-amd64 的目标：CI 单 build job 产 single-arch amd64；Application annotation 配置
+      `<alias>.platforms: linux/amd64`；NodePool 本就只有 amd64。
+      `addx-gpu-inference-shared-runtime-namespaces` 与
+      `algo-390-staging-service-discovery-namespaces` 下仅
+      `image_app=addx-gpu-inference` 的精确存量身份，按红线 26 的限时例外保持
+      `linux/amd64`，但仍必须证明 manifest 的 amd64 成员
+      与目标 GPU 节点架构一致。
+      反例：Rollout 加 nodeSelector arch=amd64 + image 是 multi-arch → 浪费，
+      arm64 manifest 永远没节点拉。
+
+  - id: 28
+    title: CI 模板 image 一律走 ${HARBOR_REGISTRY}/base/<image>:<tag>
+    enforced_by: GFW (CN 集群拉不到外部 URL)
+    detail: |
+      Kaniko / crane / 任何 CI tool image 必须先在 DEV/base-images/images.yaml 登记
+      + 等同步 pipeline 扇出到当前配置的目标 Harbor base/。
+      **禁止** 写 gcr.io/... / docker.io/... 等外部 URL。
+      所有受支持目标集群通用，不区分 CN / 非 CN——HARBOR_REGISTRY 由 runner 注入本集群 Harbor。
+
+  - id: 29
+    title: 新部署 staging/tech-service 应用禁止自建数据类中间件（只能用 shared-middleware）
+    enforced_by: workflow gate / human review
+    detail: |
+      **范围（2026-06-05 收紧）**：shared-middleware 共享中间件已上线 **6 个集群**——
+      staging-us/eu/cn（us/eu/cn-eks-staging）+ tech-us/eu/cn（002/010/589 tech-service）。
+      ⚠️ **判别这 6 个集群必须按 cluster 名，不能按 `$target.env`**：tech-service 的 env-keyword
+      是 `env=prod`（与真 prod 集群 `*-eks-prod` 同 env），按 env 判会把 tech-service 漏成 prod、
+      误落 app-owned 分支。门禁谓词统一用——
+        **shared-middleware 集群**：`$target.cluster ∈ {us-eks-staging, eu-eks-staging,
+        cn-eks-staging, us-eks-tech-service, eu-eks-tech-service, cn-eks-tech-service}`；
+        **非 shared-middleware**：其余集群（真 prod `*-eks-prod`/`*-prod-data`/TKE/dev）→ app-owned。
+      在**这 6 个集群**上，新部署应用的数据需求**只能消费 shared-middleware**，
+      **不允许 app-owned 自建**，也不允许在 crossplane-infra 为单 app 新增这些资源：
+        - 不允许 app-owned RDS / Aurora / ElastiCache Redis / DocumentDB / MSK(Kafka) / ClickHouse；
+        - 不允许用 StatefulSet+PVC 在集群里自托管数据库引擎（见 #30，软约定但需 review）。
+      必须通过 shared-middleware 自助声明数据中间件需求：RDS/Redis/Postgres 走
+      `kind:Database`，MSK(Kafka) SCRAM 凭据走 `kind:KafkaScramCredential`。dev/staging/
+      tech-service 自动路由到 shared instance + per-app database/user 或 credential；凭证落
+      region-less per-app 路径 `secret/{env}/{platform}/application/{app}/{key}`，应用通过
+      ExternalSecret (secretStoreRef = cluster vault_css) 消费。
+      **源码归属硬边界**：`Database` / `KafkaScramCredential` claim、ExternalSecret 和 workload
+      必须跟随业务生命周期放在应用仓 overlay；`k8s` 只维护 shared instance、XRD/Composition/
+      controller 等通用平台能力，`crossplane-infra` 只维护集中权限边界。controller、composed
+      resource 或 PushSecret 运行在平台 namespace 不改变源码归属。禁止在 `k8s/shared-middleware`、
+      `crossplane-infra` 或其它平台目录为单 app 手写 User/Grant/PushSecret、静态 Vault per-app
+      路径扇出或其它业务实例配置。
+      **prod（prod-us/eu/cn）没有 shared-middleware**：prod（或 labels.isolation=required）
+      继续走 **app-owned 托管 RDS / Aurora / ElastiCache**（cost-tiering 表的 prod tier，
+      multiAZ + 加密 + 删除保护），**不是**自托管 StatefulSet。各 region 独立 staging 集群：
+      staging-us→us-eks-staging、staging-eu→eu-eks-staging、staging-cn→cn-eks-staging。
+
+      ✅ 共享 MySQL + Redis 自助 **已上线**（2026-06-03，6 集群：us/eu/cn-staging + tech-us/eu/cn）：
+      开发者写 `kind: Database {spec.app, spec.env, spec.engine, spec.purpose?}`(统一入口,
+      go-templating 按 engine 分支)，
+      app 自己写 ExternalSecret 消费,**app-ns 无静态 secret、不再 configmap 硬编码 endpoint**。对 mysql/redis/postgres 不再 STOP。
+        - `engine: mysql` → provider-sql 建 per-app database+user+grant，凭据推 vault
+          `secret/{env}/rds/application/{spec.app}/database`（host/port/username/password）。无 size 档位、
+          无独立 kind:Schema/DatabaseUser、不依赖 provider-ninedata。先执行 shared-middleware README
+          的 live CRD gate，且输出严格为 `array` 后，才可在**业务仓**同一 claim 声明
+          `spec.additionalUsers`：数据库固定 `spec.app`、用户名固定 `{spec.app}_{name}`、只允许小写字面
+          表名与 SELECT/INSERT/UPDATE/DELETE，凭据落
+          `secret/{env}/rds/application/{spec.app}/{name-dns}`。XRD 未包含该字段则 STOP；禁止应用仓 raw
+          provider-sql User/Grant，也禁止把具体账号/表名放 DEV/k8s shared-middleware overlay。
+        - `engine: redis` → 共享 ElastiCache **无 auth**(无 per-app 凭据),把共享 endpoint 推 vault
+          `secret/{env}/redis/application/{spec.app}/connection`（host/port）。**非真隔离**(真隔离需 RBAC 模式,
+          另议);app 用 key 前缀软隔离。
+        - `engine: postgres` → provider-sql 建 per-app Role(login)+Database(**归 master `shared_mw` 所有,
+          非 app role——否则删 claim 时 DROP DATABASE/ROLE 死锁**)+Grant(库级),凭据推 vault
+          `secret/{env}/rds/application/{spec.app}/postgres`（host/port/username/password,末段 key=`postgres` 非
+          `database`;连接 secret=`{spec.app}-postgres-db-cred`）。**限制(provider-sql v0.9.0 无 schema-Grant/Schema CRD)**:
+          app 靠库级 CREATE 权用**自有 schema**,默认 `public` 在 PG15+ 不可写。需要同一 owner 的
+          独立 PostgreSQL identity 时，可选 `spec.purpose` 必须是 2–20 字符 lower_snake，且
+          `len(spec.app + "_" + purpose) <= 63`；仅派生 role/database
+          `{spec.app}_{purpose}` 和 Vault key `postgres-{purpose-as-kebab}`。owner app-slug、
+          `spec.app`、namespace 和路径 app 段保持不变；mysql/redis 禁止 purpose。claim 不接受
+          host、admin/administrator、path/vaultPath、owner、privilege/privileges 等底层输入。
+        - db/user/路径段 = spec.app，需匹配 ^[a-z][a-z0-9_]{1,30}$（无连字符）。**新增 claim 不允许
+          手填或拼接多词名**：必须声明 canonical kebab-case annotation
+          `platform.addx.io/app-slug`，并机械计算 `spec.app = app-slug.replace('-', '_')`；标准
+          `{phase}-{app}` namespace 中 app-slug 还必须等于 namespace suffix。使用
+          `recipes/k8s/shared-database-claim.yaml.tmpl` 生成。Kyverno 仅 Enforce CREATE；缺 annotation 的
+          存量 claim grandfather，不改名、不拦普通 UPDATE。
+
+      ✅ 共享 MSK(Kafka) SCRAM 凭据自助 **已上线**（2026-06-22/23，6 集群）：
+        - app 在自己的 namespace 写 `platform.addx.io/v1alpha1 kind: KafkaScramCredential`
+          `{spec.app, spec.env, spec.region}`；`spec.app` 可带连字符，需匹配
+          ^[a-z][a-z0-9-]{1,40}$。
+        - Composition 在共享 MSK + shared SCRAM CMK 上创建 ESO password、AWS Secrets Manager
+          `AmazonMSK_<env>-<app>`、`ScramSecretAssociation`，并把 `username`/`password` 推到
+          `secret/{env}/kafka/application/{app}/sasl`；Composition 同时读取共享 MSK
+          `status.atProvider.bootstrapBrokersSaslScram` 并把
+          `bootstrap_brokers_sasl_scram` 推到同一路径。app ExternalSecret 消费该路径，
+          映射为 `KAFKA_USERNAME` / `KAFKA_PASSWORD` / `KAFKA_BROKERS`。
+        - `references/shared-middleware/kafka-brokers.yaml`（或平台刷新后的 live Crossplane
+          status）只用于校验/排查 broker fact；应用侧不要再把 Kafka endpoint 作为
+          ConfigMap 连接信息直配。禁止 `addx.live` CNAME（TLS hostname 校验）。
+        - Kafka topic / ACL / consumer group 治理 workflow 仍 planned；需要显式 topic/ACL 时产
+          Ops Todo，不要现编 `add-kafka-topic`。
+
+      🔴 仍 STOP 的 Readiness gate（**共享实例已部署、但 kind:Database 消费 Composition 尚未落地**）：
+      **ClickHouse / DocumentDB(MongoDB)**。注：这 2 类的**共享实例本身已于
+      2026-06-04 在全 6 集群部署完成**（staging + tech-service 各有 shared ClickHouse StatefulSet /
+      shared DocumentDB），所以 Ops Todo 是"补可复用的 kind:Database 自助消费层 + 自动 per-app
+      凭据交付"，**不是**"再建一个共享实例"，也不是在平台仓为当前 app 手写底层资源。**Aurora** 与
+      **mariadb 引擎的 RDS** 连共享实例都还没有，同样 STOP 产 Ops Todo。遇到这些仍 STOP；不要手工
+      自建 app-owned 中间件、不要在平台目录新增 per-app User/Grant/PushSecret，也不要用 StatefulSet
+      自托管（#30）。
+      例外：已存在应用迁移、平台 shared-middleware 自身、明确标注的 legacy/TKE 迁移，
+      需要在 cd-requirements.md 写明原因和迁移计划。
+    applies_to:
+      - workflows/new-service.md
+      - workflows/add-rds.md
+      - workflows/add-aurora.md
+      - workflows/add-redis.md
+      - workflows/add-db-migration.md
+      - workflows/add-ninedata-datasource.md
+      - workflows/interview-cd-requirements.md
+      - workflows/new-stateful-service.md
+      - workflows/migrate-immutable-rds-field.md
+      - references/data/resource-handling-rules.yaml
+      - references/shared-middleware/README.md
+
+  - id: 30
+    title: 应用不应用 StatefulSet+PVC 自托管数据库（约定，非 Kyverno 硬拦截）
+    enforced_by: human review（约定俗成；确需自建必须在 cd-requirements.md 写明理由）
+    detail: |
+      数据库 / 缓存 / 消息中间件的数据需求应走平台路径，**不要**用 StatefulSet+PVC 在集群里
+      自托管数据库引擎（mysql / postgres / mongodb / redis / clickhouse / kafka 等）：
+        - staging / tech-service → kind:Database 共享中间件自助（见 #29 + shared-middleware/README.md）；
+        - prod → app-owned 托管 RDS / Aurora / ElastiCache（Crossplane，cost-tiering 表 prod tier）。
+      理由：自托管 DB StatefulSet 要自己扛备份 / HA / 版本升级 / 故障恢复 / 监控，绕过了平台的
+      凭据链（Vault A1 #19）、备份策略、加密与网络隔离，是长期运维负债；也是绕过 #29 RDS 门禁的
+      常见后门（"RDS 不让建，那我跑个 mysql StatefulSet"）。
+      这是**约定不是 Kyverno 硬拦截**：确有正当理由必须自建（上游组件只发 StatefulSet 形态、
+      特殊一致性 / 协议需求、明确标注的第三方派生组件 / legacy 迁移）时，在
+      cd-requirements.md 写明**理由 + 备份 / HA / 版本升级方案**，走 review 放行——不是默认禁止一切
+      StatefulSet，而是不允许"为了存业务数据顺手自建 DB"。
+      豁免：平台自身的共享中间件（shared ClickHouse StatefulSet、自建 Kafka 形态的 shared-middleware
+      组件）本就是 StatefulSet，是被消费的平台资源，不受此约定限制。
+    applies_to:
+      - workflows/new-stateful-service.md
+      - workflows/interview-cd-requirements.md
+      - references/data/resource-handling-rules.yaml
+      - references/shared-middleware/README.md
+
+  - id: 31
+    title: 业务应用 namespace 必须前缀式 {phase}-{app}（命中 fluent-bit business-namespace gate），禁后缀式 / 裸 {app}
+    enforced_by: human review
+    validator: check_namespace_pattern.py
+    detail: |
+      业务应用的 namespace 必须是**前缀式** `{phase}-{app}`（phase = staging | pre | prod |
+      canary | test；dev = dev-{app}）。**前缀式，不是后缀**——`{app}-{phase}`（如
+      `<app>-staging`）/ `{app}-prod` / `{app}-pre` / 裸 `{app}` 全部禁用。
+      日志依据：调用共享 fluent-bit-base business-namespace gate（Lua）的 collector 只放行 namespace == `default`
+      或以 `staging-` / `pre-` / `prod-` / `canary-` / `test-` 开头的；不命中的 namespace 在入口被
+      `return -1` 直接丢弃 → 该 namespace 所有 Pod 日志静默丢失、不进 ES、无任何告警（app 本身
+      照常运行、`kubectl logs` 仍可见，所以极易漏掉）。前缀式天然过该 gate。
+      独立 collector 未调用该 Lua 时必须查实际 filter，不能套用此 drop 结论；namespace
+      ownership 约定仍然有效。Kafka/Vector 与 direct ES/OpenSearch 分支见 references/logging/README.md。
+      注：`dev-{app}` 是历史 dev 约定前缀，但 `dev-` **不在**该共享 gate 白名单；
+      cn-eks-dev 已退役，保留历史命名不意味着允许新 Build。
+      这里有两个独立约束：phase 前缀是日志采集的安全不变量；`-<app>` 后缀是新 workload 的
+      ownership / isolation 默认。`prod-us`、`pre-eu` 等共享 namespace 虽然满足前一个日志
+      gate，仍不满足 `{phase}-{app}` ownership contract，不能据此视为普通合规 namespace。
+      新建 CI Job Pod IRSA namespace 同样使用 phase 前缀，并与 runtime namespace 分离，格式为
+      `{phase}-{app}-ci`。旧 runner 若仍只接受 `.+-(staging|pre|prod|dev)$`，必须先由平台增加
+      前缀式 allow-list；不得因此为新 namespace 延续 `{app}-{phase}`，存量后缀只能精确兼容。
+      新 workload 必须继续使用准确的 `{phase}-{app}`；存量共享 namespace 只能通过下面的
+      exact、time-bounded legacy exception 保留，不能创建 namespace-wide 或 app-wide bypass。
+      检查两处且二者必须一致：业务仓 overlay `kustomization.yaml` 的 `namespace:`，与 argocd-apps
+      Application 的 `spec.destination.namespace`。**只对业务应用判定**——带
+      `argocd-image-updater.argoproj.io/image-list` 注解的 Application、或 overlay `images[].newName`
+      指向 `{harbor}/cicd/...` 的业务 overlay；平台 / Helm 自管组件落基础设施 namespace
+      （argo-cd / kyverno / logging / crossplane-system / external-secrets / kube-system /
+      registry 等）不受此规则约束、不报。
+      单业务镜像保持原有身份规则：`cicd/.../<app>` 的末段就是 app owner。一个业务应用包含多个
+      `cicd/` 组件镜像时，overlay Kustomization 和 Application 必须各自以
+      `metadata.labels.app: <owner>` 声明同一个权威 owner；owner 必须是 kebab-case，每个组件镜像
+      末段只能是 `<owner>` 或 `<owner>-<component>`（component 也必须是 kebab-case）。
+      namespace 精确使用 `{phase}-<owner>`，不能从第一个镜像推断成 `{phase}-<component>`。
+      多镜像缺 owner、owner 非法、namespace 与 owner 不符、或混入不属于 owner 的业务镜像均
+      fail closed；不得通过组件顺序或最长公共前缀猜 owner。
+      命名模板 SSOT：references/data/env-keywords.yaml -> env_keywords[<keyword>].namespace_pattern。
+      存量 Flink grandfather：002 us-tech-service 的 `flink-tech-service-us` 继续使用历史
+      `staging-us` namespace，三套 prod Application 继续分别使用 `prod-us` / `prod-eu` /
+      `prod-cn`，避免为命名合规重建有状态 Session Cluster。validator 在 argocd-apps 侧
+      精确匹配 cluster directory、Application name、namespace 与 image app，在 flink-addx
+      侧精确匹配完整 overlay path、namespace 与 image app。GCS scoped GA 不要求现有
+      业务应用借 ObjectBucket 变更同步迁移 namespace、identity 或 Vault。存量
+      `dvc-remote-staging-us-gcp` Application 仍以完整身份 grandfather；新的 ObjectBucket
+      变更只有在 workflow 精确命中 readiness 批准的 target/namespace，且同一现有
+      Application 渲染 KSA、ObjectBucket 和 workload 时才继续。namespace validator 只有在
+      workflow 显式传入 `--objectbucket-target <target>`，且“同一 overlay 里存在 app label
+      匹配、namespace 处于该 target scoped-GA readiness 的 ObjectBucket”时才放过该存量
+      shared namespace；未传或未知 target 默认拒绝。ObjectBucket 自身仍由 #35 严格校验。
+      Superset US metadata 迁移临时 grandfather：仅 002 us-tech-service 的
+      `superset-prod-us-restricted-admin` Application 与准确
+      `k8s/superset/overlays/prod-us-restricted-admin` overlay 可在迁移和回滚窗口继续使用历史
+      `superset` namespace；validator 精确匹配 cluster directory、Application name、完整 overlay
+      path、namespace 与 image app。该例外由 `DATA/superset#4` 跟踪，迁移完成并执行
+      `prod-superset` namespace 清理时必须删除。canonical 390 staging overlay
+      `k8s/flink/overlays/staging-us` 和任何 sibling 都不继承例外。
+      其它已核实需要协调 ArgoCD destination、namespaced workload/ServiceAccount 与 IAM
+      OIDC subject 才能迁移的存量身份，登记在
+      `references/data/namespace-legacy-exceptions.yaml`。每个 identity 必须引用带 accountable
+      owner、tracking issue/MR、固定 expiry、reason、exit strategy 和 compensating controls
+      的 control record；owner 记录问责方，机器授权范围只来自下方 exact identity。
+      `expires_on` 是最后一个有效的 UTC 日历日；缺字段、重复 YAML key、未知引用、过期或未使用
+      的 control 都是 status 2 配置错误。registry-managed namespace 必须继续满足 Fluent Bit
+      phase prefix，且 overlay path 必须是完整的 `k8s/[.../]overlays/<target>/kustomization.yaml`。
+      validator 只接受完整的 cluster directory、Application name 或 overlay path、namespace
+      与 image app 组合；任何 sibling 不继承。
+      Flywheel 在 GitOps adoption 期间仅可按 registry 中由 `engineering/skills#28` 跟踪的
+      exact identities 保留现有共享 namespace，并在 2026-10-29 到期。该 exception 不授权新增
+      public exposure、Ingress/ALB 改动、降低认证或其它 Application/overlay 继承；长期 exit 是
+      验证 APISIX 跨 namespace upstream 的流量语义后迁移到 `{phase}-flywheel`，不在本规则变更
+      中执行任何流量切换。
+      390 EU/US staging 的 ALGO service-discovery 临时例外仅允许 registry 中由
+      `engineering/skills#28` 跟踪的 exact Application identities，以及两个
+      addx-gpu-inference workload overlay，截至 2026-10-29（UTC，含当日）继续使用
+      `staging-eu` / `staging-us`。
+      该兼容用于保持 RUN_MODE、K8S_NAMESPACE、服务注册发现和 in-cluster DNS 的现有一致性；长期
+      exit 是显式配置注册发现与服务地址、更新 naturehood `SMMUrl`、迁移到 owned namespace 后删除
+      registry entries。Flywheel Database claim 的 `staging-flywheel` 不在例外内，也不授权任何
+      public exposure、Ingress/ALB、DNS 或认证变更。
+    applies_to:
+      - workflows/new-service.md
+      - workflows/new-stateful-service.md
+      - workflows/add-ci-aws-irsa.md
+      - workflows/interview-cd-requirements.md
+      - recipes/k8s/serviceaccount-ci-irsa.yaml.tmpl
+      - references/data/env-keywords.yaml
+      - references/data/namespace-legacy-exceptions.yaml
+      - recipes/argocd/application.yaml.tmpl
+      - validators/check_namespace_pattern.py
+
+  - id: 32
+    title: 业务应用命名必须围绕同一个 app base name，避免日志路由和 Service selector 静默失效
+    enforced_by: human review
+    validator:
+      - check_workload_naming.py
+      - check_argocd_application.py
+    detail: |
+      业务应用有三个名字，规则不同但必须指向同一个 app：
+        1. ArgoCD Application 名必须是 `{app}-{env_keyword}`，禁止裸 `{app}`。
+        2. Rollout / StatefulSet 名必须等于 pod template 的 `app` label，即 `{app}`，无 env 后缀。
+        3. Service 名必须是 `{app}` 或 `{app}-<后缀>`，且 `spec.selector` 必须选中同 overlay/base
+           里的某个 workload。
+      Pod template 必须有 `app` label；fluent-bit 日志路由依赖该 label。Service selector 选不中
+      workload 时，Kubernetes apply 不报错，但流量会静默转发到空 endpoint。
+      对单项 `app=<image-path>`，validator 从 image path 末段精确取得 app；动态/多 alias 的 image
+      名不一定等于 owning app（如 `<app>-plugin`、`<app>-backend/frontend`），优先用
+      `metadata.labels.app + metadata.labels.env` 精确校验 target name（兼容存量 env label）。只有
+      app label 时结合合法 env-keyword；历史文件两个 label 都缺时至少强制合法
+      `-<env_keyword>` 后缀，base ownership 仍需人工 review；新动态/多 alias Application 应显式写
+      `labels.app` 和 `labels.env`。
+      只有 `references/data/namespace-legacy-exceptions.yaml` 中仍有效的 exact Application identity
+      可临时兼容历史 target suffix：共享 parser 同时精确匹配 immediate parent cluster directory、
+      Application name、destination namespace 与 authoritative image app。该兼容只跳过普通
+      `{app}-{env_keyword}` suffix 断言，不会把历史 suffix 加入 env-keywords 路由，也不跳过
+      finalizer、project、automated sync、通知、Image Updater 或 recovery seed 等其它契约；
+      registry 缺失、格式错误、引用错误、存在闲置 control 或过期时 status 2 fail closed。
+      namespace 前缀式 `{phase}-{app}` 由 #31 约束。
+    applies_to:
+      - recipes/k8s/rollout.yaml.tmpl
+      - recipes/k8s/service.yaml.tmpl
+      - recipes/argocd/application.yaml.tmpl
+      - references/data/namespace-legacy-exceptions.yaml
+      - validators/check_workload_naming.py
+      - validators/check_argocd_application.py
+      - validators/_namespace_legacy_exceptions.py
+
+  - id: 33
+    title: ArgoCD AppProject 必须保持平台分类和 resource whitelist 权限围栏
+    enforced_by: check_argocd_namespace_creation.py / argocd-apps CI tools/lint-argocd-boundary.py / human review
+    validator: check_argocd_namespace_creation.py
+    detail: |
+      AppProject 原生约束 repo/destination/resource group-kind；精确 path/revision/identity
+      由 argocd-apps CI 合同补充。专用 project 的 sourceRepos 和
+      resource whitelist 必须保持最小集合：
+        - `platform-control-plane`（仅限目标集群目录已定义同名 AppProject）：只指向 DEV/k8s.git，承载
+          Argo CD、Kyverno、External Secrets Operator、GitLab Runner、Karpenter 等集群
+          控制面组件；这些 Application 不得回退到权限通配的 `default`。
+        - `crossplane-infra`：只指向 DEV/crossplane-infra.git，承载 IAM / IRSA /
+          ProviderConfig / WAFv2 / IPSet / shared SG rules 等中心权限边界资源；不承载
+          app/platform 数据面 CR 或 XRD / Composition。
+        - `platform-shared-infra`：只指向 DEV/k8s.git，承载 shared middleware、Crossplane
+          provider bootstrap、Composition / Provider / Function；不得加入 IAM。
+        - `platform-logging`：只指向 DEV/k8s.git + helm.vector.dev，承载 fluent-bit、Vector、
+          logging backend data-plane；不得加入 IAM / WAF / ProviderConfig。
+        - `platform-observability`：只指向 DEV/observability-platform.git，承载 Grafana、
+          PagerDuty、VictoriaMetrics、observability provider bootstrap 和 observability-owned
+          XRD / Composition。
+        - `app-runtime`：承载逐应用审查的 runtime 资源；source repo/path/revision、destination
+          和资源类型合同按目标集群维护，不能跨集群照搬。
+        - `app-data-plane`：承载经审批的业务 raw 数据面，按目标集群精确 repo/path/destination/kind
+          合同放行；不授予 IAM、ProviderConfig、WAF 或共享网络权限。
+        - `default`：保留存量及明确批准的 Application，sourceRepos 保持 `*`，必须保留
+          IAM blacklist；不是新业务 Application 的默认选择。
+      一仓库可注册多个独立渲染的 Application，每个 Application 只绑定一个 Project；
+      一个 Project 可有多个成员。混合职责先拆渲染入口，再按批准的 runtime / app-data-plane
+      合同绑定；平台 claim 可按现行合同留 runtime，禁止按目录名机械分类。资源身份只能
+      有一个 Application 管理；存量拆分须审批 prune/finalizer、tracking 与反向交接，
+      不套用 project-only 回滚。owner 专属名称仍是目标态，不能绕过九类名称闸门；
+      同仓、同 owner 或 Project 后缀都不替代平台 IAM/ProviderConfig/准入审核。
+      权限准备按批准候选成员，不能要求零成员 Project 的授权为空；不得按渲染自动扩权。
+      旧 Project 在清理与回滚窗口结束前保留必要权限，退役后不允许单行引用旧名恢复。
+      完整指导见 permission-boundaries.yaml 的 application_partition_contract；
+      namespace validator 不证明跨 Application 渲染互斥或通用生命周期状态机已实现。
+      新增 Application 必须先选择目标集群已有且获批准的 project，读取其准确 AppProject
+      和 argocd-apps boundary lint 合同，核对最终 render（含 hooks）。开发者不得新建
+      AppProject 或引入新 project 名称；缺少权限先写 Ops Todo，由平台在独立权限 MR
+      中处理并合并同步后再注册 consumer。不得为消除拒绝把 app-runtime 回退 default；
+      仅保留 argocd-apps lint 中按准确身份登记的历史例外。
+      `platform-crossplane` 已废弃，新增或修改 Application / AppProject 不得继续使用。
+      `CreateNamespace=true` 会让 Application controller 尝试创建 cluster-scoped core
+      `Namespace`，不会绕过 AppProject。合并前必须读取**目标集群目录的准确 AppProject**：
+        1. 若其 `clusterResourceWhitelist` 允许 `group: "", kind: Namespace`（或等价通配），
+           才能由该 Application 自建 namespace；
+        2. 否则必须有一个同集群目录、同 destination server、更低 sync-wave 的 bootstrap
+           Application，通过另一个已允许 `/Namespace` 的 AppProject 先创建。bootstrap 可以
+           自身 `CreateNamespace=true` 且 destination namespace 与目标逐字相同，也可以从其
+           source render 出 `metadata.name` 精确相同的显式 Namespace；显式 Namespace 必须带
+           `Prune=false,Delete=false`，避免删 manifest/Application 时级联删 namespace。两种方式
+           都要按 App-of-Apps health gate 验证 live root 会等待 bootstrap Healthy。
+      只写更低 sync-wave 但没有创建目标 namespace、bootstrap project 同样无 `/Namespace`、
+      显式 Namespace 无删除保护，或仅假设 namespace 已手工存在，都不算前置。用
+      `check_argocd_namespace_creation.py <cluster-dir> --application <changed-app.yaml>`
+      对每个新增/修改 Application 跑增量门禁；它只检查显式传入的 Application，以免存量
+      namespace 债务阻断无关 MR。
+      遇到 ArgoCD `resource <group>/<kind> is not permitted in project <project>` 时，先判断
+      Application 是否分错 project，再检查准确 namespace bootstrap；不要直接扩大 whitelist、
+      也不要把控制面 workload 退回 `default` 来消除 SyncFailed。只有 Namespace 创建确属该
+      project 长期职责时，才可在单独审查中扩权并说明 owner、资源范围和清理计划。
+      事实表见 references/data/permission-boundaries.yaml -> argocd_app_projects。
+    applies_to:
+      - argocd-apps/*/appproject-*.yaml
+      - argocd-apps/*/*.yaml
+      - references/data/permission-boundaries.yaml
+      - validators/check_argocd_namespace_creation.py
+
+  - id: 34
+    title: Crossplane S3 Bucket 必须去掉 Delete management policy
+    enforced_by: check_s3_bucket_delete_guard.py / k8s CI s3-bucket-delete-guard-lint
+    validator: check_s3_bucket_delete_guard.py
+    detail: |
+      app-owned / platform-owned S3 Bucket CR 可以由 GitOps 创建和更新，但不允许通过删除
+      Git 声明、ArgoCD prune 或删除 CR 来删除真实 AWS S3 bucket。所有 Crossplane S3
+      `Bucket` 必须显式设置非空 `spec.managementPolicies`，且不能包含 `Delete` 或 `*`。
+      标准值：
+        `["Observe", "Create", "Update", "LateInitialize"]`
+
+      `argocd.argoproj.io/sync-options: Prune=false` 只约束 ArgoCD prune，不约束
+      Crossplane 删除路径；`spec.deletionPolicy: Orphan` 在 MRv2 `*.m.upbound.io` provider
+      上无效且会被 `check_db_resource_contracts.py` 拦截。S3 bucket 真正销毁必须走单独审批、
+      清空 / 留存 / 备份确认和带外下线流程，不和普通资源声明删除绑定。
+    applies_to:
+      - workflows/add-s3-bucket.md
+      - recipes/crossplane/s3-bucket.yaml.tmpl
+      - validators/check_s3_bucket_delete_guard.py
+
+  - id: 35
+    title: GCS self-service must use the readiness-gated ObjectBucket platform API
+    enforced_by: check_object_bucket.py / workflow readiness gate / platform admission
+    validator: check_object_bucket.py
+    detail: |
+      Application repositories may request GCS only through
+      `platform.addx.io/v1alpha1 kind: ObjectBucket`. Before writing a manifest,
+      the workflow must resolve the existing Argo CD Application and require the
+      exact target to have `phase: scoped_ga`, `developer_enabled: true`, every
+      prerequisite ready/passed and its exact destination namespace in
+      `references/object-storage/objectbucket-readiness.yaml ->
+      approved_namespaces`. Missing/false/preview/pilot-only state is a STOP,
+      not a reason to generate speculative YAML or fall back to AWS S3. Current
+      availability is only `us-tech-service-gke/staging-us-gcp`, not fleet-wide
+      or GKE Prod.
+
+      The developer declaration has one fixed contract:
+        - metadata.name is a 1-18 character DNS label;
+        - metadata.namespace is explicit;
+        - annotations are sync-wave `-2` and sync-options
+          `Prune=confirm,Delete=confirm`;
+        - label `platform.addx.io/app` names the owner;
+        - spec is exactly profile=standard, residency=local,
+          protection=Retained and
+          access{serviceAccountName,identityMode,mode};
+        - identityMode is explicitly DirectKSA or GSAImpersonation;
+        - mode is ReadOnly or ReadWrite and the KSA belongs to the workload in
+          the same namespace and same existing Argo CD Application.
+
+      DirectKSA is preferred and its KSA must not have
+      `iam.gke.io/gcp-service-account`. GSAImpersonation requires prior platform
+      approval and WIF bootstrap. Workloads use the selected KSA, GKE metadata
+      server and ADC; never use JSON keys or `GOOGLE_APPLICATION_CREDENTIALS`.
+      Do not create a separate ObjectBucket Application, write a tracking-id,
+      use direct kubectl, or pin a Composition revision in an application repo.
+
+      The readiness file's exact `staging-us-gcp/dvc-artifacts` grandfather only
+      prevents validation from breaking that immutable revision-2 UPDATE when
+      the validator also receives its exact `--objectbucket-target`. Missing or
+      mismatched target means no grandfather. It is never a new-object template,
+      CREATE exception, canary or acceptance target.
+
+      Do not expose raw GCP managed resources, ProviderConfig, project/project
+      number, location, generated bucket name, IAM member/role or static GCP
+      credentials in an application declaration. The platform owns those fields
+      and creates a non-secret `ConfigMap/objectbucket-<logical-name>`.
+
+      ObjectBucket removal is not an ordinary rollback. The bucket has no Delete
+      management policy and is retained; decommission requires a separate
+      reviewed workflow for data inventory, runtime-access revocation and
+      retained external-resource recording.
+    applies_to:
+      - workflows/add-object-bucket.md
+      - recipes/crossplane/object-bucket-direct-ksa.yaml.tmpl
+      - recipes/crossplane/object-bucket.yaml.tmpl
+      - references/object-storage/README.md
+      - references/object-storage/objectbucket-readiness.yaml
+      - validators/check_object_bucket.py
+
+  - id: 36
+    title: DEV/k8s 只存放可复用平台能力，不静态扇出单应用期望状态
+    enforced_by: check_repo_boundary.py --repo-context k8s / code-review
+    validator: check_repo_boundary.py
+    detail: |
+      `DEV/k8s` 负责 shared instance、Helm chart、XRD/Composition/controller、集群级 wiring
+      和通用 policy。单个业务应用的期望状态必须由应用仓声明；如果资源必须运行在平台
+      namespace 或受平台权限保护，应由可复用平台能力根据应用声明生成，不能把每个 app 的
+      静态 YAML 逐份写进 `DEV/k8s`。
+
+      新增、修改或重命名 `DEV/k8s` YAML 时，以下模式直接拒绝（资源被移动到其它
+      目录也不能绕过；重命名按目标路径审查）：
+        - 在任意目录提交 top-level provider-sql Database/User/Role/Grant，或写带字面业务
+          `.../{platform}/application/{app}/...` / `{env}/app/{app}/...` Vault 路径的
+          PushSecret / ExternalSecret；
+        - 在平台仓直接提交业务 `Database` / `KafkaScramCredential` claim；
+        - 提交业务 namespace 的 SecretStore、业务 workload，或新建
+          `clusters/*/cicd/eso-app-identities/<app>/` 这类逐 app 静态身份树。
+
+      正确路径是：应用仓提交高层 claim / ownership declaration，`DEV/k8s` 提供通用
+      Composition/controller/policy 去派生 User、Grant、PushSecret、ServiceAccount、RBAC 或
+      SecretStore。通用能力尚未存在时 STOP，产 Ops Todo 补能力；不要用“资源运行在平台
+      namespace”作为把业务源码放进平台仓的理由。
+    applies_to:
+      - SKILL.md Review / Scan mode
+      - validators/check_repo_boundary.py
+      - DEV/k8s clusters/**/*.yaml
+      - DEV/k8s cicd/base/**/*.yaml
+      - DEV/k8s cicd/apps/**/*.yaml
+      - DEV/k8s clusters/*/cicd/eso-app-identities/*/*.yaml
+
+  - id: 37
+    title: Argo CD Image Updater 使用 Application annotation + argocd write-back
+    enforced_by: Application annotations / root-app ignoreDifferences / check_argocd_application.py / human review
+    detail: |
+      自动镜像更新由业务 Application 的 `argocd-image-updater.argoproj.io/*` annotations 表达：
+      `image-list`、每 alias 的 `newest-build` / SHA allow-tags / Kustomize 或 Helm 参数 / platforms，
+      以及 `write-back-method=argocd`。Image Updater 只修改 live Application image override；
+      root-apps 必须忽略该受控字段，避免旧 Git seed 覆盖新 SHA。
+
+      `spec.source.kustomize.images` 保存 current recovery seed：新建 Application 首次同步前必须
+      是 CI 已推送且 Harbor 已存在的真实 SHA；修改既有 Application 时必须从 live override
+      读取并保留当前 SHA。它是恢复基线，不是后续每次发布的 Git SSoT。
+
+      新应用不生成业务仓 ImageUpdater CR、ApplicationSet、`.argocd-source-*`、Flux CR、
+      Git 写 Secret、merger policy 或 GitLab 权限变更。`Argocd-deploy` 仅需 Reporter 读权限。
+      退役的 `image-writeback.addx.io/*` 标签和 `git-branch` annotation 必须拒绝。
+      活动 Application source path 不得保留 `.argocd-source-*`：Argo CD 会在 manifest generation
+      读取它并覆盖 Application source。历史只保留在 Git commit/MR 中，切回 argocd owner 时删除活动文件。
+
+      `force-update` 只允许用于准确 alias 且有只读证据证明
+      `Application.status.summary.images` 不可靠的场景；默认模板不得生成。启用后要确认
+      no-change reconcile 不产生重复 update。
+      完整契约见 `references/image-automation/README.md`。
+    applies_to:
+      - SKILL.md Review / Scan mode
+      - DEV/argocd-apps */*.yaml
+      - Argo CD Image Updater cluster overlays
+
+# 网络安全硬红线（CLAUDE.md 全局规则，不局限于本 skill）：
+#   - 出站网络必须走 NAT Gateway（稳定 NAT IP 做白名单）
+#   - 禁止把内部服务暴露到公网（RDS publiclyAccessible / 0.0.0.0/0 SG / 无防护 Ingress）
+#   - DNS 解析申请前必须核查服务暴露面（裸奔 = SG/WAF/SSO 三件缺一）
+# 见 ops-guardrails skill 的 DNS 解析申请检查清单。

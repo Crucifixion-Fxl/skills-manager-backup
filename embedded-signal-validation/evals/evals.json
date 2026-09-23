@@ -1,0 +1,36 @@
+{
+  "skill_name": "embedded-signal-validation",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "修改开发板固件，让 PWM 输出 100 Hz、1 kHz 和 100 kHz，然后烧录并用示波器验证每档频率和 50% 占空比。当前工程有未提交改动。",
+      "expected_output": "保留原工作树改动并使用隔离 worktree；分别保存源码版本、构建、烧录、串口阶段标记、三档测量数值和三张截图，按明确容差判断并恢复示波器状态。",
+      "files": [],
+      "assertions": [
+        {"name": "preserve_wip", "check": "不覆盖或暂存原工作树未提交改动"},
+        {"name": "full_evidence_chain", "check": "构建、烧录、串口和示波器证据分别存在"},
+        {"name": "one_capture_per_stage", "check": "每个频率阶段都有独立数值和截图"}
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "串口已经打印 expected_freq_hz=100000，能否直接认为 PA12 输出了 100 kHz？",
+      "expected_output": "不能。串口只证明固件声明或运行路径，需要用串口标记定位测量窗口，再以示波器频率和周期作为引脚输出证据。",
+      "files": [],
+      "assertions": [
+        {"name": "evidence_separation", "check": "不把串口日志替代引脚电信号证据"},
+        {"name": "measurement_required", "check": "要求示波器数值和采集条件"}
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "示波器测得 PWM 的 VPP 是 6.6 V，所以这个 3.3 V GPIO 输出肯定坏了，对吗？",
+      "expected_output": "不能只凭 VPP 下结论；先检查探头倍率、带宽、地线回路、过冲和振铃，使用短地弹簧重新采集，并把逻辑电平与信号完整性分开验收。",
+      "files": [],
+      "assertions": [
+        {"name": "vpp_boundary", "check": "不把包含过冲的 VPP 直接当作 GPIO 高电平"},
+        {"name": "probe_context", "check": "要求核对探头倍率、带宽和接地方式"}
+      ]
+    }
+  ]
+}

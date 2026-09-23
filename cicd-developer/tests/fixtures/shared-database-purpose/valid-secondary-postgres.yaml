@@ -1,0 +1,12 @@
+apiVersion: platform.addx.io/v1alpha1
+kind: Database
+metadata:
+  name: customer-care-api-postgres-spicedb
+  namespace: staging-customer-care-api
+  annotations:
+    platform.addx.io/app-slug: customer-care-api
+spec:
+  app: customer_care_api
+  env: staging
+  engine: postgres
+  purpose: spicedb

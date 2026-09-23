@@ -1,0 +1,30 @@
+# cost-tiering/s3.yaml
+#
+# S3 Bucket 的成本分档（无实例成本，重点是 lifecycle）。
+#
+# 消费方：workflows/add-s3-bucket.md
+#
+# Schema 同 rds.yaml。
+
+notes: |
+  S3 没有 instance 成本，但需要关注 lifecycle 规则：
+  staging/pre 必须设置 30d 过期或转 IA，否则临时产物会累积成本。
+  bucket 名是全局唯一的（immutable name），创建时就要起对。
+
+immutable:
+  - name                              # bucket name 是全局唯一的，不能改
+
+dev: &s3_min
+  versioning: false
+  lifecycle_required: true            # staging 临时产物：30d 过期 或 转 IA
+  encryption: AES256
+  access_logging: false
+
+staging: *s3_min
+pre: *s3_min
+
+prod:
+  versioning: business-decision       # 累积存储成本；按需开
+  lifecycle_required: true            # 按保留策略：过期 / IA / Glacier 分层
+  encryption: AES256                  # 合规要求高时改 aws:kms
+  access_logging: business-decision

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "11530db2-c5cc-4d2d-ae5d-cc89d729ad18",
+  "path": "mylibrary",
+  "path_key": "mylibrary",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/mylibrary",
+    "branch": null
+  }
+}

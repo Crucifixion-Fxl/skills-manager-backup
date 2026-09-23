@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "ff3d07a1-8726-495a-b59d-54572a8b5804",
+  "path": "cicd-platform",
+  "path_key": "cicd-platform",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/cicd-platform",
+    "branch": null
+  }
+}

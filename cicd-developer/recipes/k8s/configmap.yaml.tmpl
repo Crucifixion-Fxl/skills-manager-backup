@@ -1,0 +1,29 @@
+# configmap.yaml.tmpl —— K8s ConfigMap 模板
+#
+# 用于存放 **非敏感** 配置（环境变量、URL、特性开关、log level 等）。
+# 敏感凭据走 Vault + ExternalSecret，**不要** 放 ConfigMap。
+#
+# 两种用法：
+#   1. 内联 data（小配置）—— 用本模板
+#   2. configMapGenerator（从文件生成）—— 在 kustomization.yaml 用，本模板不适合
+#
+# 必填槽位：
+#   {{app}}           kebab-case
+#   {{namespace}}     ns
+#   {{data_lines}}    YAML 缩进 4 空格的 key: value 行列表，例：
+#                       LOG_LEVEL: "info"
+#                       FEATURE_NEW_UI: "true"
+#                       UPSTREAM_URL: "https://upstream.internal.example.com"
+#
+# Rollout 引用：
+#   spec.template.spec.containers[0].envFrom:
+#     - configMapRef:
+#         name: {{app}}-config
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{app}}-config
+  namespace: {{namespace}}
+data:
+{{data_lines}}

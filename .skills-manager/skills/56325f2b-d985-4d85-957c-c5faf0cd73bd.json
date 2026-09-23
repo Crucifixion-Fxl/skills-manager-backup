@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "56325f2b-d985-4d85-957c-c5faf0cd73bd",
+  "path": "tracking-lifecycle",
+  "path_key": "tracking-lifecycle",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/tracking-lifecycle",
+    "branch": null
+  }
+}

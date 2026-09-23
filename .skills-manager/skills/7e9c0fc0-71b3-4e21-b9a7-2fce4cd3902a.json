@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "7e9c0fc0-71b3-4e21-b9a7-2fce4cd3902a",
+  "path": "customer-care",
+  "path_key": "customer-care",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/customer-care",
+    "branch": null
+  }
+}

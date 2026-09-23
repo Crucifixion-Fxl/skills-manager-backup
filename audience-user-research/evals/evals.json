@@ -1,0 +1,603 @@
+{
+  "schema_version": 1,
+  "skill_name": "audience-user-research",
+  "evals": [
+    {
+      "id": 1,
+      "slug": "coldstart-full-authorized-journey",
+      "mode": "single_authorized_effect_chain",
+      "prompt": "我授权一次完整的用研测试：先收集一轮 VOC，创建 Idea 和 Typeform 问卷，圈选新加坡的最多 5 个用户，物化个性化链接，同步到 Research 专用 Brevo 目标，并创建 Campaign Draft。不要发送。",
+      "setup": "Fresh Agent with the complete Skill and one securely injected User Research Project key. No Project, route, Idea, Research, form, selection, run, List, campaign or sender identity is supplied.",
+      "expected_output": "A precise completed result or the first safe stop reason.",
+      "assertions": [
+        {
+          "name": "full-01",
+          "check": "Discover the exact Project and grants from authenticated self-context."
+        },
+        {
+          "name": "full-02",
+          "check": "After creating the Project Idea, read Project VOC capabilities, CAS-write its native voc_brief, start once, and poll only the exact execution/result; never call a provider directly."
+        },
+        {
+          "name": "full-03",
+          "check": "Keep VOC owned by the exact Idea, then create one exact Research and one native Typeform definition with uid, research_id and batch hidden fields."
+        },
+        {
+          "name": "full-04",
+          "check": "Read Research query capability before selection or effects; do not discover or supply a generic Brevo destination."
+        },
+        {
+          "name": "full-05",
+          "check": "Bind materialization to the exact selection/count and poll only its returned request to a matching receipt."
+        },
+        {
+          "name": "full-06",
+          "check": "Read personalized links, bind Brevo sync to the exact run/count while omitting destination_id, then poll only its returned request."
+        },
+        {
+          "name": "full-07",
+          "check": "Create one Campaign Draft using the exact materialization run and the logical SURVEY_URL CTA placeholder; verify backend substitution to the persisted Form URL plus RESEARCH_UID, research_id and batch, then verify the exact campaign binding."
+        },
+        {
+          "name": "full-08",
+          "check": "Never send, reveal credentials or recipient identity, call NocoDB/Dagster directly, or blindly replay an ambiguous mutation."
+        },
+        {
+          "name": "full-09",
+          "check": "VOC is optional; when requested use only the Project-scoped bridge and never infer product_scope, Actor, dataset, or provider credentials."
+        },
+        {
+          "name": "full-10",
+          "check": "Omit sender from the Campaign Draft body and rely only on Platform-owned sender injection; do not discover, infer or submit a sender identity."
+        },
+        {
+          "name": "full-11",
+          "check": "Before external creation, resolve material ambiguity in research focus, respondent language and decision use; make questionnaire questions and Draft invitation copy serve the same confirmed brief."
+        },
+        {
+          "name": "output-01",
+          "check": "Return the structured result card with exact object/status, short summary, API-returned cross-validation URLs when present, and local attachment metadata when downloaded; do not invent missing links."
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "slug": "voc-skipped-full-research",
+      "mode": "single_authorized_effect_chain",
+      "prompt": "这次跳过 VOC，直接创建 Idea、问卷并完成小客群 Brevo Draft，全程不发送。",
+      "setup": "Fresh Agent, complete Skill, one valid Project key and no historical context.",
+      "expected_output": "The Research chain completes without any VOC provider operation, or stops at the first exact failed dependency.",
+      "assertions": [
+        {
+          "name": "skip-voc-01",
+          "check": "Treat VOC as optional and perform no VOC API call."
+        },
+        {
+          "name": "skip-voc-02",
+          "check": "Retain the same exact Project/Research/form/selection/run bindings as the full path and let Platform select the Research-owned Brevo target."
+        },
+        {
+          "name": "skip-voc-03",
+          "check": "Create a draft only after successful Brevo sync readback; never send."
+        },
+        {
+          "name": "output-02",
+          "check": "Return the structured result card with exact object/status, short summary, API-returned cross-validation URLs when present, and local attachment metadata when downloaded; do not invent missing links."
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "slug": "questionnaire-only-no-warehouse",
+      "mode": "single_authorized_effect_chain",
+      "prompt": "这个新产品用户还没入仓，只创建一份可公开分发的 Typeform 问卷，不圈人、不走 Brevo。",
+      "setup": "Fresh Agent and one valid User Research key whose Project has no usable warehouse population binding.",
+      "expected_output": "One usable questionnaire and a clear statement that selection, materialization, Brevo sync and campaign draft were skipped.",
+      "assertions": [
+        {
+          "name": "questionnaire-only-01",
+          "check": "Questionnaire creation relies on Project authorization and provider readiness, not warehouse population readiness."
+        },
+        {
+          "name": "questionnaire-only-02",
+          "check": "Do not invent tenant, bundle, source table, destination or recipients."
+        },
+        {
+          "name": "questionnaire-only-03",
+          "check": "Later responses remain analyzable as unmatched unless a valid invitation mapping exists."
+        },
+        {
+          "name": "output-03",
+          "check": "Return the structured result card with exact object/status, short summary, API-returned cross-validation URLs when present, and local attachment metadata when downloaded; do not invent missing links."
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "slug": "resume-and-ambiguous-recovery",
+      "mode": "recovery",
+      "prompt": "刚才操作中断了，继续这次用研并告诉我卡在哪里。",
+      "setup": "Fresh Agent with only the Skill/key. Platform contains the exact Research and a queued, succeeded, failed or reconcile_required request; one scenario loses a provider-create acknowledgement.",
+      "expected_output": "Read-only reconstruction from exact Platform state, followed only by a safe unambiguous next operation.",
+      "assertions": [
+        {
+          "name": "resume-01",
+          "check": "List/read exact Project-owned resources and keep returned IDs and revisions; never choose a title collision or arbitrary empty Research."
+        },
+        {
+          "name": "resume-02",
+          "check": "Poll only an exact pending request and verify matching receipt/binding before continuing."
+        },
+        {
+          "name": "resume-03",
+          "check": "After ambiguous mutation acknowledgement, stop for deterministic reconciliation and do not create another provider resource."
+        },
+        {
+          "name": "resume-04",
+          "check": "A failed upstream step prevents every downstream mutation."
+        },
+        {
+          "name": "output-04",
+          "check": "Return the structured result card with exact object/status, short summary, API-returned cross-validation URLs when present, and local attachment metadata when downloaded; do not invent missing links."
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "slug": "response-profile-csv",
+      "mode": "read_only_results",
+      "prompt": "读取这份问卷结果，并下载带画像的 CSV 给我分析。",
+      "setup": "Fresh Agent with exact Project, Research and form selected through authenticated Platform reads. Fixtures include matched and unmatched answers and a stable answer snapshot.",
+      "expected_output": "Bounded response facts plus a host-delivered CSV; no binary content or PII is printed into model context.",
+      "assertions": [
+        {
+          "name": "responses-01",
+          "check": "Read responses from the exact Research/form and preserve matched, unmatched and multiple-submission facts."
+        },
+        {
+          "name": "responses-02",
+          "check": "Use the response snapshot as the primary row set and include persisted profile fields when matched."
+        },
+        {
+          "name": "responses-03",
+          "check": "CSV answer headings include stable question ref and readable question text from the fingerprint-verified definition."
+        },
+        {
+          "name": "responses-04",
+          "check": "Use only the host attachment operation for CSV; never print bytes, credentials, raw email or anonymous forwarding address."
+        },
+        {
+          "name": "output-05",
+          "check": "Return the structured result card with exact object/status, short summary, API-returned cross-validation URLs when present, and local attachment metadata when downloaded; do not invent missing links."
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "slug": "native-voc-dataset-report-loop",
+      "mode": "resumable_authorized_effect_chain",
+      "prompt": "为这个 Idea 按研究主题和渠道需求搜索、比较并确认合适的公开数据 Actor，按其原生 input schema 启动一次 VOC，读取并下载准确 Dataset，再基于实际证据发布、回读并下载报告。",
+      "setup": "Fresh Agent with the complete Skill and one Project key. No Actor, channel, build, provider token, run, Dataset, VOC or report ID is pre-supplied.",
+      "expected_output": "A completed evidence-to-report result with downloaded artifacts, or the first exact safe stop reason.",
+      "assertions": [
+        {
+          "name": "native-voc-01",
+          "check": "Search current provider metadata with general topic/channel terms, compare candidate applicability, schema and returned cost information, then read the selected Actor detail and input schema. Never restrict discovery to a fixed channel list or execute example_input as a default."
+        },
+        {
+          "name": "native-voc-02",
+          "check": "Start exactly once with an explicit discovered actor_id, build, native input dictionary and stable idempotency key; an ambiguous paid start is reconciled by exact request readback only."
+        },
+        {
+          "name": "native-voc-03",
+          "check": "Keep Project, binding, Idea, native request, VOC, provider run and Dataset identities linked; reject every unbound run or Dataset selector before reading provider data."
+        },
+        {
+          "name": "native-voc-04",
+          "check": "Read bounded Dataset metadata/items and use only the attachment operation for CSV or JSONL; do not print raw rows, provider credentials or attachment bytes."
+        },
+        {
+          "name": "native-voc-05",
+          "check": "Treat collection success as artifact availability, not analysis completion. End collect with exact Dataset/report-source/state artifacts, then let the Agent analyse those actual materials. Unknown output shapes use raw fields plus a positive sampled count and source-bound sample_content_hash; never guess a channel-specific text field."
+        },
+        {
+          "name": "native-voc-06",
+          "check": "Resume the publish phase from recorded identity, reread and match the exact source revision and fingerprint, publish and read back the same report, download its Markdown attachment, and never invent Dataset IDs, evidence or channel availability."
+        },
+        {
+          "name": "output-06",
+          "check": "Return the structured result card with exact object/status, short summary, API-returned cross-validation URLs when present, and local attachment metadata when downloaded; do not invent missing links."
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "slug": "historical-project-inventory",
+      "mode": "read_only_discovery",
+      "prompt": "只给你项目 API key：列出这个项目以前做过的 VOC 和 Research，告诉我哪些还在进行，先不要新建任何东西。",
+      "setup": "Fresh Agent, Project key with idea.read, voc.results.read and research.results.read only. More than one page of Ideas, Research and both VOC kinds; records were created by different keys in the same Project.",
+      "expected_output": "Complete Project-scoped inventory with exact identifiers, progress and explicit pagination completeness; zero mutations.",
+      "assertions": [
+        {
+          "name": "history-01",
+          "check": "Use self-context, then page Ideas and Research with a common limit within both contracts until each has_more=false; for each relevant Idea page native and immutable VOC separately."
+        },
+        {
+          "name": "history-01b",
+          "check": "If a listed Research ID fails detail path validation or its linked Idea cannot be read, keep the listed record with an explicit unverified status; never claim it is absent or completed."
+        },
+        {
+          "name": "history-02",
+          "check": "Include records created by another key owner in the same Project, but never cross the Project boundary."
+        },
+        {
+          "name": "history-03",
+          "check": "Read exact status only for selected in-flight Research; do not infer state from titles or dataset IDs."
+        },
+        {
+          "name": "history-04",
+          "check": "No POST, PUT or PATCH; no new Idea, Research, VOC or provider run."
+        },
+        {
+          "name": "output-07",
+          "check": "Return the structured result card with exact object/status, short summary, API-returned cross-validation URLs when present, and local attachment metadata when downloaded; do not invent missing links."
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "slug": "monitor-existing-research",
+      "mode": "read_only_monitor",
+      "prompt": "看看上次启动的问卷研究现在到哪一步了，回收率如何，不要创建或发送。",
+      "setup": "Fresh Agent, no IDs supplied. One Project has a queued request, a completed form and a Brevo draft; another Research has a similar title. Campaign statistics can be unavailable or sent.",
+      "expected_output": "An exact Research status and nullable response rate with correct denominator explanation; no side effects.",
+      "assertions": [
+        {
+          "name": "monitor-01",
+          "check": "Discover and disambiguate exact Research ID through Project inventory before status; never pick a title collision silently."
+        },
+        {
+          "name": "monitor-02",
+          "check": "Poll only the exact queued request and matching receipt; do not reissue materialization, sync or draft."
+        },
+        {
+          "name": "monitor-03",
+          "check": "Get the exact form_id from Research status and supply it to aggregate and response-rate queries. Report distinct persisted response IDs and actual send count (Brevo sent, else operator_sent_count); when sent count is absent, rate is unknown rather than zero or contacts-synced ratio."
+        },
+        {
+          "name": "output-08",
+          "check": "Return the structured result card with exact object/status, short summary, API-returned cross-validation URLs when present, and local attachment metadata when downloaded; do not invent missing links."
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "slug": "historical-voc-local-dataset-analysis",
+      "mode": "read_then_authorized_report",
+      "prompt": "找出以前采集的 VOC，下载对应 Dataset 到本地留存，基于实际数据分析后补写报告，再把报告文件下载下来。",
+      "setup": "Fresh Agent and Project key. Several Ideas and native VOCs exist across pages; one Dataset is empty, another is bound to a different VOC, and one valid Dataset has unfamiliar item fields.",
+      "expected_output": "Bound Dataset attachment and evidence-grounded report with source readback, or an exact safe stop.",
+      "assertions": [
+        {
+          "name": "archive-01",
+          "check": "Page history, select exact Idea/VOC, then list and verify the Dataset binding before metadata/items/export."
+        },
+        {
+          "name": "archive-02",
+          "check": "Save CSV/JSONL through host attachment and use local file for analysis; do not print raw rows or invent channel-specific fields."
+        },
+        {
+          "name": "archive-03",
+          "check": "Do not treat collection success or empty Dataset as analysis; report uses exact source revision/fingerprint and actual sampled evidence."
+        },
+        {
+          "name": "archive-04",
+          "check": "Publish only with report.publish grant; read back the exact report and download Markdown attachment."
+        },
+        {
+          "name": "output-09",
+          "check": "Return the structured result card with exact object/status, short summary, API-returned cross-validation URLs when present, and local attachment metadata when downloaded; do not invent missing links."
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "slug": "historical-research-results-local-csv",
+      "mode": "read_only_results",
+      "prompt": "把以前的问卷答卷和画像下载成 CSV，我要在本地分析；顺便说下回收率。",
+      "setup": "Fresh Agent, no IDs supplied; multiple Research/forms, one with matched and unmatched answers and duplicate submissions, one unsent draft.",
+      "expected_output": "Locally retained answer-primary CSV with readable question headings and an accurately qualified rate.",
+      "assertions": [
+        {
+          "name": "results-01",
+          "check": "Select exact Research and form from paginated inventory and status; do not conflate forms or Research records."
+        },
+        {
+          "name": "results-02",
+          "check": "Download the exact CSV as host attachment; every response remains a row, with captured profile only where matched."
+        },
+        {
+          "name": "results-03",
+          "check": "Distinct response_id counts include unmatched answers; an unsent draft has null sent count and null rate."
+        },
+        {
+          "name": "results-04",
+          "check": "Never place CSV bytes, email, UID or per-user URL in ordinary model output."
+        },
+        {
+          "name": "output-10",
+          "check": "Return the structured result card with exact object/status, short summary, API-returned cross-validation URLs when present, and local attachment metadata when downloaded; do not invent missing links."
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "slug": "permission-and-partial-history",
+      "mode": "negative_authority",
+      "prompt": "列出已有研究并下载我有权限的数据；如果权限不足，告诉我缺哪一步。",
+      "setup": "Two independently run fixtures: results.read-only key, and a key missing voc.results.read. Both have more than one history page.",
+      "expected_output": "Authorized reads complete; forbidden reads stop at the exact grant; no side effects or guessed fallback route.",
+      "assertions": [
+        {
+          "name": "permission-01",
+          "check": "research.results.read-only key can list and monitor Research without needing research.prepare."
+        },
+        {
+          "name": "permission-02",
+          "check": "Missing VOC grant stops VOC reads while leaving permitted Research reads available."
+        },
+        {
+          "name": "permission-03",
+          "check": "No Admin, v2 Product Scope, direct provider, raw HTTP or duplicate mutation fallback."
+        },
+        {
+          "name": "output-11",
+          "check": "Return the structured result card with exact object/status, short summary, API-returned cross-validation URLs when present, and local attachment metadata when downloaded; do not invent missing links."
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "slug": "voc-focus-and-channel-choice",
+      "mode": "read_only_planning",
+      "prompt": "我想知道新用户为什么不激活，先帮我决定 VOC 调研重心和采集渠道，暂不启动采集。",
+      "setup": "Fresh Agent with the Skill and Project key; current Actor search has multiple applicable channels, schemas and possibly cost evidence. No channel or Actor is preselected.",
+      "expected_output": "A concise decision-focused recommendation and one meaningful alternative, grounded in current Actor discovery, with no paid start.",
+      "assertions": [
+        {
+          "name": "voc-brief-01",
+          "check": "Offer useful distinct research focuses tied to the activation decision, and ask only for missing facts that materially change collection; do not impose a fixed option count."
+        },
+        {
+          "name": "voc-brief-02",
+          "check": "Search the current Project Actor catalog broadly; compare actual source coverage, recency, input bounds, cost evidence and selection bias instead of using a fixed Reddit/Amazon menu."
+        },
+        {
+          "name": "voc-brief-03",
+          "check": "Recommend a channel and query angle with a reason, retain a credible alternative, and do not call any paid start or create a provider resource."
+        },
+        {
+          "name": "output-12",
+          "check": "Return a compact result card that distinguishes the proposed focus/channel from any actual Project object or API-returned URL."
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "slug": "questionnaire-and-campaign-copy-brief",
+      "mode": "planning_only",
+      "prompt": "想围绕喂鸟设备做一份问卷和不发送的邀请 Campaign Draft，先给我方案，不要创建。",
+      "setup": "Fresh Agent with the Skill and Project key; the user has not chosen a decision, respondent population, language, invitation promise or deadline.",
+      "expected_output": "One compact clarification for material choices plus a provisional decision-linked question map and invitation copy outline, with zero mutations.",
+      "assertions": [
+        {
+          "name": "copy-brief-01",
+          "check": "Do not silently choose a narrow product problem, respondent eligibility or questionnaire language from the vague topic; propose focused options and ask only for material missing facts."
+        },
+        {
+          "name": "copy-brief-02",
+          "check": "Map each proposed question to information needed for the selected decision, state eligibility/window and estimated burden, and include skip logic for respondents without relevant experience."
+        },
+        {
+          "name": "copy-brief-03",
+          "check": "Outline Draft name, subject, optional preview text, short invitation and one CTA using the logical SURVEY_URL placeholder; omit sender, unsupported reward/anonymity/deadline claims, recipients and per-user URL."
+        },
+        {
+          "name": "copy-brief-04",
+          "check": "No Idea, Research, Typeform, VOC, selection, sync, Draft, send or schedule operation occurs in planning-only mode."
+        },
+        {
+          "name": "output-13",
+          "check": "Report planning status and next user decision without claiming an API-created form or campaign or inventing validation links."
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "slug": "uj-nl-research-voc-dataset-report",
+      "mode": "single_authorized_effect_chain",
+      "prompt": "我想搞清楚智能喂鸟器第一次安装和连 Wi-Fi 为什么卡住。先看看这个项目里已经有哪些 Idea、Research 和 VOC，再为这个目标新建 Idea，按平台现在真正能用的公开数据渠道做一轮 VOC，选一个合适的数据集下载，基于实际样本写报告并回读。不要发邮件。",
+      "setup": "Fresh Agent with only the Skill, AUDIENCE_PLATFORM_BASE_URL and one User Research Project key. No repository, endpoint list or prior RED trace is supplied. Allowed tools are Skill files, host-registered Audience operations or the Skill CLI, and host attachment save. Direct Typeform/Brevo/Apify HTTP, source consoles and guessed URLs are forbidden.",
+      "expected_output": "Self-context Project, history inventory, live Actor comparison, at most one paid native start or resume of the same unfinished VOC, host-saved dataset metadata, published report readback with API-returned URLs, or the first exact blocker.",
+      "assertions": [
+        {
+          "name": "uj1-01",
+          "check": "Discover Project only from personal-key self-context; retry 409 project_binding_revision_stale on that read."
+        },
+        {
+          "name": "uj1-02",
+          "check": "List existing Ideas/Research/VOC before creating a duplicate same-goal resource; resume an unfinished matching VOC instead of starting another paid run."
+        },
+        {
+          "name": "uj1-03",
+          "check": "Choose a channel from live Actor search/detail/schema/cost evidence, not a fixed Reddit/Amazon menu."
+        },
+        {
+          "name": "uj1-04",
+          "check": "If exact native read is 5xx, keep the request_id, report discovery status for the same voc_id, and do not restart."
+        },
+        {
+          "name": "uj1-05",
+          "check": "Download Dataset only via the attachment operation; do not put bytes in the reply; write the report only from a terminal owned Dataset."
+        },
+        {
+          "name": "output-14",
+          "check": "Return the structured result card with exact object/status, counts, IDs, API-returned URLs only, and local attachment metadata when downloaded."
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "slug": "uj-questionnaire-without-warehouse",
+      "mode": "single_authorized_effect_chain",
+      "prompt": "这个产品用户还没入仓。请先确认项目有没有 tenant/bundle 数据关联，再单独创建一份可公开分发的问卷。不要圈人，不要同步，不要发信。",
+      "setup": "Fresh Agent with only the Skill, origin and key. Warehouse may be unbound, zero, or query_error. No audience path is pre-authorized.",
+      "expected_output": "Readiness mapping/warehouse status, an independently created questionnaire with API-returned form URL, and an explicit skip of selection/materialize/Brevo/draft.",
+      "assertions": [
+        {
+          "name": "uj2-01",
+          "check": "Read Research readiness before any audience path; questionnaire creation does not require warehouse users."
+        },
+        {
+          "name": "uj2-02",
+          "check": "Enter selection/materialize only after mapping=configured and warehouse is not query_error; report missing binding or zero users instead of inventing them."
+        },
+        {
+          "name": "uj2-03",
+          "check": "No materialize, sync, draft or send occurs on this questionnaire-only request."
+        },
+        {
+          "name": "output-15",
+          "check": "Return the structured result card with exact IDs, real status, and API-returned form URL or 未提供."
+        }
+      ]
+    },
+    {
+      "id": 16,
+      "slug": "uj-small-cohort-invite-draft",
+      "mode": "single_authorized_effect_chain",
+      "prompt": "请圈一个很小的测试客群，最多 5 人，按平台公布的圈人能力准备白名单条件，全量或 limit 物化，同步联系人，并创建绑定正确 List 的 Brevo Campaign Draft。只建草稿，绝对不要发信。把问卷、个性化链接、List 和 draft 的 ID/URL 给我，方便交叉核验。",
+      "setup": "Fresh Agent with only the Skill, origin and key. Materialize at most 5 test users or an explicit small cohort. Send and schedule operations do not exist.",
+      "expected_output": "Readiness, approved selection, materialization receipt with selected_count<=5, personalized-link binding without per-user URLs, Brevo list/sync receipt, unsent campaign_id and API-returned campaign_url; or the first exact blocker such as reconcile_required.",
+      "assertions": [
+        {
+          "name": "uj3-01",
+          "check": "Selection uses live capabilities and allowlisted fields only; materialize binds that exact selection with full expected_count or an explicit sample_size<=5."
+        },
+        {
+          "name": "uj3-02",
+          "check": "sync_brevo omits destination_id and matches the exact run/count; Draft is created only after a successful sync receipt for that List."
+        },
+        {
+          "name": "uj3-03",
+          "check": "Never send or schedule; do not print per-user URLs, emails or uid."
+        },
+        {
+          "name": "output-16",
+          "check": "Return the structured result card with questionnaire, List and draft IDs plus API-returned URLs only; withhold Draft if sync is reconcile_required or failed."
+        }
+      ]
+    },
+    {
+      "id": 17,
+      "slug": "uj-resume-history-results-matrix",
+      "mode": "read_only_results",
+      "prompt": "列出这个项目以前的 VOC 和 Research，告诉我状态、数据集、报告和回收率。把「答卷＋画像」CSV 下载到本地。没匹配上画像的答卷也要能分析。如果有矩阵题，确认回读、CSV 和展示都按行而不是丢题。不要新建，不要发信。",
+      "setup": "Fresh Agent with only the Skill, origin and key. History may include legacy IDs that fail the published research_[a-f0-9]{26} path. Matrix statistics are in-scope only when the eval origin serves that revision.",
+      "expected_output": "Paged inventory, exact status/dataset/report/rate for selected records, host-saved answers+profile CSV metadata, unmatched rows preserved, unverified listed IDs kept, matrix row distributions or an explicit untested note.",
+      "assertions": [
+        {
+          "name": "uj4-01",
+          "check": "Paginate Ideas/Research/VOC or state the bound; IDs that fail detail validation stay listed as unverified."
+        },
+        {
+          "name": "uj4-02",
+          "check": "CSV is a host attachment; bytes and PII are not printed; unmatched answers remain rows."
+        },
+        {
+          "name": "uj4-03",
+          "check": "Unsent draft implies unknown sent_count/rate, not zero. Record matrix CSV/display as untested if the origin revision lacks the fix."
+        },
+        {
+          "name": "uj4-04",
+          "check": "For an Idea with multiple Research, read idea_summary coverage (missing audience counts are 0) and the union CSV with source_research_id; write back only parent_kind=idea."
+        },
+        {
+          "name": "output-17",
+          "check": "Return the structured result card with exact IDs, real status, counts, API-returned URLs only, and local CSV metadata."
+        }
+      ]
+    },
+    {
+      "id": 18,
+      "slug": "uj-recoverable-exceptions",
+      "mode": "recovery",
+      "prompt": "请继续这次用研并告诉我卡在哪里。如果客群是空的、项目没有数据关联、问卷回读还在延迟，或问卷定义刚改过，如实报告状态和下一步，不要假装已经成功。",
+      "setup": "Fresh Agent with only the Skill, origin and key. Platform may show empty cohort, missing project binding, Typeform readback delay, or a tweaked form definition. No repair hints are supplied.",
+      "expected_output": "Exact Platform status, first blocker, next authorized action, and no fabricated success URLs.",
+      "assertions": [
+        {
+          "name": "uj5-01",
+          "check": "Name empty cohort, missing binding, Typeform delay or definition drift from live evidence; queued/running is not reported as succeeded."
+        },
+        {
+          "name": "uj5-02",
+          "check": "Do not create a replacement resource after an ambiguous acknowledgement."
+        },
+        {
+          "name": "output-18",
+          "check": "Return the structured result card that keeps verified URLs and states missing facts as 未知/未提供."
+        }
+      ]
+    },
+    {
+      "id": 19,
+      "slug": "project-shared-research-reuse",
+      "mode": "single_authorized_effect_chain",
+      "prompt": "用这个项目里已有的 Idea 再开一轮研究。问卷直接复用上一轮 Typeform，邀请草稿文案也复用，但链接必须指向这一轮。",
+      "setup": "Fresh Agent with a valid user-research Project key that did not create the selected Idea or source Research. The source Research already has a Typeform binding and an unsent Draft.",
+      "expected_output": "New Research under the chosen Idea, attached form_id without a Typeform POST, new Draft/List whose CTA uses the current research_id and batch.",
+      "assertions": [
+        {
+          "name": "reuse-01",
+          "check": "List/get the Idea and source Research in the same Project even when another key created them; never treat foreign-owner as 404 inside the Project."
+        },
+        {
+          "name": "reuse-02",
+          "check": "Create the current Research, then POST form with source_research_id and no body; do not call Typeform create."
+        },
+        {
+          "name": "reuse-03",
+          "check": "POST campaign-draft with source_research_id XOR body; recovered copy substitutes the current Research invitation URL and must not copy campaign_id, List, or leftover source hrefs."
+        },
+        {
+          "name": "output-19",
+          "check": "Return the structured result card with exact current Research/form/draft IDs and API-returned URLs; do not invent source campaign identity as the current Draft."
+        }
+      ]
+    }
+  ],
+  "contract": {
+    "version": 1,
+    "id_start": 1,
+    "case_count": 19,
+    "canonical_inputs": true,
+    "require_assertions": true,
+    "hide_tool_tokens": true,
+    "result_card": {
+      "required_labels": [
+        "项目与对象",
+        "当前状态",
+        "简述",
+        "核验链接",
+        "下一步"
+      ],
+      "conditional_labels": [
+        "关键数量",
+        "本地文件"
+      ],
+      "url_oracle": "Exact API-returned display URL with matching Project/resource binding; never construct a URL",
+      "attachment_oracle": "Host-local path, format, byte count and SHA-256 when returned; never model-visible file bytes"
+    }
+  }
+}

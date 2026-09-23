@@ -1,0 +1,27 @@
+# 项目专用题目映射。复制到 <project_dir>/config/schema_overrides.yaml 后填写。
+#
+# logical_qid 是稳定、可读的业务标识，不要求使用 Q1/Q2。
+# 两种确定性映射方式可以并用：
+# 1. provider_question_ids_by_cohort：最可靠，适合问卷已冻结；
+# 2. exact_titles：仅做规范化后的完整题面匹配，不做模糊或语义猜测。
+# 同一 cohort 中，一个 logical_qid 只能对应一道 provider question。
+
+version: 1
+allow_unmapped: true
+
+logical_questions:
+  USAGE_FREQUENCY:
+    exact_titles:
+      - "<该题完整题面>"
+    provider_question_ids_by_cohort:
+      "<cohort_key>": "<provider_question_id>"
+
+  PRIMARY_OUTCOME:
+    exact_titles:
+      - "<该题完整题面>"
+    provider_question_ids_by_cohort: {}
+
+  OPEN_FEEDBACK:
+    exact_titles:
+      - "<该开放题完整题面>"
+    provider_question_ids_by_cohort: {}

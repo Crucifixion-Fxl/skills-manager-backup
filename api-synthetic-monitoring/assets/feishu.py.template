@@ -1,0 +1,159 @@
+"""Feishu webhook notification for API monitoring failures.
+
+Supports signed webhooks (Feishu bots with signature verification enabled,
+which is the company default). Signing algorithm per Feishu docs:
+
+    sign = base64(HMAC-SHA256(key=f"{timestamp}\\n{secret}", msg=b""))
+
+Also runnable as ``python -m lib.feishu`` from the smoke directory for
+CI after_script use.
+"""
+
+from __future__ import annotations
+
+import argparse
+import base64
+import hashlib
+import hmac
+import json
+import logging
+import sys
+import time
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
+
+import requests
+
+logger = logging.getLogger(__name__)
+
+
+def _gen_sign(timestamp: int, secret: str) -> str:
+    """Compute Feishu webhook signature.
+
+    Algorithm: base64(HMAC-SHA256(key=f"{timestamp}\\n{secret}", msg=b""))
+    """
+    key = f"{timestamp}\n{secret}".encode("utf-8")
+    digest = hmac.new(key, b"", hashlib.sha256).digest()
+    return base64.b64encode(digest).decode("utf-8")
+
+
+def _build_card(
+    env: str,
+    failures: List[Dict[str, str]],
+    job_url: Optional[str] = None,
+    rp_url: Optional[str] = None,
+) -> Dict[str, Any]:
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+    fields_element: Dict[str, Any] = {
+        "tag": "div",
+        "fields": [
+            {"text": {"tag": "lark_md", "content": f"**Env:** {env}"}},
+            {"text": {"tag": "lark_md", "content": f"**Time:** {timestamp}"}},
+        ],
+    }
+
+    if failures:
+        lines = "\n".join(f"- {f['test']}: {f['detail']}" for f in failures)
+    else:
+        lines = "- (no detail provided)"
+
+    failures_element: Dict[str, Any] = {
+        "tag": "div",
+        "text": {"tag": "lark_md", "content": f"**Failures:**\n{lines}"},
+    }
+
+    actions: List[Dict[str, Any]] = []
+    if job_url:
+        actions.append({
+            "tag": "button",
+            "text": {"tag": "plain_text", "content": "View CI Job"},
+            "type": "primary",
+            "url": job_url,
+        })
+    if rp_url:
+        actions.append({
+            "tag": "button",
+            "text": {"tag": "plain_text", "content": "View ReportPortal"},
+            "type": "default",
+            "url": rp_url,
+        })
+
+    elements: List[Dict[str, Any]] = [fields_element, failures_element]
+    if actions:
+        elements.append({"tag": "action", "actions": actions})
+
+    return {
+        "msg_type": "interactive",
+        "card": {
+            "header": {
+                "title": {"tag": "plain_text", "content": "API Monitoring Failed"},
+                "template": "red",
+            },
+            "elements": elements,
+        },
+    }
+
+
+def send_failure_card(
+    webhook_url: str,
+    env: str,
+    failures: List[Dict[str, str]],
+    job_url: Optional[str] = None,
+    rp_url: Optional[str] = None,
+    webhook_secret: Optional[str] = None,
+) -> None:
+    """Send a Feishu interactive failure card.
+
+    Logs warnings on HTTP errors but never raises — a notification failure
+    should never mask the actual test result.
+    """
+    payload = _build_card(env, failures, job_url=job_url, rp_url=rp_url)
+
+    if webhook_secret:
+        timestamp = int(time.time())
+        payload["timestamp"] = str(timestamp)
+        payload["sign"] = _gen_sign(timestamp, webhook_secret)
+
+    try:
+        resp = requests.post(
+            webhook_url,
+            json=payload,
+            headers={"Content-Type": "application/json"},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        body = resp.json()
+        if body.get("code", 0) != 0:
+            logger.warning("Feishu webhook returned non-zero code: %s", body)
+    except requests.RequestException as exc:
+        logger.warning("Failed to send Feishu notification: %s", exc)
+
+
+def _cli() -> None:
+    parser = argparse.ArgumentParser(description="Send a Feishu failure card.")
+    parser.add_argument("--webhook", required=True)
+    parser.add_argument("--secret", default=None)
+    parser.add_argument("--env", required=True)
+    parser.add_argument("--job-url", default=None)
+    parser.add_argument("--failures-file", default=None)
+    args = parser.parse_args()
+
+    if args.failures_file:
+        with open(args.failures_file, "r") as fh:
+            failures: List[Dict[str, str]] = json.load(fh)
+    else:
+        failures = [{"test": "(unknown)", "detail": "smoke tests failed"}]
+
+    send_failure_card(
+        webhook_url=args.webhook,
+        env=args.env,
+        failures=failures,
+        job_url=args.job_url,
+        webhook_secret=args.secret,
+    )
+
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.WARNING, stream=sys.stderr)
+    _cli()

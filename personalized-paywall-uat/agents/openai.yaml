@@ -1,0 +1,3 @@
+display_name: Personalized Paywall UAT
+short_description: Enforce API, UI, device, and four-channel payment UAT gates.
+default_prompt: Use the Personalized Paywall UAT skill to select the smallest certification profile that satisfies the requested claim and execute every policy-required phase for that profile. For Full UAT, require Apple IAP Sandbox, Google Play Billing test purchase, Stripe Test Mode, and Airwallex demo/sandbox cancellation, success, and entitlement evidence. Collect immutable evidence, run the repository gate, and safely repair in-scope failures. Never certify partial runs, missing channels, mock prices as real prices, missing evidence, or self-reported PASS.

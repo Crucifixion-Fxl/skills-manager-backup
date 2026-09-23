@@ -1,0 +1,33 @@
+{
+  "schema_version": "1.1",
+  "platform": "typeform",
+  "form_id": "",
+  "publication_mode": "agent_publish",
+  "risk_level": "C",
+  "require_mobile": false,
+  "require_response_verification": true,
+  "evidence": {
+    "instrument_identity": "typeform_instrument_identity.json",
+    "survey_quality_result": "survey_quality_gate_result.json",
+    "readback_diff": "typeform_readback_diff.json",
+    "path_plan": "typeform_test_path_plan.json",
+    "renderer_results": "typeform_renderer_results.json",
+    "response_verification": "typeform_response_verification.json"
+  },
+  "test_data_lifecycle": {
+    "required": true,
+    "test_case_marker": "",
+    "retrieval_window": {
+      "since": "",
+      "until": ""
+    },
+    "analysis_exclusion_rule": "Exclude records matching the test_case marker.",
+    "retention_until": "",
+    "cleanup_status": "planned"
+  },
+  "owner_publish_confirmation": {
+    "status": "pending",
+    "confirmed_by": "",
+    "confirmed_at": ""
+  }
+}

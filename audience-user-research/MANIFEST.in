@@ -1,0 +1,8 @@
+include SKILL.md
+include README.md
+recursive-include agents *.yaml
+recursive-include contracts *.json
+recursive-include evals *.json
+recursive-include references *.md
+recursive-include scripts *.py
+recursive-include tests/fixtures *.json

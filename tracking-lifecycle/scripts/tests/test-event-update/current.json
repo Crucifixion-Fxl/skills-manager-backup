@@ -1,0 +1,7 @@
+{ "code": 200, "data": {
+  "id": 2399, "type": 1, "point": "account_delete_device_warning_page",
+  "parameters": [
+    { "id": 11, "name": "source", "valueType": "5", "trackerType": 0 },
+    { "id": 12, "name": "amount", "valueType": "4", "trackerType": 0 }
+  ]
+}}

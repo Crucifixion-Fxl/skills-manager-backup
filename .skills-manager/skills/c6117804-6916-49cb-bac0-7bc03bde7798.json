@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "c6117804-6916-49cb-bac0-7bc03bde7798",
+  "path": "subscription-payment-tester",
+  "path_key": "subscription-payment-tester",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/subscription-payment-tester",
+    "branch": null
+  }
+}

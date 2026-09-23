@@ -1,0 +1,52 @@
+schema_version: 1
+
+api:
+  api_version: platform.addx.io/v1alpha1
+  kind: ObjectBucket
+  logical_name_max_length: 18
+  connection_config_map_pattern: objectbucket-<logical-name>
+  connection_keys:
+    - BUCKET_NAME
+    - BUCKET_URI
+    - BUCKET_CLOUD
+    - BUCKET_LOCATION
+    - BUCKET_ACCESS_MODE
+    - BUCKET_SERVICE_ACCOUNT
+
+# Existing immutable revision-2 object. This exact tuple may keep its two-key
+# access block on UPDATE; it is not a template, canary or CREATE exception.
+grandfathered_objects:
+  - target: us-tech-service-gke
+    namespace: staging-us-gcp
+    name: dvc-artifacts
+    app: dvc-remote
+    identity_mode: omitted_legacy_direct_ksa
+    service_account_name: dvc-remote
+    mode: ReadWrite
+
+targets:
+  us-tech-service-gke:
+    cloud: gcp
+    account_id: a4xcloud-tech-service-us
+    argocd_apps_dir: gcp-a4xcloud-tech-service-us-us-tech-service/
+    phase: scoped_ga
+    developer_enabled: true
+    approved_namespaces:
+      - staging-us-gcp
+    pilot_namespaces:
+      - crossplane-objectbucket-pilot
+    prerequisites:
+      api_configuration_package: ready
+      gcp_configuration_package: ready
+      deterministic_config_map_contract: ready
+      pilot_admission: ready
+      namespace_provider_config: ready
+      workload_identity: ready
+      revision_4_direct_ksa_runtime_io: passed
+      revision_4_denied_runtime_io: passed
+      raw_gcs_and_direct_kubectl_denial: passed
+      generalized_admission: ready
+      argocd_objectbucket_health: passed
+      namespace_onboarding_contract: ready
+      decommission_runbook: ready
+    last_verified: "2026-07-21"

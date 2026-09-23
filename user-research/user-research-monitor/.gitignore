@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+
+# 不进 repo 的本地状态
+config/discovered_schema.yaml
+
+# OAuth 凭证 / 敏感配置
+config/client_secret_*.json
+config/google_oauth.yaml
+
+# PII / PM 审核名单
+config/excluded_responses.yaml

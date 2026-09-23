@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "ee3cb44a-cbc2-4243-8197-edeab0626166",
+  "path": "work-method-retrospective",
+  "path_key": "work-method-retrospective",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/work-method-retrospective",
+    "branch": null
+  }
+}

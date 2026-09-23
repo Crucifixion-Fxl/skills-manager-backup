@@ -1,0 +1,214 @@
+{
+  "body": [
+    {
+      "assignee": null,
+      "assignees": [],
+      "author": {
+        "avatar_url": null,
+        "id": 6,
+        "locked": false,
+        "name": "Buzz Sync Developer (localstack)",
+        "public_email": null,
+        "state": "active",
+        "username": "buzz-sync-dev",
+        "web_url": "http://gitlab.localstack.test:8929/buzz-sync-dev"
+      },
+      "blocking_discussions_resolved": true,
+      "closed_at": null,
+      "closed_by": null,
+      "created_at": "2026-09-13T08:21:15.260Z",
+      "description": "Closes #1",
+      "detailed_merge_status": "not_open",
+      "discussion_locked": null,
+      "downvotes": 0,
+      "draft": false,
+      "force_remove_source_branch": null,
+      "has_conflicts": false,
+      "id": 1,
+      "iid": 1,
+      "imported": false,
+      "imported_from": "none",
+      "labels": [
+        "type::feature"
+      ],
+      "merge_after": null,
+      "merge_commit_sha": "8ac847d0d8aea921273b558fe4663d9c003db0ef",
+      "merge_status": "can_be_merged",
+      "merge_user": {
+        "avatar_url": null,
+        "id": 7,
+        "locked": false,
+        "name": "Buzz Sync Maintainer (localstack)",
+        "public_email": null,
+        "state": "active",
+        "username": "buzz-sync-maintainer",
+        "web_url": "http://gitlab.localstack.test:8929/buzz-sync-maintainer"
+      },
+      "merge_when_pipeline_succeeds": false,
+      "merged_at": "2026-09-13T08:22:19.640Z",
+      "merged_by": {
+        "avatar_url": null,
+        "id": 7,
+        "locked": false,
+        "name": "Buzz Sync Maintainer (localstack)",
+        "public_email": null,
+        "state": "active",
+        "username": "buzz-sync-maintainer",
+        "web_url": "http://gitlab.localstack.test:8929/buzz-sync-maintainer"
+      },
+      "milestone": {
+        "created_at": "2026-09-13T08:21:10.397Z",
+        "description": null,
+        "due_date": null,
+        "expired": false,
+        "id": 1,
+        "iid": 1,
+        "project_id": 2,
+        "start_date": null,
+        "state": "active",
+        "title": "rec-0913082019 milestone",
+        "updated_at": "2026-09-13T08:22:21.252Z",
+        "web_url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot/-/milestones/1"
+      },
+      "prepared_at": "2026-09-13T08:21:30.297Z",
+      "project_id": 2,
+      "reference": "!1",
+      "references": {
+        "full": "buzz-sync-test/pilot!1",
+        "relative": "!1",
+        "short": "!1"
+      },
+      "reviewers": [
+        {
+          "avatar_url": null,
+          "id": 7,
+          "locked": false,
+          "name": "Buzz Sync Maintainer (localstack)",
+          "public_email": null,
+          "state": "active",
+          "username": "buzz-sync-maintainer",
+          "web_url": "http://gitlab.localstack.test:8929/buzz-sync-maintainer"
+        }
+      ],
+      "sha": "33a2250fbe88eda7ee825409bc1d43b7f7a5af7a",
+      "should_remove_source_branch": null,
+      "source_branch": "feature/1-recording-0913082019",
+      "source_project_id": 2,
+      "squash": false,
+      "squash_commit_sha": null,
+      "squash_on_merge": false,
+      "state": "merged",
+      "target_branch": "main",
+      "target_project_id": 2,
+      "task_completion_status": {
+        "completed_count": 0,
+        "count": 0
+      },
+      "time_stats": {
+        "human_time_estimate": null,
+        "human_total_time_spent": null,
+        "time_estimate": 0,
+        "total_time_spent": 0
+      },
+      "title": "Recording MR 0913082019 cc @buzz-sync-maintainer",
+      "updated_at": "2026-09-13T08:22:19.590Z",
+      "upvotes": 0,
+      "user_notes_count": 1,
+      "web_url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot/-/merge_requests/1",
+      "work_in_progress": false
+    },
+    {
+      "assignee": null,
+      "assignees": [],
+      "author": {
+        "avatar_url": null,
+        "id": 6,
+        "locked": false,
+        "name": "Buzz Sync Developer (localstack)",
+        "public_email": null,
+        "state": "active",
+        "username": "buzz-sync-dev",
+        "web_url": "http://gitlab.localstack.test:8929/buzz-sync-dev"
+      },
+      "blocking_discussions_resolved": true,
+      "closed_at": null,
+      "closed_by": null,
+      "created_at": "2026-09-13T08:21:17.766Z",
+      "description": null,
+      "detailed_merge_status": "unchecked",
+      "discussion_locked": null,
+      "downvotes": 0,
+      "draft": true,
+      "force_remove_source_branch": null,
+      "has_conflicts": false,
+      "id": 2,
+      "iid": 2,
+      "imported": false,
+      "imported_from": "none",
+      "labels": [],
+      "merge_after": null,
+      "merge_commit_sha": null,
+      "merge_status": "unchecked",
+      "merge_user": null,
+      "merge_when_pipeline_succeeds": false,
+      "merged_at": null,
+      "merged_by": null,
+      "milestone": null,
+      "prepared_at": "2026-09-13T08:21:28.335Z",
+      "project_id": 2,
+      "reference": "!2",
+      "references": {
+        "full": "buzz-sync-test/pilot!2",
+        "relative": "!2",
+        "short": "!2"
+      },
+      "reviewers": [],
+      "sha": "9ff4ed1660aef141905e9b75c223c25f45ebdb91",
+      "should_remove_source_branch": null,
+      "source_branch": "feature/1-draft-0913082019",
+      "source_project_id": 2,
+      "squash": false,
+      "squash_commit_sha": null,
+      "squash_on_merge": false,
+      "state": "opened",
+      "target_branch": "main",
+      "target_project_id": 2,
+      "task_completion_status": {
+        "completed_count": 0,
+        "count": 0
+      },
+      "time_stats": {
+        "human_time_estimate": null,
+        "human_total_time_spent": null,
+        "time_estimate": 0,
+        "total_time_spent": 0
+      },
+      "title": "Draft: Recording draft MR 0913082019",
+      "updated_at": "2026-09-13T08:21:28.350Z",
+      "upvotes": 0,
+      "user_notes_count": 0,
+      "web_url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot/-/merge_requests/2",
+      "work_in_progress": true
+    }
+  ],
+  "headers": {
+    "content-type": "application/json",
+    "x-next-page": "",
+    "x-page": "1",
+    "x-per-page": "100",
+    "x-total": "2",
+    "x-total-pages": "1"
+  },
+  "request": {
+    "as": "bot",
+    "method": "GET",
+    "path": "projects/2/merge_requests",
+    "query": {
+      "order_by": "created_at",
+      "sort": "asc",
+      "state": "all",
+      "updated_after": "2026-09-13T08:20:19Z"
+    }
+  },
+  "status": 200
+}

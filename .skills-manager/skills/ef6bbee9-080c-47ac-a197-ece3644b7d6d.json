@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "ef6bbee9-080c-47ac-a197-ece3644b7d6d",
+  "path": "codebase-vulnerability-analysis",
+  "path_key": "codebase-vulnerability-analysis",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/codebase-vulnerability-analysis",
+    "branch": null
+  }
+}

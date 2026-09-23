@@ -1,0 +1,68 @@
+{
+  "summary": "",
+  "sqlExecuteEvidence": {
+    "requestId": "",
+    "executionId": "",
+    "decision": "",
+    "datasourceId": "",
+    "databaseName": "",
+    "schemaName": "",
+    "sqlType": "",
+    "riskLevel": "",
+    "preflight": {
+      "hasError": false,
+      "hasWarn": false,
+      "allowSubmit": false,
+      "messages": []
+    },
+    "resultPreview": {
+      "rowCount": 0,
+      "affectedRows": 0,
+      "columns": [],
+      "rows": []
+    },
+    "masked": false,
+    "truncated": false,
+    "needSQLTask": false,
+    "nextAction": null
+  },
+  "sqlTaskEvidence": {
+    "tool": "",
+    "requestId": "",
+    "operationRequestId": "",
+    "taskId": "",
+    "workflowId": "",
+    "operation": "",
+    "status": "",
+    "statusDesc": "",
+    "datasourceId": "",
+    "databaseName": "",
+    "schemaName": "",
+    "ruleCheckSummary": {
+      "errorCount": 0,
+      "warningCount": 0,
+      "permissionCount": 0,
+      "syntaxCount": 0
+    },
+    "reviewReady": false,
+    "canSubmitApproval": false,
+    "canExecute": false,
+    "approvalRequestId": "",
+    "approvalRound": 0,
+    "approvalCandidates": [],
+    "nextApprovalNodeId": null,
+    "nextApprovalNodeName": "",
+    "nextAction": "",
+    "consoleUrl": "",
+    "nodeId": null,
+    "nodeInfoRequestId": "",
+    "transferAccountId": "",
+    "subtaskSummary": {
+      "total": 0,
+      "failed": 0,
+      "running": 0,
+      "success": 0
+    },
+    "subtaskErrorSummary": []
+  }
+}

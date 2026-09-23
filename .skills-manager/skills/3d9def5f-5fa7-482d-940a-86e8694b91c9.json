@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "3d9def5f-5fa7-482d-940a-86e8694b91c9",
+  "path": "embed-bazel-module-usage",
+  "path_key": "embed-bazel-module-usage",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/embed-bazel-module-usage",
+    "branch": null
+  }
+}

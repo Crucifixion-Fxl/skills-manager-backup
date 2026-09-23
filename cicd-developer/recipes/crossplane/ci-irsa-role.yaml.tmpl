@@ -1,0 +1,54 @@
+# ci-irsa-role.yaml.tmpl
+#
+# CI Job Pod IRSA —— GitLab CI job 临时拿 AWS 凭证调 AWS API。
+# 不要复用 runtime Pod 的 IRSA role；CI 用独立 SA + 独立 IAM Role，缩小爆炸半径。
+#
+# 必填槽位：
+#   {{app}}                kebab-case app name
+#   {{purpose}}            kebab-case purpose, e.g. engine-publisher
+#   {{namespace}}          CI job pod 跑的 namespace
+#   {{sa_name}}            CI ServiceAccount 名，通常 {{app}}-ci-{{purpose}}
+#   {{oidc_provider_arn}}  目标 EKS OIDC Provider ARN
+#   {{oidc_provider_url}}  OIDC issuer URL without https://
+#   {{partition}}          aws | aws-cn
+#   {{account_id}}         target AWS account id
+#
+# 配套：
+# - recipes/crossplane/ci-irsa-rolepolicy.yaml.tmpl
+# - recipes/k8s/serviceaccount-ci-irsa.yaml.tmpl
+# - recipes/ci/gitlab-ci-aws-job.yml.tmpl
+
+apiVersion: iam.aws.m.upbound.io/v1beta1
+kind: Role
+metadata:
+  name: crossplane-app-{{app}}-ci-{{purpose}}-irsa
+  annotations:
+    crossplane.io/external-name: crossplane-app-{{app}}-ci-{{purpose}}-irsa
+spec:
+  forProvider:
+    assumeRolePolicy: |
+      {
+        "Version": "2012-10-17",
+        "Statement": [{
+          "Effect": "Allow",
+          "Principal": {
+            "Federated": "{{oidc_provider_arn}}"
+          },
+          "Action": "sts:AssumeRoleWithWebIdentity",
+          "Condition": {
+            "StringEquals": {
+              "{{oidc_provider_url}}:sub": "system:serviceaccount:{{namespace}}:{{sa_name}}",
+              "{{oidc_provider_url}}:aud": "sts.amazonaws.com"
+            }
+          }
+        }]
+      }
+    permissionsBoundary: arn:{{partition}}:iam::{{account_id}}:policy/CrossplaneAppBoundary
+    tags:
+      managed-by: crossplane
+      app: {{app}}
+      type: ci-irsa
+      purpose: {{purpose}}
+  providerConfigRef:
+    name: default
+    kind: ClusterProviderConfig

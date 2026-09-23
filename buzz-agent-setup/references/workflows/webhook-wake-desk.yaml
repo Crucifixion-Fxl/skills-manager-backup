@@ -1,0 +1,46 @@
+# GitLab 项目 webhook 到达时 @Desk 立即跑一轮 gitlab sync。webhook 只是唤醒信号：Desk 仍按 GitLab API 事实同步，不读、不转发 webhook payload。
+# 状态：模板，未启用。启用要单独的基础设施授权：先打通 GitLab → relay 的网络（历史上 GitLab 连不上受限 relay）。
+# 链路：GitLab 项目 Settings → Webhooks：
+#   - URL 填 https://<relay>/hooks/<workflow_id>，不带任何查询参数。
+#   - Custom headers 里加 X-Webhook-Secret: <relay webhook secret>（GitLab 17.1 起支持自定义 webhook 请求头）。
+#     relay 先读 X-Webhook-Secret 头，读不到才回退到 ?secret= 查询参数。不要用 ?secret=：URL 会进代理和访问日志。
+#     GitLab 自带的 Secret token 字段（X-Gitlab-Token 头）relay 不认，留空。
+#   - Trigger 只勾选下面 if: 里列出的事件类型，这是第一道过滤。
+#     GitLab 18.0 不发 milestone webhook（录制时 milestone_events 开关被忽略），milestone 变化只靠 schedule 轮询进独立 Thread。
+#   - secret 只经 Vault 下发，不写进仓库；泄漏或人员变动时轮换。
+# 类型判断写在步骤的 if: 里，不写在 trigger 下：
+#   - relay 的 webhook 触发器不带任何字段（sha-6c35e82 与 0.2.1 都是这样），trigger 下的 filter 会被静默丢弃，等于不过滤。
+#   - 步骤的 if: 两个版本都支持：条件为假时这一步被跳过（不算失败），relay 仍会记一次 run，但不发任何消息。
+#   - relay 把 payload 顶层键展平成 trigger_<key>，嵌套字段（object_attributes.action、project.id 等）用不了，所以只按顶层 trigger_object_kind 判断。
+#   - 类型必须与 gitlab_buzz_sync.py 的 WEBHOOK_HANDLERS 完全一致（L1-GIS-037 守护）：
+#     - 含 work_item：GitLab 以 work item 形式投递的 Issue 类事件，按 Issue 处理；
+#     - 不含 build：job 附着在 pipeline 消息上；
+#     - 不含 emoji、vulnerability：不支持；
+#     - 不含 push、wiki_page、feature_flag（2026-09-18 通知政策）：这些类型不再唤醒、不再产生记录；tag_push 与 release 属发布信号，13:16 起恢复。
+# 没有去抖：每个匹配的 webhook 都会 @Desk 一次（push 已不在唤醒列表）。
+#   同一份配置（同频道、同项目集合）由脚本的非阻塞锁保证同时只跑一轮，撞上的那次 status=locked、什么都不做；
+#   同一频道的其他配置各有各的锁，不受影响。锁只在同一主机、同一 state 目录内有效。
+# webhook 触发的 Workflow 没有触发消息可挂，不能 reply_in_thread；只发一条顶层 @Desk，也不要用 call_webhook 转发 payload。
+# schedule Workflow（见 references/gitlab-buzz-sync.md）保留作兜底：webhook 丢失、relay 或网络中断时靠它补齐。
+#   两者跑的是同一脚本：Issue/MR 靠 GitLab binding note 去重，顶层通知靠 events: 行去重。
+# 停用：buzz workflows delete 删掉本 Workflow，并在 GitLab 项目里删除对应 webhook。
+# 下发：buzz workflows create --channel <CHANNEL_UUID> --yaml "$(cat webhook-wake-desk.yaml)"；替换 <desk-name>。
+name: gitlab-webhook-wake-desk
+description: GitLab 项目 webhook 到达时 @Desk 立即同步；Desk 只跑脚本，不回复本消息。
+trigger:
+  on: webhook
+steps:
+  - id: wake_desk
+    if: >-
+      trigger_object_kind == "issue"
+      || trigger_object_kind == "work_item"
+      || trigger_object_kind == "merge_request"
+      || trigger_object_kind == "note"
+      || trigger_object_kind == "pipeline"
+      || trigger_object_kind == "deployment"
+      || trigger_object_kind == "milestone"
+      || trigger_object_kind == "tag_push"
+      || trigger_object_kind == "release"
+      || trigger_object_kind == "access_token"
+    action: send_message
+    text: "@<desk-name> gitlab sync"

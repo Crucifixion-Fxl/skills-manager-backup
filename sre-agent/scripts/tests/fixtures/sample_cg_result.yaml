@@ -1,0 +1,105 @@
+type: "incident_report"
+
+alert_summary:
+  incidents: ["Q1ABC123", "Q1DEF456"]
+  entity: "thanos-cn"
+  service: "grafana-ai"
+  cloud_account: "tencent-100014919455"
+  cluster: "tencent-100014919455-cn-main"
+  environment: "cn-prod"
+  region: "ap-beijing"
+  severity: "P1"
+  triggered_at: "2026-03-24T10:42:50Z"
+  diagnosed_at: "2026-03-24T10:55:00Z"
+  pagerduty_url: "https://addx-oncall.pagerduty.com/incidents/Q1ABC123"
+
+diagnosis_process:
+  investigation_rounds: 2
+  dimensions_investigated: ["k8s", "prometheus", "preceding"]
+  dimensions_not_available: []
+  cross_validation: "K8s OOMKilled + Prometheus 内存趋势一致"
+
+trend_data:
+  - metric: "container_memory_working_set_bytes"
+    values_24h: "稳定在 1.2GB，告警前 10min 飙升到 2.1GB"
+
+timeline:
+  - time: "2026-03-24T10:31:00Z"
+    event: "thanos-store Pod 重启"
+    source: "k8s"
+  - time: "2026-03-24T10:41:38Z"
+    event: "thanos-query OOMKilled"
+    source: "k8s"
+  - time: "2026-03-24T10:42:50Z"
+    event: "PagerDuty 告警触发"
+    source: "pagerduty"
+
+causal_chain:
+  confidence: "high"
+  reasoning: "K8s 和 Prometheus 数据交叉验证，时序一致"
+  investigation_rounds: 2
+  depth_limit_reached: false
+
+  evaluation:
+    complete: true
+    criteria:
+      - id: "①"
+        name: "可行动"
+        passed: true
+        detail: "加 resource limits"
+      - id: "②"
+        name: "可解释"
+        passed: true
+        detail: "WHY: 无 limits → BestEffort QoS → OOM"
+      - id: "③"
+        name: "最早点"
+        passed: true
+        detail: "再追 why = 创建时遗漏"
+      - id: "④"
+        name: "可预防"
+        passed: true
+        detail: "加 limits 防止 OOM 重现"
+
+  chain:
+    - event: "thanos-query Deployment 未设置 resource requests/limits"
+      node_type: "root_cause"
+      actionable: true
+      source: "k8s"
+    - event: "OOMKilled"
+      node_type: "intermediate"
+      caused_by: [0]
+      source: "k8s"
+    - event: "thanos-cn 不可达"
+      node_type: "symptom"
+      duration: "25min"
+      source: "curl"
+    - event: "35+ 假告警"
+      node_type: "impact"
+      source: "pagerduty"
+
+impact:
+  affected_services: ["grafana-ai"]
+  affected_users: "内部 oncall 团队"
+  blast_radius: "cn-prod 监控查询不可用"
+  data_loss_risk: false
+
+risk_assessment:
+  current_risk: "high"
+  trend: "stable"
+  eta_to_critical: null
+  single_point_of_failure: true
+  auto_recovery_possible: false
+
+solutions:
+  short_term:
+    - action: "给 thanos-query 添加 resource limits"
+      addresses: "causal_chain[0]"
+      risk: "low"
+      reversible: true
+      prompt: |
+        使用 k8s-ops skill 对 tencent-100014919455-cn-main 集群
+        prometheus namespace 的 thanos-query Deployment 添加 resource limits。
+        备份 → patch → rollout status → 验证 QoS=Burstable。
+  long_term:
+    - description: "thanos-query 增加到 2 副本"
+      addresses: "causal_chain[0]"

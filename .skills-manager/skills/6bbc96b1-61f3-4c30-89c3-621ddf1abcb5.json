@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "6bbc96b1-61f3-4c30-89c3-621ddf1abcb5",
+  "path": "k8s-ops",
+  "path_key": "k8s-ops",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/k8s-ops",
+    "branch": null
+  }
+}

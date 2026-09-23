@@ -1,0 +1,187 @@
+{
+  "body": {
+    "assignee": null,
+    "assignees": [],
+    "author": {
+      "avatar_url": null,
+      "id": 6,
+      "locked": false,
+      "name": "Buzz Sync Developer (localstack)",
+      "public_email": null,
+      "state": "active",
+      "username": "buzz-sync-dev",
+      "web_url": "http://gitlab.localstack.test:8929/buzz-sync-dev"
+    },
+    "blocking_discussions_resolved": true,
+    "changes_count": "3",
+    "closed_at": null,
+    "closed_by": null,
+    "created_at": "2026-09-13T08:21:15.260Z",
+    "description": "Closes #1",
+    "detailed_merge_status": "not_open",
+    "diff_refs": {
+      "base_sha": "07a9dd7e9e1991a0be385aa10f368f2d4dea0957",
+      "head_sha": "33a2250fbe88eda7ee825409bc1d43b7f7a5af7a",
+      "start_sha": "07a9dd7e9e1991a0be385aa10f368f2d4dea0957"
+    },
+    "discussion_locked": null,
+    "downvotes": 0,
+    "draft": false,
+    "first_contribution": true,
+    "first_deployed_to_production_at": null,
+    "force_remove_source_branch": null,
+    "has_conflicts": false,
+    "head_pipeline": {
+      "before_sha": "0000000000000000000000000000000000000000",
+      "committed_at": null,
+      "coverage": null,
+      "created_at": "2026-09-13T08:21:20.743Z",
+      "detailed_status": {
+        "details_path": "/buzz-sync-test/pilot/-/pipelines/1",
+        "favicon": "/assets/ci_favicons/favicon_status_failed-41304d7f7e3828808b0c26771f0309e55296819a9beea3ea9fbf6689d9857c12.png",
+        "group": "failed",
+        "has_details": true,
+        "icon": "status_failed",
+        "illustration": null,
+        "label": "failed",
+        "text": "Failed",
+        "tooltip": "failed"
+      },
+      "duration": null,
+      "finished_at": "2026-09-13T08:22:16.399Z",
+      "id": 1,
+      "iid": 1,
+      "project_id": 2,
+      "queued_duration": null,
+      "ref": "refs/merge-requests/1/head",
+      "sha": "33a2250fbe88eda7ee825409bc1d43b7f7a5af7a",
+      "source": "merge_request_event",
+      "started_at": null,
+      "status": "failed",
+      "tag": false,
+      "updated_at": "2026-09-13T08:22:16.407Z",
+      "user": {
+        "avatar_url": null,
+        "id": 6,
+        "locked": false,
+        "name": "Buzz Sync Developer (localstack)",
+        "public_email": null,
+        "state": "active",
+        "username": "buzz-sync-dev",
+        "web_url": "http://gitlab.localstack.test:8929/buzz-sync-dev"
+      },
+      "web_url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot/-/pipelines/1",
+      "yaml_errors": null
+    },
+    "id": 1,
+    "iid": 1,
+    "imported": false,
+    "imported_from": "none",
+    "labels": [
+      "type::feature"
+    ],
+    "latest_build_finished_at": null,
+    "latest_build_started_at": null,
+    "merge_after": null,
+    "merge_commit_sha": "8ac847d0d8aea921273b558fe4663d9c003db0ef",
+    "merge_error": null,
+    "merge_status": "can_be_merged",
+    "merge_user": {
+      "avatar_url": null,
+      "id": 7,
+      "locked": false,
+      "name": "Buzz Sync Maintainer (localstack)",
+      "public_email": null,
+      "state": "active",
+      "username": "buzz-sync-maintainer",
+      "web_url": "http://gitlab.localstack.test:8929/buzz-sync-maintainer"
+    },
+    "merge_when_pipeline_succeeds": false,
+    "merged_at": "2026-09-13T08:22:19.640Z",
+    "merged_by": {
+      "avatar_url": null,
+      "id": 7,
+      "locked": false,
+      "name": "Buzz Sync Maintainer (localstack)",
+      "public_email": null,
+      "state": "active",
+      "username": "buzz-sync-maintainer",
+      "web_url": "http://gitlab.localstack.test:8929/buzz-sync-maintainer"
+    },
+    "milestone": {
+      "created_at": "2026-09-13T08:21:10.397Z",
+      "description": null,
+      "due_date": null,
+      "expired": false,
+      "id": 1,
+      "iid": 1,
+      "project_id": 2,
+      "start_date": null,
+      "state": "active",
+      "title": "rec-0913082019 milestone",
+      "updated_at": "2026-09-13T08:22:21.252Z",
+      "web_url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot/-/milestones/1"
+    },
+    "pipeline": null,
+    "prepared_at": "2026-09-13T08:21:30.297Z",
+    "project_id": 2,
+    "reference": "!1",
+    "references": {
+      "full": "buzz-sync-test/pilot!1",
+      "relative": "!1",
+      "short": "!1"
+    },
+    "reviewers": [
+      {
+        "avatar_url": null,
+        "id": 7,
+        "locked": false,
+        "name": "Buzz Sync Maintainer (localstack)",
+        "public_email": null,
+        "state": "active",
+        "username": "buzz-sync-maintainer",
+        "web_url": "http://gitlab.localstack.test:8929/buzz-sync-maintainer"
+      }
+    ],
+    "sha": "33a2250fbe88eda7ee825409bc1d43b7f7a5af7a",
+    "should_remove_source_branch": null,
+    "source_branch": "feature/1-recording-0913082019",
+    "source_project_id": 2,
+    "squash": false,
+    "squash_commit_sha": null,
+    "squash_on_merge": false,
+    "state": "merged",
+    "subscribed": false,
+    "target_branch": "main",
+    "target_project_id": 2,
+    "task_completion_status": {
+      "completed_count": 0,
+      "count": 0
+    },
+    "time_stats": {
+      "human_time_estimate": null,
+      "human_total_time_spent": null,
+      "time_estimate": 0,
+      "total_time_spent": 0
+    },
+    "title": "Recording MR 0913082019 cc @buzz-sync-maintainer",
+    "updated_at": "2026-09-13T08:22:19.590Z",
+    "upvotes": 0,
+    "user": {
+      "can_merge": false
+    },
+    "user_notes_count": 1,
+    "web_url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot/-/merge_requests/1",
+    "work_in_progress": false
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "request": {
+    "as": "bot",
+    "method": "GET",
+    "path": "projects/2/merge_requests/1",
+    "query": {}
+  },
+  "status": 200
+}

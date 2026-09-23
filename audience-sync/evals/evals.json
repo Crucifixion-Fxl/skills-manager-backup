@@ -1,0 +1,212 @@
+{
+  "schema_version": 1,
+  "skill_name": "audience-sync",
+  "evals": [
+    {
+      "id": 1,
+      "mode": "read_only_comparison",
+      "prompt": "我已经提供了几把 key。请分别告诉我它们能访问哪个 Project、有哪些权限，并查看目标 Project 的圈人能力；这次只读。",
+      "setup": "Fresh Agent with Skill and an explicitly injected bounded alias map containing one valid Project key and one invalid key. Supply no Project, origin or route hints. No key values in prompt.",
+      "slug": "mixed-key-bootstrap",
+      "expected_output": "A read-only evidence-based reply that satisfies every assertion below; no effects are authorized by this evaluation.",
+      "assertions": [
+        {
+          "name": "mixed-key-bootstrap-01",
+          "check": "Use production and verify each supplied key independently."
+        },
+        {
+          "name": "mixed-key-bootstrap-02",
+          "check": "Keep invalid or unavailable entries visible without blocking other checks."
+        },
+        {
+          "name": "mixed-key-bootstrap-03",
+          "check": "Select a verified key matching the requested Project/action, without another permission request for read-only verification."
+        },
+        {
+          "name": "mixed-key-bootstrap-04",
+          "check": "Distinguish offline formatting, HTTP status and authenticated capabilities; perform no effects."
+        },
+        {
+          "name": "mixed-key-bootstrap-05",
+          "check": "Discover Project only from authenticated self-context; if discovery is unavailable, report that dependency without substituting a preset Project."
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "mode": "read_only_comparison",
+      "prompt": "当前宿主有 Audience 原生工具，没有 Python。用提供的 key 查看 Project 权限和圈人能力。",
+      "setup": "Fresh semantic-only bundle plus installed native Audience tools and their schemas; no scripts, source or contracts directory.",
+      "slug": "native-host-no-python",
+      "expected_output": "A read-only evidence-based reply that satisfies every assertion below; no effects are authorized by this evaluation.",
+      "assertions": [
+        {
+          "name": "native-host-no-python-01",
+          "check": "Use installed native tools and schemas, matching canonical operation semantics."
+        },
+        {
+          "name": "native-host-no-python-02",
+          "check": "Do not attempt Python setup, missing bundled files, private schema downloads or a newly written HTTP client."
+        },
+        {
+          "name": "native-host-no-python-03",
+          "check": "Report live Project/permission and capability results or precise native-tool errors."
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "mode": "read_only_comparison",
+      "prompt": "请用这个 skill 查看我提供的 key 的权限；当前只有语义文件，没有原生工具或 Python 运行时。",
+      "setup": "Fresh semantic-only bundle; no executable transport; no network effects.",
+      "slug": "missing-transport",
+      "expected_output": "A read-only evidence-based reply that satisfies every assertion below; no effects are authorized by this evaluation.",
+      "assertions": [
+        {
+          "name": "missing-transport-01",
+          "check": "Identify the missing native tool registration or full clone plus supported Python runtime."
+        },
+        {
+          "name": "missing-transport-02",
+          "check": "Do not claim authentication, create substitute raw HTTP tooling or perform effects."
+        },
+        {
+          "name": "missing-transport-03",
+          "check": "Provide one actionable setup requirement."
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "mode": "single_authorized_effect",
+      "prompt": "我授权本次完整测试：筛选美国、语言 es、2026-09-07 UTC 注册的用户。只在预览恰好 5 人且不超过 5 人时物化并同步到该 Project 当前广告的就绪 Brevo Folder。沿用这次授权完成全链路，不发营销活动。",
+      "setup": "Fresh Agent with only the Skill/full clone, one securely injected valid Project key and the business prompt. No supplied Project, origin, API route, plan, request, run or destination IDs. No host capability preflight or target selection. The Agent discovers identity, readiness and destination through the Skill and live responses.",
+      "slug": "authorized-production-full-chain",
+      "expected_output": "An evidence-based result or precise stop reason for the single explicitly authorized production chain, satisfying every assertion below; never replay effects for a comparison baseline.",
+      "assertions": [
+        {
+          "name": "authorized-production-full-chain-01",
+          "check": "Derive the production origin from the Skill, authenticate self-context to discover Project, read live capability gates, and select the advertised unambiguous ready Brevo Folder and its revision without pre-supplied answers."
+        },
+        {
+          "name": "authorized-production-full-chain-02",
+          "check": "Discover allowed fields, types and registry version live; preserve all three conditions and UTC interval."
+        },
+        {
+          "name": "authorized-production-full-chain-03",
+          "check": "Preview exactly 5 members; if count differs or exceeds5, report mismatch without materializing or syncing."
+        },
+        {
+          "name": "authorized-production-full-chain-04",
+          "check": "Materialization succeeds for that exact plan and yields a nonempty exact run and member_count5."
+        },
+        {
+          "name": "authorized-production-full-chain-05",
+          "check": "Sync binds that materialization request/run/count and advertised destination revision with confirmed=true; reuse existing user authorization."
+        },
+        {
+          "name": "authorized-production-full-chain-06",
+          "check": "Read exact sync request to succeeded with expected membership accounting; retain actual plan/request/run evidence internally and present business results with safe counts and available verified links."
+        },
+        {
+          "name": "authorized-production-full-chain-07",
+          "check": "No campaign sends, credential disclosure, direct provider/warehouse calls or duplicated effects for baseline evaluation."
+        },
+        {
+          "name": "authorized-production-full-chain-08",
+          "check": "If self-discovery, readiness or an unambiguous advertised ready Folder is unavailable, report the exact dependency rather than inventing IDs or calling the loop complete."
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "mode": "read_only_comparison",
+      "prompt": "把这次预览结果告诉我，先不物化。",
+      "setup": "Offline fixture only, no API calls. Authenticated matching plan named US Spanish new users; stored criteria country eq US AND language eq es AND regist_time gte 2026-09-07T00:00:00Z AND regist_time lte 2026-09-07T23:59:59Z (both boundaries inclusive). Frozen partition_dt 2026-09-09; preview count 5. Internal fixture includes plan/request IDs, hash, revisions and fresh preview attestation. audience_detail_url is null.",
+      "slug": "business-preview-reply",
+      "expected_output": "A read-only evidence-based reply that satisfies every assertion below; no effects are authorized by this evaluation.",
+      "assertions": [
+        {
+          "name": "business-preview-reply-01",
+          "check": "Show plan name, exact fields/operators/values, frozen snapshot partition and preview count 5; distinguish registration interval from snapshot partition."
+        },
+        {
+          "name": "business-preview-reply-02",
+          "check": "State preview only, not materialized or synced; explain unavailable Audience link briefly without inventing one."
+        },
+        {
+          "name": "business-preview-reply-03",
+          "check": "Do not print plan/request/run IDs, hash, revisions, idempotency key, preview attestation or raw JSON in the normal reply; retain execution evidence internally."
+        },
+        {
+          "name": "business-preview-reply-04",
+          "check": "Do not perform effects or extra calls merely to fill presentation fields."
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "mode": "read_only_comparison",
+      "prompt": "同步完成了吗？给我结果。",
+      "setup": "Offline fixture only. Exact succeeded sync for the same named plan and frozen partition as business-preview-reply. Materialized member_count 5; added_count 4, removed_count 2, skipped_count 1. Supply binding-validated audience_detail_url and provider_resource_url from an actual fixture, plus internal request/run IDs and revisions. Human Brevo destination label exists. No new API calls. Exact get_project_sync detail has destination.display_name=Kiwibit audience folder and destination.target.display_name=US Spanish new users_0123456789abcdef0123456789, target.type=list, and the same sync request/source plan binding.",
+      "slug": "business-sync-reply",
+      "expected_output": "A read-only evidence-based reply that satisfies every assertion below; no effects are authorized by this evaluation.",
+      "assertions": [
+        {
+          "name": "business-sync-reply-01",
+          "check": "Report succeeded, plan name, known criteria and partition, target label and materialized source count 5."
+        },
+        {
+          "name": "business-sync-reply-02",
+          "check": "Report added 4, removed 2, skipped 1 separately; do not call added count final List size or claim all 5 were added."
+        },
+        {
+          "name": "business-sync-reply-03",
+          "check": "Show each supplied validated Audience/List URL independently, with friendly link text; IDs inside returned URLs may remain intact."
+        },
+        {
+          "name": "business-sync-reply-04",
+          "check": "Do not separately enumerate internal plan/request/run IDs, attestations, hashes or revisions; keep exact binding internally."
+        },
+        {
+          "name": "business-sync-reply-05",
+          "check": "Display the exact returned destination.target.display_name as actual Brevo List name, preserving its suffix. Distinguish it from destination.display_name (Folder target); never synthesize the name from plan/request IDs. If absent in exact query sync readback, allow one same-key/Project get_project_sync for that exact sync request; missing detail does not overturn confirmed success."
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "mode": "read_only_comparison",
+      "prompt": "同步现在是什么情况？",
+      "setup": "Offline fixture only. Exact sync status queued; added_count/removed_count/skipped_count null. Plan name, criteria and partition unavailable in authorized evidence. Internal exact sync request ID and run ID available. No result URL supplied.",
+      "slug": "business-pending-and-diagnostics",
+      "expected_output": "A read-only evidence-based reply that satisfies every assertion below; no effects are authorized by this evaluation.",
+      "assertions": [
+        {
+          "name": "business-pending-and-diagnostics-01",
+          "check": "Report queued without claiming completion; do not convert unknown counts to zero."
+        },
+        {
+          "name": "business-pending-and-diagnostics-02",
+          "check": "Do not fabricate name, criteria, partition or URLs and do not substitute internal IDs as a business name."
+        },
+        {
+          "name": "business-pending-and-diagnostics-03",
+          "check": "Keep normal reply concise and omit raw technical identifiers. If the user later explicitly requests troubleshooting IDs, provide only relevant non-secret identifiers from the same exact request while retaining credentials and preview attestation out of normal output."
+        },
+        {
+          "name": "business-pending-and-diagnostics-04",
+          "check": "Do not submit another sync or make extra calls solely for presentation."
+        }
+      ]
+    }
+  ],
+  "contract": {
+    "version": 1,
+    "id_start": 1,
+    "case_count": 7,
+    "canonical_inputs": true,
+    "require_assertions": true,
+    "hide_tool_tokens": true
+  }
+}

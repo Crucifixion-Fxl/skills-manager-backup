@@ -1,0 +1,40 @@
+# Multi-stage Dockerfile for Go services.
+#
+# Required slots (this is a Dockerfile, not YAML; substitute then write to the
+# repository's Dockerfile path):
+#   {{go_version}}     e.g. 1.22  (use a specific minor version, not latest)
+#   {{main_path}}      path to main package, e.g. ./cmd/api
+#   {{binary_name}}    output binary name (kebab-case OK)
+#   {{port}}           container port the binary listens on
+#
+# DO NOT use `FROM golang:latest`. Pinning the minor version avoids surprise
+# behavior on language updates.
+#
+# DO NOT use a single-stage Dockerfile (build + run in golang image). Final
+# image must be distroless or alpine — golang:* images carry ~700MB toolchain.
+#
+# DO NOT skip CGO_ENABLED=0 unless the app needs CGO (rare for HTTP services).
+# Static binary works in distroless / scratch / alpine without libc.
+#
+# DO NOT add ENTRYPOINT pointing to a shell wrapper that does config templating.
+# Config is injected via ConfigMap / Secret env vars; the binary runs directly.
+#
+# CN target rule: before writing this Dockerfile for any CN / TKE / aws-cn
+# target, new-service.md Step 7 must rewrite external FROM images to
+# ${HARBOR_REGISTRY}/base/... and add ARG HARBOR_REGISTRY.
+
+FROM golang:{{go_version}}-bookworm AS builder
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 GOFLAGS="-trimpath" go build \
+    -ldflags="-s -w" \
+    -o /out/{{binary_name}} {{main_path}}
+
+FROM gcr.io/distroless/static-debian12:nonroot
+WORKDIR /
+COPY --from=builder /out/{{binary_name}} /{{binary_name}}
+EXPOSE {{port}}
+USER nonroot:nonroot
+ENTRYPOINT ["/{{binary_name}}"]

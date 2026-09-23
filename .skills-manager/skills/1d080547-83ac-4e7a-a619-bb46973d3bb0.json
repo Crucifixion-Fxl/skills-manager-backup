@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "1d080547-83ac-4e7a-a619-bb46973d3bb0",
+  "path": "observability-design",
+  "path_key": "observability-design",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/observability-design",
+    "branch": null
+  }
+}

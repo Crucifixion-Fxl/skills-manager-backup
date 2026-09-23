@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "4022f53e-f9a8-4f44-965c-83765d68d63e",
+  "path": "datahub",
+  "path_key": "datahub",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/datahub",
+    "branch": null
+  }
+}

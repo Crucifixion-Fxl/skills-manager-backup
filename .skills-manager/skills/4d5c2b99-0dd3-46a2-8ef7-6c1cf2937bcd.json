@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "4d5c2b99-0dd3-46a2-8ef7-6c1cf2937bcd",
+  "path": "argocd-fleet-scan",
+  "path_key": "argocd-fleet-scan",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/argocd-fleet-scan",
+    "branch": null
+  }
+}

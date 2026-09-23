@@ -1,0 +1,178 @@
+{
+  "schema_version": 1,
+  "skill_name": "delivery-progress-analysis",
+  "evals": [
+    {
+      "id": 1,
+      "mode": "offline_fixture",
+      "prompt": "使用提供的 Naturehood VN1.4.0 冻结夹具，在 2026-09-15T01:00:00Z 生成交付进展报告。不要访问实时系统或修改 Issue。",
+      "setup": "Only the attached frozen fixture is authoritative. Treat its three issues as the complete candidate set and do not infer facts outside it.",
+      "files": [
+        "evals/fixtures/naturehood-vn140.md"
+      ],
+      "expected_output": "一份一分钟可读、异常优先、有精确深链接的报告：正确算出 9 月 16 日提测截止；把 #198 和 #159 的临期未闭环证据讲清，把 #130 列为未排期且不推断时间风险；不生成完成百分比。",
+      "assertions": [
+        {
+          "name": "complete_bounded_scope",
+          "check": "明确覆盖 3/3 个夹具 Issue，并说明这是冻结夹具的完整集合，不声称代表实时项目全集。"
+        },
+        {
+          "name": "correct_app_deadline",
+          "check": "基于 due_date 2026-09-18 与周一至周五日历，正确给出提测截止 2026-09-16；不虚构节假日。"
+        },
+        {
+          "name": "semantic_evidence_chain",
+          "check": "#198 同时引用开放客户端 MR、失败 Pipeline，并分别核验最终 release 候选映射与组合包验收结论；两者未闭环时不得因两个后端 MR 已合并而声明完成。"
+        },
+        {
+          "name": "comment_calibrates_not_erases",
+          "check": "承认 #198 与 #159 最新评论解释了现状，但评论并未解决临期交付风险；#159 的未发现 MR 不写成没有开发。"
+        },
+        {
+          "name": "unscheduled_no_time_guess",
+          "check": "#130 放入未排期／需处理，并引用 schema blocker；因为没有 Milestone，不推断逾期天数。"
+        },
+        {
+          "name": "deep_links_support_claims",
+          "check": "关键结论旁使用具体 Issue、note、MR、Pipeline 深链接；跨项目 MR 保留项目身份，不只写裸 !iid。"
+        },
+        {
+          "name": "concise_information_dense",
+          "check": "摘要不超过 12 行，最多 3 个关键变化和 3 个动作；每个展开项最多 4 行，避免重复方法说明。"
+        },
+        {
+          "name": "no_pseudo_progress",
+          "check": "不按 commit、代码行、MR 数或 checklist 合成完成百分比，不评价需求价值。"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "mode": "offline_fixture",
+      "prompt": "项目给了一个 due_date=2026-09-18 的 Issue 列表，但没有说明这是 APP 还是服务端项目，也没有状态模型、工作日历和阈值。请做进展分析。",
+      "setup": "No repository or Canvas is available. The supplied list has exact Issue URLs but no other configuration.",
+      "expected_output": "输出可验证的对象状态与配置缺口，停止提测截止和逾期风险推断；不要靠项目名补齐 APP 日历或状态语义。",
+      "assertions": [
+        {
+          "name": "missing_config_stops_time_inference",
+          "check": "明确列出 delivery type、状态模型、工作日历和阈值缺失，不计算 due_date-2 或风险等级。"
+        },
+        {
+          "name": "facts_still_useful",
+          "check": "仍可简洁报告已给出的状态和精确 Issue 链接，并说明补齐哪些配置即可继续。"
+        },
+        {
+          "name": "no_repository_name_guess",
+          "check": "不从仓库名、标题或惯例猜测项目类型、节假日或状态含义。"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "mode": "offline_fixture",
+      "prompt": "当前证据与昨日报告完全相同：5 条风险的状态、MR、CI 和解释评论都没变化；另有 7 条正常事项。请生成今天的进展更新。",
+      "setup": "Yesterday's report and today's fully paginated evidence are available and identical. Exact evidence-index links are supplied.",
+      "expected_output": "把结论压缩为无实质变化，最多保留需要立即处理的摘要和昨日证据索引；不重发 12 条逐项长报告。",
+      "assertions": [
+        {
+          "name": "delta_first",
+          "check": "明确写无实质变化，不把持续项伪装成新增或升级。"
+        },
+        {
+          "name": "unchanged_risk_suppression",
+          "check": "不逐条重复全部 5 条风险和 7 条正常事项；只保留仍需动作的最高优先级摘要并链接索引。"
+        },
+        {
+          "name": "normal_items_omitted",
+          "check": "正常事项用数量概括，不为了填满模板展开。"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "mode": "offline_fixture",
+      "prompt": "本次范围明确包含 type::feature 与 type::bug。Bug #244 在关联 MR 合并且 pipeline success 后被 reopen；最新复现评论说明生产仍可触发，MR review 还有一个 blocking thread。另一个 feature 正常。请生成进展更新。",
+      "setup": "Exact Issue, reopen event, reproduction note, MR, pipeline and unresolved review-thread deep links are supplied. TDD level is L3 but project rules say it is informational, not a gate.",
+      "expected_output": "把 reopened Bug 作为交付风险并串起复现、MR、CI 与 review 证据；不因 CI success 或 TDD L3 宣布已修复，也不把 TDD level 当门禁。",
+      "assertions": [
+        {
+          "name": "requested_bug_scope_included",
+          "check": "因为调用方明确纳入 type::bug，Bug #244 不得被功能报告过滤掉。"
+        },
+        {
+          "name": "reopen_is_regression_signal",
+          "check": "将 reopen 与生产复现识别为合并后的负反馈信号，并使用对应深链接。"
+        },
+        {
+          "name": "ci_success_not_resolution",
+          "check": "不因历史 MR merged 或 pipeline success 声称 Bug 已解决。"
+        },
+        {
+          "name": "review_and_tdd_non_gate",
+          "check": "报告 blocking review thread 的实际影响；TDD L3 只作为上下文，不自行升级为门禁。"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "mode": "offline_discussion_background_conflict",
+      "prompt": "Channel 里产品经理说 Issue #198 ‘客户端已经做完，只差发包’，并提供了消息深链接；Issue comment 也解释历史设备证据可复用。但当前 GitLab 仍显示 Android、Flutter、iOS MR open，两个 Pipeline failed，最终组合包 E2E 未闭环。请生成进展更新。",
+      "setup": "The Channel message, Issue comment, three MRs, two failed Pipelines and final-evidence-gap note each have exact deep links and timestamps. The Channel author is not configured as authority to change milestone or completion semantics.",
+      "expected_output": "把 Channel 与 comment 作为有用背景引用，但与 MR/CI/验收证据对账后仍报告交付未闭环；清楚呈现‘只差发包’说法与系统事实的差距，不攻击发言者。",
+      "assertions": [
+        {
+          "name": "channel_and_comment_are_cited_background",
+          "check": "保留 Channel 消息与 Issue comment 的深链接、作者和时间，并用于解释团队当前判断。"
+        },
+        {
+          "name": "discussion_does_not_override_delivery_evidence",
+          "check": "不因‘已经做完’声明而把 Issue 判为完成；继续引用 open MR、failed Pipeline 和缺失 E2E。"
+        },
+        {
+          "name": "conflict_is_explicit_and_neutral",
+          "check": "中性说明背景声明与系统证据不一致，并给出可消除差距的具体交付物，不做人员评价。"
+        },
+        {
+          "name": "no_unauthorized_calendar_change",
+          "check": "普通 Channel 消息不修改 Milestone、提测截止或状态语义。"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "mode": "offline_verified_responsible_people_mentions",
+      "prompt": "生成交付进展，并在 Buzz 原 Thread 通知需要处理风险的相关责任人。Issue #198 的 GitLab assignee 是 hzheng，Buzz 精确同名 profile 是当前 Channel member；Issue #159 的 assignee hmei 命中两个近似 display name，且没有 owner 管理的 alias。",
+      "setup": "Frozen GitLab assignee objects, exact Buzz profile lookup results, owner-signed Canvas aliases and a complete Channel membership snapshot are supplied. The publishing runtime can attach explicit p tags and read back the sent event. No Channel membership mutation is authorized.",
+      "files": [
+        "evals/fixtures/naturehood-vn140.md"
+      ],
+      "expected_output": "在最多 3 条需要响应的动作中，hzheng 只被通知一次，并用其已核验 pubkey 形成真实 p tag；hmei 标记为 Buzz 身份未唯一解析且不发送 mention。报告不得 @all、不得自动加人，Workflow 不保存用户名或 pubkey。",
+      "assertions": [
+        {
+          "name": "verified_member_gets_one_real_mention",
+          "check": "hzheng 同时满足 GitLab assignee、Buzz 唯一精确匹配和当前 Channel member，因此在原 Thread 用显式真实 p tag 通知一次；readback 核对目标 pubkey。"
+        },
+        {
+          "name": "ambiguous_identity_is_not_notified",
+          "check": "hmei 没有唯一精确映射时只显示责任人和解析缺口，不发送 mention，不选择任一近似 display name。"
+        },
+        {
+          "name": "no_spam_or_membership_mutation",
+          "check": "只通知需要行动的责任人，每个 pubkey 每份报告最多一次；不 @all、不自动添加 Channel member。"
+        },
+        {
+          "name": "people_mapping_is_not_workflow_configuration",
+          "check": "动态责任人来自 GitLab assignee，例外 alias 来自 owner 管理的 Canvas；Workflow 不保存人员名单或 pubkey。"
+        }
+      ]
+    }
+  ],
+  "contract": {
+    "version": 1,
+    "id_start": 1,
+    "case_count": 6,
+    "canonical_inputs": true,
+    "require_assertions": true,
+    "hide_tool_tokens": true
+  }
+}

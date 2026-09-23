@@ -1,0 +1,40 @@
+# ArgoCD Application - {{pvc_application_name}}
+#
+# Slots:
+#   pvc_application_name, k8s_repo_url, k8s_target_revision
+#   pvc_source_path, runner_namespace
+#
+# Deploys the standalone PVC before the runner release. Keep this Application
+# separate from the Helm release so runner rebuilds do not delete the cache.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: {{pvc_application_name}}
+  namespace: argo-cd
+  labels:
+    app.kubernetes.io/part-of: cicd-stack
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    argocd.argoproj.io/sync-wave: "-10"
+    notifications.argoproj.io/subscribe.on-health-degraded.feishu-ops: ""
+    notifications.argoproj.io/subscribe.on-sync-failed.feishu-ops: ""
+spec:
+  project: default
+  source:
+    repoURL: {{k8s_repo_url}}
+    targetRevision: {{k8s_target_revision}}
+    path: {{pvc_source_path}}
+    directory:
+      recurse: false
+      include: "*.yaml"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: {{runner_namespace}}
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false
+      - ServerSideApply=true

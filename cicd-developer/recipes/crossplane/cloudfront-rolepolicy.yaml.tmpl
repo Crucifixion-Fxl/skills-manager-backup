@@ -1,0 +1,33 @@
+# CloudFront management RolePolicy for the per-app Crossplane role.
+#
+# Required slots:
+#   {{app}}  kebab-case app name; Role crossplane-app-{{app}} must already exist
+#
+# Write to: crossplane-infra/<cluster_dir>/{{app}}-iam.yaml
+#
+# CloudFront is account-global. AWS does not support useful per-distribution ARN
+# scoping for every create/update call, so Resource remains "*". Keep this policy
+# attached only to the per-app role, not the default provider role.
+
+apiVersion: iam.aws.m.upbound.io/v1beta1
+kind: RolePolicy
+metadata:
+  name: crossplane-app-{{app}}-cloudfront
+spec:
+  forProvider:
+    policy: |
+      {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Action": "cloudfront:*",
+            "Resource": "*"
+          }
+        ]
+      }
+    roleRef:
+      name: crossplane-app-{{app}}
+  providerConfigRef:
+    name: default
+    kind: ClusterProviderConfig

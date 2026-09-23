@@ -1,0 +1,49 @@
+# Bootstrap BucketPolicy for CloudFront OAC.
+#
+# Use only for the first sync when the Distribution ID is not known yet.
+# Replace with cloudfront-bucket-policy-final.yaml.tmpl after Distribution Ready.
+#
+# Required slots:
+#   {{app}}          bucket owner app; providerConfigRef.name
+#   {{bucket_name}}  private S3 bucket name
+#   {{region}}       S3 bucket AWS region
+#   {{partition}}    aws | aws-cn for the S3 ARN
+#   {{account_id}}   bucket owner AWS account id
+#
+# Security note:
+# - PublicAccessBlock stays fully enabled.
+# - SourceAccount bootstrap solves the Distribution-ID chicken-and-egg, but it is
+#   not the final least-privilege state. Final state must use SourceArn.
+
+apiVersion: s3.aws.m.upbound.io/v1beta1
+kind: BucketPolicy
+metadata:
+  name: {{bucket_name}}-cloudfront
+spec:
+  forProvider:
+    region: {{region}}
+    bucketRef:
+      name: {{bucket_name}}
+    policy: |
+      {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Sid": "AllowCloudFrontOACBootstrap",
+            "Effect": "Allow",
+            "Principal": {
+              "Service": "cloudfront.amazonaws.com"
+            },
+            "Action": "s3:GetObject",
+            "Resource": "arn:{{partition}}:s3:::{{bucket_name}}/*",
+            "Condition": {
+              "StringEquals": {
+                "AWS:SourceAccount": "{{account_id}}"
+              }
+            }
+          }
+        ]
+      }
+  providerConfigRef:
+    name: {{app}}
+    kind: ClusterProviderConfig

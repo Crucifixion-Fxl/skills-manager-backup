@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "audience-sync-skill"
+version = "0.8.1"
+description = "Audience Sync Project Skill and fixed-operation client"
+requires-python = ">=3.9"
+dependencies = []
+
+[project.scripts]
+audience-sync-api = "audience_sync.cli:main"
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "ruff==0.7.4"]
+
+[tool.setuptools.package-data]
+audience_sync = ["py.typed"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+ignore = ["UP007"]

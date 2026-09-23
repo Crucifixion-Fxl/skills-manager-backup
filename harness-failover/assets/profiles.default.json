@@ -1,0 +1,12 @@
+{
+  "_comment": "Default harness profiles. One profile = adapter + wrapper + account home + model + effort. Lower priority number = preferred. Add accounts/overrides in ~/.config/buzz/harness-profiles.json (same shape, merged by id).",
+  "profiles": [
+    {"id": "grok", "harness": "grok", "model": "grok-4.6", "effort": "high", "priority": 10},
+    {"id": "claude-buzz", "harness": "claude", "model": "sonnet", "effort": "medium", "priority": 20,
+     "wrapper": "~/.local/bin/claude-buzz", "home": "~/.claude-buzz"},
+    {"id": "codex-buzz", "harness": "codex", "model": "gpt-5.6-sol", "effort": "medium", "priority": 30,
+     "home": "~/.codex-buzz"},
+    {"id": "glm", "harness": "claude", "provider": "glm", "model": "opus[1m]", "effort": "high", "priority": 40,
+     "wrapper": "~/.local/bin/claude-glm", "home": "~/.claude-glm"}
+  ]
+}

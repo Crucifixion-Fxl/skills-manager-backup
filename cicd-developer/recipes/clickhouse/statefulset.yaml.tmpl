@@ -1,0 +1,113 @@
+# clickhouse-statefulset.yaml.tmpl
+#
+# ClickHouse 单节点 StatefulSet 自助模板。
+# 多副本（>1）需配 Keeper 协调组件，**不在** 本模板范围——找运维评估。
+#
+# 必填槽位：
+#   {{app}}                  实例标签（默认 `clickhouse`，跨多 service 时改成 `<service>-clickhouse`）
+#   {{namespace}}            部署 namespace
+#   {{db_name}}              ClickHouse 启动时 CREATE DATABASE 的库名（如 `events`）
+#   {{cpu_requests}}         按 cost-tiering/clickhouse.yaml 的 env tier
+#   {{cpu_limits}}           同上
+#   {{memory_requests}}      同上
+#   {{memory_limits}}        同上
+#   {{ephemeral_storage_requests}}  同上；容器日志、临时文件和可写层预算
+#   {{ephemeral_storage_limits}}    同上；必须限制，避免节点磁盘被单实例耗尽
+#   {{pvc_size}}             按容量公式估：qps × bytes × retention × 86400 × 0.1压缩 × 5 headroom
+#   {{storage_class}}        from workflow `$target.pvc_storage_class` (EKS `gp3` / GKE `standard-rwo` / TKE `cbs`)
+#   镜像由 clickhouse/kustomization-overlay.yaml.tmpl 的 images 块统一覆盖；
+#   其 name 固定为 clickhouse-server，避免通用 app-name overlay 漏改镜像。
+#
+# 配套：
+#   - clickhouse-service.yaml（含 headless service + ClusterIP service，两个 port 9000+8123）
+#   - clickhouse-password-generator.yaml + clickhouse-password-external-secret.yaml
+#     （Password Generator 生成 password key，再由 ExternalSecret 写入 app Secret）
+#
+# 锁定的规则：
+#   1. **ClusterIP only**——ClickHouse native 协议（9000）和 HTTP（8123）都无 auth 层，**绝不** 公网暴露
+#      （ExternalIP/LoadBalancer/Ingress 全禁）
+#   2. 单副本——`replicas: 1`，多副本走 ops-led 评估流程（Keeper 协调）
+#   3. PVC 用 ReadWriteOnce —— ClickHouse 实例对 data dir 独占
+#   4. nodeSelector arch=amd64 —— ClickHouse 25.8 LTS 镜像目前 amd64 only
+#      未来若有 arm64 image 再去掉这条 nodeSelector
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{app}}
+  namespace: {{namespace}}
+  labels:
+    app: {{app}}
+spec:
+  serviceName: {{app}}-headless          # 必须匹配 service.yaml 里的 headless service 名
+  replicas: 1                             # 单节点；多副本另议
+  selector:
+    matchLabels:
+      app: {{app}}
+  template:
+    metadata:
+      labels:
+        app: {{app}}
+        env: __overlay__                  # overlay patch 写入实际 env keyword
+    spec:
+      automountServiceAccountToken: false # ClickHouse 不调用 Kubernetes API，不挂载默认 SA token
+      imagePullSecrets:
+        - name: harbor-registry-secret    # Kyverno 自动同步
+      nodeSelector:
+        kubernetes.io/arch: amd64          # 25.8 LTS 镜像 amd64 only
+      securityContext:
+        fsGroup: 101                       # ClickHouse 默认 user/group id（容器内 root 跑，PVC fsGroup 101）
+      containers:
+        - name: clickhouse
+          image: clickhouse-server:placeholder    # clickhouse overlay 的 images.newName/newTag 覆盖
+          ports:
+            - { name: native, containerPort: 9000 }
+            - { name: http,   containerPort: 8123 }
+          env:
+            - name: CLICKHOUSE_DB
+              value: {{db_name}}                  # 启动 entrypoint 自动 CREATE DATABASE
+            - name: CLICKHOUSE_USER
+              value: default
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{app}}-clickhouse-secret
+                  key: password
+            - name: CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT
+              value: "1"                          # 让 default 用户能 CREATE USER / GRANT
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/clickhouse
+          readinessProbe:                          # Kyverno require-probes
+            httpGet: { path: /ping, port: 8123 }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet: { path: /ping, port: 8123 }
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 6
+          resources:                               # Kyverno require-resources
+            requests:
+              cpu: {{cpu_requests}}
+              memory: {{memory_requests}}
+              ephemeral-storage: {{ephemeral_storage_requests}}
+            limits:
+              cpu: {{cpu_limits}}
+              memory: {{memory_limits}}
+              ephemeral-storage: {{ephemeral_storage_limits}}
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: {{storage_class}}        # EKS gp3 / GKE standard-rwo / TKE cbs
+        resources:
+          requests:
+            storage: {{pvc_size}}                   # 按容量公式估
+
+# Kyverno 兼容性说明：
+#   - require-rollout-for-new-apps 只 match `kind: Deployment`，StatefulSet 不受影响（**不需要** PolicyException）
+#   - require-probes / require-resources / disallow-latest-tag 都覆盖 StatefulSet——上面模板已满足

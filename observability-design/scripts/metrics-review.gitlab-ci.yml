@@ -1,0 +1,45 @@
+# Metrics Config-as-Code — MR AI Review Template (CI-sync 路径专用)
+#
+# Provided by skill: addx:observability-design
+# Include from your project's .gitlab-ci.yml:
+#
+#   include:
+#     - project: engineering/skills
+#       file: skills/observability-design/scripts/metrics-review.gitlab-ci.yml
+#       ref: main
+#
+# Requires 'opencode-runner' CI image available in your project scope.
+# Does not provide deterministic set-parity lint — that's a project-level
+# Node/Python script. This job handles semantic / 口径 review only.
+#
+# ⚠️ 仅 CI-sync 路径适用 (D3 Git-SSOT)
+# ================================
+# 本 template 假设 YAML 文件是 SSOT, MR 触发 YAML 变更即为口径变更。
+# 如果你的项目走 Skill-driven 路径 (工具原生 SSOT, 如 Superset + /superset skill),
+# 本 template 不适用 —— docs 改动在普通 MR review 里由 `/code-review` skill 审查,
+# 不需要单独 CI job (docs 变更不对应"部署事件", 无 trigger 意义).
+
+review:metrics-config-as-code:
+  stage: test
+  image: $CI_REGISTRY/devops/opencode-runner:latest
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        # 仅 CI-sync 路径的 YAML SSOT 类文件
+        - "observability/growthbook/**"
+        - "observability/sla/**"
+        - "**/metrics.yml"
+        # Legacy paths (pre-observability umbrella projects)
+        - "growthbook/**"
+        - "sla/**"
+  script:
+    - opencode review
+        --skill addx:observability-design
+        --focus metrics-config-as-code
+        --diff-base $CI_MERGE_REQUEST_DIFF_BASE_SHA
+        --post-comments
+  allow_failure: true   # advisory — deterministic lint blocks instead
+  artifacts:
+    when: always
+    reports:
+      codequality: opencode-review-comments.json

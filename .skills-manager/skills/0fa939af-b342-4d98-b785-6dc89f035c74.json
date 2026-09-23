@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "0fa939af-b342-4d98-b785-6dc89f035c74",
+  "path": "feishu-channel-rules",
+  "path_key": "feishu-channel-rules",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/lark/feishu-channel-rules",
+    "branch": null
+  }
+}

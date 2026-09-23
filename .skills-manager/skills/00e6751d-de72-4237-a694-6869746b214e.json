@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "00e6751d-de72-4237-a694-6869746b214e",
+  "path": "code-submit",
+  "path_key": "code-submit",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/code-submit",
+    "branch": null
+  }
+}

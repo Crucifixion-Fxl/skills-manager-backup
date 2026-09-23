@@ -1,0 +1,4 @@
+interface:
+  display_name: "嵌入式信号验证"
+  short_description: "通过固件、串口日志和示波器证据闭环验证嵌入式信号输出"
+  default_prompt: "使用 $embedded-signal-validation 验证固件输出的 PWM 是否符合代码预期。"

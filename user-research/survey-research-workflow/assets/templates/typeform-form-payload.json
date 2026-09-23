@@ -1,0 +1,54 @@
+{
+  "title": "Survey title",
+  "type": "branching",
+  "settings": {
+    "is_public": false,
+    "language": "en",
+    "show_progress_bar": true,
+    "show_question_number": false
+  },
+  "welcome_screens": [
+    {
+      "ref": "welcome",
+      "title": "Welcome",
+      "properties": {
+        "description": "What this survey is about and the honest time estimate.",
+        "show_button": true,
+        "button_text": "Start"
+      }
+    }
+  ],
+  "fields": [
+    {
+      "ref": "q1_recent_behavior",
+      "title": "A respondent-facing question",
+      "type": "multiple_choice",
+      "properties": {
+        "allow_multiple_selection": false,
+        "allow_other_choice": false,
+        "randomize": false,
+        "vertical_alignment": true,
+        "choices": [
+          {
+            "ref": "q1_yes",
+            "label": "Yes"
+          },
+          {
+            "ref": "q1_no",
+            "label": "No"
+          }
+        ]
+      },
+      "validations": {
+        "required": true
+      }
+    }
+  ],
+  "thankyou_screens": [
+    {
+      "ref": "thank_you",
+      "title": "Thank you"
+    }
+  ],
+  "logic": []
+}

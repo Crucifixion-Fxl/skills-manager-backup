@@ -1,0 +1,90 @@
+{
+  "business": "example",
+  "gitlab": {
+    "base_url": "https://gitlab.addx.ai",
+    "project_id": 1234,
+    "project_web_url": "https://gitlab.addx.ai/engineering/fchac-public-sandbox",
+    "token_env": "EXAMPLE_DESK_GITLAB_TOKEN",
+    "bot_author_id": 9001,
+    "bot_username": "example-desk",
+    "required_project_visibility": "public",
+    "deployment_baseline": null
+  },
+  "buzz": {
+    "channel_id": "00000000-0000-0000-0000-000000000000",
+    "desk_agent": "desk",
+    "cli_path": "/home/jchen/.local/opt/buzz-0.5.23/usr/bin/buzz",
+    "cli_sha256": "c8ad1f50b2e22ad09c7f291ed56c067b3283b559d4c8b12ba656577203c10cdb",
+    "desk_pubkey": "0000000000000000000000000000000000000000000000000000000000000001"
+  },
+  "status_order": ["triage", "backlog", "ready", "in-progress", "in-review"],
+  "agents": {
+    "desk": {
+      "name": "example-desk",
+      "kind": "desk",
+      "pubkey": "0000000000000000000000000000000000000000000000000000000000000001"
+    },
+    "feature": {
+      "name": "example-feature",
+      "kind": "role",
+      "pubkey": "0000000000000000000000000000000000000000000000000000000000000002"
+    },
+    "bug": {
+      "name": "example-bug",
+      "kind": "role",
+      "pubkey": "0000000000000000000000000000000000000000000000000000000000000003"
+    },
+    "debt": {
+      "name": "example-debt",
+      "kind": "role",
+      "pubkey": "0000000000000000000000000000000000000000000000000000000000000004"
+    },
+    "dev": {
+      "name": "example-dev",
+      "kind": "role",
+      "pubkey": "0000000000000000000000000000000000000000000000000000000000000005"
+    },
+    "qa": {
+      "name": "example-qa",
+      "kind": "role",
+      "pubkey": "0000000000000000000000000000000000000000000000000000000000000006"
+    },
+    "sre": {
+      "name": "example-sre",
+      "kind": "role",
+      "pubkey": "0000000000000000000000000000000000000000000000000000000000000007"
+    }
+  },
+  "routes": [
+    {
+      "types": ["feature"],
+      "statuses": ["triage", "backlog"],
+      "target": "feature"
+    },
+    {
+      "types": ["bug"],
+      "statuses": ["triage", "backlog"],
+      "target": "bug"
+    },
+    {
+      "types": ["maintenance"],
+      "statuses": ["triage", "backlog"],
+      "target": "debt"
+    },
+    {
+      "types": ["operation"],
+      "statuses": ["triage", "backlog", "ready", "in-progress", "in-review"],
+      "target": "sre"
+    },
+    {
+      "types": ["feature", "bug", "maintenance"],
+      "statuses": ["ready", "in-progress"],
+      "target": "dev"
+    },
+    {
+      "types": ["feature", "bug", "maintenance"],
+      "statuses": ["in-review"],
+      "target": "qa"
+    }
+  ]
+}

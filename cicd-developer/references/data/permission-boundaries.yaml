@@ -1,0 +1,509 @@
+# permission-boundaries.yaml
+#
+# 操作 / 排查的权限边界硬事实。workflow / playbook 在指导用户做某动作前 **必须**
+# 检查这里——开发者权限不够的命令要明确标注"联系运维执行"或给 ArgoCD UI 等价路径。
+#
+# 消费方：
+#   - 所有 workflow 在写 `[action]` 时区分谁能跑
+#   - 所有 playbook 在写诊断命令时同上
+#   - 给用户的 Ops Todo 表（哪些必须运维做）
+#
+# Schema：
+#   developer_constraints   开发者默认权限与明确的条件例外（不能从有工具推断权限）
+#   vault_permission_matrix  Vault 各 role 能干什么 + 怎么开通
+#   aws_permissions          AWS 命令分类（只读 OK / 写操作运维）
+#   k8s_write_operations     staging 开发者 OIDC 不授予的 K8s 写操作清单
+#   k8s_read_debug_contract  已授权 staging 身份的 namespace read/debug 范围
+#   crossplane_app_boundary  CrossplaneAppBoundary 拦截 / 允许的 AWS action
+
+# =============================================================================
+# 开发者默认权限边界
+# =============================================================================
+developer_constraints:
+
+  kubectl:
+    available_by_default: false
+    conditional_access_reference: references/cluster-access/clusters.yaml
+    note: |
+      未证明目标 cluster、身份和权限前，不默认拥有 kubectl 权限。例外是
+      references/cluster-access/clusters.yaml 登记且 status=enabled 的 staging cluster：
+      已通过该表 Casdoor/Feishu 组认证的开发者，在同集群 staging-* namespace 内有
+      get/list/watch 与 logs/exec/port-forward/attach 的 read + debug 权限；接入见
+      references/cluster-access/staging-kubectl.md。默认 namespace 只是 smoke target，
+      不把权限扩大到非 staging namespace，也不授予业务资源写权限。
+      logs 包含 --previous（仍需目标容器存在对应历史日志）；exec/attach/port-forward
+      是既有 debug 能力，不等于纯只读。尤其 exec 可修改应用运行状态，具体操作仍须
+      落在本次用户授权范围内；不能借 debug 修改部署、提取 Secret 或绕过 GitOps。
+      Kubernetes Secret 读取、非 staging namespace、cluster-scoped 资源和 RBAC 修改
+      仍禁止。平台 CRD/Provider/Composition 等只读能力检查也超出本开发者 OIDC 范围，
+      必须由已授权 ops 身份执行；prod 走独立 IAM/admin 路径，不能套用 staging 例外。
+      命令需标明实际执行身份、准确 context 与 namespace。无适用授权时联系运维，或用
+      本人 ArgoCD RBAC 已允许的 Pod Logs/Events/ExternalSecret 状态视图；UI 不提供额外
+      授权，不能把 Secret Data 或 Promote/Restart/Rollback/Delete 称为默认只读替代。
+
+  aws_cli:
+    read_only: true
+    note: |
+      AWS CLI **只读命令** 通常开发者能跑（SSO 只读）：
+        aws iam list-*
+        aws <svc> describe-*
+        aws iam simulate-policy
+      用于核对 ID / 状态。
+      **写命令**（modify / create / delete）必须运维做。
+
+  gitlab_admin:
+    available: false
+    note: |
+      个人 namespace 项目转 group、shared_runners_enabled、project Owner 等需 admin 权限。
+      开发者只能改自己的 project Member（如加自己为 Developer 解 CI_JOB_TOKEN 403）。
+
+# =============================================================================
+# Vault 权限矩阵
+# =============================================================================
+vault_permission_matrix:
+
+  app-owner:
+    paths:
+      write: ["secret/{dev,staging,pre,prod}/app/<app>/*"]
+      read:  ["secret/{env}/<platform>/application/<app>/*"]
+    grants:
+      - 4 环境全 CRUD 自己 app 业务密钥
+      - 只读本 app 的所有 platform 资源凭据（rds / aurora / redis / sentry 等）
+    how_to_grant: |
+      1. app 在 DEV/gitlab-vault-sync 仓库 apps-registry.yaml 注册
+      2. GitLab repo 给目标人 Maintainer+ 角色
+    approver: GitLab repo Owner
+    effective_in: 注册 / 加成员后 3 分钟内自动生效（vault-sync 服务扫仓库）
+
+  app-developer:
+    paths:
+      read: ["secret/{dev,staging}/app/<app>/*"]
+    grants:
+      - 只读 dev/staging
+    how_to_grant: 同 app-owner 但 GitLab repo 角色给 Developer
+    approver: GitLab repo Owner
+    effective_in: 3 分钟内
+
+  platform-admin:
+    paths:
+      write: ["secret/{env}/<platform>/*"]
+    grants:
+      - 某 env 下整个 platform namespace 全 CRUD
+      - 给所有 app 下发资源凭据
+    enabled_admins:
+      # 完整 11 个 platform 的 admin role
+      - aws-admin-<env>
+      - auth-admin-<env>
+      - rds-admin-<env>           # 2026-04-30 起新增
+      - aurora-admin-<env>        # 2026-04-30
+      - redis-admin-<env>         # 2026-04-30
+      - mongodb-admin-<env>       # 2026-04-30
+      - kafka-admin-<env>         # 2026-04-30
+      - nacos-admin-<env>         # 2026-04-30
+      - elasticsearch-admin-<env> # 2026-04-30
+      - mysql-admin-<env>         # 2026-04-30
+      - sentry-admin-<env>        # 2026-04-30
+    how_to_grant: |
+      提 MR 到 DEV/vault-policies 仓库 roles/<platform>-admin-<env>.yaml 加邮箱白名单
+    approver: 仓库 Maintainer（目前运维 SRE）
+    effective_in: 合并后 sg-devops CronJob 3 分钟内同步到 6 Vault
+
+  cicd-ops:
+    paths:
+      write: ["secret/cicd/*"]
+    grants:
+      - 管 CI/CD 工具链 / 平台组件凭据
+    how_to_grant: |
+      仅运维 + 少数平台服务 AppRole/JWT
+      业务开发者 **不申请** 此权限（硬红线 7a 禁止业务凭据进 cicd 路径）
+    approver: 运维
+
+  vault-env-cli:
+    paths: 由 app-owner / app-developer 服务端 policy 决定
+    grants:
+      - vault-env --region <r> run <app>/<env> -- <cmd> 把密钥注入本地子进程
+    how_to_grant: 已是 app 成员即可用，无额外动作
+    effective_in: 立即
+
+  k8s-pod-read:
+    paths: 由运维 / 应用方写的 ExternalSecret 决定
+    grants:
+      - 运行时把 Vault KV 注入 Pod Secret
+    how_to_grant: 在 app k8s/ manifest 声明 ExternalSecret，ArgoCD sync 即生效
+    effective_in: 部署后立即
+
+# =============================================================================
+# staging 开发者 OIDC 不授予的 K8s 写操作（变更走 GitOps / 已授权 ops 路径）
+# =============================================================================
+k8s_write_operations:
+  - kubectl annotate / label
+  - kubectl delete / patch
+  - kubectl rollout restart
+  - kubectl scale
+  - kubectl apply / create / replace
+  - kubectl drain / cordon
+
+# 既有 staging namespace read/debug 例外；不修改或扩展平台 RBAC
+k8s_read_debug_contract:
+  source: references/cluster-access/clusters.yaml
+  scope: enabled staging cluster + authenticated required group + staging-* namespace
+  allowed_read: [get, list, watch, logs, "logs --previous"]
+  allowed_debug: [exec, port-forward, attach]
+  note: |
+    仅对 source 中允许的业务运行态资源生效；不包含 Secrets、非 staging namespace
+    或 cluster-scoped 资源。debug 能力不授权任意命令，执行前按本次任务范围判断其副作用。
+    读取 CRD/Provider/Composition 等平台状态需要已授权 ops 身份，即使命令本身只读。
+
+# =============================================================================
+# CrossplaneAppBoundary（IAM permission boundary）
+# 限制 Crossplane 代签的 IRSA Role 能干什么。Crossplane App Role + IRSA Role
+# 都挂这个 boundary。
+# =============================================================================
+crossplane_app_boundary:
+
+  allowed_actions:
+    # 这是允许列表的 **总结**（不是穷尽，准确清单在
+    # platform/iam-policies/CrossplaneAppBoundary-aws-<account>.json）
+    - rds:*                       # 全 RDS 操作（但 IRSA 不该写 RDS）
+    - elasticache:*               # 全 ElastiCache
+    - s3:*                        # 全 S3（含 lifecycle）
+    - sqs:*
+    - dynamodb:*
+    - cloudfront:*                 # CloudFront account-global；仍只挂 per-app ProviderConfig/RolePolicy
+    - kms:Decrypt, kms:DescribeKey, kms:GenerateDataKey     # 只用 AWS-managed key 时够用
+    - secretsmanager:Get, secretsmanager:Describe, secretsmanager:List
+
+  blocked_actions:
+    # 这些 action 被 boundary **拦下**，需要 boundary 扩展或换方案：
+    - kms:CreateGrant             # 自定义 kmsKeyId 会需要这个，但被拦
+    - kms:Encrypt                 # 同上
+    - kms:GenerateDataKeyWithoutPlaintext
+    - secretsmanager:CreateSecret # manageMasterUserPassword=true 会触发，但被拦
+    - secretsmanager:PutSecretValue
+    - secretsmanager:DeleteSecret
+    - iam:CreateUser, iam:CreateAccessKey   # 应用层创建 IAM user / AK 一律拦
+    # 其他 service 全 namespace 默认不在允许列表，
+    # 单独走专属 ProviderConfig + AssumeRoleChain 或 ops-led 方案
+
+  workaround_for_blocked:
+    custom_kms_key:
+      affected: storageEncrypted + kmsKeyId 自定义场景
+      solution: 用 AWS-managed key（不写 kmsKeyId，让 RDS / EBS 用 alias/aws/rds）
+    secrets_manager:
+      affected: manageMasterUserPassword=true 这种内置密码托管
+      solution: A1 链路（ESO Password Generator + PushSecret）替代——见 hard-rules.yaml #19
+    other_service_namespaces:
+      affected: boundary 未默认放开的 service
+      solution: 专属 ProviderConfig + AssumeRoleChain（见 recipes/crossplane/wafv2-webacl.yaml.tmpl）
+
+  reference:
+    canonical: platform/iam-policies/CrossplaneAppBoundary-aws-<account>.json
+    note: 这个 JSON 是各 AWS account 的 git canonical；改 boundary 要 MR + 运维 SRE 审批
+
+# =============================================================================
+# ArgoCD AppProject 边界（部署入口权限围栏）
+# argocd-apps 仓库用 tools/lint-argocd-boundary.py 在 MR 阶段强制；这里是
+# cicd-developer / code-review 的人读事实表。遇到 SyncFailed / resource not
+# permitted 时，先判断 Application 是否分错 project，不要直接扩大 whitelist。
+# =============================================================================
+argocd_app_projects:
+
+  review_rule: |
+    AppProject 原生限制来源 repo、destination 和 resource group/kind；精确 path/revision/identity 由 argocd-apps CI 合同补充，不是原生路径权限。专用 project 的
+    sourceRepos 和 resource whitelist 必须保持最小集合；不能为了让一次 sync
+    通过就把 batch/*、s3/*、iam/* 这类资源随手加进错误 project。
+    修复顺序：先判断资源是否真的属于该 project；整组同职责时评审 project-only 迁移，
+    混合职责时在同仓拆为独立渲染的多个 Application，各绑定批准的 Project；平台权限
+    资源仍迁回平台仓库/入口。已有资源拆分须单独审批 ownership 交接与 prune/finalizer
+    保护，不能仅改 project 或让两个 Application 重复管理。只有确认是该 project 的职责时，才扩展
+    whitelist，并在 MR 里说明 owner、原因、资源类型和迁移/清理计划。
+
+  application_partition_contract: |
+    一仓库可有多个 Application，每个 Application（包括 multi-source）只绑定一个
+    AppProject；一个 Project 可有多个成员。先按权限职责与生命周期拆分渲染入口，
+    Argo CD 不会对单 Application 内的 kind 自动分流。runtime、raw 数据面分别匹配
+    app-runtime 与已批准 app-data-plane 合同；平台 claim 在当前精确合同允许时可留
+    runtime，不按 infra/deps 目录名或每一种 kind 机械拆分。IAM/ProviderConfig/WAF/
+    shared SG 仍走平台仓库，Project 名不替代 cloud IAM/providerConfigRef/准入约束。
+    固定 revision、完整 values/参数和全部 sources 渲染后，按 cluster/group/kind/
+    实际 namespace/name 证明无重复 owner、无遗漏；父 overlay 不得继续引用新 infra
+    Application 已接管的对象。operator 派生对象按 controller ownership/tracking 归因。
+    owner 可以拥有多个 Application；app-data-plane-<owner>[-<component>] 仍是目标态，
+    未获平台注册、现行 lint 不接受的名称不可使用，不凭前缀自动放行或取消平台审查。
+    渲染仅生成权限需求，批准合同才是授权依据。准备按候选成员交付，允许零 live 成员；
+    启用核对 render/hooks/隐式 Namespace/live cleanup 所需权限，额外保留项说明理由；
+    退役冻结成员和精确合同，到清理完成且回滚窗口关闭后才单独撤权。单行 project 回滚
+    仅在旧 Project 存在、授权有效且政策允许时成立；拆分另有正反 ownership 交接计划。
+    这些阶段是指导，不声称现有 validator 已实现通用状态机或跨应用渲染互斥检查。
+
+  application_registration_contract: |
+    Application 必须使用目标集群中已有且获批准的 AppProject；不能默认填 default，
+    也不能仅因另一集群存在 app-runtime 就直接使用。先读取 argocd-apps 当前主分支中
+    准确 cluster directory 的 AppProject 及 tools/argocd_boundary_lint.py 对该身份的
+    repo/path/revision/destination 合同，再核对最终 render 的资源类型（包括 hooks）。
+    开发者不得自行创建 AppProject 或引入新 project 名称。缺少 source/destination/
+    resource 权限时先产精确 Ops Todo；平台确认 owner 后，在独立权限 MR 中补准确合同，
+    合并且同步后再注册 consumer，不在 Application MR 中顺手扩权。
+    存量 Application 保留已批准的 project，迁移另行处理；app-runtime 不能回退 default
+    来绕过资源限制。唯一例外以 argocd-apps 当前 lint 登记的准确历史身份为准，不能推广。
+
+  namespace_creation_contract: |
+    CreateNamespace=true 仍受 AppProject.clusterResourceWhitelist 约束。每个新增或修改的
+    Application 必须让其准确 project 允许 core /Namespace，或由更低 sync-wave、同
+    destination server 的 bootstrap Application 通过另一个有权 project 先创建。bootstrap
+    要么自身 CreateNamespace 到完全相同的 destination namespace，要么 render 同名且带
+    Prune=false,Delete=false 的显式 Namespace；并验证 live App-of-Apps health gate 会等待
+    bootstrap Healthy。禁止把未创建目标 namespace 的 bootstrap 当作前置；禁止为消除
+    SyncFailed 直接扩权或把控制面 workload 退回 default。用
+    check_argocd_namespace_creation.py 对 changed Application 做定向检查。
+    对 migrate-argocd-helm-identity 工作流，standalone bootstrap 仍是默认模式；只有用户
+    明确批准准确 target AppProject 成为 Namespace 长期 owner，并接受其 destinations 导致的
+    project-wide 权限影响时，才可把其字面 `(cluster-dir, control namespace, project name)`
+    身份放入显式批准的非空有限 permission project set；禁止 wildcard、selector 或
+    directory/fleet discovery，跨集群同名 AppProject 必须作为不同成员。
+    单项目 set 继续兼容；一个独立 permission-only MR 可为 set 中每个 AppProject 分别增加
+    同一个 exact core /Namespace entry，但不得触及 set 外项目或其它字段。每个成员都要独立
+    live 只读验证 exact delta 与无 Namespace/workload 副作用，再以
+    check_argocd_helm_identity_migration.py --target-project-namespace-owner 校验 consumer。
+    该显式模式不得带任何 bootstrap 输入，target 必须 CreateNamespace=true，且 raw render
+    仍不得包含 Namespace 或任何 cluster-scoped/unknown GVK。AppProject 的 `*/*` cluster
+    权限或多条规则拼接不能代替本模式要求的一条无 name/额外约束的精确
+    `{group: '', kind: Namespace}` permission-only 条目；whitelist/blacklist 必须是结构
+    合法的 mapping list，每字段最多 128 条、group/kind/name pattern 累计最多 4096 字符、
+    单 pattern 最多 256 字符；预算在 Go filepath.Match 求值前检查并 fail closed。合并前
+    只允许静态候选预检；每次完整 consumer gate 必须在 permission-only MR 独立合并、该
+    consumer 的单一 target AppProject/cluster/namespace 对应 live 证据通过后重跑。permission
+    batch 不扩大 wave：gate 仍只绑定一个 target，随后才可打开该 consumer Add MR。不得从
+    缺少 bootstrap 隐式推断。
+
+  deprecated:
+    platform-crossplane: platform-shared-infra
+
+  default:
+    source_repos: ["*"]
+    required_cluster_resource_whitelist:
+      - "*/*"
+    required_blacklist:
+      - "clusterResourceBlacklist: iam.aws.upbound.io/*"
+      - "namespaceResourceBlacklist: iam.aws.m.upbound.io/*"
+    note: |
+      default 仍承载尚未迁移及明确获批准的 Application，sourceRepos 需要保持 "*"；
+      这不是新增业务 Application 的默认选择，也不授权把 app-runtime 成员退回 default。
+      它的关键护栏是 IAM blacklist；不要把 IAM blacklist 删除来让业务仓创建 IAM。
+
+  dedicated_projects:
+
+    app-runtime:
+      scope:
+        - target cluster directories that contain an approved app-runtime AppProject
+      owns:
+        - explicitly reviewed application runtime resources
+      note: |
+        sourceRepos、source path/revision、destinations 和 resource whitelist 都是
+        cluster-local 合同；以目标集群的 AppProject 和 argocd-apps boundary lint 为准。
+        不复制其它集群的权限，也不维护会漂移的统一 repo/namespace/kind 清单。
+        从存量 default 迁移前，目标权限须先合并同步，再用 argocd-apps 的
+        tools/check-app-runtime-readiness.py 对准确 live Application 做只读检查；
+        该迁移不属于新应用注册的附带动作。
+
+    platform-control-plane:
+      scope:
+        - target cluster directories that contain appproject-platform-control-plane.yaml
+      source_repos:
+        - https://gitlab.addx.ai/DEV/k8s.git
+      owns:
+        - Argo CD and Argo Rollouts controllers
+        - Kyverno controllers and policies
+        - External Secrets Operator
+        - Crossplane controller
+        - GitLab Runner, its RBAC and shared PVC Application
+        - Karpenter NodePool and EC2NodeClass declarations
+        - Harbor control-plane release
+      classification_examples:
+        - gitlab-runner-amd64
+        - gitlab-runner-arm64
+        - gitlab-runner-nat
+        - gitlab-runner-rbac
+        - gitlab-runner-toolchain-cache
+        - gitlab-runner-toolchain-cache-lite
+        - gitlab-runner-toolchain-cache-pvc
+        - karpenter-nodepools
+      allowed_cluster_resource_whitelist:
+        - "rbac.authorization.k8s.io/ClusterRole"
+        - "rbac.authorization.k8s.io/ClusterRoleBinding"
+        - "apiextensions.k8s.io/CustomResourceDefinition"
+        - "admissionregistration.k8s.io/MutatingWebhookConfiguration"
+        - "admissionregistration.k8s.io/ValidatingWebhookConfiguration"
+        - "apiregistration.k8s.io/APIService"
+        - "kyverno.io/ClusterPolicy"
+        - "karpenter.sh/NodePool"
+        - "karpenter.k8s.aws/EC2NodeClass"
+      allowed_namespace_resource_whitelist:
+        - "/ConfigMap"
+        - "/PersistentVolumeClaim"
+        - "/Secret"
+        - "/Service"
+        - "/ServiceAccount"
+        - "apps/Deployment"
+        - "apps/StatefulSet"
+        - "batch/CronJob"
+        - "batch/Job"
+        - "policy/PodDisruptionBudget"
+        - "networking.k8s.io/Ingress"
+        - "rbac.authorization.k8s.io/Role"
+        - "rbac.authorization.k8s.io/RoleBinding"
+        - "kyverno.io/PolicyException"
+        - "external-secrets.io/ExternalSecret"
+        - "cert-manager.io/Certificate"
+        - "cert-manager.io/Issuer"
+      must_not_use:
+        - default
+      note: |
+        本 project 是 cluster-local 权限边界；只有目标 argocd-apps 集群目录已经提交
+        appproject-platform-control-plane.yaml 时才可引用。该目录内新增同类 Application
+        写回 default 是权限边界回退；先改 Application.project，不要扩大 whitelist。
+        不得因其它集群存在同名 project 就假设目标集群也已落地。
+        上述 resource whitelist 是职责摘要，不是所有集群的完整或统一权限集合。
+        必须读取目标集群准确 AppProject 的已批准 spec.clusterResourceWhitelist、
+        namespaceResourceWhitelist 和 blacklist；不能据本摘要推断 core /Namespace
+        已允许或被排除，也不能复制其它集群的白名单。
+        使用 CreateNamespace=true 时按 namespace_creation_contract 判断：准确目标 project
+        已获准且实际允许 core /Namespace 可直接使用；否则由有权 project 下、更低 wave 的
+        bootstrap 先创建准确 namespace（exact destination 或受删除保护的同名显式 Namespace）。
+        Git 已批准不证明 live 已同步；运行态验收还要核对准确 project 的有效权限。
+        不得为修一次同步失败顺手扩权；新增权限走独立平台审批/权限 MR。
+
+    crossplane-infra:
+      source_repos:
+        - https://gitlab.addx.ai/DEV/crossplane-infra.git
+      owns:
+        - IAM / IRSA Role / RolePolicy / Policy
+        - ClusterProviderConfig / ProviderConfig
+        - WAFv2
+        - shared SecurityGroupIngressRule / SecurityGroupEgressRule
+        - Tencent CAM and GCP/Tencent provider identity resources
+      repo_boundary_note: >
+        The repo CI boundary is stricter than the historical ArgoCD whitelist:
+        new data-plane resources and Crossplane XRD/Composition definitions do
+        not belong here. Current data-plane grandfather is only the Harbor S3
+        objects in aws-125710977284-sg-devops/harbor.yaml.
+      allowed_cluster_resource_whitelist:
+        - "aws.m.upbound.io/ClusterProviderConfig"
+        - "aws.upbound.io/ProviderConfig"
+        - "cam.tencentcloud.crossplane.io/*"
+        - "iam.aws.upbound.io/*"
+        - "ninedata.crossplane.io/ClusterProviderConfig"
+        - "tencentcloud.crossplane.io/ProviderConfig"
+      allowed_namespace_resource_whitelist:
+        - "/Secret"
+        - "ec2.aws.m.upbound.io/*"
+        - "elasticache.aws.m.upbound.io/*"
+        - "external-secrets.io/ExternalSecret"
+        - "iam.aws.m.upbound.io/*"
+        - "kafka.aws.m.upbound.io/*"
+        - "opensearch.aws.m.upbound.io/*"
+        - "rds.aws.m.upbound.io/*"
+        - "s3.aws.m.upbound.io/*"
+        - "wafv2.aws.m.upbound.io/*"
+      must_not_absorb:
+        - app-owned or platform data-plane CR unless it is an explicit current grandfather exception
+        - Crossplane CompositeResourceDefinition / Composition
+
+    platform-shared-infra:
+      source_repos:
+        - https://gitlab.addx.ai/DEV/k8s.git
+      owns:
+        - shared middleware
+        - Crossplane provider bootstrap
+        - Composition / XRD / Provider / Function
+        - shared platform namespaces, RBAC and provider configs
+      allowed_cluster_resource_whitelist:
+        - "/Namespace"
+        - "apiextensions.crossplane.io/*"
+        - "aws.m.upbound.io/ClusterProviderConfig"
+        - "kubernetes.crossplane.io/ProviderConfig"
+        - "mysql.sql.crossplane.io/ProviderConfig"
+        - "oci.upbound.io/ProviderConfig"
+        - "pkg.crossplane.io/*"
+        - "postgresql.sql.crossplane.io/ProviderConfig"
+        - "rbac.authorization.k8s.io/*"
+        - "upjet-cloudflare.upbound.io/ProviderConfig"
+      must_not_include:
+        - "iam.aws.upbound.io/*"
+        - "iam.aws.m.upbound.io/*"
+        - WAFv2
+
+    platform-logging:
+      source_repos:
+        - https://gitlab.addx.ai/DEV/k8s.git
+        - https://helm.vector.dev
+      owns:
+        - fluent-bit collectors
+        - Vector collectors
+        - logging backend data-plane resources migrated out of crossplane-infra
+      allowed_cluster_resource_whitelist:
+        - "/Namespace"
+        - "rbac.authorization.k8s.io/*"
+      allowed_namespace_resource_whitelist:
+        - "/*"
+        - "apps/*"
+        - "autoscaling/*"
+        - "batch/*"
+        - "external-secrets.io/*"
+        - "kafka.aws.m.upbound.io/*"
+        - "opensearch.aws.m.upbound.io/*"
+        - "s3.aws.m.upbound.io/*"
+      must_not_include:
+        - "iam.aws.upbound.io/*"
+        - "iam.aws.m.upbound.io/*"
+        - WAFv2
+        - ProviderConfig / ClusterProviderConfig
+
+    platform-observability:
+      source_repos:
+        - https://gitlab.addx.ai/DEV/observability-platform.git
+      owns:
+        - Grafana resources
+        - PagerDuty resources
+        - VictoriaMetrics operator resources
+        - observability provider bootstrap and observability-owned XRD / Composition
+      allowed_cluster_resource_whitelist:
+        - "/Namespace"
+        - "apiextensions.crossplane.io/*"
+        - "escalation.pagerduty.crossplane.io/*"
+        - "grafana.m.crossplane.io/*"
+        - "pagerduty.crossplane.io/*"
+        - "pkg.crossplane.io/*"
+        - "rbac.authorization.k8s.io/*"
+        - "schedule.pagerduty.crossplane.io/*"
+        - "service.pagerduty.crossplane.io/*"
+        - "team.pagerduty.crossplane.io/*"
+      allowed_namespace_resource_whitelist:
+        - "/*"
+        - "alerting.grafana.m.crossplane.io/*"
+        - "apps/*"
+        - "batch/CronJob"
+        - "external-secrets.io/*"
+        - "generators.external-secrets.io/*"
+        - "operator.victoriametrics.com/*"
+        - "oss.grafana.m.crossplane.io/*"
+        - "s3.aws.m.upbound.io/Bucket"
+      must_not_include:
+        - "iam.aws.upbound.io/*"
+        - "iam.aws.m.upbound.io/*"
+        - WAFv2
+        - general logging data-plane resources
+
+# =============================================================================
+# 集群级 / 跨账号操作（必须运维做）
+# =============================================================================
+platform_level_operations:
+  - 账号级 AWS 策略（Permissions Boundary / 跨账号 sts:AssumeRole trust）
+  - GitLab project 转 group / shared_runners_enabled
+  - DEV/argocd-apps 仓库 MR review + 合并
+  - DEV/k8s 仓库 cicd/base/* 或 cicd/apps/* 改动（Kyverno policy / Image Updater config 等）
+  - DEV/vault-policies 仓库 MR（platform-admin 白名单 / role 定义）
+  - DEV/base-images images.yaml MR（同步外部镜像到当前配置的目标 Harbor base/）
+  - 集群 NodePool / Karpenter / Cluster Autoscaler 配置
+  - DNS 解析（addx.live 阿里云 DNS / internal.addx.live 等）
+  - WAFv2 ACL 创建（如果走 default ProviderConfig 而非专属 chain）

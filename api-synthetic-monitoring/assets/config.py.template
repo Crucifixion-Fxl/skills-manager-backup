@@ -1,0 +1,100 @@
+"""Environment configuration loader for API synthetic monitoring.
+
+For CI environments: reads URLs from envs.ENVIRONMENTS (checked in).
+For local: probes common port ranges to discover running dev services.
+"""
+
+from __future__ import annotations
+
+import subprocess
+from dataclasses import dataclass
+
+
+@dataclass
+class EnvConfig:
+    api_url: str
+    admin_url: str
+    env_name: str
+
+
+def load_config(env: str) -> EnvConfig:
+    if env == "local":
+        return _load_local_config()
+    return _load_ci_config(env)
+
+
+def _load_ci_config(env: str) -> EnvConfig:
+    from envs import ENVIRONMENTS
+
+    if env not in ENVIRONMENTS:
+        raise RuntimeError(
+            f"Unknown env '{env}'. Add it to envs.py. "
+            f"Known: {list(ENVIRONMENTS.keys())}"
+        )
+    cfg = ENVIRONMENTS[env]
+    return EnvConfig(
+        api_url=cfg.get("api_url", ""),
+        admin_url=cfg["admin_url"],
+        env_name=env,
+    )
+
+
+def _load_local_config() -> EnvConfig:
+    """Discover running dev services by probing port ranges.
+
+    Adjust the probe paths and port ranges to match your project's
+    dev conventions.
+    """
+    # Probe for the specific API endpoint on 8000-8099
+    api_port = _probe_port_range_post(
+        8000, 8099,
+        "/<your-core-endpoint>",
+        '{"probe":"smoke"}',
+    )
+    if not api_port:
+        api_port = _probe_port_range(8000, 8099, "/health")
+    admin_port = _probe_port_range(3000, 3099, "/api/health")
+
+    if not api_port:
+        raise RuntimeError("API not found on 8000-8099 — run 'make dev' first")
+    if not admin_port:
+        raise RuntimeError("Admin not found on 3000-3099 — run 'make dev' first")
+
+    return EnvConfig(
+        api_url=f"http://127.0.0.1:{api_port}",
+        admin_url=f"http://127.0.0.1:{admin_port}",
+        env_name="local",
+    )
+
+
+def _probe_port_range_post(
+    start: int, end: int, path: str, body: str,
+) -> int | None:
+    for port in range(start, end + 1):
+        try:
+            result = subprocess.run(
+                ["curl", "-sf", "--max-time", "1", "-X", "POST",
+                 "-H", "Content-Type: application/json", "-d", body,
+                 f"http://127.0.0.1:{port}{path}"],
+                capture_output=True, timeout=3,
+            )
+            if result.returncode == 0:
+                return port
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            continue
+    return None
+
+
+def _probe_port_range(start: int, end: int, health_path: str) -> int | None:
+    for port in range(start, end + 1):
+        try:
+            result = subprocess.run(
+                ["curl", "-sf", "--max-time", "1",
+                 f"http://127.0.0.1:{port}{health_path}"],
+                capture_output=True, timeout=3,
+            )
+            if result.returncode == 0:
+                return port
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            continue
+    return None

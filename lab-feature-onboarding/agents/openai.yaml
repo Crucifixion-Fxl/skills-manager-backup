@@ -1,0 +1,4 @@
+interface:
+  display_name: "实验功能接入 SOP"
+  short_description: "AI Bird 多客户端实验功能接入、默认状态、门禁与验证 SOP"
+  default_prompt: "Use $lab-feature-onboarding to onboard a new AI Bird Labs feature or add an existing feature to a new client."

@@ -1,0 +1,120 @@
+{
+  "schema_version": 1,
+  "receipt_kind": "naturehood_agent_issue_lifecycle_l4",
+  "recorded_at_utc": "2026-09-15T09:32:00Z",
+  "executed_by": "jchen via Codex session",
+  "attestation": "unsigned_operator_observation",
+  "snapshot_only": true,
+  "contains_secret": false,
+  "method": {
+    "plugin_revision": "24165734c0f671fa17fa376e12c3ce2e2db160a6",
+    "test_level": "L4",
+    "project_id": 1175,
+    "project_path": "applications/naturehood",
+    "contract": "Each registered Agent uses its own identity to create, comment, update, close, reopen and finally close one self-assigned Issue. Reporter identities must be denied branch creation; the Developer identity creates and removes one temporary branch."
+  },
+  "agents": {
+    "nh-feature": {
+      "bot_user_id": 968,
+      "access_level": 20,
+      "issue_iid": 253,
+      "issue_url": "https://gitlab.addx.ai/applications/naturehood/-/issues/253",
+      "note_id": 606711,
+      "statuses": {
+        "create": 201,
+        "comment": 201,
+        "update": 200,
+        "close": 200,
+        "reopen": 200,
+        "final_close": 200,
+        "readback": 200
+      },
+      "final_state": "closed",
+      "self_assigned": true,
+      "branch_create_status": 403,
+      "branch_cleanup_status": null
+    },
+    "nh-dev": {
+      "bot_user_id": 945,
+      "access_level": 30,
+      "issue_iid": 254,
+      "issue_url": "https://gitlab.addx.ai/applications/naturehood/-/issues/254",
+      "note_id": 606715,
+      "statuses": {
+        "create": 201,
+        "comment": 201,
+        "update": 200,
+        "close": 200,
+        "reopen": 200,
+        "final_close": 200,
+        "readback": 200
+      },
+      "final_state": "closed",
+      "self_assigned": true,
+      "branch_create_status": 201,
+      "branch_cleanup_status": 204
+    },
+    "nh-bi": {
+      "bot_user_id": 985,
+      "access_level": 20,
+      "issue_iid": 255,
+      "issue_url": "https://gitlab.addx.ai/applications/naturehood/-/issues/255",
+      "note_id": 606719,
+      "statuses": {
+        "create": 201,
+        "comment": 201,
+        "update": 200,
+        "close": 200,
+        "reopen": 200,
+        "final_close": 200,
+        "readback": 200
+      },
+      "final_state": "closed",
+      "self_assigned": true,
+      "branch_create_status": 403,
+      "branch_cleanup_status": null
+    }
+  },
+  "runtime": {
+    "channel_id": "40ad7888-23a7-452c-96b5-8e062d82a06c",
+    "launcher_sha256": "185a74f4609f99ca803d72eb4d0b2cfd525187ded88872140e38c5207076997f",
+    "agents": {
+      "nh-feature": {
+        "service": "buzz-local-nh-feature.service",
+        "active": true,
+        "main_pid": 2210137,
+        "started_at_utc": "2026-09-15T09:29:58Z",
+        "workers": 4,
+        "env_mode": "0600",
+        "prompt_mode": "0600",
+        "prompt_sha256": "baeb55a87cfba5a14cdae3ce5e2de3462cbfc74ff77053c1eb3f8a86c5a5f3b4",
+        "process_started_after_prompt": true,
+        "declared_env_only": true
+      },
+      "nh-dev": {
+        "service": "buzz-local-nh-dev.service",
+        "active": true,
+        "main_pid": 2210141,
+        "started_at_utc": "2026-09-15T09:29:58Z",
+        "workers": 2,
+        "env_mode": "0600",
+        "prompt_mode": "0600",
+        "prompt_sha256": "50f1cb8134f7d667ab77797aa002e77ebaa4362ed9179fb3a4be552ff80a0068",
+        "process_started_after_prompt": true,
+        "declared_env_only": true
+      },
+      "nh-bi": {
+        "service": "buzz-local-nh-bi.service",
+        "active": true,
+        "main_pid": 2210138,
+        "started_at_utc": "2026-09-15T09:29:58Z",
+        "workers": 1,
+        "env_mode": "0600",
+        "prompt_mode": "0600",
+        "prompt_sha256": "d14fbe5b68773282eb17bd069272fea1961d1d054535c93cb35ec27db0f09d9e",
+        "process_started_after_prompt": true,
+        "declared_env_only": true
+      }
+    }
+  }
+}

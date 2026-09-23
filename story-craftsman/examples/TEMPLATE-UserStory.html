@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>用户故事 - &lt;主题名称&gt;</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f8fa;
+      --panel: #ffffff;
+      --text: #172033;
+      --muted: #5f6b7a;
+      --line: #d8dee8;
+      --accent: #0f766e;
+      --accent-soft: #d9f3ef;
+      --warn: #b45309;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--text);
+      background: var(--bg);
+    }
+    main {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 40px 24px 64px;
+    }
+    header, section {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 24px;
+      margin-bottom: 16px;
+    }
+    h1, h2, h3 { line-height: 1.25; margin: 0 0 12px; }
+    h1 { font-size: 32px; }
+    h2 { font-size: 22px; border-bottom: 1px solid var(--line); padding-bottom: 8px; }
+    h3 { font-size: 18px; }
+    p { margin: 0 0 12px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+    th, td { border: 1px solid var(--line); padding: 10px 12px; text-align: left; vertical-align: top; }
+    th { background: #eef2f7; }
+    .meta { color: var(--muted); }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+    .note { border-left: 4px solid var(--warn); padding-left: 12px; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <p class="badge">User Story</p>
+      <h1>&lt;主题名称&gt; - 用户故事</h1>
+      <p class="meta">参考文档（可选）：&lt;链接或相对路径 1&gt; | &lt;链接或相对路径 2&gt;</p>
+    </header>
+
+    <section id="why">
+      <h2>1. 背景（Why）</h2>
+      <ul>
+        <li>&lt;痛点/问题 1：现状导致什么成本或风险&gt;</li>
+        <li>&lt;痛点/问题 2：谁在什么场景下被影响&gt;</li>
+      </ul>
+    </section>
+
+    <section id="what">
+      <h2>2. 目标（What）</h2>
+      <ul>
+        <li>&lt;目标 1：要达成什么结果（可验证）&gt;</li>
+        <li>&lt;目标 2：要提升什么指标/体验（可量化更好）&gt;</li>
+      </ul>
+    </section>
+
+    <section id="who">
+      <h2>3. 角色（Who）</h2>
+      <table>
+        <thead><tr><th>角色</th><th>职责</th></tr></thead>
+        <tbody>
+          <tr><td>&lt;角色A&gt;</td><td>&lt;做什么/关心什么&gt;</td></tr>
+          <tr><td>&lt;角色B&gt;</td><td>&lt;做什么/关心什么&gt;</td></tr>
+          <tr><td>&lt;系统/平台（可选）&gt;</td><td>&lt;自动化做什么&gt;</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="epic-overview">
+      <h2>4. Epic 概览</h2>
+      <table>
+        <thead><tr><th>Epic</th><th>视角</th><th>包含 US</th><th>优先级</th></tr></thead>
+        <tbody>
+          <tr><td>&lt;Epic 1&gt;</td><td>&lt;stakeholder&gt;</td><td>US-XX-01, US-XX-02</td><td>P0</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="epic-1">
+      <h2>Epic 1：&lt;功能簇&gt;（&lt;stakeholder&gt; 视角）</h2>
+      <p>&lt;一句话说明这个 Epic 服务的是谁、解决什么问题&gt;</p>
+
+      <section id="us-xx-01">
+        <h3>US-XX-01：&lt;用户故事标题&gt; <span class="badge">P0</span></h3>
+        <p><strong>作为</strong> &lt;角色&gt;，<strong>我希望</strong> &lt;能力/需求&gt;，<strong>以便于</strong> &lt;价值/目的&gt;。</p>
+        <h4>验收标准（AC）</h4>
+        <ul>
+          <li>Given &lt;前置条件&gt;，When &lt;用户动作/系统事件&gt;，Then &lt;可验证结果&gt;</li>
+          <li>Given &lt;边界条件&gt;，When &lt;触发&gt;，Then &lt;兜底/错误结果&gt;</li>
+        </ul>
+        <p class="note">约束 / 依赖 / 风险：&lt;可选补充&gt;</p>
+      </section>
+    </section>
+
+    <section id="future-epic">
+      <h2>Future Epic：&lt;尚未排期但已识别的方向&gt;</h2>
+      <p>&lt;触发条件和为什么本期不做&gt;</p>
+    </section>
+
+    <section id="out-of-scope">
+      <h2>本期明确不做</h2>
+      <ul><li>&lt;明确排除项&gt;</li></ul>
+    </section>
+
+    <section id="nfr">
+      <h2>非功能需求（NFR）</h2>
+      <ul><li>&lt;可量化 NFR，例如响应 p95 &lt; 2s&gt;</li></ul>
+    </section>
+
+    <section id="status">
+      <h2>实现状态与 L3 覆盖</h2>
+      <table>
+        <thead><tr><th>US</th><th>状态</th><th>L3 场景</th><th>备注</th></tr></thead>
+        <tbody>
+          <tr><td>US-XX-01</td><td>待开始</td><td>&lt;docs/testing/scenarios/...html&gt;</td><td>&lt;可选&gt;</td></tr>
+        </tbody>
+      </table>
+    </section>
+  </main>
+</body>
+</html>

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "d73d8efa-df58-48f0-af85-c759b1cfdfe1",
+  "path": "azure-cli",
+  "path_key": "azure-cli",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/azure-cli",
+    "branch": null
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "369d2e1a-44d0-411f-9c5f-ad21cbec60b7",
+  "path": "opencode-review-inject",
+  "path_key": "opencode-review-inject",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/opencode-review-inject",
+    "branch": null
+  }
+}

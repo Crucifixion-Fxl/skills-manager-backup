@@ -1,0 +1,46 @@
+# cost-tiering/_global.yaml
+#
+# 跨资源种类共享的成本规则：
+#   - 未知资源处理流程
+#   - prod-CR 上线前的自检清单
+#   - 必拒绝的反模式
+#
+# 消费方：所有 add-* workflow + new-* workflow（Step "决定 tier"）
+
+# =============================================================================
+# 未知资源 / 非模板化资源
+# =============================================================================
+unknown_resources:
+  description: |
+    没有自助模板的资源（DocumentDB / Neptune ...）**不允许** 自动生成。
+    MSK(Kafka) SCRAM 凭据已通过 KafkaScramCredential 自助，但 topic/ACL 治理仍 planned。
+    workflow 产出 ops-todo；运维评估容量后给规格建议。
+  required_inputs:                    # MR 描述 / cd-requirements.md 必须包含这 3 项
+    - expected_data_volume
+    - read_write_qps
+    - retention_duration
+  exceptions:
+    - clickhouse                      # 已有自助模板
+
+# =============================================================================
+# prod-CR 上线前自检
+# workflow 在生成 prod 档 manifest 之前必须把这些项打给用户确认。
+# =============================================================================
+prod_self_check:
+  - "staging 已经跑过至少一个 release，有真实流量 / 数据量参考"
+  - "cd-requirements.md 列出 prod 选型 + 月度成本量级"
+  - "CR 显式设 storageEncrypted=true / deletionProtection=true / backupRetentionPeriod>=7"
+  - "Aurora / ElastiCache：副本数 ≥ 2，跨 AZ"
+  - "如月度成本 > $200：MR 描述显式 @ 审批人"
+
+# =============================================================================
+# 反模式 —— workflow 拒绝产出
+# =============================================================================
+anti_patterns:
+  - "staging 按 prod 规格开（db.r6g.large 用于测试 = $200+/月浪费）"
+  - "prod 不开 multiAZ（单点故障，SLA 不达标）"
+  - "prod 不开 deletionProtection（一次误删 = 数据全失）"
+  - "staging / prod 没显式设 backupRetentionPeriod（用默认值合规审计过不了）"
+  - "未知资源（DocumentDB / Neptune）照抄 RDS 规格猜"
+  - "多个 app 在 prod 共用一个 RDS（IAM 边界 + 故障域不清）"
+  - "publiclyAccessible: true 在任何 env（网络安全硬红线）"

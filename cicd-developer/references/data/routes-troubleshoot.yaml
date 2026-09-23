@@ -1,0 +1,290 @@
+# routes-troubleshoot.yaml
+#
+# 用户症状 / 只读版本查询 -> playbook 文件 的路由表（"troubleshoot" 模式）。
+#
+# 按 keywords 找候选后选择与症状最直接匹配的 playbook；同样合理的多个候选先澄清，
+# 不凭最高 substring score 猜。找不到匹配时先收集只读证据，不能临场编造修复流程；
+# 可复用的新模式须在后续维护 MR 中新增 playbook 和路由。
+#
+# 消费方：
+#   - SKILL.md（指向本唯一 inventory）
+#   - LLM 路由判断
+#
+# Schema：
+#   symptom              用户口语化的症状（跟用户报的话尽量接近）
+#   keywords             触发词列表
+#   playbook_file        playbook 文件相对路径
+#   related_validators   与该症状相关、且输入适用时必须跑的静态 validator；空列表表示
+#                        没有静态 validator，按 playbook 的实况证据门禁执行。不要因此
+#                        对仓库根目录或未渲染 Helm templates 运行 validate.sh。
+
+troubleshoot_symptoms:
+
+  - symptom: 查询上一部署版本、回滚候选或业务镜像快速回滚方案
+    keywords:
+      - rollback
+      - 回滚
+      - previous deployed version
+      - release history
+      - rollback candidate
+      - fast rollback
+      - 上一个版本
+      - 上一版
+      - 历史部署版本
+      - 回滚候选
+      - 快速回滚
+      - 回滚方案
+      - rollout undo
+      - pin mr 已合并
+      - rollback pin not effective
+    playbook_file: troubleshooting/business-image-rollback-history.md
+    related_validators: []
+
+  - symptom: Kyverno forbid-eso-secret-literal-prefix 拒绝 PushSecret，remoteKey 带字面 secret/ 前缀
+    keywords:
+      - forbid-eso-secret-literal-prefix
+      - pushsecret-no-secret-literal-prefix
+      - pushsecret literal secret prefix
+      - remoteKey 不能带字面 secret/
+      - secret/secret
+      - v0 metadata husk
+    playbook_file: troubleshooting/pushsecret-literal-secret-prefix.md
+    related_validators:
+      - check_vault_paths.py
+
+  - symptom: PushSecret 报 `secret key endpoint does not exist`，ArgoCD sync 卡在 PushSecret 资源
+    keywords:
+      - "secret key endpoint does not exist"
+      - pushsecret stuck
+      - pushsecret synced false
+      - rds-conn pushsecret error
+    playbook_file: troubleshooting/pushsecret-stuck-endpoint-does-not-exist.md
+    related_validators:
+      - check_eso_pushsecret_bug.py
+      - check_vault_paths.py
+
+  - symptom: Redis / ElastiCache PushSecret 报 `secret key address does not exist`
+    keywords:
+      - "secret key address does not exist"
+      - redis pushsecret address
+      - elasticache pushsecret address
+      - redis-conn missing address
+      - crossplane conn patcher
+      - crossplane-conn-patcher
+      - conn-patcher missing address
+    playbook_file: troubleshooting/redis-pushsecret-address-missing.md
+    related_validators:
+      - check_vault_paths.py
+
+  - symptom: shared-middleware Redis 目标逻辑 DB 非空，或已知应用 key pattern 与共享 key 冲突
+    keywords:
+      - shared redis logical db collision
+      - shared middleware redis db nonempty
+      - redis dbsize collision
+      - generic redis key prefix collision
+      - target redis logical database occupied
+    playbook_file: troubleshooting/shared-redis-logical-db-collision.md
+    related_validators: []
+
+  - symptom: ArgoCD app phase=Running 卡几小时，retryCount=null，manifest 变更不生效
+    keywords:
+      - phase running stuck
+      - argocd sync stuck
+      - sync timeout
+      - retrycount null
+      - zombie operation
+      - stale operationstate
+      - sync ok missing
+      - ui syncing
+      - manifest changes not applied
+    playbook_file: troubleshooting/argocd-app-stuck-phase-running.md
+    related_validators:
+      - check_argocd_application.py
+
+  - symptom: ArgoCD OutOfSync / SyncFailed，但资源实际 Ready；PVC / Rollout / PushSecret / RDS runtime drift
+    keywords:
+      - argocd runtime drift
+      - p2 outofsync
+      - outofsync but healthy
+      - syncfailed pvc immutable
+      - pvc volumeName drift
+      - pvc storageClassName drift
+      - rollout restartAt drift
+      - rollout revision drift
+      - pushsecret default drift
+      - pushsecret conversionStrategy drift
+      - pushsecret force-resync
+      - rds external-name drift
+      - rds deletionpolicy drift
+      - crossplane deletionpolicy drift
+      - respectignoredifferences
+    playbook_file: troubleshooting/argocd-runtime-drift.md
+    related_validators:
+      - check_argocd_application.py
+
+  - symptom: Image Updater 不更新新 SHA；Application Synced/Healthy，images_skipped，status.summary.images 为空
+    keywords:
+      - image updater not updating
+      - image updater skipped
+      - images_skipped
+      - status.summary.images empty
+      - force-update
+      - new sha not deployed
+      - argocd image stuck old tag
+    playbook_file: troubleshooting/image-updater-skips-live-image.md
+    related_validators:
+      - check_argocd_application.py
+
+  - symptom: Crossplane SecurityGroupIngressRule 报 InvalidPermission.Duplicate，ArgoCD Degraded
+    keywords:
+      - invalidpermission.duplicate
+      - securitygroupingressrule duplicate
+      - security group rule already exists
+      - sg rule duplicate
+      - crossplane sg rule degraded
+      - argo degraded sg rule
+    playbook_file: troubleshooting/securitygroupingressrule-duplicate.md
+    related_validators: []
+
+  - symptom: Crossplane RDS Instance 一直 reconcile，requires replacing it / not authorized / matched-wrong-instance
+    keywords:
+      - requires replacing it
+      - rds reconcile loop
+      - rds not authorized
+      - dbsecuritygroupnotfound
+      - crossplane rds stuck
+      - matched wrong rds instance
+    playbook_file: troubleshooting/crossplane-rds-reconcile-loop.md
+    related_validators: []
+
+  - symptom: DocumentDB ClusterInstance 报 `PubliclyAccessible flag cannot be set on a cluster member instance`
+    keywords:
+      - publiclyaccessible flag cannot be set
+      - public flag cannot be set on a cluster member instance
+      - documentdb clusterinstance publiclyaccessible
+      - docdb clusterinstance publiclyaccessible
+      - docdb member instance create failed
+      - documentdb degraded publiclyaccessible
+    playbook_file: troubleshooting/documentdb-clusterinstance-publiclyaccessible.md
+    related_validators:
+      - check_db_resource_contracts.py
+
+  - symptom: 跨账号 / 跨 VPC 访问 RDS / Redis / DocumentDB timeout
+    keywords:
+      - cross account db timeout
+      - cross vpc db timeout
+      - communications link failure
+      - connection timed out rds
+      - dagster to rds timeout
+      - peering route sg
+      - vpc peering db access
+    playbook_file: troubleshooting/cross-account-db-timeout.md
+    related_validators: []
+
+  - symptom: Pod ImagePullBackOff / ErrImagePull / manifest unknown / 401 / no matching manifest for arch
+    keywords:
+      - imagepullbackoff
+      - errimagepull
+      - manifest unknown
+      - 401 unauthorized harbor
+      - no matching manifest
+      - back-off pulling image
+    playbook_file: troubleshooting/image-pull-failure.md
+    related_validators: []
+
+  - symptom: env var 缺失 / 应用启动 panic 缺配置 / Secret 一直 NotReady / ExternalSecret READY=False
+    keywords:
+      - env var missing
+      - secret not found
+      - externalsecret not ready
+      - SecretSyncedError
+      - DB_PASSWORD is empty
+      - cannot connect missing config
+    playbook_file: troubleshooting/secrets-env-missing.md
+    related_validators:
+      - check_vault_paths.py
+
+  - symptom: kind Database Ready 但 Vault 仍是旧值 / PushSecret secret not managed by external-secrets
+    keywords:
+      - database ready pushsecret failed
+      - secret not managed by external-secrets
+      - vault still legacy database connection
+      - shared database pushsecret not ready
+      - xdatabase ready vault missing
+      - pushsecret ownership vault
+    playbook_file: troubleshooting/shared-database-pushsecret-unmanaged-vault-path.md
+    related_validators:
+      - check_vault_paths.py
+
+  - symptom: GitLab CI job 卡 pending / 报 403 / runner pod 起不来 / no runners online assigned
+    keywords:
+      - job stuck pending
+      - no runners online
+      - 403 not allowed to download code
+      - runner oomkilled
+      - no nodes match selector
+      - ci_job_token forbidden
+    playbook_file: troubleshooting/gitlab-ci-runner-issues.md
+    related_validators: []
+
+  - symptom: sentry-onboard Job 失败 / Pod SENTRY_DSN 为空 / cn-prod 504 timeout / TKE 401 pull image / slug collision
+    keywords:
+      - sentry onboard job
+      - sentry tke image pull
+      - sentry_dsn empty
+      - vault login 400 sentry
+      - sentry slug collision
+      - sentry cn 504
+      - sentry external deletion detected
+      - sentry path schema mismatch
+    playbook_file: troubleshooting/sentry-onboard-issues.md
+    related_validators: []
+
+  - symptom: Pod CrashLoopBackOff / OOMKilled / 探针失败 / CreateContainerConfigError / 启动后 Error
+    keywords:
+      - crashloopbackoff
+      - pod oomkilled
+      - liveness probe failed
+      - readiness probe failed
+      - createcontainerconfigerror
+      - pod restarting
+      - pod error state
+    playbook_file: troubleshooting/pod-runtime-crash.md
+    related_validators: []
+
+  - symptom: DB migration PreSync Job 失败 / URL parse error / sync 卡 Running / migration 重跑 already exists
+    keywords:
+      - migration job failed
+      - presync hook failed
+      - cannot parse postgres url
+      - migration url escape
+      - column already exists
+      - relation already exists
+      - schema migration stuck
+      - migration not idempotent
+    playbook_file: troubleshooting/db-migration-failures.md
+    related_validators: []
+
+  - symptom: ES 看不到日志 / 索引断档 / 应用一直在跑但 0 信号丢失 / log silent loss
+    keywords:
+      - logs missing in es
+      - kibana no data
+      - log index missing
+      - uncategorized topic
+      - env label missing fluent-bit
+      - log silent loss
+      - log pipeline broken
+    playbook_file: troubleshooting/log-pipeline-silent-loss.md
+    related_validators: []
+
+  - symptom: NineData DataSource Ready=False / SQL 任务报 Connect failed / AccessKey must not be null / COMMERCIAL_INSUFFICIENT_QUOTA
+    keywords:
+      - ninedata datasource not ready
+      - commercial_insufficient_quota
+      - cloudprofile not set
+      - accessalias not registered
+      - aliyun-cn-hangzhou
+      - 9data sql failed
+      - ninedata permission_deny
+    playbook_file: troubleshooting/ninedata-datasource-issues.md
+    related_validators: []

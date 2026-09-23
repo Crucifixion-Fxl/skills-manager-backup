@@ -1,0 +1,97 @@
+# ingress.yaml.tmpl —— K8s Ingress 模板
+#
+# 开发者只关注 3 个字段；Kyverno admission webhook 自动注入 ALB / SG 配置。
+# 4 种暴露场景，根据 `ingress.addx.io/sg` label 选：
+#   1. 公网 C 端服务（无 label）—— 来源 IP 不限制，**必须** 挂 WAF
+#   2. 办公室访问（`office`）—— from-office SG 自动注入
+#   3. 内网访问（`internal`）—— ALB scheme=internal，仅 VPC 内可达
+#   4. 飞书 webhook 回调（`feishu-webhook`）—— 飞书国内服务器 32 IP / tcp 443
+#
+# 必填槽位：
+#   {{app}}              kebab-case
+#   {{namespace}}        部署 namespace
+#   {{hostname}}         如 my-app.addx.live
+#   {{service_port}}     Service 端口（不是 container port）
+#   {{health_path}}      ALB target health check 路径，如 /health
+#
+# 选填槽位（按场景填）：
+#   {{sg_label}}         office | internal | feishu-webhook | (留空=公网)
+#   {{scheme}}           internal | internet-facing | (留空 = ALB 默认 internet-facing)
+#
+# ⚠️ **网络安全硬红线**（CLAUDE.md 全局规则 #3）：
+#   - **内部工具公网暴露 + SG/WAF/SSO 三件套都没有 = 拒绝部署**
+#     workflow Step "网络暴露" 会拦住这种 manifest，绝不要试图绕开
+#   - 公网 ingress + 业务侧无 SSO → 必须挂 WAF（alb.ingress.kubernetes.io/wafv2-acl-arn）
+#   - DNS 解析申请前必须核查 Ingress 真的不裸奔（SG / WAF / SSO 至少其一）
+#
+# ⚠️ 飞书 webhook 必须 **独立** Ingress + **独立** ALB，**不能** 跟主入口共享 ALB
+# （详见 workflows/add-ingress.md 的飞书 webhook 独立 ALB 门禁）
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{app}}
+  namespace: {{namespace}}
+  labels:
+    app: {{app}}
+    # 安全组选择：office | internal | feishu-webhook | (空 = 公网 WAF)
+    # ingress.addx.io/sg: {{sg_label}}
+  annotations:
+    # ALB scheme: internal | internet-facing；默认 internet-facing
+    # alb.ingress.kubernetes.io/scheme: {{scheme}}
+    alb.ingress.kubernetes.io/healthcheck-path: {{health_path}}
+    # 公网 c-end 场景挂 WAF（按 region 选 ARN，运维提供）：
+    # alb.ingress.kubernetes.io/wafv2-acl-arn: arn:aws:wafv2:<region>:<account>:regional/webacl/<name>/<id>
+spec:
+  ingressClassName: alb
+  rules:
+    - host: {{hostname}}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{app}}
+                port:
+                  number: {{service_port}}
+
+# ============================================================
+# 4 种暴露场景对照
+# ============================================================
+#
+# 1. 公网 C 端服务（API、官网、移动端 backend）
+#    labels:   无 ingress.addx.io/sg
+#    scheme:   internet-facing（默认）
+#    必须：    alb.ingress.kubernetes.io/wafv2-acl-arn 挂 WAF
+#    DNS:      申请 *.addx.live 解析（addx.live 在阿里云 DNS）
+#
+# 2. 办公室访问（内部管理后台 / 控制台）
+#    labels:   ingress.addx.io/sg: office
+#    scheme:   internet-facing
+#    Kyverno:  自动注入 from-office SG
+#    DNS:      申请 *.addx.live 解析
+#
+# 3. 内网访问（仅 VPC 内可达 / 通过 VPN）
+#    labels:   ingress.addx.io/sg: internal
+#    scheme:   internal
+#    Kyverno:  自动注入 internal SG
+#    DNS:      申请 *-internal.addx.live 解析（匹配现有 *.addx.live ACM wildcard）
+#
+# 4. 飞书 webhook 回调（飞书国内服务器 32 IP）
+#    labels:   ingress.addx.io/sg: feishu-webhook
+#    scheme:   internet-facing
+#    Kyverno:  自动注入 feishu-webhook SG（每 AWS 账号 + TKE 都预置）
+#    DNS:      申请 *.addx.live 解析
+#    ⚠️ 必须独立 Ingress + 独立 ALB，不能共享主入口 ALB
+#
+# ============================================================
+# TKE 集群（cn-k8s）的额外要求
+# ============================================================
+# 腾讯云 qcloud Ingress 必填 spec.tls 字段（即使 80 端口也是）。
+# workflow 检测目标集群是 TKE 时，加：
+#   spec:
+#     tls:
+#       - hosts:
+#           - {{hostname}}
+#         secretName: <wildcard-cert-secret-name>   # 集群预设 wildcard cert

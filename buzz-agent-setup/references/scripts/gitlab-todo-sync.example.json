@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "channel_id": "<channel-uuid>",
+  "publisher_pubkey": "<todo-publisher-hex-pubkey>",
+  "owner_pubkey": "<owner-hex-pubkey>",
+  "done_authors": ["<owner-hex-pubkey>", "<assistant-hex-pubkey>"],
+  "state_dir": "/home/<user>/.local/state/buzz-todo/<name>",
+  "buzz": {
+    "cli_path": "/home/<user>/.local/opt/buzz-0.5.23/usr/bin/buzz",
+    "cli_sha256": "<buzz-cli-sha256>"
+  },
+  "gitlab": {
+    "base_url": "https://gitlab.addx.ai",
+    "username": "<gitlab-username>",
+    "token_env": "GITLAB_TODO_TOKEN"
+  },
+  "todo": {
+    "actions": ["assigned", "review_requested", "mentioned", "directly_addressed", "build_failed", "approval_required"],
+    "since": "<now-utc>",
+    "max_per_run": 20,
+    "mark_done": true,
+    "done_emojis": ["✅"]
+  }
+}

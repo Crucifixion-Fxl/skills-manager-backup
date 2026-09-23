@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "b5a15321-1149-40b3-8961-423121a39e73",
+  "path": "dagster-dbt-model-execute",
+  "path_key": "dagster-dbt-model-execute",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/dagster-dbt-model-execute",
+    "branch": null
+  }
+}

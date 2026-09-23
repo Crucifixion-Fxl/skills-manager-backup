@@ -1,0 +1,4 @@
+interface:
+  display_name: "User Research Workflow"
+  short_description: "Plan and coordinate fit-for-purpose user research"
+  default_prompt: "Use $user-research to turn this product decision into the lightest valid research plan and choose the appropriate method."

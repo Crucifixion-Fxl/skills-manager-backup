@@ -1,0 +1,48 @@
+{
+  "regionCode": "us-east-1",
+  "version": "mini-test-20260414",
+  "publicationDate": "2026-04-14T00:00:00Z",
+  "terms": {
+    "savingsPlan": [
+      {
+        "sku": "sp-1y-nu-compute",
+        "description": "1 year No Upfront Compute Savings Plan",
+        "effectiveDate": "2026-04-01T00:00:00Z",
+        "leaseContractLength": {"duration": 1, "unit": "year"},
+        "rates": [
+          {
+            "discountedServiceCode": "AmazonEC2",
+            "discountedSku": "EC2SKU_C5_XLARGE_LINUX",
+            "discountedUsageType": "USE1-BoxUsage:c5.xlarge",
+            "discountedOperation": "RunInstances",
+            "discountedRate": {"price": "0.1230", "unit": "Hrs"},
+            "rateCode": "RC1"
+          },
+          {
+            "discountedServiceCode": "AWSLambda",
+            "discountedSku": "LAMBDA_GBSEC_STD",
+            "discountedUsageType": "Lambda-GB-Second",
+            "discountedOperation": "Invoke",
+            "discountedRate": {"price": "0.00001483", "unit": "seconds"},
+            "rateCode": "RC2"
+          },
+          {
+            "discountedServiceCode": "AmazonECS",
+            "discountedSku": "FARGATE_VCPU",
+            "discountedUsageType": "Fargate-vCPU-Hours:perCPU",
+            "discountedOperation": "FargateTask",
+            "discountedRate": {"price": "0.03278", "unit": "Hrs"},
+            "rateCode": "RC3"
+          }
+        ]
+      },
+      {
+        "sku": "sp-3y-nu-compute",
+        "description": "3 year No Upfront Compute Savings Plan",
+        "effectiveDate": "2026-04-01T00:00:00Z",
+        "leaseContractLength": {"duration": 3, "unit": "year"},
+        "rates": []
+      }
+    ]
+  }
+}

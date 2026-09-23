@@ -1,0 +1,27 @@
+# Nginx server contract for static web artifacts.
+#
+# Required slots:
+#   {{port}}          exact container listen port
+#   {{health_path}}   exact non-root health path, e.g. /health
+#   {{spa_fallback}}  /index.html for an SPA, =404 for a multi-page/static site
+#
+# The explicit health endpoint stays compatible with Kubernetes HTTP probes and
+# does not depend on a generated asset existing at the health path.
+
+server {
+    listen {{port}};
+    server_name _;
+
+    root /usr/share/nginx/html;
+    index index.html;
+
+    location = {{health_path}} {
+        access_log off;
+        default_type text/plain;
+        return 200 "ok\n";
+    }
+
+    location / {
+        try_files $uri $uri/ {{spa_fallback}};
+    }
+}

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "5ac5e8a8-ce21-420c-b362-95f98fda29eb",
+  "path": "vault-kv-manager",
+  "path_key": "vault-kv-manager",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/vault-kv-manager",
+    "branch": null
+  }
+}

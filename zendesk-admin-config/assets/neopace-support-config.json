@@ -1,0 +1,276 @@
+{
+  "schema_version": 1,
+  "tenant": {
+    "subdomain": "neopace"
+  },
+  "unresolved_decisions": [
+    {
+      "id": "group-members",
+      "owner": "Customer Care",
+      "question": "Confirm the formal NeoPace Support group name and its agent members."
+    },
+    {
+      "id": "contributor-agents",
+      "owner": "Customer Care",
+      "question": "Confirm whether Contributor Agent is needed and provide the member list."
+    },
+    {
+      "id": "automatic-tags",
+      "owner": "Customer Care",
+      "question": "Confirm which source, channel, urgency, and incident tags are automatic and the trigger rules that set them."
+    },
+    {
+      "id": "integration-fields",
+      "owner": "Golf Backend",
+      "question": "Confirm source systems and write paths for Device Info, Query Info, and GitLab work item fields."
+    }
+  ],
+  "groups": [
+    {
+      "key": "neopace-support",
+      "name": "NeoPace Support",
+      "description": "Primary NeoPace customer support group.",
+      "enabled": false,
+      "decision_required": true,
+      "notes": "Enable after Customer Care confirms the exact name and membership."
+    }
+  ],
+  "ticket_fields": [
+    {
+      "key": "notes",
+      "title": "Notes",
+      "type": "textarea",
+      "description": "Additional customer or agent context.",
+      "active": true,
+      "visible_in_portal": true,
+      "editable_in_portal": true,
+      "required_in_portal": false
+    },
+    {
+      "key": "topic",
+      "title": "NeoPace Topic",
+      "type": "tagger",
+      "description": "Primary support topic selected by the customer or agent.",
+      "active": true,
+      "visible_in_portal": true,
+      "editable_in_portal": true,
+      "required_in_portal": true,
+      "custom_field_options": [
+        {"name": "Service Issue / Purchase & Reservation / Price & Product Bundle", "value": "service_purchase_price_bundle"},
+        {"name": "Service Issue / Purchase & Reservation / Deposit & Refund", "value": "service_purchase_deposit_refund"},
+        {"name": "Service Issue / Purchase & Reservation / Kickstarter & Founder Benefits", "value": "service_purchase_kickstarter_benefits"},
+        {"name": "Service Issue / Purchase & Reservation / Payment & Cancellation", "value": "service_purchase_payment_cancellation"},
+        {"name": "Service Issue / Purchase & Reservation / Availability & Launch Date", "value": "service_purchase_availability"},
+        {"name": "Service Issue / Shipping & Order / Order Status", "value": "service_shipping_order_status"},
+        {"name": "Service Issue / Shipping & Order / Shipping & Delivery", "value": "service_shipping_delivery"},
+        {"name": "Service Issue / Subscription / Plans & Pricing", "value": "service_subscription_plans_pricing"},
+        {"name": "Service Issue / Subscription / Premium AI Features", "value": "service_subscription_ai_features"},
+        {"name": "Service Issue / Subscription / Payment, Renewal & Cancellation", "value": "service_subscription_payment_renewal"},
+        {"name": "Service Issue / Subscription / Access Issue", "value": "service_subscription_access"},
+        {"name": "Service Issue / Subscription / Refund", "value": "service_subscription_refund"},
+        {"name": "Service Issue / Warranty / Return & Refund", "value": "service_warranty_return_refund"},
+        {"name": "Service Issue / Warranty / Warranty Status", "value": "service_warranty_status"},
+        {"name": "Service Issue / Warranty / Replacement", "value": "service_warranty_replacement"},
+        {"name": "Service Issue / Feedback & Community / Product or App Feedback", "value": "service_feedback_product_app"},
+        {"name": "Service Issue / Feedback & Community / Feature Request", "value": "service_feedback_feature_request"},
+        {"name": "Service Issue / Feedback & Community / Bug Report", "value": "service_feedback_bug_report"},
+        {"name": "Service Issue / Feedback & Community / Community, Review, or Partnership", "value": "service_feedback_community_partnership"},
+        {"name": "Service Issue / General Inquiry / General Inquiry", "value": "service_general_inquiry"},
+        {"name": "Service Issue / General Inquiry / Website Issue", "value": "service_general_website"},
+        {"name": "Service Issue / General Inquiry / Privacy or Legal", "value": "service_general_privacy_legal"},
+        {"name": "Service Issue / General Inquiry / Other", "value": "service_general_other"},
+        {"name": "Technical Issue / Product & Feature / Product Information", "value": "technical_product_information"},
+        {"name": "Technical Issue / Product & Feature / Product Specifications", "value": "technical_product_specifications"},
+        {"name": "Technical Issue / Product & Feature / Supported Features", "value": "technical_product_supported_features"},
+        {"name": "Technical Issue / Product & Feature / Compatibility", "value": "technical_product_compatibility"},
+        {"name": "Technical Issue / Product & Feature / Accuracy & Performance", "value": "technical_product_accuracy_performance"},
+        {"name": "Technical Issue / Installation & Setup / Installation & Placement", "value": "technical_setup_installation_placement"},
+        {"name": "Technical Issue / Installation & Setup / First-time Setup", "value": "technical_setup_first_time"},
+        {"name": "Technical Issue / Installation & Setup / App Connection", "value": "technical_setup_app_connection"},
+        {"name": "Technical Issue / Installation & Setup / Calibration & Auto Alignment", "value": "technical_setup_calibration_alignment"},
+        {"name": "Technical Issue / Installation & Setup / Connection or Setup Failure", "value": "technical_setup_failure"},
+        {"name": "Technical Issue / App & Account / App Download & Compatibility", "value": "technical_app_download_compatibility"},
+        {"name": "Technical Issue / App & Account / Login & Account", "value": "technical_app_login_account"},
+        {"name": "Technical Issue / App & Account / Device Connection", "value": "technical_app_device_connection"},
+        {"name": "Technical Issue / App & Account / Data, Sessions & Sync", "value": "technical_app_data_sessions_sync"},
+        {"name": "Technical Issue / App & Account / App Error or Crash", "value": "technical_app_error_crash"},
+        {"name": "Technical Issue / Performance & AI Analysis / Incorrect or Missing Data", "value": "technical_performance_missing_data"},
+        {"name": "Technical Issue / Performance & AI Analysis / AI Analysis", "value": "technical_performance_ai_analysis"},
+        {"name": "Technical Issue / Performance & AI Analysis / 3D Replay", "value": "technical_performance_3d_replay"},
+        {"name": "Technical Issue / Performance & AI Analysis / Training & Progress Tracking", "value": "technical_performance_training_tracking"},
+        {"name": "Technical Issue / Performance & AI Analysis / Simulator or Environment Performance", "value": "technical_performance_simulator"},
+        {"name": "Technical Issue / Hardware & Accessories / Power, Charging & Battery", "value": "technical_hardware_power_battery"},
+        {"name": "Technical Issue / Hardware & Accessories / Camera, Radar, or Gimbal", "value": "technical_hardware_camera_radar_gimbal"},
+        {"name": "Technical Issue / Hardware & Accessories / Device Damage or Overheating", "value": "technical_hardware_damage_overheating"},
+        {"name": "Technical Issue / Hardware & Accessories / Accessories", "value": "technical_hardware_accessories"},
+        {"name": "Technical Issue / Hardware & Accessories / Device Not Working", "value": "technical_hardware_not_working"}
+      ]
+    },
+    {
+      "key": "follow-team",
+      "title": "Follow Team",
+      "type": "tagger",
+      "description": "Customer Care team responsible for follow-up.",
+      "active": true,
+      "visible_in_portal": false,
+      "editable_in_portal": false,
+      "required_in_portal": false,
+      "custom_field_options": [
+        {"name": "CN Team", "value": "follow_team_cn"},
+        {"name": "US Team", "value": "follow_team_us"}
+      ]
+    },
+    {
+      "key": "order-number",
+      "title": "Order #",
+      "type": "text",
+      "description": "Order identifier used for order-related support.",
+      "active": true,
+      "visible_in_portal": true,
+      "editable_in_portal": true,
+      "required_in_portal": false
+    },
+    {
+      "key": "purchase-channel",
+      "title": "Purchase Channel",
+      "type": "tagger",
+      "description": "Channel through which the customer purchased the product.",
+      "active": true,
+      "visible_in_portal": true,
+      "editable_in_portal": true,
+      "required_in_portal": false,
+      "custom_field_options": [
+        {"name": "Kickstarter", "value": "purchase_channel_kickstarter"},
+        {"name": "DTC", "value": "purchase_channel_dtc"},
+        {"name": "Amazon", "value": "purchase_channel_amazon"},
+        {"name": "Retail Partner", "value": "purchase_channel_retail_partner"},
+        {"name": "Other", "value": "purchase_channel_other"},
+        {"name": "Unknown", "value": "purchase_channel_unknown"}
+      ]
+    },
+    {
+      "key": "follow-up-date",
+      "title": "Follow-up Date",
+      "type": "date",
+      "description": "Next scheduled Customer Care follow-up date.",
+      "active": true,
+      "visible_in_portal": false,
+      "editable_in_portal": false,
+      "required_in_portal": false
+    },
+    {
+      "key": "gitlab-workitem-link",
+      "title": "GitLab Work Item Link",
+      "type": "text",
+      "description": "Link written by the approved GitLab integration.",
+      "active": true,
+      "visible_in_portal": false,
+      "editable_in_portal": false,
+      "required_in_portal": false
+    },
+    {
+      "key": "gitlab-workitem-description",
+      "title": "GitLab Work Item Description",
+      "type": "textarea",
+      "description": "Description sent to the approved GitLab integration.",
+      "active": true,
+      "visible_in_portal": false,
+      "editable_in_portal": false,
+      "required_in_portal": false
+    },
+    {
+      "key": "gitlab-workitem-title",
+      "title": "GitLab Work Item Title",
+      "type": "text",
+      "description": "Title sent to the approved GitLab integration.",
+      "enabled": false,
+      "active": false,
+      "decision_required": true,
+      "notes": "Enable after its owner and generation rule are defined."
+    },
+    {
+      "key": "gitlab-workitem-type",
+      "title": "GitLab Work Item Type",
+      "type": "tagger",
+      "description": "GitLab work item classification.",
+      "active": true,
+      "visible_in_portal": false,
+      "editable_in_portal": false,
+      "required_in_portal": false,
+      "custom_field_options": [
+        {"name": "Issue", "value": "gitlab_workitem_issue"},
+        {"name": "Request", "value": "gitlab_workitem_request"}
+      ]
+    },
+    {
+      "key": "serial-number",
+      "title": "Serial Number",
+      "type": "text",
+      "description": "NeoPace device serial number.",
+      "active": true,
+      "visible_in_portal": true,
+      "editable_in_portal": true,
+      "required_in_portal": false
+    },
+    {
+      "key": "device-info",
+      "title": "Device Info",
+      "type": "textarea",
+      "description": "Read-only device context written by an approved integration.",
+      "active": true,
+      "visible_in_portal": false,
+      "editable_in_portal": false,
+      "required_in_portal": false
+    },
+    {
+      "key": "query-info",
+      "title": "Query Info",
+      "type": "textarea",
+      "description": "Read-only query context written by an approved integration.",
+      "active": true,
+      "visible_in_portal": false,
+      "editable_in_portal": false,
+      "required_in_portal": false
+    },
+    {
+      "key": "contributor-agent",
+      "title": "Contributor Agent",
+      "type": "multiselect",
+      "enabled": false,
+      "decision_required": true,
+      "notes": "Enable only after Customer Care provides the controlled option list."
+    }
+  ],
+  "ticket_forms": [
+    {
+      "key": "neopace-customer-support",
+      "name": "NeoPace Customer Support",
+      "display_name": "NeoPace Customer Support",
+      "active": true,
+      "end_user_visible": true,
+      "append_field_keys": [
+        "notes",
+        "topic",
+        "follow-team",
+        "order-number",
+        "purchase-channel",
+        "follow-up-date",
+        "gitlab-workitem-link",
+        "gitlab-workitem-description",
+        "gitlab-workitem-type",
+        "serial-number",
+        "device-info",
+        "query-info"
+      ]
+    }
+  ],
+  "triggers": [
+    {
+      "key": "neopace-default-routing",
+      "title": "NeoPace default routing",
+      "enabled": false,
+      "decision_required": true,
+      "notes": "Enable only after Group, tag ownership, ordering, and collision checks are approved."
+    }
+  ]
+}

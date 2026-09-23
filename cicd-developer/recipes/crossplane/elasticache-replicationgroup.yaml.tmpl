@@ -1,0 +1,63 @@
+# crossplane-elasticache-replicationgroup.yaml.tmpl
+#
+# AWS ElastiCache Redis ReplicationGroup —— prod 强制用 RG kind（不是 Cluster
+# kind，那个不支持副本）。staging 也可以用 RG 提前验证 prod 同形态。
+#
+# 必填槽位：
+#   {{app}}                 kebab-case
+#   {{env_keyword}}         如 staging-us
+#   {{namespace}}           K8s namespace（Redis CR 写这里）
+#   {{node_type}}           从 cost-tiering/redis.yaml prod.nodeType（默认 t4g 家族，如 cache.t4g.small；
+#                           高资源占用由 cd-requirements.md 指定 r8g/m8g）
+#   {{num_nodes}}           从 cost-tiering/redis.yaml prod.numNodes（≥2 for prod）
+#   {{automatic_failover}}  从 cost-tiering/redis.yaml（prod=true）
+#   {{multi_az}}            从 cost-tiering/redis.yaml（prod=true）
+#   {{snapshot_retention}}  从 cost-tiering/redis.yaml prod.snapshotRetentionLimit_days
+#   {{at_rest_encryption}}  从 cost-tiering/redis.yaml（prod=true）
+#   {{management_policies}} 从 cost-tiering/redis.yaml；prod 必须不含 Delete
+#   {{region}}              AWS region
+#   {{redis_security_group}}  从同集群其它 app 应用仓 overlay 的 redis.yaml 或 crossplane-infra legacy redis YAML 复制
+#                              （跟 RDS SG 一般不同，可能是单独的 SG）
+#
+# 连接 Secret 契约：
+#   最终 `<app>-redis-conn` 必须是 `address` + `port`。
+#   ReplicationGroup kind 通常不是 provider 直接创建 Secret，而是
+#   crossplane-conn-patcher 读取 atProvider.primaryEndpointAddress / port 后创建并
+#   填充 Secret。PushSecret 只能依赖最终契约，不要读 endpoint。
+
+apiVersion: elasticache.aws.m.upbound.io/v1beta1
+kind: ReplicationGroup
+metadata:
+  name: {{app}}-{{env_keyword}}-redis
+  namespace: {{namespace}}
+  annotations:
+    # The installed v2 ReplicationGroup CRD does not expose
+    # spec.forProvider.replicationGroupId. The external name is the AWS ID.
+    crossplane.io/external-name: {{app}}-{{env_keyword}}-redis
+spec:
+  managementPolicies: {{management_policies}}
+  forProvider:
+    description: "{{app}} {{env_keyword}} Redis"
+    nodeType: {{node_type}}
+    numCacheClusters: {{num_nodes}}      # ≥ 2 for prod
+    automaticFailoverEnabled: {{automatic_failover}}
+    multiAzEnabled: {{multi_az}}
+    snapshotRetentionLimit: {{snapshot_retention}}
+    atRestEncryptionEnabled: {{at_rest_encryption}}
+    transitEncryptionEnabled: true       # 强制（in-transit 加密对成本影响极小）
+    engine: valkey                       # 默认 Valkey（非 Redis OSS）；CRD engine 字段接受 redis|valkey
+    engineVersion: "9.1"                 # pin 具体 minor（已验证 us/cn 可用；family valkey9）
+    port: 6379
+    subnetGroupName: crossplane-default
+    securityGroupIds:
+      - {{redis_security_group}}
+    region: {{region}}
+    tags:
+      app: {{app}}
+      env: {{env_keyword}}
+      managed-by: crossplane
+  writeConnectionSecretToRef:
+    name: {{app}}-redis-conn             # conn-patcher 创建 / 填充 address + port
+  providerConfigRef:
+    name: {{app}}
+    kind: ClusterProviderConfig

@@ -1,0 +1,51 @@
+# k8s/overlays/<env>-<region>/kustomization.yaml — per-cluster overlay.
+#
+# Required slots:
+#   {{namespace}}         e.g. naturehood, support-admin-prod
+#   {{app}}               kebab-case
+#   {{env}}               env keyword from references/data/env-keywords.yaml
+#                         (e.g. staging-us / prod-us-restricted-admin), not just staging/pre/prod/dev
+#   {{harbor_image_path}} e.g. harbor-39070-us-staging.addx.live/cicd/staging-us/<app>
+#                         (must be the env-scoped cicd/<env>-<region>/<app> path)
+#   {{image_tag}}         **不带冒号前缀**；self-built apps use overlay/draft placeholder 0000000.
+#                         kustomize 自动用 `:` 拼 newName + newTag；带冒号会渲染成 `::tag` 触发 ImagePullBackOff。
+#                         0000000 只用于 overlay 初始渲染；Application 中的 recovery seed
+#                         和最终运行 tag 必须写成纯 Git SHA，不要使用 staging-latest / prod-latest。
+#                         首次同步 ArgoCD Application 前，CI 应已向该 Harbor path 推送真实 SHA；
+#                         不要让 Pod 真的去拉 0000000。
+#
+# Workflow may add additional patches for cluster-specific overrides.
+# Example patches recipes/patches/ stays under the SAME overlay if multiple are needed.
+#
+# IMPORTANT: env label on Rollout's pod template MUST be present.
+# kustomize `labels:` block does NOT propagate into argoproj.io/v1alpha1 Rollout
+# (it only handles built-in workload kinds). For Rollout the workflow MUST use
+# an explicit patch (see template below), not the labels: shortcut.
+#
+# 平台日志的分类/查询依赖 pod template 的 app + env label；Kafka output 下缺标签
+# 可能进入未消费 topic，direct ES/OpenSearch 下需查共享 index/alias。先识别实际链路，
+# 见 references/logging/README.md 和 troubleshooting/log-pipeline-silent-loss.md。
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: {{namespace}}
+
+resources:
+  - ../../base
+
+# Image override: ArgoCD Image Updater rewrites newTag on every new image push.
+images:
+  - name: {{app}}
+    newName: {{harbor_image_path}}
+    newTag: "{{image_tag}}"
+
+# Explicit patch for Rollout pod template env label.
+# kustomize labels: block does NOT reach CRD pod templates; must patch.
+patches:
+  - target:
+      kind: Rollout
+    patch: |-
+      - op: add
+        path: /spec/template/metadata/labels/env
+        value: {{env}}

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "d70bf052-a2fc-4366-b747-19f4a7897e8c",
+  "path": "paprika",
+  "path_key": "paprika",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/paprika",
+    "branch": null
+  }
+}

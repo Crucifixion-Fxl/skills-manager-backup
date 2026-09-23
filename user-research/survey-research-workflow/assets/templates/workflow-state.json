@@ -1,0 +1,84 @@
+{
+  "project_id": "",
+  "current_stage": "intake",
+  "gate_status": "not_started",
+  "owner_confirmation_required": true,
+  "blockers": [],
+  "next_action": "",
+  "followup_route": {
+    "route": null,
+    "allowed_routes": ["revise_survey", "revise_email", "sample_action", "sample_status_memo"],
+    "recommended_by": null,
+    "owner_confirmed": false,
+    "notes": ""
+  },
+  "last_updated": "",
+  "stages": [
+    {
+      "stage": "intake",
+      "status": "not_started",
+      "required_inputs": ["project request"],
+      "required_outputs": ["project-context.md", "workflow-state.json", "artifact-index.md"]
+    },
+    {
+      "stage": "research_plan",
+      "status": "not_started",
+      "required_inputs": ["project-context.md"],
+      "required_outputs": ["research-brief.md", "atomic_decision_register.md", "decision_evidence_matrix.md", "instrument_architecture.md", "email_brief.md"]
+    },
+    {
+      "stage": "survey_design",
+      "status": "not_started",
+      "required_inputs": ["research-brief.md"],
+      "required_outputs": ["survey_outline.md", "measurement_construct_audit.md", "question_wording.md", "design_rationale_pack.md", "scope_regression_audit.md", "platform_capability_check.md", "survey_spec.json"]
+    },
+    {
+      "stage": "survey_build",
+      "status": "not_started",
+      "required_inputs": ["survey_spec.json"],
+      "required_outputs": ["platform_build_plan.json", "platform_preflight_report.md", "platform_id_mapping.json", "platform_readback_diff.json", "platform_logic_test_matrix.md"]
+    },
+    {
+      "stage": "campaign_copy",
+      "status": "not_started",
+      "required_inputs": ["email_brief.md", "approved public form links"],
+      "required_outputs": ["email_copy.md", "campaign_copy_rationale.md", "campaign_spec.json"]
+    },
+    {
+      "stage": "audience_sync",
+      "status": "not_started",
+      "required_inputs": ["audience_sync_spec.json", "raw pool CSV", "exclusion CSVs"],
+      "required_outputs": ["target_contacts.csv", "mailchimp_preflight_result.json", "segment_id_mapping.json", "verify_result.json"]
+    },
+    {
+      "stage": "campaign_draft",
+      "status": "not_started",
+      "required_inputs": ["campaign_spec.json", "segment_id_mapping.json"],
+      "required_outputs": ["campaign_spec.snapshot.json", "mailchimp_campaign_plan.json", "mailchimp_preflight_report.md", "campaign_id_mapping.json", "mailchimp_readback_diff.json", "mailchimp_manual_setup_checklist.md"]
+    },
+    {
+      "stage": "collection_monitor",
+      "status": "not_started",
+      "required_inputs": ["platform_id_mapping.json", "verified API access, webhook data, or immutable response export"],
+      "required_outputs": ["monitor_status.json"]
+    },
+    {
+      "stage": "followup_strategy",
+      "status": "not_started",
+      "required_inputs": ["monitor_status.json"],
+      "required_outputs": ["followup_strategy.md", "followup_strategy.json"]
+    },
+    {
+      "stage": "report",
+      "status": "not_started",
+      "required_inputs": ["monitor_status.json", "findings_data.json"],
+      "required_outputs": ["research-report.md"]
+    },
+    {
+      "stage": "workflow_dry_run",
+      "status": "not_started",
+      "required_inputs": ["monitor_status.json", "workflow-state.json"],
+      "required_outputs": ["workflow_dry_run_status.json", "workflow_dry_run_report.md"]
+    }
+  ]
+}

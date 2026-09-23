@@ -1,0 +1,37 @@
+# Python 服务的 Dockerfile 模板。
+#
+# 必填槽位：
+#   {{python_version}}   e.g. 3.12（pin 主版本）
+#   {{port}}             container 监听端口
+#   {{start_cmd}}        JSON 数组形式，e.g. ["gunicorn", "app:app", "-b", "0.0.0.0:8000"]
+#                        或 ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+#
+# 设计要点：
+#   - 用 python:X.Y-slim 而不是 alpine（alpine 没有 manylinux wheels，要从源码编译，
+#     很多 native package（numpy / cryptography / lxml）会慢且踩坑）
+#   - 多阶段：builder 装编译依赖 + pip wheel，runtime 只 pip install --no-index 用 wheel
+#   - 用 PYTHONDONTWRITEBYTECODE=1 + PYTHONUNBUFFERED=1（容器内打印不缓存）
+#   - 用 non-root user 跑
+#   - **不要** copy .venv from host
+#   - CN / TKE / aws-cn target：写盘前按 new-service.md Step 7 把 FROM 改为
+#     ${HARBOR_REGISTRY}/base/...，并补 ARG HARBOR_REGISTRY
+
+FROM python:{{python_version}}-slim AS builder
+WORKDIR /build
+RUN apt-get update && apt-get install -y --no-install-recommends gcc g++ && rm -rf /var/lib/apt/lists/*
+COPY requirements.txt ./
+RUN pip wheel --no-cache-dir --no-deps --wheel-dir /build/wheels -r requirements.txt
+
+FROM python:{{python_version}}-slim
+WORKDIR /app
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+COPY --from=builder /build/wheels /wheels
+COPY requirements.txt ./
+RUN pip install --no-cache-dir --no-index --find-links=/wheels -r requirements.txt && rm -rf /wheels
+COPY . .
+RUN useradd --create-home --uid 1000 app && chown -R app:app /app
+USER app
+EXPOSE {{port}}
+CMD {{start_cmd}}

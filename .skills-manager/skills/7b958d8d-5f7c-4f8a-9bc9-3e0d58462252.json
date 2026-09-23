@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "7b958d8d-5f7c-4f8a-9bc9-3e0d58462252",
+  "path": "lingxing-api",
+  "path_key": "lingxing-api",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/lingxing-api",
+    "branch": null
+  }
+}

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Android 产品走查"
+  short_description: "从需求和设计到安卓真机走查、截图报告、问题审批与新包复测"
+  default_prompt: "使用 $android-product-acceptance，根据我提供的 PRD、设计稿、APK 和测试账号完成真机验收，生成待确认的问题报告。"

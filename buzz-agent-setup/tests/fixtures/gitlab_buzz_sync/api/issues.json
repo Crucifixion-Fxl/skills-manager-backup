@@ -1,0 +1,200 @@
+{
+  "body": [
+    {
+      "_links": {
+        "award_emoji": "http://gitlab.localstack.test:8929/api/v4/projects/2/issues/1/award_emoji",
+        "closed_as_duplicate_of": null,
+        "notes": "http://gitlab.localstack.test:8929/api/v4/projects/2/issues/1/notes",
+        "project": "http://gitlab.localstack.test:8929/api/v4/projects/2",
+        "self": "http://gitlab.localstack.test:8929/api/v4/projects/2/issues/1"
+      },
+      "assignee": {
+        "avatar_url": null,
+        "id": 6,
+        "locked": false,
+        "name": "Buzz Sync Developer (localstack)",
+        "public_email": null,
+        "state": "active",
+        "username": "buzz-sync-dev",
+        "web_url": "http://gitlab.localstack.test:8929/buzz-sync-dev"
+      },
+      "assignees": [
+        {
+          "avatar_url": null,
+          "id": 6,
+          "locked": false,
+          "name": "Buzz Sync Developer (localstack)",
+          "public_email": null,
+          "state": "active",
+          "username": "buzz-sync-dev",
+          "web_url": "http://gitlab.localstack.test:8929/buzz-sync-dev"
+        }
+      ],
+      "author": {
+        "avatar_url": null,
+        "id": 6,
+        "locked": false,
+        "name": "Buzz Sync Developer (localstack)",
+        "public_email": null,
+        "state": "active",
+        "username": "buzz-sync-dev",
+        "web_url": "http://gitlab.localstack.test:8929/buzz-sync-dev"
+      },
+      "closed_at": "2026-09-13T08:22:20.073Z",
+      "closed_by": {
+        "avatar_url": null,
+        "id": 7,
+        "locked": false,
+        "name": "Buzz Sync Maintainer (localstack)",
+        "public_email": null,
+        "state": "active",
+        "username": "buzz-sync-maintainer",
+        "web_url": "http://gitlab.localstack.test:8929/buzz-sync-maintainer"
+      },
+      "confidential": false,
+      "created_at": "2026-09-13T08:21:11.198Z",
+      "description": "Recording description.\nSecond line.",
+      "discussion_locked": null,
+      "downvotes": 0,
+      "due_date": null,
+      "has_tasks": true,
+      "id": 1,
+      "iid": 1,
+      "imported": false,
+      "imported_from": "none",
+      "issue_type": "issue",
+      "labels": [
+        "recording",
+        "status::in-progress",
+        "type::feature"
+      ],
+      "merge_requests_count": 1,
+      "milestone": {
+        "created_at": "2026-09-13T08:21:10.397Z",
+        "description": null,
+        "due_date": null,
+        "expired": false,
+        "id": 1,
+        "iid": 1,
+        "project_id": 2,
+        "start_date": null,
+        "state": "active",
+        "title": "rec-0913082019 milestone",
+        "updated_at": "2026-09-13T08:22:21.252Z",
+        "web_url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot/-/milestones/1"
+      },
+      "moved_to_id": null,
+      "project_id": 2,
+      "references": {
+        "full": "buzz-sync-test/pilot#1",
+        "relative": "#1",
+        "short": "#1"
+      },
+      "service_desk_reply_to": null,
+      "severity": "UNKNOWN",
+      "state": "closed",
+      "task_completion_status": {
+        "completed_count": 0,
+        "count": 0
+      },
+      "task_status": "0 of 0 checklist items completed",
+      "time_stats": {
+        "human_time_estimate": null,
+        "human_total_time_spent": null,
+        "time_estimate": 0,
+        "total_time_spent": 0
+      },
+      "title": "Recording issue 0913082019 cc @buzz-sync-maintainer",
+      "type": "ISSUE",
+      "updated_at": "2026-09-13T08:22:20.169Z",
+      "upvotes": 0,
+      "user_notes_count": 2,
+      "web_url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot/-/issues/1"
+    },
+    {
+      "_links": {
+        "award_emoji": "http://gitlab.localstack.test:8929/api/v4/projects/2/issues/2/award_emoji",
+        "closed_as_duplicate_of": null,
+        "notes": "http://gitlab.localstack.test:8929/api/v4/projects/2/issues/2/notes",
+        "project": "http://gitlab.localstack.test:8929/api/v4/projects/2",
+        "self": "http://gitlab.localstack.test:8929/api/v4/projects/2/issues/2"
+      },
+      "assignee": null,
+      "assignees": [],
+      "author": {
+        "avatar_url": null,
+        "id": 7,
+        "locked": false,
+        "name": "Buzz Sync Maintainer (localstack)",
+        "public_email": null,
+        "state": "active",
+        "username": "buzz-sync-maintainer",
+        "web_url": "http://gitlab.localstack.test:8929/buzz-sync-maintainer"
+      },
+      "closed_at": null,
+      "closed_by": null,
+      "confidential": false,
+      "created_at": "2026-09-13T08:21:28.608Z",
+      "description": null,
+      "discussion_locked": null,
+      "downvotes": 0,
+      "due_date": null,
+      "has_tasks": true,
+      "id": 2,
+      "iid": 2,
+      "imported": false,
+      "imported_from": "none",
+      "issue_type": "task",
+      "labels": [],
+      "merge_requests_count": 0,
+      "milestone": null,
+      "moved_to_id": null,
+      "project_id": 2,
+      "references": {
+        "full": "buzz-sync-test/pilot#2",
+        "relative": "#2",
+        "short": "#2"
+      },
+      "service_desk_reply_to": null,
+      "severity": "UNKNOWN",
+      "state": "opened",
+      "task_completion_status": {
+        "completed_count": 0,
+        "count": 0
+      },
+      "task_status": "",
+      "time_stats": {
+        "human_time_estimate": null,
+        "human_total_time_spent": null,
+        "time_estimate": 0,
+        "total_time_spent": 0
+      },
+      "title": "Recording task 0913082019 renamed",
+      "type": "TASK",
+      "updated_at": "2026-09-13T08:21:29.672Z",
+      "upvotes": 0,
+      "user_notes_count": 0,
+      "web_url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot/-/work_items/2"
+    }
+  ],
+  "headers": {
+    "content-type": "application/json",
+    "x-next-page": "",
+    "x-page": "1",
+    "x-per-page": "100",
+    "x-total": "2",
+    "x-total-pages": "1"
+  },
+  "request": {
+    "as": "bot",
+    "method": "GET",
+    "path": "projects/2/issues",
+    "query": {
+      "order_by": "created_at",
+      "sort": "asc",
+      "state": "all",
+      "updated_after": "2026-09-13T08:20:19Z"
+    }
+  },
+  "status": 200
+}

@@ -1,0 +1,67 @@
+# CloudFront Distribution for a private S3 bucket via OAC.
+#
+# Required slots:
+#   {{cdn_name}}                                  K8s resource name
+#   {{distribution_external_name_annotation_block}} Either:
+#                                                    "  annotations:\n    crossplane.io/external-name: <distribution-id>"
+#                                                    or empty during first-create bootstrap
+#   {{cdn_comment}}                               Human-readable AWS comment
+#   {{origin_domain_name}}                        S3 regional domain, e.g. bucket.s3.us-east-1.amazonaws.com
+#   {{viewer_certificate_block}}                  viewerCertificate YAML block indented 4 spaces
+#   {{aliases_block}}                             aliases YAML block indented 4 spaces, or empty
+#   {{app}}                                      providerConfigRef.name
+#
+# Rules:
+# - Use originAccessControlIdRef. Do not set originAccessControlId: "".
+# - Keep CloudFront provider defaults explicit so ArgoCD does not stay OutOfSync
+#   after Crossplane normalizes the live spec.
+# - For custom domains, viewer_certificate_block must use an ACM cert in us-east-1.
+# - For e2e without a custom domain, use cloudfrontDefaultCertificate and leave aliases_block empty.
+# - After first sync, commit the real crossplane.io/external-name and tighten bucket policy to SourceArn.
+
+apiVersion: cloudfront.aws.m.upbound.io/v1beta1
+kind: Distribution
+metadata:
+  name: {{cdn_name}}
+{{distribution_external_name_annotation_block}}
+spec:
+  forProvider:
+    enabled: true
+    httpVersion: http2
+    priceClass: PriceClass_All
+    waitForDeployment: true
+    comment: "{{cdn_comment}}"
+    origin:
+      - domainName: {{origin_domain_name}}
+        originId: s3-origin
+        originAccessControlIdRef:
+          name: {{cdn_name}}-oac
+        s3OriginConfig: {}
+    defaultCacheBehavior:
+      targetOriginId: s3-origin
+      viewerProtocolPolicy: redirect-to-https
+      allowedMethods:
+        - GET
+        - HEAD
+      cachedMethods:
+        - GET
+        - HEAD
+      forwardedValues:
+        queryString: false
+        cookies:
+          forward: none
+      compress: true
+    restrictions:
+      geoRestriction:
+        restrictionType: none
+{{viewer_certificate_block}}
+{{aliases_block}}
+    tags:
+      app: {{app}}
+      crossplane-kind: distribution.cloudfront.aws.m.upbound.io
+      crossplane-name: {{cdn_name}}
+      crossplane-providerconfig: {{app}}
+      managed-by: crossplane
+  providerConfigRef:
+    name: {{app}}
+    kind: ClusterProviderConfig

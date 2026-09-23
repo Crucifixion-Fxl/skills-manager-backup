@@ -1,0 +1,327 @@
+# clusters.yaml
+#
+# K8s 路由/历史查表。16 条记录（11 Ops + 4 Builder + 1 CICD 基础设施），
+# 其中 cn-eks-dev 已退役；条目数不是当前可部署集群数，也不是 fleet scanner 巡检数。
+# 部署前必须检查 deployment_status；历史条目只供 Review/Troubleshoot 定位。
+# tier 与 vault 域绑定：所有 tech-service tier（4 集群）一律 ops 域，
+# 不得消费 builder vault；builder dev/staging 集群不得消费 ops vault。
+# TKE cn-k8s 是 ops 域特例：部署在 cn-k8s 的服务即使 env=staging 也使用 ops vault。详见
+# references/vault-paths/domain-binding.md。
+#
+# 消费方：
+#   - workflows/*.md（先检查 deployment_status，再查 account_id / harbor / runner_tags / vault_css）
+#   - troubleshooting/*.md（诊断时按集群查 cloud / region）
+#   - workflows/add-sentry.md 用 region 查询 sentry-instances.yaml；Sentry 的 prod 实例不改变应用 ENV/Vault 域
+#
+# 这是只读数据。新集群上线由平台团队通过 MR 加入；workflow 不修改这个文件。
+#
+# Schema：
+#   clusters[]:
+#     name             集群规范名（其他 yaml 引用的 key）
+#     deployment_status allowed | retired；allowed 仅表示路由准入，不代替 live readiness。
+#                       Build 写入前必须为 allowed；retired / 未知 / 缺失均 STOP。
+#     lifecycle_evidence 退役等状态变更的权威仓库证据链接（按需）
+#     domain           ops | builder | cicd-infra
+#     region           us | eu | cn | sg
+#     cloud            aws | gcp | tencent
+#     account_id       AWS account id（字符串）| GCP project id | Tencent uin
+#     partition        aws | aws-cn （仅 cloud=aws 时存在；用于 IRSA ARN / S3 ARN 渲染）
+#                      cloud=gcp/tencent 无此字段 —— IRSA / 跨 AWS 资源 workflow 见此字段缺失即 STOP
+#     aws_region       完整 AWS region 名（仅 cloud=aws 时存在）；如 us-east-1 / eu-central-1 / cn-northwest-1 / ap-southeast-1
+#                      用于 RDS / S3 / KMS Crossplane CR 的 forProvider.region；workflow 不要凭印象推导
+#     argocd_apps_dir  在 argocd-apps 仓库的子目录名（带斜杠结尾）
+#     argocd_url       ArgoCD WebUI URL（null = 当前未配置独立 ArgoCD WebUI）
+#     casdoor_url      Casdoor SSO URL
+#     harbor_url       Harbor registry URL
+#     vault            vault 实例 key（在 references/vault-paths/instances.yaml 中查）
+#     vault_css        集群内 ClusterSecretStore 名字
+#     runner_tags      GitLab runner tag 列表
+#     build_mode       dual-arch | single-arch-amd64
+
+clusters:
+
+  # ===== Ops 集群（11 个）-> prod Vault =====
+
+  - name: us-eks-prod
+    deployment_status: allowed
+    domain: ops
+    region: us
+    cloud: aws
+    account_id: "302571458622"
+    partition: aws
+    aws_region: us-east-1
+    argocd_apps_dir: aws-302571458622-us-prod/
+    argocd_url: argocd-us.addx.live
+    casdoor_url: casdoor-us.addx.live
+    harbor_url: harbor-30257-us-prod.addx.live
+    vault: vault-us-prod
+    vault_css: vault-backend
+    runner_tags: [us-prod-amd64, us-prod-arm64]
+    build_mode: dual-arch
+
+  - name: eu-eks-prod
+    deployment_status: allowed
+    domain: ops
+    region: eu
+    cloud: aws
+    account_id: "740315635167"
+    partition: aws
+    aws_region: eu-central-1
+    argocd_apps_dir: aws-740315635167-eu-prod/
+    argocd_url: argocd-eu.addx.live
+    casdoor_url: casdoor-eu.addx.live
+    harbor_url: harbor-74031-eu-prod.addx.live
+    vault: vault-eu-prod
+    vault_css: vault-backend
+    runner_tags: [eu-prod-amd64, eu-prod-arm64]
+    build_mode: dual-arch
+
+  - name: cn-prod
+    deployment_status: allowed
+    domain: ops
+    region: cn
+    cloud: aws
+    account_id: "741924744516"
+    partition: aws-cn
+    aws_region: cn-north-1
+    argocd_apps_dir: aws-741924744516-cn-prod/
+    argocd_url: argocd-cn.addx.live
+    casdoor_url: casdoor-cn.addx.live
+    harbor_url: harbor-74192-cn-prod.addx.live
+    vault: vault-cn-prod
+    vault_css: vault-backend
+    runner_tags: [cn-prod-amd64, cn-prod-arm64]
+    build_mode: dual-arch
+
+  - name: us-prod-gke
+    deployment_status: allowed
+    domain: ops
+    region: us
+    cloud: gcp
+    account_id: a4xcloud-p-us       # GCP project id
+    argocd_apps_dir: gcp-a4xcloud-p-us-us-prod/
+    argocd_url: argocd-us-prod-gke.addx.live
+    casdoor_url: casdoor-us-prod-gke.addx.live
+    harbor_url: harbor-a4xp-us-prod.addx.live
+    vault: vault-us-prod
+    vault_css: vault-backend
+    runner_tags: [gcp-prod-amd64]
+    build_mode: single-arch-amd64
+
+  - name: us-prod-data
+    deployment_status: allowed
+    domain: ops
+    region: us
+    cloud: aws
+    account_id: "769494896000"       # us-data 跟 eu-data 同一 AWS 账号
+    partition: aws
+    aws_region: us-east-1
+    argocd_apps_dir: aws-769494896000-us-data/
+    argocd_url: argocd-us-data.addx.live
+    casdoor_url: casdoor-us-data.addx.live
+    harbor_url: harbor-76949-us-data.addx.live
+    vault: vault-us-prod
+    vault_css: vault-backend
+    runner_tags: [us-data-amd64, us-data-arm64]
+    build_mode: dual-arch
+
+  - name: eu-prod-data
+    deployment_status: allowed
+    domain: ops
+    region: eu
+    cloud: aws
+    account_id: "769494896000"       # 同 us-data 账号，跨 region
+    partition: aws
+    aws_region: eu-central-1
+    argocd_apps_dir: aws-769494896000-eu-data/
+    argocd_url: argocd-eu-data.addx.live
+    casdoor_url: casdoor-eu-data.addx.live
+    harbor_url: harbor-76949-eu-data.addx.live
+    vault: vault-eu-prod
+    vault_css: vault-backend
+    runner_tags: [eu-data-amd64]
+    build_mode: single-arch-amd64
+
+  - name: cn-k8s
+    deployment_status: allowed
+    domain: ops
+    region: cn
+    cloud: tencent
+    account_id: "100014919455"
+    argocd_apps_dir: tencent-100014919455-cn-main/
+    argocd_url: argocd-cn-k8s.addx.live
+    casdoor_url: casdoor-cn-k8s.addx.live
+    harbor_url: harbor-cn.addx.live
+    vault: vault-cn-prod
+    vault_css: vault-backend
+    runner_tags: [tke-amd64]
+    build_mode: single-arch-amd64    # TKE 无 arm64 节点
+
+  - name: us-eks-tech-service
+    deployment_status: allowed
+    domain: ops
+    region: us
+    cloud: aws
+    account_id: "002497567426"
+    partition: aws
+    aws_region: us-east-1
+    argocd_apps_dir: aws-002497567426-us-tech-service/
+    argocd_url: argocd-us-tech-service.addx.live
+    casdoor_url: casdoor-us-tech-service.addx.live
+    harbor_url: harbor-00249-us-tech.addx.live
+    vault: vault-us-prod
+    vault_css: vault-backend
+    runner_tags: [us-tech-amd64, us-tech-arm64]
+    build_mode: dual-arch
+
+  - name: eu-eks-tech-service
+    deployment_status: allowed
+    domain: ops
+    region: eu
+    cloud: aws
+    account_id: "010840394398"
+    partition: aws
+    aws_region: eu-central-1
+    argocd_apps_dir: aws-010840394398-eu-tech-service/
+    argocd_url: argocd-eu-tech-service.addx.live
+    casdoor_url: casdoor-eu-tech-service.addx.live
+    harbor_url: harbor-01084-eu-tech.addx.live
+    vault: vault-eu-prod
+    vault_css: vault-backend
+    runner_tags: [eu-tech-amd64, eu-tech-arm64]
+    build_mode: dual-arch
+
+  - name: us-tech-service-gke
+    deployment_status: allowed
+    domain: ops
+    region: us
+    cloud: gcp
+    account_id: a4xcloud-tech-service-us
+    argocd_apps_dir: gcp-a4xcloud-tech-service-us-us-tech-service/
+    argocd_url: argocd-us-tech-service-gke.addx.live
+    casdoor_url: casdoor-us-tech-service-gke.addx.live
+    harbor_url: harbor-a4xt-us-tech.addx.live
+    vault: vault-us-prod
+    vault_css: vault-backend
+    runner_tags: [gcp-tech-amd64]
+    build_mode: single-arch-amd64
+
+  - name: cn-eks-tech-service
+    deployment_status: allowed
+    domain: ops                      # tech-service tier 一律 ops 域（见 references/vault-paths/domain-binding.md）
+    region: cn
+    cloud: aws
+    account_id: "589899215075"
+    partition: aws-cn
+    aws_region: cn-north-1
+    argocd_apps_dir: aws-589899215075-cn-tech-service/
+    argocd_url: argocd-cn-tech-service.addx.live
+    casdoor_url: casdoor-cn-tech-service.addx.live
+    harbor_url: harbor-58989-cn-tech.addx.live
+    vault: vault-cn-prod             # CN ops vault (vault-cn.addx.live)
+    vault_css: vault-backend
+    runner_tags: [cn-tech-amd64, cn-tech-arm64]
+    build_mode: dual-arch
+    # staging-cn 现已切到独立 builder staging 集群 cn-eks-staging（见 env-keywords.yaml）；
+    # pre 已废弃。本集群只承载 restricted-admin 的 prod（namespace 前缀 prod-{app}）+
+    # 平台栈自身。tech-service 自身平台栈（ArgoCD/Casdoor/Harbor/cicd-portal）的密钥
+    # **必须**走 ops vault，不得读 vault-builder。
+
+  # ===== Builder 记录（3 个部署准入 + 1 个退役历史）-> Builder Vault =====
+  #
+  # Builder 集群只承载真正的 dev/staging 开发联调流量。
+  # tech-service tier（含 cn-eks-tech-service）不在此区——它们是 ops 域。
+
+  - name: cn-eks-dev
+    deployment_status: retired
+    lifecycle_evidence: https://gitlab.addx.ai/DEV/base-images/-/blob/60387c4dbbbb9a282129883a63b5fc5fbeee4a4f/docs/plans/2026-09-01-retire-cn-dev-image-sync.md
+    # 保留旧 Harbor/runner/Vault 字段供存量审查；不得据此构建或部署新工作负载。
+    domain: builder
+    region: cn
+    cloud: aws
+    account_id: "801447536674"
+    partition: aws-cn
+    aws_region: cn-north-1
+    argocd_apps_dir: aws-801447536674-cn-dev/
+    argocd_url: argocd-dev-cn.addx.live
+    casdoor_url: casdoor-cn-dev.addx.live
+    harbor_url: harbor-80144-cn-dev.addx.live
+    vault: vault-cn-builder
+    vault_css: vault-builder-backend # explicit builder store alias
+    runner_tags: [cn-dev-amd64, cn-dev-arm64]
+    build_mode: dual-arch
+
+  - name: cn-eks-staging
+    deployment_status: allowed
+    domain: builder
+    region: cn
+    cloud: aws
+    account_id: "801447536674"
+    partition: aws-cn
+    aws_region: cn-north-1
+    argocd_apps_dir: aws-801447536674-cn-staging/
+    argocd_url: argocd-cn-staging.addx.live
+    casdoor_url: casdoor-cn-staging.addx.live
+    harbor_url: harbor-80144-cn-staging.addx.live
+    vault: vault-cn-builder
+    vault_css: vault-builder-backend
+    runner_tags: [cn-staging-amd64, cn-staging-arm64]
+    build_mode: dual-arch
+
+  - name: us-eks-staging
+    deployment_status: allowed
+    domain: builder
+    region: us
+    cloud: aws
+    account_id: "390709477306"
+    partition: aws
+    aws_region: us-east-1
+    argocd_apps_dir: aws-390709477306-us-staging/
+    argocd_url: argocd-us-staging.addx.live
+    casdoor_url: casdoor-us-staging.addx.live
+    harbor_url: harbor-39070-us-staging.addx.live
+    vault: vault-us-builder
+    vault_css: vault-builder-backend
+    runner_tags: [us-staging-amd64, us-staging-arm64]
+    build_mode: dual-arch
+
+  - name: eu-eks-staging
+    deployment_status: allowed
+    domain: builder
+    region: eu
+    cloud: aws
+    account_id: "390709477306"
+    partition: aws
+    aws_region: eu-central-1
+    argocd_apps_dir: aws-390709477306-eu-staging/
+    argocd_url: argocd-eu-staging.addx.live
+    casdoor_url: casdoor-eu-staging.addx.live
+    harbor_url: harbor-39070-eu-staging.addx.live
+    vault: vault-eu-builder
+    vault_css: vault-builder-backend
+    runner_tags: [eu-staging-amd64, eu-staging-arm64]
+    build_mode: dual-arch
+
+  # ===== CI/CD 基础设施（1 个）-> 不接受业务 app =====
+
+  - name: sg-devops
+    deployment_status: allowed
+    domain: cicd-infra
+    region: sg
+    cloud: aws
+    account_id: "125710977284"
+    partition: aws
+    aws_region: ap-southeast-1
+    argocd_apps_dir: aws-125710977284-sg-devops/
+    argocd_url: argocd-sg-devops.addx.live
+    casdoor_url: casdoor-sg-devops.addx.live
+    harbor_url: harbor-12571-sg-devops.addx.live
+    vault: vault-cn-prod
+    vault_css: vault-backend
+    runner_tags: [sg-amd64, sg-arm64, sg-amd64-high, sg-amd64-xhigh, sg-amd64-ultra]
+    runner_tiers:
+      standard: {tags: [sg-amd64, sonar-scanner-sg, runner-sg], cpu_limit: 1.5c, mem_limit: 1.5Gi, note: "默认档，所有新项目从此开始"}
+      high: {tags: [sg-amd64-high, sonar-scanner-sg-high, runner-sg-high], cpu_limit: 3.5c, mem_limit: 4Gi}
+      xhigh: {tags: [sg-amd64-xhigh, sonar-scanner-sg-xhigh, runner-sg-xhigh], cpu_limit: 5c, mem_limit: 8Gi}
+      ultra: {tags: [sg-amd64-ultra, sonar-scanner-sg-ultra, runner-sg-ultra], cpu_limit: 7.5c, mem_limit: 24Gi}
+    build_mode: dual-arch

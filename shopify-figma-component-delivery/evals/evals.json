@@ -1,0 +1,41 @@
+{
+  "skill_name": "shopify-figma-component-delivery",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "请根据这个桌面 Figma 节点 https://figma.com/design/demo?node-id=10-20 和移动节点 https://figma.com/design/demo?node-id=30-40 开发 Shopify 首屏组件。我的理解是左侧标题和按钮、右侧产品图，手机端图片在标题下方；标题、按钮文字、按钮链接和图片需要运营修改。",
+      "expected_output": "读取两个 node-id 后只产出待评审 PRD。PRD 分开记录用户理解和 Agent 理解，定义中间宽度响应式规则，区分运营配置与代码固定项，列出冲突和 Given/When/Then 验收；不得创建技术设计、代码或写入 Draft。",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "PRD v0.2 已通过，可以继续。",
+      "expected_output": "确认批准对象后进入技术设计，检查目标仓库现状并输出待评审技术设计，包含需求追踪、文件计划、schema、布局、性能、可访问性、测试和 Draft 方案；不得修改代码。若目标仓库或 Draft 信息缺失，只询问阻塞信息。",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "技术设计 v0.3 通过，授权开发并更新专用 Draft theme NeoPace Component 04。开发后移动端图片裁切和 Figma 不一致，桌面端一致。",
+      "expected_output": "仅在批准范围内开发和更新确认的非 Live Draft。完成全量扫描后创建带 ID、严重级别、期望/实际、影响及 Figma/实现截图的差异清单，停在 VISUAL_DECISION_PENDING；不得自行修复裁切，也不得声称最终完成。",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "视觉差异都已处理，最终效果我确认没问题，提交代码吧。",
+      "expected_output": "先给出组件、批准基线、Draft 名称/ID/preview、桌面与移动设计/实现主截图、验证结果和代码状态。最终验收确认后，将“提交代码”识别为范围不明确，只分别询问 commit、push、创建 MR 的授权；不得自动执行 Git 操作、合并或发布 Live。",
+      "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "这个 Hero 的背景图只有一张 16:9 桌面图，设计稿给了 1440x900 桌面和 375x812 手机。要求背景铺满，不希望人物被裁掉，标题一直放在人物左侧。请整理 PRD。",
+      "expected_output": "不得只写 background-size: cover。必须指出铺满、人物不裁切、标题固定在人物左侧在部分屏幕比例上可能互相冲突；给出 cover、contain、独立移动素材三种取舍，定义焦点、可裁切区、文字安全区、容器高度以及标准桌面、超宽、矮屏、平板横竖、窄屏和高长宽比手机方案，并把无法同时满足的要求列为待用户确认，停在 PRD_REVIEW_PENDING。",
+      "files": []
+    },
+    {
+      "id": 6,
+      "prompt": "组件已经开发完成。Theme Editor 里有标题文字、标题大小、标题颜色、显示按钮、按钮文字、按钮链接、顶部间距、底部间距、图片焦点和手机端单独图片。请准备给运营的配置文档。",
+      "expected_output": "生成独立运营配置说明：按 Theme Editor 顺序覆盖全部字段；标题、大小、颜色、按钮和图片直接展示；顶部/底部留白、图片主体位置和设备专属设置放入默认收起的进阶区域。使用运营语言解释作用、推荐值、变大变小或留空后的效果、条件显示、桌面手机差异、预览保存和 Draft 非 Live 边界，不以 schema、Liquid、CSS、padding、object-position 等技术术语作为主要说明。",
+      "files": []
+    }
+  ]
+}

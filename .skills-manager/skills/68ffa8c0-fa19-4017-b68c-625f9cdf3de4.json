@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "68ffa8c0-fa19-4017-b68c-625f9cdf3de4",
+  "path": "api-synthetic-monitoring",
+  "path_key": "api-synthetic-monitoring",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/api-synthetic-monitoring",
+    "branch": null
+  }
+}

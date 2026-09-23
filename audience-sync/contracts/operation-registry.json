@@ -1,0 +1,149 @@
+{
+  "contract_revision": "audience-sync-v2",
+  "contract_state": "published_operations",
+  "operations": [
+    {
+      "name": "create_audience",
+      "method": "POST",
+      "path": "/api/platform/v2/audience-sync/audiences",
+      "path_parameters": [],
+      "query_parameters": [],
+      "required_query_parameters": [],
+      "required_body": [
+        "audience_filter",
+        "idempotency_key",
+        "name",
+        "product_scope"
+      ],
+      "optional_body": []
+    },
+    {
+      "name": "search_audiences",
+      "method": "POST",
+      "path": "/api/platform/v2/audience-sync/audiences/search",
+      "path_parameters": [],
+      "query_parameters": [],
+      "required_query_parameters": [],
+      "required_body": [
+        "product_scope"
+      ],
+      "optional_body": [
+        "limit",
+        "offset",
+        "query"
+      ]
+    },
+    {
+      "name": "save_audience",
+      "method": "PUT",
+      "path": "/api/platform/v2/audience-sync/audiences/{audience_id}",
+      "path_parameters": [
+        "audience_id"
+      ],
+      "query_parameters": [],
+      "required_query_parameters": [],
+      "required_body": [
+        "audience_filter",
+        "expected_audience_filter_hash",
+        "idempotency_key",
+        "name",
+        "product_scope"
+      ],
+      "optional_body": []
+    },
+    {
+      "name": "materialize_audience",
+      "method": "POST",
+      "path": "/api/platform/v2/audience-sync/audiences/{audience_id}/materializations",
+      "path_parameters": [
+        "audience_id"
+      ],
+      "query_parameters": [],
+      "required_query_parameters": [],
+      "required_body": [
+        "expected_audience_filter_hash",
+        "idempotency_key",
+        "product_scope"
+      ],
+      "optional_body": []
+    },
+    {
+      "name": "preview_audience",
+      "method": "POST",
+      "path": "/api/platform/v2/audience-sync/audiences/{audience_id}/preview",
+      "path_parameters": [
+        "audience_id"
+      ],
+      "query_parameters": [],
+      "required_query_parameters": [],
+      "required_body": [
+        "product_scope"
+      ],
+      "optional_body": []
+    },
+    {
+      "name": "get_sync_capabilities",
+      "method": "GET",
+      "path": "/api/platform/v2/audience-sync/capabilities",
+      "path_parameters": [],
+      "query_parameters": [
+        "product_scope"
+      ],
+      "required_query_parameters": [
+        "product_scope"
+      ],
+      "required_body": [],
+      "optional_body": []
+    },
+    {
+      "name": "get_materialization",
+      "method": "GET",
+      "path": "/api/platform/v2/audience-sync/materializations/{materialization_request_id}",
+      "path_parameters": [
+        "materialization_request_id"
+      ],
+      "query_parameters": [
+        "product_scope"
+      ],
+      "required_query_parameters": [
+        "product_scope"
+      ],
+      "required_body": [],
+      "optional_body": []
+    },
+    {
+      "name": "sync_audience",
+      "method": "POST",
+      "path": "/api/platform/v2/audience-sync/syncs",
+      "path_parameters": [],
+      "query_parameters": [],
+      "required_query_parameters": [],
+      "required_body": [
+        "audience_id",
+        "destination_id",
+        "expected_member_count",
+        "idempotency_key",
+        "materialization_run_id",
+        "product_scope"
+      ],
+      "optional_body": []
+    },
+    {
+      "name": "get_audience_sync",
+      "method": "GET",
+      "path": "/api/platform/v2/audience-sync/syncs/{sync_request_id}",
+      "path_parameters": [
+        "sync_request_id"
+      ],
+      "query_parameters": [
+        "product_scope"
+      ],
+      "required_query_parameters": [
+        "product_scope"
+      ],
+      "required_body": [],
+      "optional_body": []
+    }
+  ],
+  "schema_version": 2
+}

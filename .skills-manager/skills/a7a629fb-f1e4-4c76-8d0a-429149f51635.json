@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "a7a629fb-f1e4-4c76-8d0a-429149f51635",
+  "path": "figma-i18n",
+  "path_key": "figma-i18n",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/figma-i18n",
+    "branch": null
+  }
+}

@@ -1,0 +1,28 @@
+# clickhouse-kustomization-overlay.yaml.tmpl
+#
+# Per-target overlay for the fixed ClickHouse StatefulSet base. This is separate
+# from the generic app overlay because its image name is clickhouse-server rather
+# than the app name, and it owns the generator-backed password chain.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: {{namespace}}
+
+resources:
+  - ../../base
+  - clickhouse-password-generator.yaml
+  - clickhouse-password-external-secret.yaml
+
+images:
+  - name: clickhouse-server
+    newName: {{harbor_image_path}}
+    newTag: "{{image_tag}}"
+
+patches:
+  - target:
+      kind: StatefulSet
+    patch: |-
+      - op: add
+        path: /spec/template/metadata/labels/env
+        value: {{env}}

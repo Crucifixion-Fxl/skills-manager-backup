@@ -1,0 +1,84 @@
+# cluster-access/clusters.yaml
+#
+# 开发者 staging kubectl 访问事实表。
+#
+# 本文件是 skill 查表数据，不是基础设施 source of truth。
+# kubeconfig 渲染以 DEV/addx-cluster-login clusters/*.yaml 为准。
+
+schema_version: 1
+
+tool:
+  repo: https://gitlab.addx.ai/DEV/addx-cluster-login
+  install_command: 'bash "$HOME/Project/A4x/addx-cluster-login/install.sh"'
+  install_method: authenticated-git-checkout
+  minimum_kubelogin_version: "1.32.0"
+  pkce_method: S256
+  auto_open_browser: false
+  source_revision: f62f608f998dfd88dc17de35ea26d92da1f7b4c7
+  list_command: "addx-cluster-login --list"
+  login_command_template: "addx-cluster-login <cluster>"
+
+auth_contract:
+  scope: staging-only
+  identity_provider: Casdoor -> Feishu SSO
+  client_mode: PKCE public client
+  username_claim: email
+  groups_claim: owner
+  required_group: a4x-org
+  token_ttl: 8h
+  refresh_ttl: 7d
+
+rbac_contract:
+  namespace_pattern: "staging-*"
+  default_namespaces_are_smoke_targets_only: true
+  allowed_namespace_verbs: [get, list, watch]
+  allowed_debug_verbs: [exec, logs, port-forward, attach]
+  forbidden:
+    - get secrets
+    - create/update/patch/delete business resources
+    - delete pods
+    - access non-staging namespaces
+    - access cluster-scoped resources
+    - modify RBAC
+
+clusters:
+  us-staging:
+    status: enabled
+    cloud: aws
+    aws_account_id: "390709477306"
+    aws_region: us-east-1
+    eks_cluster_name: us-eks-staging
+    default_namespace: staging-us
+    wrapper_config: clusters/us-staging.yaml
+    onboarding_date: "2026-05-20"
+    kubectl_smoke: "kubectl get pods -n staging-us"
+
+  eu-staging:
+    status: enabled
+    cloud: aws
+    aws_account_id: "390709477306"
+    aws_region: eu-central-1
+    eks_cluster_name: eu-eks-staging
+    default_namespace: staging-eu
+    wrapper_config: clusters/eu-staging.yaml
+    onboarding_date: "2026-05-21"
+    kubectl_smoke: "kubectl get pods -n staging-eu"
+
+  cn-staging:
+    status: enabled
+    cloud: aws
+    aws_account_id: "801447536674"
+    aws_region: cn-north-1
+    eks_cluster_name: cn-eks-staging
+    default_namespace: staging-cn
+    wrapper_config: clusters/cn-staging.yaml
+    onboarding_date: "2026-05-23"
+    kubectl_smoke: "kubectl get pods -n staging-cn"
+
+unsupported:
+  prod:
+    reason: prod kubectl 走 IAM/admin path，不走开发者 OIDC 自助
+  write_access:
+    reason: 部署变更必须走 GitOps MR 和 ArgoCD
+  secrets_read:
+    reason: 开发者应使用批准的 Vault/UI 路径，不读取 Kubernetes Secret

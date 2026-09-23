@@ -1,0 +1,26 @@
+modes:
+  instance:
+    who_can_use: Any project with instance runners enabled and matching tag.
+    security_boundary: false
+    allowed_sensitivity:
+      - L1
+    notes:
+      - Runner tag is only a scheduling selector.
+      - Use only when cache contents are safe to share.
+  group:
+    who_can_use: Projects inside the registered GitLab group.
+    security_boundary: group boundary
+    allowed_sensitivity:
+      - L1
+      - L2
+    notes:
+      - Acceptable for L2 only when the whole group is trusted.
+  project:
+    who_can_use: One GitLab project.
+    security_boundary: project boundary
+    allowed_sensitivity:
+      - L1
+      - L2
+    notes:
+      - Preferred for hard isolation.
+      - Requires dedicated registration token and platform/SRE support.

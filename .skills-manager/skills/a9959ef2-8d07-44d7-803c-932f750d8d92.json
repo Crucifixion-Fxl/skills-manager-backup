@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "a9959ef2-8d07-44d7-803c-932f750d8d92",
+  "path": "skill-contribution",
+  "path_key": "skill-contribution",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/skill-contribution",
+    "branch": null
+  }
+}

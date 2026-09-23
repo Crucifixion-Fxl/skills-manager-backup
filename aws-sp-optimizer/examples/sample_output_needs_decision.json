@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-04-22T04:11:04.292297+00:00",
+  "script_version": "0.1.0",
+  "elapsed_seconds": 52.38,
+  "status": "needs_human_decision",
+  "context": {
+    "org_alias": "a4x-us",
+    "account_id": "002497567426"
+  },
+  "failure_dossier": {
+    "reason_summary": "no_viable_window",
+    "rejection_summary": {
+      "severe_decline": {
+        "count": 63,
+        "samples_omitted_from_output": true
+      },
+      "incomplete_data": {
+        "count": 12,
+        "samples_omitted_from_output": true
+      }
+    }
+  },
+  "risks": [],
+  "warnings": []
+}

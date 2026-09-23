@@ -1,0 +1,26 @@
+{
+  "terms": {
+    "OnDemand": {
+      "EC2SKU_C5_XLARGE_LINUX": {
+        "EC2SKU_C5_XLARGE_LINUX.JRTCKXETXF": {
+          "priceDimensions": {
+            "EC2SKU_C5_XLARGE_LINUX.JRTCKXETXF.6YS6EN2CT7": {
+              "pricePerUnit": {"USD": "0.1700"},
+              "unit": "Hrs"
+            }
+          }
+        }
+      }
+    }
+  },
+  "products": {
+    "EC2SKU_C5_XLARGE_LINUX": {
+      "attributes": {
+        "instanceType": "c5.xlarge",
+        "operation": "RunInstances",
+        "operatingSystem": "Linux",
+        "tenancy": "Shared"
+      }
+    }
+  }
+}

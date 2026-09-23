@@ -1,0 +1,24 @@
+# PersistentVolumeClaim for {{project_name}} CI {{cache_purpose}} cache.
+#
+# Slots:
+#   project_name, cache_purpose, pvc_name, runner_namespace
+#   runner_release_name, pvc_size, rwx_storage_class
+#
+# Access mode MUST be ReadWriteMany because GitLab Kubernetes runner jobs may
+# land on different nodes concurrently.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{pvc_name}}
+  namespace: {{runner_namespace}}
+  labels:
+    app.kubernetes.io/name: {{runner_release_name}}
+    app.kubernetes.io/part-of: gitlab-runner
+    app.kubernetes.io/managed-by: gitops
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: {{pvc_size}}
+  storageClassName: {{rwx_storage_class}}

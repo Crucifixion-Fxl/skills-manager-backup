@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "9206a777-f29a-4ccf-9e7c-d6d6d39c1c9f",
+  "path": "dev-workflow",
+  "path_key": "dev-workflow",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/dev-workflow",
+    "branch": null
+  }
+}

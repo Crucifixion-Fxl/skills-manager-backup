@@ -1,0 +1,62 @@
+{
+  "body": [
+    {
+      "created_at": "2026-09-13T08:21:22.564Z",
+      "id": 3,
+      "iid": 3,
+      "name": null,
+      "project_id": 2,
+      "ref": "feature/1-recording-0913082019",
+      "sha": "33a2250fbe88eda7ee825409bc1d43b7f7a5af7a",
+      "source": "external",
+      "status": "success",
+      "updated_at": "2026-09-13T08:21:23.511Z",
+      "web_url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot/-/pipelines/3"
+    },
+    {
+      "created_at": "2026-09-13T08:21:20.743Z",
+      "id": 1,
+      "iid": 1,
+      "name": null,
+      "project_id": 2,
+      "ref": "refs/merge-requests/1/head",
+      "sha": "33a2250fbe88eda7ee825409bc1d43b7f7a5af7a",
+      "source": "merge_request_event",
+      "status": "failed",
+      "updated_at": "2026-09-13T08:22:16.407Z",
+      "web_url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot/-/pipelines/1"
+    },
+    {
+      "created_at": "2026-09-13T08:21:21.795Z",
+      "id": 2,
+      "iid": 2,
+      "name": null,
+      "project_id": 2,
+      "ref": "main",
+      "sha": "07a9dd7e9e1991a0be385aa10f368f2d4dea0957",
+      "source": "external",
+      "status": "failed",
+      "updated_at": "2026-09-13T08:28:28.531Z",
+      "web_url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot/-/pipelines/2"
+    }
+  ],
+  "headers": {
+    "content-type": "application/json",
+    "x-next-page": "",
+    "x-page": "1",
+    "x-per-page": "100",
+    "x-total": "3",
+    "x-total-pages": "1"
+  },
+  "request": {
+    "as": "bot",
+    "method": "GET",
+    "path": "projects/2/pipelines",
+    "query": {
+      "order_by": "updated_at",
+      "sort": "asc",
+      "updated_after": "2026-09-13T08:20:19Z"
+    }
+  },
+  "status": 200
+}

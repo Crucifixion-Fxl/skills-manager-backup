@@ -1,0 +1,78 @@
+// =============================================================================
+// Android 埋点注入模板 — tracking-lifecycle Step 5
+// 占位符: {{page}}, {{module}}, {{component}}, {{point}}, {{params}}
+// =============================================================================
+
+// --- import (注入到文件顶部) ---
+import com.a4x.tracker_core.Tracker
+import com.a4x.tracker_core.TrackNode
+import com.a4x.tracker_core.Constants.KEY_SPM_B
+import com.a4x.tracker_core.Constants.KEY_SPM_C
+import com.a4x.tracker_core.Constants.KEY_SPM_D
+import com.a4x.tracker_core.SpmEventType
+import com.a4x.tracker_core.postTrack
+import com.a4x.tracker_core.postSelfEventTrack
+
+// =============================================================================
+// PV — 页面浏览
+// 注入位置: Activity.onCreate() 或 Fragment.onViewCreated()
+// =============================================================================
+override fun onCreate(savedInstanceState: Bundle?) {
+    super.onCreate(savedInstanceState)
+    setPageTrackNode(TrackNode(KEY_SPM_B to "{{page}}"))
+    View(this).postTrack(SpmEventType.PV, mapOf(
+        KEY_SPM_B to "{{page}}",
+        {{params}}
+    ))
+}
+
+// =============================================================================
+// CLK — 点击事件
+// 注入位置: View.setOnClickListener / onClick 回调，放在业务逻辑之前
+// =============================================================================
+{{view}}.setOnClickListener {
+    it.postTrack(SpmEventType.CLK, mapOf(
+        KEY_SPM_B to "{{page}}",
+        KEY_SPM_C to "{{module}}",
+        KEY_SPM_D to "{{component}}",
+        {{params}}
+    ))
+    // ... 业务逻辑
+}
+
+// =============================================================================
+// EXP — 曝光事件（RecyclerView 列表项）
+// 注入位置: Adapter.onBindViewHolder() 或 convert()，使用 View.Tag 防重
+// =============================================================================
+override fun onBindViewHolder(holder: ViewHolder, position: Int) {
+    // ... 数据绑定
+
+    val trackStatus = holder.itemView.getTag(R.id.track_posted)
+    if (trackStatus != true) {
+        holder.itemView.setTag(R.id.track_posted, true)
+        Tracker.postTrack(holder.itemView, SpmEventType.EXP, mapOf(
+            KEY_SPM_B to "{{page}}",
+            KEY_SPM_C to "{{module}}",
+            KEY_SPM_D to "{{component}}",
+            {{params}}
+        ))
+    }
+}
+
+// =============================================================================
+// EXP — 曝光事件（静态 View）
+// 注入位置: View 初始化完成后（如 onCreate / onViewCreated）
+// =============================================================================
+Tracker.postTrack({{view}}, SpmEventType.EXP, mapOf(
+    KEY_SPM_B to "{{page}}",
+    KEY_SPM_C to "{{module}}",
+    {{params}}
+))
+
+// =============================================================================
+// SELF_EVENT — 自定义事件
+// 注入位置: 业务逻辑触发点
+// =============================================================================
+postSelfEventTrack("{{point}}", hashMapOf(
+    {{params}}
+))

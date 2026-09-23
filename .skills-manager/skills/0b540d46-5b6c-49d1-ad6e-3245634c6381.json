@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "0b540d46-5b6c-49d1-ad6e-3245634c6381",
+  "path": "gitlab-instance-runners",
+  "path_key": "gitlab-instance-runners",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/gitlab-instance-runners",
+    "branch": null
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "7ac62abc-0f09-4c71-a44d-30b27cd1401e",
+  "path": "argocd",
+  "path_key": "argocd",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/argocd",
+    "branch": null
+  }
+}

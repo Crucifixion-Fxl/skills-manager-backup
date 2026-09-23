@@ -1,0 +1,15 @@
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMPodScrape
+metadata:
+  name: {{scrape_name}}
+  labels:
+    app.kubernetes.io/part-of: victoria-metrics
+    app.kubernetes.io/name: {{app}}
+spec:
+  selector:
+    matchLabels:
+      {{selector_label_key}}: {{selector_label_value}}
+  podMetricsEndpoints:
+    - port: {{metrics_port}}
+      path: {{metrics_path}}
+      interval: {{scrape_interval}}

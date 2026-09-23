@@ -1,0 +1,17 @@
+schema_version: 1
+
+orgs:
+  a4x-us:
+    description: "A4X US production / consolidated billing payer"
+    profile: aws-002497567426-us-tech-service
+    payer_account_id: "002497567426"
+    org_id: o-4bw6d7ou28
+    cur_database: cur-db
+    cur_table: a4x_report
+    athena_output: s3://a4x-cur-query/sp-optimizer/
+    athena_workgroup: primary
+    primary_region: us-east-1
+    defaults:
+      window_days: 90
+      window_end: today
+      prefer: balanced

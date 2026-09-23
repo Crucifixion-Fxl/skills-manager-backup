@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "d89c9429-d5c9-45dd-b1ce-d19af85fdfbe",
+  "path": "root-cause-analysis",
+  "path_key": "root-cause-analysis",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/root-cause-analysis",
+    "branch": null
+  }
+}

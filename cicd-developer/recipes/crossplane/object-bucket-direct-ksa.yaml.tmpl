@@ -1,0 +1,17 @@
+# DirectKSA is the recommended ObjectBucket runtime identity. Keep this
+# ServiceAccount in the same existing Argo CD Application as the ObjectBucket
+# and workload. Do not add iam.gke.io/gcp-service-account or a tracking-id.
+#
+# Required slots:
+#   {{service_account_name}}  app-owned KSA DNS label
+#   {{namespace}}             approved existing application namespace
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{service_account_name}}
+  namespace: {{namespace}}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-3"
+    iam.gke.io/return-principal-id-as-email: "true"
+automountServiceAccountToken: false

@@ -1,0 +1,30 @@
+# ObjectBucket is the only developer-facing GCS declaration. Platform-owned
+# Configuration packages choose the project, location, generated bucket name,
+# ProviderConfig and cloud security controls.
+#
+# Required slots:
+#   {{logical_name}}          DNS label, 1-18 characters
+#   {{namespace}}             existing application namespace
+#   {{app}}                   owning application label
+#   {{service_account_name}}  existing KSA used by the workload
+#   {{identity_mode}}         DirectKSA | GSAImpersonation
+#   {{access_mode}}           ReadOnly | ReadWrite
+
+apiVersion: platform.addx.io/v1alpha1
+kind: ObjectBucket
+metadata:
+  name: {{logical_name}}
+  namespace: {{namespace}}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+    argocd.argoproj.io/sync-options: Prune=confirm,Delete=confirm
+  labels:
+    platform.addx.io/app: {{app}}
+spec:
+  profile: standard
+  residency: local
+  protection: Retained
+  access:
+    serviceAccountName: {{service_account_name}}
+    identityMode: {{identity_mode}}
+    mode: {{access_mode}}

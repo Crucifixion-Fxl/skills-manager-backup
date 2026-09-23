@@ -1,0 +1,7 @@
+[submodule "lib-common"]
+	path = vendor/lib-common
+	url = git@gitlab.addx.ai:platform/lib-common.git
+
+[submodule "ui-kit"]
+	path = vendor/ui-kit
+	url = https://gitlab.addx.ai/frontend/ui-kit.git

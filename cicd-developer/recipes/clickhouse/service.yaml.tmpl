@@ -1,0 +1,41 @@
+# clickhouse-service.yaml.tmpl
+#
+# ClickHouse Service —— ClusterIP（普通调用）+ Headless（StatefulSet 稳定 DNS）。
+# 两个一起放在一个文件用 `---` 分。
+#
+# 必填槽位：
+#   {{app}}        匹配 statefulset.yaml 里的 selector（默认 `clickhouse`）
+#   {{namespace}}  ns
+#
+# ⚠️ ClusterIP only —— ClickHouse native (9000) 和 HTTP (8123) 都无 auth 层，
+# **绝不** 改成 LoadBalancer / NodePort / 公网 Ingress。
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{app}}
+  namespace: {{namespace}}
+  labels:
+    app: {{app}}
+spec:
+  type: ClusterIP
+  selector:
+    app: {{app}}
+  ports:
+    - { name: native, port: 9000, targetPort: 9000 }
+    - { name: http,   port: 8123, targetPort: 8123 }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{app}}-headless        # statefulset.yaml 的 serviceName 必须指向这个
+  namespace: {{namespace}}
+  labels:
+    app: {{app}}
+spec:
+  clusterIP: None
+  selector:
+    app: {{app}}
+  ports:
+    - { name: native, port: 9000, targetPort: 9000 }
+    - { name: http,   port: 8123, targetPort: 8123 }

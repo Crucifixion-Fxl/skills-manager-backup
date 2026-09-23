@@ -1,0 +1,53 @@
+# cost-tiering/redis.yaml
+#
+# AWS ElastiCache Redis 的成本分档。
+#
+# 消费方：workflows/add-redis.md
+#
+# Schema 同 rds.yaml；v2 m.upbound.io 用 managementPolicies 表达 Delete /
+# Orphan 语义，不使用 spec.deletionPolicy。
+
+notes: |
+  prod **必须** 用 ReplicationGroup kind（Cluster kind 不支持副本）。
+  Redis 虽然是"坏了可重建"的缓存，但 prod 重建期间会 cache miss 全部打到
+  backing DB；如果 app 没做 graceful fallback，必须多副本 HA。
+  **默认引擎 = Valkey（不是 Redis OSS）**，默认 engineVersion `9.1`（app-owned CR 由
+  recipe 模板硬编码 engine:valkey / engineVersion:"9.1"）。2026-09-15 已验证
+  ElastiCache us-east-1 与 cn-north-1 均提供 valkey 9.1（family valkey9，实际 9.1.0），
+  且集群 elasticache.aws.m.upbound.io/v1beta1 ReplicationGroup/Cluster CRD 的 engine
+  字段 schema 明确接受 redis | valkey。用其它引擎/版本需 cd-requirements.md 记录理由。
+  **nodeType 规格约定**：默认起步 Graviton t4g 家族（burstable，低流量默认）；高资源
+  占用（热点 key / 大内存 / 高吞吐）改用 r8g / m8g 家族——**由用户在 cd-requirements.md
+  显式指定**，本表不自动升档。
+  自 2026-05-26 起，新部署应用 staging/tech-service 不按本表自建 app-owned Redis，改走 kind:Database 自助。
+  ✅ 共享 Redis 自助 2026-06-03 已上线 6 集群（engine:redis,function-go-templating + provider-kubernetes）：
+  写 kind:Database{app,env,engine:redis}，Composition 把共享 ElastiCache endpoint 推 vault
+  secret/{env}/redis/application/{app}/connection（host/port），app 走 ExternalSecret 读，不再 Ops Todo、
+  不再 configmap 硬编码 endpoint。注:共享实例**无 auth**(无 authToken/TLS/RBAC),Composition 只发 endpoint、
+  **无 per-app 凭据、非真隔离**(真隔离需 RBAC 模式,另议);无 size 档位。Legacy/平台自身可继续用本表 staging tier;
+  生产专用独立实例仍用本表 prod tier（ReplicationGroup + HA）。
+
+immutable: []
+
+dev: &redis_min
+  kind: Cluster                       # 或 ReplicationGroup；最小配置验字段名即可
+  nodeType: cache.t4g.micro           # Graviton burstable 起步（默认 t4g 家族）
+  numNodes: 1
+  automaticFailoverEnabled: false
+  multiAZ: false
+  snapshotRetentionLimit_days: 0
+  atRestEncryption: false
+  managementPolicies: ["*"]             # 含 Delete；非 prod 可随 CR 清理
+
+staging: *redis_min
+pre: *redis_min
+
+prod:
+  kind: ReplicationGroup              # 强制
+  nodeType: cache.t4g.small           # 低流量默认（t4g 家族）；高占用改 r8g/m8g，由 cd-requirements 指定
+  numNodes: 2                         # 1 primary + 1 replica 起步
+  automaticFailoverEnabled: true
+  multiAZ: true
+  snapshotRetentionLimit_days: 7
+  atRestEncryption: true
+  managementPolicies: ["Observe", "Create", "Update", "LateInitialize"]

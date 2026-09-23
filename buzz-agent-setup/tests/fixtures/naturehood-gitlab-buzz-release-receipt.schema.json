@@ -1,0 +1,609 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Naturehood GitLab Buzz timer-gated L4 receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "receipt_kind",
+    "snapshot_only",
+    "contains_secret",
+    "recorded_at_utc",
+    "release",
+    "runtime",
+    "naturehood_eval",
+    "cutover",
+    "verification",
+    "protocol_evidence"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 3
+    },
+    "receipt_kind": {
+      "const": "naturehood_gitlab_buzz_release_l4"
+    },
+    "snapshot_only": {
+      "const": false
+    },
+    "contains_secret": {
+      "const": false
+    },
+    "recorded_at_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "release": {
+      "$ref": "#/$defs/release"
+    },
+    "runtime": {
+      "$ref": "#/$defs/runtime"
+    },
+    "naturehood_eval": {
+      "$ref": "#/$defs/naturehood_eval"
+    },
+    "cutover": {
+      "$ref": "#/$defs/cutover"
+    },
+    "verification": {
+      "$ref": "#/$defs/verification"
+    },
+    "protocol_evidence": {
+      "$ref": "#/$defs/protocol_evidence"
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "git_revision": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "release": {
+      "type": "object",
+      "required": [
+        "skills_revision",
+        "buzz_deploy_revision",
+        "installed_plugin_revision",
+        "release_dir",
+        "sha256"
+      ],
+      "properties": {
+        "skills_revision": {
+          "$ref": "#/$defs/git_revision"
+        },
+        "buzz_deploy_revision": {
+          "$ref": "#/$defs/git_revision"
+        },
+        "installed_plugin_revision": {
+          "$ref": "#/$defs/git_revision"
+        },
+        "release_dir": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "object",
+          "required": [
+            "gitlab_buzz_sync_timer.py",
+            "gitlab_buzz_desk_runner.py",
+            "gitlab_buzz_summary_publish.py",
+            "gitlab_buzz_sync.py",
+            "gitlab_buzz_route_reply.py",
+            "buzz_responsible_mentions.py",
+            "buzz_send_with_responsible_mentions.py",
+            "runner_manifest",
+            "timer_unit",
+            "service_unit",
+            "launcher",
+            "buzz_cli"
+          ]
+        }
+      }
+    },
+    "agent": {
+      "type": "object",
+      "required": [
+        "active",
+        "main_pid",
+        "workers",
+        "started_at_utc",
+        "prompt_sha256",
+        "plugin_revision"
+      ]
+    },
+    "runtime": {
+      "type": "object",
+      "required": [
+        "channel_id",
+        "agents",
+        "desk"
+      ],
+      "properties": {
+        "channel_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "agents": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "nh-desk",
+            "nh-feature",
+            "nh-bug",
+            "nh-debt",
+            "nh-dev",
+            "nh-bi",
+            "nh-sre",
+            "nh-qa"
+          ],
+          "properties": {
+            "nh-desk": {
+              "$ref": "#/$defs/agent"
+            },
+            "nh-feature": {
+              "$ref": "#/$defs/agent"
+            },
+            "nh-bug": {
+              "$ref": "#/$defs/agent"
+            },
+            "nh-debt": {
+              "$ref": "#/$defs/agent"
+            },
+            "nh-dev": {
+              "$ref": "#/$defs/agent"
+            },
+            "nh-bi": {
+              "$ref": "#/$defs/agent"
+            },
+            "nh-sre": {
+              "$ref": "#/$defs/agent"
+            },
+            "nh-qa": {
+              "$ref": "#/$defs/agent"
+            }
+          }
+        },
+        "desk": {
+          "type": "object",
+          "required": [
+            "process_started_after_prompt",
+            "prompt_sync_command_count"
+          ],
+          "properties": {
+            "prompt_sync_command_count": {
+              "const": 0
+            }
+          }
+        }
+      }
+    },
+    "naturehood_eval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "started_at_utc",
+        "completed_at_utc",
+        "timer",
+        "runner",
+        "output_oracle",
+        "failure_oracle",
+        "trigger_gate"
+      ],
+      "properties": {
+        "started_at_utc": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "completed_at_utc": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "timer": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "systemd_scope",
+            "timer_unit",
+            "service_unit",
+            "on_unit_active_sec",
+            "persistent",
+            "automatic",
+            "launcher",
+            "env_whitelist",
+            "gitlab_credential_env_count",
+            "inherited_non_whitelisted_env_count",
+            "manifest_env",
+            "manifest_path_pinned",
+            "manifest_sha256",
+            "exec_start",
+            "entrypoint_argument_count",
+            "llm_in_sync_path",
+            "acp_session_count",
+            "public_tick_message_count",
+            "observed_at_utc"
+          ],
+          "properties": {
+            "systemd_scope": {
+              "const": "user"
+            },
+            "timer_unit": {
+              "type": "string",
+              "pattern": "^gitlab-buzz-sync-[a-z0-9][a-z0-9-]*\\.timer$"
+            },
+            "service_unit": {
+              "type": "string",
+              "pattern": "^gitlab-buzz-sync-[a-z0-9][a-z0-9-]*\\.service$"
+            },
+            "on_unit_active_sec": {
+              "const": 300
+            },
+            "persistent": {
+              "const": true
+            },
+            "automatic": {
+              "const": false
+            },
+            "launcher": {
+              "const": "env-i-whitelist"
+            },
+            "env_whitelist": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "enum": [
+                  "BUZZ_AUTH_TAG",
+                  "BUZZ_DESK_RUNNER_MANIFEST",
+                  "BUZZ_PRIVATE_KEY",
+                  "BUZZ_RELAY_URL",
+                  "HOME",
+                  "LANG",
+                  "LOGNAME",
+                  "PATH",
+                  "USER"
+                ]
+              }
+            },
+            "gitlab_credential_env_count": {
+              "const": 1
+            },
+            "inherited_non_whitelisted_env_count": {
+              "const": 0
+            },
+            "manifest_env": {
+              "const": "BUZZ_DESK_RUNNER_MANIFEST"
+            },
+            "manifest_path_pinned": {
+              "const": true
+            },
+            "manifest_sha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "exec_start": {
+              "type": "string",
+              "pattern": "^/usr/bin/python3 /.+/scripts/gitlab_buzz_sync_timer\\.py$"
+            },
+            "entrypoint_argument_count": {
+              "const": 0
+            },
+            "llm_in_sync_path": {
+              "const": false
+            },
+            "acp_session_count": {
+              "const": 0
+            },
+            "public_tick_message_count": {
+              "const": 0
+            },
+            "observed_at_utc": {
+              "$ref": "#/$defs/timestamp"
+            }
+          }
+        },
+        "runner": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "started",
+            "exit_code",
+            "business_argument_count",
+            "status"
+          ],
+          "properties": {
+            "started": {
+              "const": true
+            },
+            "exit_code": {
+              "const": 0
+            },
+            "business_argument_count": {
+              "const": 0
+            },
+            "status": {
+              "enum": [
+                "ok",
+                "degraded"
+              ]
+            }
+          }
+        },
+        "output_oracle": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "machine_digest_count",
+            "readable_summary_count",
+            "readable_summary_event_id",
+            "summary_source",
+            "llm_generated_summary_count",
+            "summary_publisher_gates_passed",
+            "public_summary_internal_id_count",
+            "duplicate_count",
+            "summary_fact_consistency_verified",
+            "no_new_event_channel_message_count",
+            "existing_issue_thread_reply_count",
+            "existing_mr_thread_reply_count",
+            "wrong_thread_reply_count",
+            "unbound_issue_root_count",
+            "unbound_issue_binding_count",
+            "unbound_mr_root_count",
+            "unbound_mr_binding_count",
+            "top_level_push_aggregate_count"
+          ],
+          "properties": {
+            "machine_digest_count": {
+              "const": 0
+            },
+            "readable_summary_count": {
+              "const": 1
+            },
+            "readable_summary_event_id": {
+              "$ref": "#/$defs/sha256"
+            },
+            "summary_source": {
+              "const": "template"
+            },
+            "llm_generated_summary_count": {
+              "const": 0
+            },
+            "summary_publisher_gates_passed": {
+              "const": true
+            },
+            "public_summary_internal_id_count": {
+              "const": 0
+            },
+            "duplicate_count": {
+              "const": 0
+            },
+            "summary_fact_consistency_verified": {
+              "const": true
+            },
+            "no_new_event_channel_message_count": {
+              "const": 0
+            },
+            "existing_issue_thread_reply_count": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "existing_mr_thread_reply_count": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "wrong_thread_reply_count": {
+              "const": 0
+            },
+            "unbound_issue_root_count": {
+              "const": 1
+            },
+            "unbound_issue_binding_count": {
+              "const": 1
+            },
+            "unbound_mr_root_count": {
+              "const": 1
+            },
+            "unbound_mr_binding_count": {
+              "const": 1
+            },
+            "top_level_push_aggregate_count": {
+              "const": 1
+            }
+          }
+        },
+        "failure_oracle": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "injected_failure_count",
+            "business_channel_message_count",
+            "timer_exit_nonzero",
+            "journal_failure_record_count",
+            "journal_failure_record_redacted"
+          ],
+          "properties": {
+            "injected_failure_count": {
+              "const": 1
+            },
+            "business_channel_message_count": {
+              "const": 0
+            },
+            "timer_exit_nonzero": {
+              "const": true
+            },
+            "journal_failure_record_count": {
+              "const": 1
+            },
+            "journal_failure_record_redacted": {
+              "const": true
+            }
+          }
+        },
+        "trigger_gate": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "public_workflow_schedule_decommissioned",
+            "public_workflow_schedule_enabled",
+            "desk_heartbeat_enabled",
+            "evaluation_passed",
+            "automatic_timer_enabled_after_eval",
+            "automatic_timer_enabled_at_utc"
+          ],
+          "properties": {
+            "public_workflow_schedule_decommissioned": {
+              "const": true
+            },
+            "public_workflow_schedule_enabled": {
+              "const": false
+            },
+            "desk_heartbeat_enabled": {
+              "const": false
+            },
+            "evaluation_passed": {
+              "const": true
+            },
+            "automatic_timer_enabled_after_eval": {
+              "const": true
+            },
+            "automatic_timer_enabled_at_utc": {
+              "$ref": "#/$defs/timestamp"
+            }
+          }
+        }
+      }
+    },
+    "cutover": {
+      "type": "object",
+      "required": [
+        "old_notifier_timer_active",
+        "old_notifier_naturehood_source_enabled",
+        "old_notifier_drain",
+        "public_sync_workflow_decommissioned",
+        "public_sync_workflow_enabled",
+        "public_visible_tick_message_count",
+        "sync_timer_enabled",
+        "sync_timer_interval_seconds",
+        "sync_timer_unit_sha256",
+        "desk_heartbeat_enabled",
+        "route_mode",
+        "http_fallback_enabled"
+      ],
+      "properties": {
+        "old_notifier_timer_active": {
+          "const": true
+        },
+        "old_notifier_naturehood_source_enabled": {
+          "const": false
+        },
+        "old_notifier_drain": {
+          "type": "object",
+          "required": [
+            "full_cycle_waited",
+            "last_naturehood_write_at_utc"
+          ],
+          "properties": {
+            "full_cycle_waited": {
+              "const": true
+            },
+            "last_naturehood_write_at_utc": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        },
+        "public_sync_workflow_decommissioned": {
+          "const": true
+        },
+        "public_sync_workflow_enabled": {
+          "const": false
+        },
+        "public_visible_tick_message_count": {
+          "const": 0
+        },
+        "sync_timer_enabled": {
+          "const": true
+        },
+        "sync_timer_interval_seconds": {
+          "const": 300
+        },
+        "sync_timer_unit_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "desk_heartbeat_enabled": {
+          "const": false
+        },
+        "route_mode": {
+          "const": "desk-local"
+        },
+        "http_fallback_enabled": {
+          "const": false
+        }
+      }
+    },
+    "l4_scenarios": {
+      "type": "array",
+      "minItems": 27,
+      "maxItems": 27,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "status",
+          "destination",
+          "agent",
+          "oracle",
+          "outcome",
+          "event_ids"
+        ]
+      }
+    },
+    "verification": {
+      "type": "object",
+      "required": [
+        "l1",
+        "l2",
+        "l3",
+        "l4",
+        "source_audit"
+      ],
+      "properties": {
+        "l4": {
+          "type": "object",
+          "required": [
+            "live_test_skipped",
+            "scenarios"
+          ],
+          "properties": {
+            "live_test_skipped": {
+              "const": false
+            },
+            "scenarios": {
+              "$ref": "#/$defs/l4_scenarios"
+            }
+          }
+        }
+      }
+    },
+    "protocol_evidence": {
+      "type": "object",
+      "required": [
+        "root_event_id",
+        "binding_event_id",
+        "route_event_id",
+        "role_reply_event_id",
+        "responsible_human_event_id",
+        "pending_acked_readback",
+        "cursor_retry_same_boundary",
+        "overlap_lock_single_writer",
+        "mode_lease_one_winner",
+        "mode_lease_loser_write_count",
+        "injection_rejections",
+        "responsible_rejections"
+      ]
+    }
+  }
+}

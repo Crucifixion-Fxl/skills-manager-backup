@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "111261de-653f-4b13-a880-fdf32c0ec528",
+  "path": "audience-user-research",
+  "path_key": "audience-user-research",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/audience-user-research",
+    "branch": null
+  }
+}

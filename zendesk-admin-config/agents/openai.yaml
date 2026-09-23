@@ -1,0 +1,7 @@
+interface:
+  display_name: "Zendesk Admin Config"
+  short_description: "审查并安全配置 NeoPace Zendesk 字段、表单、分组和触发器"
+  default_prompt: "使用 $zendesk-admin-config 读取 NeoPace Zendesk 当前配置，生成不含删除操作的 plan，并在我明确确认同一个 plan SHA 后才应用和验证。"
+
+policy:
+  allow_implicit_invocation: true

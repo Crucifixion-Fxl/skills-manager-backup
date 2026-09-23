@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "d179d483-79d2-46d2-9c02-acc22a8df20f",
+  "path": "feishu-integration-testing",
+  "path_key": "feishu-integration-testing",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/feishu-integration-testing",
+    "branch": null
+  }
+}

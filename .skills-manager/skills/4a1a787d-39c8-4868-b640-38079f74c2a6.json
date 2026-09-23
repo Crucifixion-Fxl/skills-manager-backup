@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "4a1a787d-39c8-4868-b640-38079f74c2a6",
+  "path": "e2e-auth-broker",
+  "path_key": "e2e-auth-broker",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/e2e-auth-broker",
+    "branch": null
+  }
+}

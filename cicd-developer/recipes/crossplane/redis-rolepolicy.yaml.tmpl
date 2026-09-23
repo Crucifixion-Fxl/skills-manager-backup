@@ -1,0 +1,50 @@
+# Crossplane ElastiCache Redis RolePolicy.
+#
+# Required slots:
+#   {{app}}         kebab-case
+#   {{partition}}   aws | aws-cn
+#   {{region}}      AWS region
+#   {{account_id}}  AWS account ID
+#
+# Keep Describe/List in the first statement because those APIs do not support
+# resource-level ARNs. The second statement scopes mutating permissions to the
+# app's Redis resource names.
+
+apiVersion: iam.aws.m.upbound.io/v1beta1
+kind: RolePolicy
+metadata:
+  name: crossplane-app-{{app}}-redis
+spec:
+  forProvider:
+    policy: |
+      {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Sid": "RedisDescribe",
+            "Effect": "Allow",
+            "Action": [
+              "elasticache:Describe*",
+              "elasticache:List*"
+            ],
+            "Resource": "*"
+          },
+          {
+            "Sid": "RedisManage",
+            "Effect": "Allow",
+            "Action": "elasticache:*",
+            "Resource": [
+              "arn:{{partition}}:elasticache:{{region}}:{{account_id}}:replicationgroup:{{app}}-*",
+              "arn:{{partition}}:elasticache:{{region}}:{{account_id}}:cluster:{{app}}-*",
+              "arn:{{partition}}:elasticache:{{region}}:{{account_id}}:subnetgroup:*",
+              "arn:{{partition}}:elasticache:{{region}}:{{account_id}}:securitygroup:*",
+              "arn:{{partition}}:elasticache:{{region}}:{{account_id}}:parametergroup:*"
+            ]
+          }
+        ]
+      }
+    roleRef:
+      name: crossplane-app-{{app}}
+  providerConfigRef:
+    name: default
+    kind: ClusterProviderConfig

@@ -1,0 +1,102 @@
+{
+  "body": [
+    {
+      "assignee": {
+        "avatar_url": null,
+        "id": 6,
+        "locked": false,
+        "name": "Buzz Sync Developer (localstack)",
+        "public_email": null,
+        "state": "active",
+        "username": "buzz-sync-dev",
+        "web_url": "http://gitlab.localstack.test:8929/buzz-sync-dev"
+      },
+      "assignees": [
+        {
+          "avatar_url": null,
+          "id": 6,
+          "locked": false,
+          "name": "Buzz Sync Developer (localstack)",
+          "public_email": null,
+          "state": "active",
+          "username": "buzz-sync-dev",
+          "web_url": "http://gitlab.localstack.test:8929/buzz-sync-dev"
+        }
+      ],
+      "author": {
+        "avatar_url": null,
+        "id": 6,
+        "locked": false,
+        "name": "Buzz Sync Developer (localstack)",
+        "public_email": null,
+        "state": "active",
+        "username": "buzz-sync-dev",
+        "web_url": "http://gitlab.localstack.test:8929/buzz-sync-dev"
+      },
+      "closed_at": null,
+      "closed_by": null,
+      "confidential": false,
+      "created_at": "2026-09-13T08:21:11.198Z",
+      "description": "Recording description.\nSecond line.",
+      "discussion_locked": null,
+      "downvotes": 0,
+      "due_date": null,
+      "id": 1,
+      "iid": 1,
+      "issue_type": "issue",
+      "labels": [
+        "recording",
+        "status::in-progress",
+        "type::feature"
+      ],
+      "merge_requests_count": 1,
+      "milestone": {
+        "created_at": "2026-09-13T08:21:10.397Z",
+        "description": null,
+        "due_date": null,
+        "expired": false,
+        "id": 1,
+        "iid": 1,
+        "project_id": 2,
+        "start_date": null,
+        "state": "closed",
+        "title": "rec-0913082019 milestone",
+        "updated_at": "2026-09-13T08:21:25.736Z",
+        "web_url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot/-/milestones/1"
+      },
+      "project_id": 2,
+      "state": "opened",
+      "task_completion_status": {
+        "completed_count": 0,
+        "count": 0
+      },
+      "time_stats": {
+        "human_time_estimate": null,
+        "human_total_time_spent": null,
+        "time_estimate": 0,
+        "total_time_spent": 0
+      },
+      "title": "Recording issue 0913082019 cc @buzz-sync-maintainer",
+      "type": "ISSUE",
+      "updated_at": "2026-09-13T08:21:12.907Z",
+      "upvotes": 0,
+      "user_notes_count": 2,
+      "web_url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot/-/issues/1"
+    }
+  ],
+  "headers": {
+    "content-type": "application/json",
+    "x-next-page": "",
+    "x-page": "1",
+    "x-per-page": "100",
+    "x-total": "1",
+    "x-total-pages": "1"
+  },
+  "request": {
+    "as": "bot",
+    "method": "GET",
+    "path": "projects/2/merge_requests/1/closes_issues",
+    "query": {}
+  },
+  "status": 200
+}

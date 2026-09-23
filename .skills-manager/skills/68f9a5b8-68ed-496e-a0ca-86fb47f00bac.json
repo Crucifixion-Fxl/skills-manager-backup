@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "68f9a5b8-68ed-496e-a0ca-86fb47f00bac",
+  "path": "oscilloscope-automation",
+  "path_key": "oscilloscope-automation",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/oscilloscope-automation",
+    "branch": null
+  }
+}

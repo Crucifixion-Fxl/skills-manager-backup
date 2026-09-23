@@ -1,0 +1,4 @@
+interface:
+  display_name: "Survey Research Workflow"
+  short_description: "Review, design, or operationalize survey-first research"
+  default_prompt: "Use $survey-research-workflow in the lightest appropriate mode to review, design, or run this survey research task."

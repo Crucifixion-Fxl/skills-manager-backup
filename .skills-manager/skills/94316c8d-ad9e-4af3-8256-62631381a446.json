@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "94316c8d-ad9e-4af3-8256-62631381a446",
+  "path": "android-product-acceptance",
+  "path_key": "android-product-acceptance",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/android-product-acceptance",
+    "branch": null
+  }
+}

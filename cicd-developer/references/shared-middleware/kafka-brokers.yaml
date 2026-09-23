@@ -1,0 +1,112 @@
+# Shared MSK SASL/SCRAM bootstrap brokers for the 6 shared-middleware clusters.
+# Source of truth: live Crossplane Cluster `.status.atProvider.bootstrapBrokersSaslScram`.
+# Verified: 2026-07-08.
+#
+# Developer-facing contract:
+# - Developers do not need, and usually do not have, tech-service/Crossplane kubectl access.
+# - KafkaScramCredential writes username/password/bootstrap_brokers_sasl_scram to Vault path
+#   secret/{env}/kafka/application/{app}/sasl.
+# - cicd-developer / platform maintainers use this YAML or live Crossplane status only to
+#   verify or refresh the broker facts that the Composition pushes to Vault.
+
+version: 1
+listener:
+  protocol: SASL_SSL
+  sasl_mechanism: SCRAM-SHA-512
+  port: 9096
+source:
+  api_resource: clusters.kafka.aws.m.upbound.io
+  namespace: crossplane-system
+  field: status.atProvider.bootstrapBrokersSaslScram
+  refresh_command_template: >-
+    kubectl --context <context> -n crossplane-system get
+    clusters.kafka.aws.m.upbound.io <shared_msk_name>
+    -o jsonpath='{.status.atProvider.bootstrapBrokersSaslScram}'
+
+clusters:
+  staging-us:
+    fleet_name: US Staging
+    env_keyword: staging-us
+    context: us-eks-staging
+    cloud: aws
+    account_id: "390709477306"
+    region: us-east-1
+    shared_msk_name: staging-us-shared-msk
+    external_name: arn:aws:kafka:us-east-1:390709477306:cluster/staging-us-shared-msk/344814ca-2483-4f9e-b28f-4eabc6abe105-11
+    bootstrap_brokers_sasl_scram: b-1.stagingussharedmsk.pzq8zr.c11.kafka.us-east-1.amazonaws.com:9096,b-2.stagingussharedmsk.pzq8zr.c11.kafka.us-east-1.amazonaws.com:9096,b-3.stagingussharedmsk.pzq8zr.c11.kafka.us-east-1.amazonaws.com:9096
+    brokers:
+      - b-1.stagingussharedmsk.pzq8zr.c11.kafka.us-east-1.amazonaws.com:9096
+      - b-2.stagingussharedmsk.pzq8zr.c11.kafka.us-east-1.amazonaws.com:9096
+      - b-3.stagingussharedmsk.pzq8zr.c11.kafka.us-east-1.amazonaws.com:9096
+
+  staging-eu:
+    fleet_name: EU Staging
+    env_keyword: staging-eu
+    context: eu-eks-staging
+    cloud: aws
+    account_id: "390709477306"
+    region: eu-central-1
+    shared_msk_name: staging-eu-shared-msk
+    external_name: arn:aws:kafka:eu-central-1:390709477306:cluster/staging-eu-shared-msk/91e7fbd4-5278-472a-863d-19eda5a81854-8
+    bootstrap_brokers_sasl_scram: b-1.stagingeusharedmsk.n5qeba.c8.kafka.eu-central-1.amazonaws.com:9096,b-2.stagingeusharedmsk.n5qeba.c8.kafka.eu-central-1.amazonaws.com:9096,b-3.stagingeusharedmsk.n5qeba.c8.kafka.eu-central-1.amazonaws.com:9096
+    brokers:
+      - b-1.stagingeusharedmsk.n5qeba.c8.kafka.eu-central-1.amazonaws.com:9096
+      - b-2.stagingeusharedmsk.n5qeba.c8.kafka.eu-central-1.amazonaws.com:9096
+      - b-3.stagingeusharedmsk.n5qeba.c8.kafka.eu-central-1.amazonaws.com:9096
+
+  staging-cn:
+    fleet_name: CN Staging
+    env_keyword: staging-cn
+    context: cn-eks-staging
+    cloud: aws-cn
+    account_id: "801447536674"
+    region: cn-north-1
+    shared_msk_name: staging-cn-shared-msk
+    external_name: arn:aws-cn:kafka:cn-north-1:801447536674:cluster/staging-cn-shared-msk/e27cad9b-b29a-416b-983d-515d832a0b83-4
+    bootstrap_brokers_sasl_scram: b-1.stagingcnsharedmsk.inp729.c4.kafka.cn-north-1.amazonaws.com.cn:9096,b-2.stagingcnsharedmsk.inp729.c4.kafka.cn-north-1.amazonaws.com.cn:9096,b-3.stagingcnsharedmsk.inp729.c4.kafka.cn-north-1.amazonaws.com.cn:9096
+    brokers:
+      - b-1.stagingcnsharedmsk.inp729.c4.kafka.cn-north-1.amazonaws.com.cn:9096
+      - b-2.stagingcnsharedmsk.inp729.c4.kafka.cn-north-1.amazonaws.com.cn:9096
+      - b-3.stagingcnsharedmsk.inp729.c4.kafka.cn-north-1.amazonaws.com.cn:9096
+
+  tech-us:
+    fleet_name: US Tech Service
+    env_keyword: tech-us
+    context: us-eks-tech-002-admin
+    cloud: aws
+    account_id: "002497567426"
+    region: us-east-1
+    shared_msk_name: tech-us-shared-msk
+    external_name: arn:aws:kafka:us-east-1:002497567426:cluster/tech-us-shared-msk/6c03b50f-9079-4dcf-b182-698ec911d5ba-7
+    bootstrap_brokers_sasl_scram: b-1.techussharedmsk.97190s.c7.kafka.us-east-1.amazonaws.com:9096,b-2.techussharedmsk.97190s.c7.kafka.us-east-1.amazonaws.com:9096
+    brokers:
+      - b-1.techussharedmsk.97190s.c7.kafka.us-east-1.amazonaws.com:9096
+      - b-2.techussharedmsk.97190s.c7.kafka.us-east-1.amazonaws.com:9096
+
+  tech-eu:
+    fleet_name: EU Tech Service
+    env_keyword: tech-eu
+    context: eu-eks-tech-010-admin
+    cloud: aws
+    account_id: "010840394398"
+    region: eu-central-1
+    shared_msk_name: tech-eu-shared-msk
+    external_name: arn:aws:kafka:eu-central-1:010840394398:cluster/tech-eu-shared-msk/1eda0d84-d8c6-42c6-acc9-187e86174fe9-2
+    bootstrap_brokers_sasl_scram: b-1.techeusharedmsk.nets5t.c2.kafka.eu-central-1.amazonaws.com:9096,b-2.techeusharedmsk.nets5t.c2.kafka.eu-central-1.amazonaws.com:9096
+    brokers:
+      - b-1.techeusharedmsk.nets5t.c2.kafka.eu-central-1.amazonaws.com:9096
+      - b-2.techeusharedmsk.nets5t.c2.kafka.eu-central-1.amazonaws.com:9096
+
+  tech-cn:
+    fleet_name: CN Tech Service
+    env_keyword: tech-cn
+    context: cn-eks-tech-589-admin
+    cloud: aws-cn
+    account_id: "589899215075"
+    region: cn-north-1
+    shared_msk_name: tech-cn-shared-msk
+    external_name: arn:aws-cn:kafka:cn-north-1:589899215075:cluster/tech-cn-shared-msk/072f0923-e71c-4624-9a7a-a61cf96c06cf-3
+    bootstrap_brokers_sasl_scram: b-1.techcnsharedmsk.xa49sl.c3.kafka.cn-north-1.amazonaws.com.cn:9096,b-2.techcnsharedmsk.xa49sl.c3.kafka.cn-north-1.amazonaws.com.cn:9096
+    brokers:
+      - b-1.techcnsharedmsk.xa49sl.c3.kafka.cn-north-1.amazonaws.com.cn:9096
+      - b-2.techcnsharedmsk.xa49sl.c3.kafka.cn-north-1.amazonaws.com.cn:9096

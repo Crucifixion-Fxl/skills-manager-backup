@@ -1,0 +1,706 @@
+# Exact, time-bounded legacy namespace identities that require a coordinated
+# migration. Every identity dimension and exception_id is mandatory so no
+# sibling Application, overlay, app, cluster, or namespace can inherit one.
+# A control's owner is the accountable owner for review and removal; machine
+# authorization comes only from the exact identities below, not from owner text.
+# The same active exact Application identity may retain its registered historical
+# target suffix in check_argocd_application.py without adding that suffix to the
+# env-keyword routing SSOT. All non-name Application contracts still apply.
+# Repository-bound identities declare their complete binding set atomically:
+# Application manifest repository plus source repository/path, or Kustomization
+# repository. Partial bindings are invalid and never widen a legacy identity.
+# expires_on is the last valid UTC calendar date.
+
+controls:
+  alexa-access-front-prod-us-shared-namespace:
+    owner: CLOUD/alexa-access-front
+    tracking_ref: https://gitlab.addx.ai/CLOUD/alexa-access-front/-/merge_requests/7
+    expires_on: "2026-12-31"
+    reason: >-
+      In-place ArgoCD adoption of the live prod workload keeps the legacy
+      shared prod-us namespace; the Deployment, Service, and Ingress 1:1
+      mirror the running service and cannot move namespaces without a
+      coordinated traffic migration.
+    exit_strategy: >-
+      Migrate the workload to prod-alexa-access-front with a coordinated
+      traffic change, then remove both exact identities from this registry.
+    compensating_controls:
+      - The namespace keeps the prod- prefix required by the Fluent Bit business-namespace gate.
+      - Only the exact Application and complete overlay identities below are accepted.
+      - Automated sync stays disabled until soak; no Image Updater annotations in the adoption phase.
+
+  safepush-prod-us-shared-namespace:
+    owner: CLOUD/safepush
+    tracking_ref: https://gitlab.addx.ai/CLOUD/safepush/-/merge_requests/21
+    expires_on: "2026-12-31"
+    reason: >-
+      In-place ArgoCD adoption of the live prod workload keeps the legacy
+      shared prod-us namespace; the Rollout, Service, Ingress, and PDB 1:1
+      mirror the running service and cannot move namespaces without a
+      coordinated traffic migration.
+    exit_strategy: >-
+      Migrate the workload to prod-safepush with a coordinated traffic
+      change, then remove both exact identities from this registry.
+    compensating_controls:
+      - The namespace keeps the prod- prefix required by the Fluent Bit business-namespace gate.
+      - Only the exact Application and complete overlay identities below are accepted.
+      - Image Updater argocd write-back contract is retained for the adopted workload (same as alexa-access-front live adoption).
+
+  safepush-prod-eu-shared-namespace:
+    owner: CLOUD/safepush
+    tracking_ref: https://gitlab.addx.ai/CLOUD/safepush/-/merge_requests/27
+    expires_on: "2026-12-31"
+    reason: >-
+      In-place ArgoCD adoption of the live prod-eu workload keeps the legacy
+      shared prod-eu namespace; the Rollout, Service, Ingress, and PDB 1:1
+      mirror the running service and cannot move namespaces without a
+      coordinated traffic migration.
+    exit_strategy: >-
+      Migrate the workload to prod-safepush with a coordinated traffic
+      change, then remove both exact identities from this registry.
+    compensating_controls:
+      - The namespace keeps the prod- prefix required by the Fluent Bit business-namespace gate.
+      - Only the exact Application and complete overlay identities below are accepted.
+      - Image Updater argocd write-back contract is retained for the adopted workload (same as prod-us).
+
+  nature-chat-frontend-prod-us-shared-namespace:
+    owner: ALGO/nature-chat-frontend
+    tracking_ref: https://gitlab.addx.ai/engineering/skills/-/merge_requests/635
+    expires_on: "2026-10-29"
+    reason: >-
+      The static-site publisher Job and IRSA identity remain coupled to the
+      existing shared prod namespace.
+    exit_strategy: >-
+      Coordinate the Argo CD destination, workload namespace, and IAM OIDC
+      subject migration to prod-nature-chat-frontend, then remove both exact
+      identities from this registry.
+    compensating_controls:
+      - The namespace keeps the prod- prefix required by the Fluent Bit business-namespace gate.
+      - Only the exact Application and complete overlay identities below are accepted.
+
+  micro-app-platform-prod-us-shared-namespace:
+    owner: WEB/micro_app_platform
+    tracking_ref: https://gitlab.addx.ai/engineering/skills/-/merge_requests/690
+    expires_on: "2026-10-29"
+    reason: >-
+      The existing production Ingresses, Services, stateful middleware, PVCs,
+      and direct Secrets remain coupled to the shared prod-us namespace during
+      the in-place stateless Argo CD adoption.
+    exit_strategy: >-
+      Coordinate a separately approved migration of the exact Application,
+      stateless overlay, Ingress and Service identities, and excluded
+      dependencies to prod-micro-app-platform, then remove both exact
+      identities from this registry.
+    compensating_controls:
+      - The namespace keeps the prod- prefix required by the Fluent Bit business-namespace gate.
+      - Only the exact argocd-apps manifest repository, US Tech Application file, micro_app_platform source repository/path, and prod overlay repository/path identities below are accepted.
+      - Stateful middleware, PVCs, direct Secrets, and independently owned dependencies remain excluded from Argo ownership.
+      - Finalizer, app-runtime project, automated sync, notifications, Image Updater, passive source and image pins, and recovery validation remain mandatory.
+
+  flywheel-shared-tenant-namespaces:
+    owner: ALGO/flywheel
+    tracking_ref: https://gitlab.addx.ai/engineering/skills/-/issues/28
+    expires_on: "2026-10-29"
+    reason: >-
+      Existing Flywheel paths are embedded in shared tenant Ingresses, whose
+      Kubernetes Service backends must remain in the same namespace during
+      GitOps adoption.
+    exit_strategy: >-
+      Route each existing shared Ingress path to its same-namespace APISIX
+      Service, validate equivalent authentication and traffic behavior, point
+      APISIX at <service>.<phase>-flywheel.svc.cluster.local, migrate Flywheel
+      to its owned namespace, and remove this exception.
+    compensating_controls:
+      - Every retained namespace keeps an approved phase prefix required by the Fluent Bit business-namespace gate.
+      - Application cluster/name/namespace/image-app and complete overlay path matches remain exact and fail closed.
+      - Historical Application target suffixes remain exact registry compatibility only; they are not added to env-keyword routing.
+      - Finalizer, project, automated sync, notifications, Image Updater, and recovery seed validation remain mandatory.
+      - This exception does not authorize public exposure, Ingress or ALB changes, or weaker authentication.
+
+  algo-390-staging-service-discovery-namespaces:
+    owner: ALGO
+    tracking_ref: https://gitlab.addx.ai/engineering/skills/-/issues/28
+    expires_on: "2026-10-29"
+    reason: >-
+      The 390 staging ALGO workloads still derive service-registry lookup,
+      registration, and in-cluster service DNS from RUN_MODE and K8S_NAMESPACE,
+      so each workload's K8S_NAMESPACE must remain equal to RUN_MODE
+      (staging-eu or staging-us) during parity migration.
+    exit_strategy: >-
+      Make service-registry lookup, registration, and service DNS explicit
+      instead of deriving them from RUN_MODE, update naturehood SMMUrl, migrate
+      the workloads to owned namespaces, and remove all exact identities from
+      this registry.
+    compensating_controls:
+      - Both retained namespaces keep the staging- prefix required by the Fluent Bit business-namespace gate.
+      - Application cluster/name/namespace/image-app and complete GPU overlay path matches remain exact and fail closed.
+      - Finalizer, project, automated sync, notifications, Image Updater, and recovery seed validation remain mandatory.
+      - Flywheel's Database claim remains in staging-flywheel and is not authorized by this exception.
+      - This exception does not authorize public exposure, Ingress, ALB, or DNS changes, or weaker authentication.
+
+  addx-gpu-inference-shared-runtime-namespaces:
+    owner: ALGO/addx_gpu_inference
+    tracking_ref: https://gitlab.addx.ai/engineering/skills/-/issues/28
+    expires_on: "2026-10-29"
+    reason: >-
+      The existing GCP staging, Tencent staging, and four production GPU
+      inference workloads are adopted in place so the GitOps ownership change
+      preserves their current namespaces, service discovery, credentials,
+      autoscaling, traffic endpoints, and runtime behavior.
+    exit_strategy: >-
+      After GitOps ownership and standard delivery are stable, separately
+      assess service discovery and traffic dependencies for migration to owned
+      namespaces, execute any approved namespace migration, and remove all
+      exact identities from this registry.
+    compensating_controls:
+      - Every retained namespace keeps an approved phase prefix required by the Fluent Bit business-namespace gate.
+      - Application cluster/name/namespace/image-app and complete overlay path matches remain exact and fail closed, using the same legacy identity shape as Flywheel.
+      - Passive adoption preserves literal image, configuration, Secret values, ports, placement, autoscaling, and traffic behavior.
+      - This exception does not authorize a new namespace, public exposure, Ingress, load balancer, DNS, secret-value, or runtime-content change.
+
+  troubleshooting-prod-shared-namespaces:
+    owner: DATA/troubleshooting
+    tracking_ref: https://gitlab.addx.ai/DATA/troubleshooting/-/merge_requests/257
+    expires_on: "2026-12-31"
+    reason: >-
+      troubleshooting prod（backend/frontend/middlequery）按 in-place Argo CD
+      adoption 纳管，现有 Deployment 保持 prod-us/prod-eu 共享 namespace
+      （002/3025/eu-tech/eu-prod 老集群命名，与 {phase}-{app} 规范不同）。
+    exit_strategy: >-
+      Coordinate a separately approved migration of the exact Application,
+      overlay, Ingress and Service identities to prod-troubleshooting /
+      prod-middlequery namespaces, then remove all exact identities from this
+      registry.
+    compensating_controls:
+      - The namespaces keep the prod- prefix required by the Fluent Bit business-namespace gate.
+      - Only the exact argocd-apps Application files and troubleshooting repo overlay paths below are accepted.
+      - Existing middleware (RDS/ElastiCache/ES), direct Secrets, and vault-config-secret remain excluded from Argo ownership.
+      - Finalizer, default project, automated sync, notifications, Image Updater, and recovery validation remain mandatory.
+
+
+  iot-sim-pre-shared-namespaces:
+    owner: CLOUD/iot-sim
+    tracking_ref: https://gitlab.addx.ai/CLOUD/iot-sim/-/merge_requests/37
+    expires_on: "2026-12-31"
+    reason: >-
+      In-place ArgoCD adoption of the live pre workloads keeps the legacy
+      shared pre-us/pre-eu namespaces (285d/303d, cluster 302571458622 /
+      740315635167); the Deployment, Service, and Ingress 1:1 mirror the
+      running service and cannot move namespaces without a coordinated
+      traffic migration. Pre-eu connects to the prod Kafka cluster and that
+      behavior is preserved.
+    exit_strategy: >-
+      Migrate the workloads to pre-iot-sim with a coordinated traffic change,
+      then remove both exact identities from this registry.
+    compensating_controls:
+      - The namespaces keep the pre- prefix required by the Fluent Bit business-namespace gate.
+      - Only the exact argocd-apps Application files and iot-sim overlay paths below are accepted.
+      - Deployment -> Rollout kind swap happens in a separate serialized MR with a controlled rolling restart (same image/config).
+      - Finalizer, app-runtime project, automated sync, notifications, Image Updater, and recovery validation remain mandatory.
+
+  oauth2-prod-shared-namespaces:
+    owner: CLOUD/oauth2
+    tracking_ref: https://gitlab.addx.ai/CLOUD/oauth2/-/merge_requests/77
+    expires_on: "2026-12-31"
+    reason: >-
+      oauth2 prod（US/EU）按 in-place Argo CD adoption 纳管，现有 Deployment
+      保持 prod-us/prod-eu 共享 namespace（302571458622 / 740315635167 老集群
+      命名，与 {phase}-{app} 规范不同）；Service 和共享 api-* Ingress 路由
+      1:1 镜像现网，不能移动 namespace 而不做协调流量迁移。
+    exit_strategy: >-
+      Coordinate a separately approved migration of the exact Application,
+      overlay, Ingress and Service identities to prod-oauth2, then remove
+      both exact identities from this registry.
+    compensating_controls:
+      - The namespaces keep the prod- prefix required by the Fluent Bit business-namespace gate.
+      - Only the exact argocd-apps Application files and oauth2 overlay paths below are accepted.
+      - Deployment -> Rollout kind swap happens in a separate serialized MR with a controlled rolling restart (same image/config).
+      - Finalizer, app-runtime project, automated sync, notifications, Image Updater, and recovery validation remain mandatory.
+      - This exception does not authorize public exposure, Ingress, ALB, or DNS changes, or weaker authentication.
+      - This exception does not authorize public exposure, Ingress, ALB, or DNS changes, or weaker authentication.
+
+  iot-sim-prod-shared-namespaces:
+    owner: CLOUD/iot-sim
+    tracking_ref: https://gitlab.addx.ai/CLOUD/iot-sim/-/merge_requests/39
+    expires_on: "2026-12-31"
+    reason: >-
+      In-place ArgoCD adoption of the live prod workloads keeps the legacy
+      shared prod-us/prod-eu namespaces (280d/296d, cluster 302571458622 /
+      740315635167); the Deployment, Service, and Ingress 1:1 mirror the
+      running service (2/2 replicas, public sim-us.vicohome.io /
+      sim-eu.vicohome.io) and cannot move namespaces without a coordinated
+      traffic migration. Prod-eu connects to the eu-prod Kafka cluster and
+      that behavior is preserved.
+    exit_strategy: >-
+      Migrate the workloads to prod-iot-sim with a coordinated traffic change,
+      then remove both exact identities from this registry.
+    compensating_controls:
+      - The namespaces keep the prod- prefix required by the Fluent Bit business-namespace gate.
+      - Only the exact argocd-apps Application files and iot-sim overlay paths below are accepted.
+      - Deployment -> Rollout kind swap happens in a separate serialized MR with a controlled rolling restart (same image/config), US first then EU.
+      - Finalizer, app-runtime project, automated sync, notifications, Image Updater, and recovery validation remain mandatory.
+      - This exception does not authorize public exposure, Ingress, ALB, or DNS changes, or weaker authentication.
+
+  webhook-pre-us-shared-namespace:
+    owner: PAAS/webhook
+    tracking_ref: https://gitlab.addx.ai/DEV/argocd-apps/-/merge_requests/1468
+    expires_on: "2026-12-31"
+    reason: >-
+      In-place passive adoption keeps the existing pre-us namespace so the
+      running Deployment retains its exact identity while ownership moves from
+      Jenkins to Argo CD.
+    exit_strategy: >-
+      Migrate the workload to an owned pre-webhook namespace through a
+      separately approved traffic change, then remove this exact identity from
+      the registry.
+    compensating_controls:
+      - The namespace keeps the pre- phase prefix required by the Fluent Bit business-namespace gate.
+      - Only the exact webhook-pre-us Application and PAAS/webhook pre-us observe-overlay identities below are accepted.
+      - Child Applications remain absent until artifact copy, image-only normalization, and directed passive-adoption validation pass.
+      - Jenkins remains authoritative until automatic promotion is accepted.
+
+  state-machine-staging-cn-tke-shared-namespace:
+    owner: CLOUD/state-machine
+    tracking_ref: https://gitlab.addx.ai/DEV/argocd-apps/-/merge_requests/1472
+    expires_on: "2026-12-31"
+    reason: >-
+      In-place passive adoption keeps the existing staging-cn namespace so the
+      running Deployment and Service retain their exact identities while
+      ownership moves from Jenkins to Argo CD.
+    exit_strategy: >-
+      Migrate the workload to an owned staging-state-machine namespace through
+      a separately approved traffic change, then remove this exact identity
+      from the registry.
+    compensating_controls:
+      - The namespace keeps the staging- phase prefix required by the Fluent Bit business-namespace gate.
+      - Only the exact state-machine-staging-cn Application and CLOUD/state-machine TKE staging overlay identities below are accepted.
+      - The app-runtime boundary binds the source repo and path to staging-cn as reviewed in DEV/argocd-apps!1472.
+      - Child Applications remain absent until artifact copy, image-only normalization, and directed passive-adoption validation pass.
+      - Both Jenkins entries remain authoritative until automatic promotion is accepted.
+
+applications:
+  - cluster_dir: aws-002497567426-us-tech-service
+    application_name: troubleshooting-prod-us
+    namespace: prod-us
+    image_app: troubleshooting
+    manifest_repository: https://gitlab.addx.ai/DEV/argocd-apps.git
+    source_repository: https://gitlab.addx.ai/DATA/troubleshooting.git
+    source_path: k8s/overlays/prod-us
+    exception_id: troubleshooting-prod-shared-namespaces
+  - cluster_dir: aws-302571458622-us-prod
+    application_name: middlequery-prod-us
+    namespace: prod-us
+    image_app: middlequery
+    manifest_repository: https://gitlab.addx.ai/DEV/argocd-apps.git
+    source_repository: https://gitlab.addx.ai/DATA/troubleshooting.git
+    source_path: k8s/overlays/prod-us-middlequery
+    exception_id: troubleshooting-prod-shared-namespaces
+  - cluster_dir: aws-010840394398-eu-tech-service
+    application_name: troubleshooting-prod-eu
+    namespace: prod-eu
+    image_app: troubleshooting
+    manifest_repository: https://gitlab.addx.ai/DEV/argocd-apps.git
+    source_repository: https://gitlab.addx.ai/DATA/troubleshooting.git
+    source_path: k8s/overlays/prod-eu
+    exception_id: troubleshooting-prod-shared-namespaces
+  - cluster_dir: aws-740315635167-eu-prod
+    application_name: middlequery-prod-eu
+    namespace: prod-eu
+    image_app: middlequery
+    manifest_repository: https://gitlab.addx.ai/DEV/argocd-apps.git
+    source_repository: https://gitlab.addx.ai/DATA/troubleshooting.git
+    source_path: k8s/overlays/prod-eu-middlequery
+    exception_id: troubleshooting-prod-shared-namespaces
+  - cluster_dir: aws-302571458622-us-prod
+    application_name: alexa-access-front-prod-us
+    namespace: prod-us
+    image_app: alexa-access-front
+    manifest_repository: https://gitlab.addx.ai/DEV/argocd-apps.git
+    source_repository: https://gitlab.addx.ai/CLOUD/alexa-access-front.git
+    source_path: k8s/overlays/prod-us
+    exception_id: alexa-access-front-prod-us-shared-namespace
+
+  - cluster_dir: aws-302571458622-us-prod
+    application_name: safepush-prod-us
+    namespace: prod-us
+    image_app: safepush
+    manifest_repository: https://gitlab.addx.ai/DEV/argocd-apps.git
+    source_repository: https://gitlab.addx.ai/CLOUD/safepush.git
+    source_path: k8s/overlays/prod-us
+    exception_id: safepush-prod-us-shared-namespace
+
+  - cluster_dir: aws-740315635167-eu-prod
+    application_name: safepush-prod-eu
+    namespace: prod-eu
+    image_app: safepush
+    manifest_repository: https://gitlab.addx.ai/DEV/argocd-apps.git
+    source_repository: https://gitlab.addx.ai/CLOUD/safepush.git
+    source_path: k8s/overlays/prod-eu
+    exception_id: safepush-prod-eu-shared-namespace
+
+  - cluster_dir: aws-302571458622-us-prod
+    application_name: nature-chat-frontend-prod-us
+    namespace: prod-us
+    image_app: nature-chat-frontend
+    exception_id: nature-chat-frontend-prod-us-shared-namespace
+
+  - cluster_dir: aws-002497567426-us-tech-service
+    application_name: micro-app-platform-prod-us
+    namespace: prod-us
+    image_app: micro-app-platform
+    manifest_repository: https://gitlab.addx.ai/DEV/argocd-apps.git
+    source_repository: https://gitlab.addx.ai/WEB/micro_app_platform.git
+    source_path: k8s/overlays/prod-us
+    exception_id: micro-app-platform-prod-us-shared-namespace
+
+  - cluster_dir: aws-002497567426-us-tech-service
+    application_name: flywheel-staging-us-aws
+    namespace: staging-us
+    image_app: flywheel
+    exception_id: flywheel-shared-tenant-namespaces
+  - cluster_dir: aws-302571458622-us-prod
+    application_name: flywheel-pre-us-aws
+    namespace: pre-us
+    image_app: flywheel
+    exception_id: flywheel-shared-tenant-namespaces
+  - cluster_dir: aws-302571458622-us-prod
+    application_name: flywheel-prod-us
+    namespace: prod-us
+    image_app: flywheel
+    exception_id: flywheel-shared-tenant-namespaces
+  - cluster_dir: aws-740315635167-eu-prod
+    application_name: flywheel-pre-eu-aws
+    namespace: pre-eu
+    image_app: flywheel
+    exception_id: flywheel-shared-tenant-namespaces
+  - cluster_dir: aws-740315635167-eu-prod
+    application_name: flywheel-prod-eu
+    namespace: prod-eu
+    image_app: flywheel
+    exception_id: flywheel-shared-tenant-namespaces
+  - cluster_dir: gcp-a4xcloud-p-us-us-prod
+    application_name: flywheel-prod-us-gcp
+    namespace: prod-us
+    image_app: flywheel
+    exception_id: flywheel-shared-tenant-namespaces
+  - cluster_dir: gcp-a4xcloud-tech-service-us-us-tech-service
+    application_name: flywheel-staging-us-gcp
+    namespace: staging-us
+    image_app: flywheel
+    exception_id: flywheel-shared-tenant-namespaces
+  - cluster_dir: tencent-100014919455-cn-main
+    application_name: flywheel-staging-cn
+    namespace: staging-cn
+    image_app: flywheel
+    exception_id: flywheel-shared-tenant-namespaces
+  - cluster_dir: tencent-100014919455-cn-main
+    application_name: flywheel-pre-cn
+    namespace: pre-cn
+    image_app: flywheel
+    exception_id: flywheel-shared-tenant-namespaces
+  - cluster_dir: tencent-100014919455-cn-main
+    application_name: flywheel-prod-cn
+    namespace: prod-cn
+    image_app: flywheel
+    exception_id: flywheel-shared-tenant-namespaces
+
+  - cluster_dir: aws-390709477306-eu-staging
+    application_name: flywheel-deps-staging-eu
+    namespace: staging-eu
+    image_app: flywheel
+    exception_id: algo-390-staging-service-discovery-namespaces
+  - cluster_dir: aws-390709477306-eu-staging
+    application_name: addx-smart-multimedia-deps-staging-eu
+    namespace: staging-eu
+    image_app: addx-smart-multimedia
+    exception_id: algo-390-staging-service-discovery-namespaces
+  - cluster_dir: aws-390709477306-eu-staging
+    application_name: a4x-algo-event-dispatcher-deps-staging-eu
+    namespace: staging-eu
+    image_app: a4x-algo-event-dispatcher
+    exception_id: algo-390-staging-service-discovery-namespaces
+  - cluster_dir: aws-390709477306-eu-staging
+    application_name: addx-gpu-inference-staging-eu
+    namespace: staging-eu
+    image_app: addx-gpu-inference
+    exception_id: algo-390-staging-service-discovery-namespaces
+  - cluster_dir: aws-390709477306-us-staging
+    application_name: flywheel-deps-staging-us
+    namespace: staging-us
+    image_app: flywheel
+    exception_id: algo-390-staging-service-discovery-namespaces
+  - cluster_dir: aws-390709477306-us-staging
+    application_name: addx-smart-multimedia-deps-staging-us
+    namespace: staging-us
+    image_app: addx-smart-multimedia
+    exception_id: algo-390-staging-service-discovery-namespaces
+  - cluster_dir: aws-390709477306-us-staging
+    application_name: a4x-algo-event-dispatcher-deps-staging-us
+    namespace: staging-us
+    image_app: a4x-algo-event-dispatcher
+    exception_id: algo-390-staging-service-discovery-namespaces
+  - cluster_dir: aws-390709477306-us-staging
+    application_name: addx-gpu-inference-staging-us
+    namespace: staging-us
+    image_app: addx-gpu-inference
+    exception_id: algo-390-staging-service-discovery-namespaces
+
+  - cluster_dir: gcp-a4xcloud-tech-service-us-us-tech-service
+    application_name: addx-gpu-inference-staging-us-gcp-to-staging-us
+    namespace: staging-us
+    image_app: addx-gpu-inference
+    exception_id: addx-gpu-inference-shared-runtime-namespaces
+  - cluster_dir: tencent-100014919455-cn-main
+    application_name: addx-gpu-inference-staging-cn
+    namespace: staging-cn
+    image_app: addx-gpu-inference
+    exception_id: addx-gpu-inference-shared-runtime-namespaces
+  - cluster_dir: aws-740315635167-eu-prod
+    application_name: addx-gpu-inference-prod-eu
+    namespace: prod-eu
+    image_app: addx-gpu-inference
+    exception_id: addx-gpu-inference-shared-runtime-namespaces
+  - cluster_dir: aws-302571458622-us-prod
+    application_name: addx-gpu-inference-prod-us-aws
+    namespace: prod-us
+    image_app: addx-gpu-inference
+    exception_id: addx-gpu-inference-shared-runtime-namespaces
+  - cluster_dir: gcp-a4xcloud-p-us-us-prod
+    application_name: addx-gpu-inference-prod-us-gcp
+    namespace: prod-us
+    image_app: addx-gpu-inference
+    exception_id: addx-gpu-inference-shared-runtime-namespaces
+  - cluster_dir: tencent-100014919455-cn-main
+    application_name: addx-gpu-inference-prod-cn
+    namespace: prod-cn
+    image_app: addx-gpu-inference
+    exception_id: addx-gpu-inference-shared-runtime-namespaces
+
+  - cluster_dir: aws-302571458622-us-prod
+    application_name: iot-sim-pre-us
+    namespace: pre-us
+    image_app: iot-sim
+    manifest_repository: https://gitlab.addx.ai/DEV/argocd-apps.git
+    source_repository: https://gitlab.addx.ai/CLOUD/iot-sim.git
+    source_path: k8s/overlays/pre-us
+    exception_id: iot-sim-pre-shared-namespaces
+  - cluster_dir: aws-740315635167-eu-prod
+    application_name: iot-sim-pre-eu
+    namespace: pre-eu
+    image_app: iot-sim
+    manifest_repository: https://gitlab.addx.ai/DEV/argocd-apps.git
+    source_repository: https://gitlab.addx.ai/CLOUD/iot-sim.git
+    source_path: k8s/overlays/pre-eu
+    exception_id: iot-sim-pre-shared-namespaces
+
+  - cluster_dir: aws-302571458622-us-prod
+    application_name: oauth2-prod-us
+    namespace: prod-us
+    image_app: oauth2
+    manifest_repository: https://gitlab.addx.ai/DEV/argocd-apps.git
+    source_repository: https://gitlab.addx.ai/CLOUD/oauth2.git
+    source_path: k8s/overlays/prod-us
+    exception_id: oauth2-prod-shared-namespaces
+  - cluster_dir: aws-740315635167-eu-prod
+    application_name: oauth2-prod-eu
+    namespace: prod-eu
+    image_app: oauth2
+    manifest_repository: https://gitlab.addx.ai/DEV/argocd-apps.git
+    source_repository: https://gitlab.addx.ai/CLOUD/oauth2.git
+    source_path: k8s/overlays/prod-eu
+    exception_id: oauth2-prod-shared-namespaces
+  - cluster_dir: aws-302571458622-us-prod
+    application_name: iot-sim-prod-us
+    namespace: prod-us
+    image_app: iot-sim
+    manifest_repository: https://gitlab.addx.ai/DEV/argocd-apps.git
+    source_repository: https://gitlab.addx.ai/CLOUD/iot-sim.git
+    source_path: k8s/overlays/prod-us
+    exception_id: iot-sim-prod-shared-namespaces
+  - cluster_dir: aws-740315635167-eu-prod
+    application_name: iot-sim-prod-eu
+    namespace: prod-eu
+    image_app: iot-sim
+    manifest_repository: https://gitlab.addx.ai/DEV/argocd-apps.git
+    source_repository: https://gitlab.addx.ai/CLOUD/iot-sim.git
+    source_path: k8s/overlays/prod-eu
+    exception_id: iot-sim-prod-shared-namespaces
+  - cluster_dir: aws-302571458622-us-prod
+    application_name: webhook-pre-us
+    namespace: pre-us
+    image_app: webhook
+    manifest_repository: https://gitlab.addx.ai/DEV/argocd-apps.git
+    source_repository: https://gitlab.addx.ai/PAAS/webhook.git
+    source_path: k8s/overlays/pre-us-observe
+    exception_id: webhook-pre-us-shared-namespace
+  - cluster_dir: tencent-100014919455-cn-main
+    application_name: state-machine-staging-cn
+    namespace: staging-cn
+    image_app: state-machine
+    manifest_repository: https://gitlab.addx.ai/DEV/argocd-apps.git
+    source_repository: https://gitlab.addx.ai/CLOUD/state-machine.git
+    source_path: k8s/tke-cn/overlays/staging-cn
+    exception_id: state-machine-staging-cn-tke-shared-namespace
+
+kustomizations:
+  - path_suffix: [k8s, overlays, prod-us, kustomization.yaml]
+    namespace: prod-us
+    image_app: alexa-access-front
+    repository: https://gitlab.addx.ai/CLOUD/alexa-access-front.git
+    exception_id: alexa-access-front-prod-us-shared-namespace
+
+  - path_suffix: [k8s, overlays, prod-us, kustomization.yaml]
+    namespace: prod-us
+    image_app: troubleshooting
+    repository: https://gitlab.addx.ai/DATA/troubleshooting.git
+    exception_id: troubleshooting-prod-shared-namespaces
+  - path_suffix: [k8s, overlays, prod-us-middlequery, kustomization.yaml]
+    namespace: prod-us
+    image_app: middlequery
+    repository: https://gitlab.addx.ai/DATA/troubleshooting.git
+    exception_id: troubleshooting-prod-shared-namespaces
+  - path_suffix: [k8s, overlays, prod-eu, kustomization.yaml]
+    namespace: prod-eu
+    image_app: troubleshooting
+    repository: https://gitlab.addx.ai/DATA/troubleshooting.git
+    exception_id: troubleshooting-prod-shared-namespaces
+  - path_suffix: [k8s, overlays, prod-eu-middlequery, kustomization.yaml]
+    namespace: prod-eu
+    image_app: middlequery
+    repository: https://gitlab.addx.ai/DATA/troubleshooting.git
+    exception_id: troubleshooting-prod-shared-namespaces
+
+  - path_suffix: [k8s, overlays, prod-us, kustomization.yaml]
+    namespace: prod-us
+    image_app: nature-chat-frontend
+    exception_id: nature-chat-frontend-prod-us-shared-namespace
+
+  - path_suffix: [k8s, overlays, prod-us, kustomization.yaml]
+    namespace: prod-us
+    image_app: micro-app-platform
+    repository: https://gitlab.addx.ai/WEB/micro_app_platform.git
+    exception_id: micro-app-platform-prod-us-shared-namespace
+
+  - path_suffix: [k8s, overlays, prod-us, kustomization.yaml]
+    namespace: prod-us
+    image_app: oauth2
+    repository: https://gitlab.addx.ai/CLOUD/oauth2.git
+    exception_id: oauth2-prod-shared-namespaces
+  - path_suffix: [k8s, overlays, prod-eu, kustomization.yaml]
+    namespace: prod-eu
+    image_app: oauth2
+    repository: https://gitlab.addx.ai/CLOUD/oauth2.git
+    exception_id: oauth2-prod-shared-namespaces
+
+  - path_suffix: [k8s, app, overlays, staging-us-aws, kustomization.yaml]
+    namespace: staging-us
+    image_app: flywheel
+    exception_id: flywheel-shared-tenant-namespaces
+  - path_suffix: [k8s, app, overlays, pre-us-aws, kustomization.yaml]
+    namespace: pre-us
+    image_app: flywheel
+    exception_id: flywheel-shared-tenant-namespaces
+  - path_suffix: [k8s, app, overlays, prod-us-aws-302, kustomization.yaml]
+    namespace: prod-us
+    image_app: flywheel
+    exception_id: flywheel-shared-tenant-namespaces
+  - path_suffix: [k8s, app, overlays, pre-eu-aws, kustomization.yaml]
+    namespace: pre-eu
+    image_app: flywheel
+    exception_id: flywheel-shared-tenant-namespaces
+  - path_suffix: [k8s, app, overlays, prod-eu-aws-740, kustomization.yaml]
+    namespace: prod-eu
+    image_app: flywheel
+    exception_id: flywheel-shared-tenant-namespaces
+  - path_suffix: [k8s, app, overlays, prod-us-gcp, kustomization.yaml]
+    namespace: prod-us
+    image_app: flywheel
+    exception_id: flywheel-shared-tenant-namespaces
+  - path_suffix: [k8s, app, overlays, staging-us-gcp, kustomization.yaml]
+    namespace: staging-us
+    image_app: flywheel
+    exception_id: flywheel-shared-tenant-namespaces
+  - path_suffix: [k8s, app, overlays, staging-cn, kustomization.yaml]
+    namespace: staging-cn
+    image_app: flywheel
+    exception_id: flywheel-shared-tenant-namespaces
+  - path_suffix: [k8s, app, overlays, pre-cn, kustomization.yaml]
+    namespace: pre-cn
+    image_app: flywheel
+    exception_id: flywheel-shared-tenant-namespaces
+  - path_suffix: [k8s, app, overlays, prod-cn, kustomization.yaml]
+    namespace: prod-cn
+    image_app: flywheel
+    exception_id: flywheel-shared-tenant-namespaces
+
+  - path_suffix: [k8s, overlays, staging-eu, kustomization.yaml]
+    namespace: staging-eu
+    image_app: addx-gpu-inference
+    exception_id: algo-390-staging-service-discovery-namespaces
+  - path_suffix: [k8s, overlays, staging-us, kustomization.yaml]
+    namespace: staging-us
+    image_app: addx-gpu-inference
+    exception_id: algo-390-staging-service-discovery-namespaces
+
+  - path_suffix: [k8s, overlays, staging-us-gcp-to-staging-us, kustomization.yaml]
+    namespace: staging-us
+    image_app: addx-gpu-inference
+    exception_id: addx-gpu-inference-shared-runtime-namespaces
+  - path_suffix: [k8s, overlays, staging-us-gcp, kustomization.yaml]
+    namespace: staging-us
+    image_app: addx-gpu-inference
+    exception_id: addx-gpu-inference-shared-runtime-namespaces
+  - path_suffix: [k8s, overlays, staging-cn, kustomization.yaml]
+    namespace: staging-cn
+    image_app: addx-gpu-inference
+    exception_id: addx-gpu-inference-shared-runtime-namespaces
+  - path_suffix: [k8s, overlays, prod-eu, kustomization.yaml]
+    namespace: prod-eu
+    image_app: addx-gpu-inference
+    exception_id: addx-gpu-inference-shared-runtime-namespaces
+  - path_suffix: [k8s, overlays, prod-us, kustomization.yaml]
+    namespace: prod-us
+    image_app: addx-gpu-inference
+    exception_id: addx-gpu-inference-shared-runtime-namespaces
+  - path_suffix: [k8s, overlays, prod-us-gcp, kustomization.yaml]
+    namespace: prod-us
+    image_app: addx-gpu-inference
+    exception_id: addx-gpu-inference-shared-runtime-namespaces
+  - path_suffix: [k8s, overlays, prod-cn, kustomization.yaml]
+    namespace: prod-cn
+    image_app: addx-gpu-inference
+    exception_id: addx-gpu-inference-shared-runtime-namespaces
+
+  - path_suffix: [k8s, overlays, pre-us, kustomization.yaml]
+    namespace: pre-us
+    image_app: iot-sim
+    repository: https://gitlab.addx.ai/CLOUD/iot-sim.git
+    exception_id: iot-sim-pre-shared-namespaces
+  - path_suffix: [k8s, overlays, pre-eu, kustomization.yaml]
+    namespace: pre-eu
+    image_app: iot-sim
+    repository: https://gitlab.addx.ai/CLOUD/iot-sim.git
+    exception_id: iot-sim-pre-shared-namespaces
+
+  - path_suffix: [k8s, overlays, prod-us, kustomization.yaml]
+    namespace: prod-us
+    image_app: iot-sim
+    repository: https://gitlab.addx.ai/CLOUD/iot-sim.git
+    exception_id: iot-sim-prod-shared-namespaces
+  - path_suffix: [k8s, overlays, prod-eu, kustomization.yaml]
+    namespace: prod-eu
+    image_app: iot-sim
+    repository: https://gitlab.addx.ai/CLOUD/iot-sim.git
+    exception_id: iot-sim-prod-shared-namespaces
+
+  - path_suffix: [k8s, overlays, pre-us-observe, kustomization.yaml]
+    namespace: pre-us
+    image_app: webhook
+    repository: https://gitlab.addx.ai/PAAS/webhook.git
+    exception_id: webhook-pre-us-shared-namespace
+
+  - path_suffix: [k8s, tke-cn, overlays, staging-cn, kustomization.yaml]
+    namespace: staging-cn
+    image_app: state-machine
+    repository: https://gitlab.addx.ai/CLOUD/state-machine.git
+    exception_id: state-machine-staging-cn-tke-shared-namespace

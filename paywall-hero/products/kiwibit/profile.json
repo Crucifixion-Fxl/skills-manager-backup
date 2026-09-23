@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "product_id": "kiwibit",
+  "display_name": "Kiwibit",
+  "status": "partial_materials_received",
+  "positioning": {
+    "primary_emphases": [],
+    "supported_claims": []
+  },
+  "appearance": {
+    "default_hardware_model": null,
+    "distinguishing_features": [
+      "绿色双坡屋顶，屋顶可见大面积深色太阳能板。",
+      "中部绿色竖直面板带白色 kiwibit 标识，上下排列两个黑色圆形区域；下方为可见镜头。",
+      "中央面板两侧为透明储粮区域，前下方有绿色接粮盘与圆角弧形栖架。"
+    ],
+    "reference_asset_ids": [
+      "kiwibit-feeder-reference-01"
+    ],
+    "evidence_scope": "用户于 2026-09-08 提供的当前参考图；仅用于该图所示硬件外观，型号未提供。"
+  },
+  "brand": {
+    "primary_color": null,
+    "accent_color": "#0CC97A",
+    "fonts_by_locale": {},
+    "visual_preferences": []
+  },
+  "default_phone_frame_id": null,
+  "output": {
+    "logical_width": 275,
+    "logical_height": 220,
+    "scale": 3,
+    "pixel_width": 825,
+    "pixel_height": 660,
+    "aspect_ratio": "5:4",
+    "height_policy": "default_adjustable"
+  },
+  "paywall_placement": {
+    "display_height": null,
+    "crop_mode": null,
+    "overlay_safe_areas": []
+  },
+  "assets": [
+    {
+      "id": "kiwibit-feeder-reference-01",
+      "path": "assets/kiwibit/hardware/kiwibit_feeder.jpg",
+      "kind": "hardware_reference",
+      "locale": null,
+      "model": null,
+      "source": "用户于 2026-09-08 提供：kiwibit_feeder.jpg",
+      "usage": "当前产品硬件外观参考；非默认手机框或真实 App 截图",
+      "status": "provided",
+      "sha256": "7d1796722007fd967926e3471eb11525ba5780351fa1c8b307986f25dfb35b03",
+      "notes": "白底组合宣传图，含手机、鸟和 4K ULTRA HD 标识；不是透明底独立硬件素材。"
+    }
+  ]
+}

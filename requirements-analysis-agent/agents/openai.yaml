@@ -1,0 +1,4 @@
+interface:
+  display_name: "Requirements Analysis Agent"
+  short_description: "Review every incoming requirement before design or coding"
+  default_prompt: "Analyze this requirement, invoke relevant company skills in review-only mode, and produce a typed REQUIREMENTS artifact or ATTEMPT_NEEDS_INPUT. Never start downstream work before the PO accepts the exact artifact ID and hash."

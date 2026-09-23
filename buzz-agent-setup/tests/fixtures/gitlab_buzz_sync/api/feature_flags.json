@@ -1,0 +1,29 @@
+{
+  "body": [
+    {
+      "active": false,
+      "created_at": "2026-09-13T08:21:25.892Z",
+      "description": "recording flag",
+      "name": "rec_flag_0913082019",
+      "scopes": [],
+      "strategies": [],
+      "updated_at": "2026-09-13T08:21:26.158Z",
+      "version": "new_version_flag"
+    }
+  ],
+  "headers": {
+    "content-type": "application/json",
+    "x-next-page": "",
+    "x-page": "1",
+    "x-per-page": "100",
+    "x-total": "1",
+    "x-total-pages": "1"
+  },
+  "request": {
+    "as": "maintainer",
+    "method": "GET",
+    "path": "projects/2/feature_flags",
+    "query": {}
+  },
+  "status": 200
+}

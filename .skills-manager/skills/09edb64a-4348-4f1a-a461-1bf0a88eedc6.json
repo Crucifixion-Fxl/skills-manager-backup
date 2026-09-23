@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "09edb64a-4348-4f1a-a461-1bf0a88eedc6",
+  "path": "aliyun-cli",
+  "path_key": "aliyun-cli",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/aliyun-cli",
+    "branch": null
+  }
+}

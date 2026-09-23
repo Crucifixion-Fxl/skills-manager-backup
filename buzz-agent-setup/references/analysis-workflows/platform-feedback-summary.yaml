@@ -1,0 +1,27 @@
+# 每周平台反馈周报（职能 Channel，如 gitsecops）。唤醒平台 Desk。
+# 顺序硬约束：必须晚于各业务频道的 weekly-mr-pipeline-health（周一 01:30 UTC）及其转交，
+# 本模板默认周一 06:30 UTC，给 -dev 分析和 Desk 建单留 5 小时。
+# 替换 <desk-name>、<issues-repo>（path 与 project id）、<business-channels> 与站立受众 GitLab 用户名。
+name: weekly-platform-feedback-summary
+description: Weekly summary of platform feedback filed in the central issue repo. Runs after every business channel's pipeline-health hand-off.
+trigger:
+  on: schedule
+  # relay 的星期字段 1=周日：周一=2，周一到周五=2-6；名字写法（MON、MON-FRI）未验证，不要用。
+  cron: "30 6 * * 2"
+steps:
+  - id: wake
+    action: send_message
+    text: >-
+      @<desk-name> 汇总本周收到的平台反馈，方法见 $addx:buzz-agent-setup
+      的 references/scheduled-workflows.md「平台反馈周报」。
+      对象：<issues-repo>；窗口：[触发时 − 7 天, 触发时)，UTC，
+      新建按 created_at，状态变化按 updated_at；分析时点：触发时；
+      对比窗口：上一份同口径周报。
+      顺序：<business-channels> 各自的 weekly-mr-pipeline-health 先出报告并转交，
+      你在各频道 Thread 里回了 Issue 链接之后才写本报告；
+      先核对这几个频道本周的转交回执（你自己发的回复，含「无平台层根因」），
+      缺哪个写「待转交：<频道>」，不补分析、不等待。
+      只用 Issue 的标题、链接、标签、状态、影响项目路径和计数，不贴日志和 Thread 正文；报告只发在本频道。
+      最终报告走 helper，sources：person <channel_admin_username>、
+      person <core_eng_username>（缺席写未通知）。ack 不加站立受众。
+      最终报告超过约 8 行时按 references/feishu-doc-report.md 写成飞书文档（你自己的 bot 建、只读授权给群、发摘要），Buzz Thread 只发摘要和文档链接。

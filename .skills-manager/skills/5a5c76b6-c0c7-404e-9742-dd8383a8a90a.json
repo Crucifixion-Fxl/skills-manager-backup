@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "5a5c76b6-c0c7-404e-9742-dd8383a8a90a",
+  "path": "work-method-demo-writer",
+  "path_key": "work-method-demo-writer",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/work-method-demo-writer",
+    "branch": null
+  }
+}

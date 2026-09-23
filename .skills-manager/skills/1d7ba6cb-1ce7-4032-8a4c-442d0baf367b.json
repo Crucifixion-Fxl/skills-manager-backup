@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "1d7ba6cb-1ce7-4032-8a4c-442d0baf367b",
+  "path": "aws-cli",
+  "path_key": "aws-cli",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/aws-cli",
+    "branch": null
+  }
+}

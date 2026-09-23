@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Work Method Demo</title>
+  <meta name="description" content="把一个工作方法写成产品级、可视化、可演示的 HTML demo。" />
+  <meta property="og:type" content="article" />
+  <meta property="og:title" content="Work Method Demo" />
+  <meta property="og:description" content="先写 motivation，再写核心判断标准，最后用真实工具 demo 展示完整闭环。" />
+  <meta property="og:image" content="./og-card.svg" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Work Method Demo" />
+  <meta name="twitter:description" content="把工作方法写成产品级、可视化、可演示的 HTML demo。" />
+  <meta name="twitter:image" content="./og-card.svg" />
+  <style>
+    :root {
+      --bg: #10140f;
+      --panel: #1c241b;
+      --ink: #f6f0dd;
+      --muted: #b8b29f;
+      --line: rgba(246, 240, 221, 0.16);
+      --green: #8fd36d;
+      --blue: #75b9ff;
+      --font-ui: "Aptos", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      --font-mono: "SFMono-Regular", "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font-ui); line-height: 1.65; }
+    .hero, main { max-width: 1280px; margin: 0 auto; padding: 56px 28px; }
+    .eyebrow { color: var(--green); font: 760 12px var(--font-mono); text-transform: uppercase; letter-spacing: .12em; }
+    h1 { margin: 16px 0; font-size: clamp(38px, 6vw, 76px); line-height: 1; }
+    .lead { max-width: 760px; color: #d6d0bd; font-size: 20px; }
+    .demo { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: 18px; margin-top: 24px; }
+    .terminal { background: #080d08; border: 1px solid var(--line); border-radius: 8px; padding: 14px; font: 12px var(--font-mono); color: #c9d4bf; }
+    .ok { color: var(--green); }
+    .blue { color: var(--blue); }
+  </style>
+</head>
+<body>
+  <section class="hero">
+    <div class="eyebrow">Work Method Demo</div>
+    <h1>把方法标题写成产品主张</h1>
+    <p class="lead">先写 motivation，再写核心判断标准，最后用真实工具 demo 展示完整闭环。</p>
+    <div class="demo">
+      <div class="terminal">
+        <div>&gt; 用户输入真实任务或操作</div>
+        <div class="blue">● Tool / AI action</div>
+        <div class="ok">⎿ 输出可 review 的结果</div>
+      </div>
+    </div>
+  </section>
+  <main>
+    <section>
+      <h2>核心判断标准</h2>
+      <p>用一句话说明何时使用这个方法、何时不要使用。</p>
+    </section>
+  </main>
+</body>
+</html>

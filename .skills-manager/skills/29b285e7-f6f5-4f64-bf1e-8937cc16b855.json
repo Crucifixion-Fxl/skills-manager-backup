@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "29b285e7-f6f5-4f64-bf1e-8937cc16b855",
+  "path": "bad-review-interception",
+  "path_key": "bad-review-interception",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/bad-review-interception",
+    "branch": null
+  }
+}

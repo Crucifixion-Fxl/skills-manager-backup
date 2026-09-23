@@ -1,0 +1,33 @@
+{
+  "schema": "addx.work_method_report_quality.v1",
+  "comparison_method": "blind_side_by_side",
+  "judge_input": "reports_claim_ledger_rubric_only",
+  "critical_gates": [
+    "scene_reconstruction",
+    "evidence_traceability",
+    "skill_boundary"
+  ],
+  "quality_dimensions": [
+    "scene_reconstruction",
+    "evidence_traceability",
+    "recommendation_actionability",
+    "skill_decision_accuracy",
+    "human_readability"
+  ],
+  "score_range": [0, 4],
+  "scoring_anchors": {
+    "0": "Missing, unsupported, or unusable for this dimension.",
+    "1": "Major facts or links are wrong; a reviewer cannot rely on it.",
+    "2": "Partially useful but an important scene element, evidence link, action, boundary, or explanation is missing.",
+    "3": "Complete and reliable with only minor clarity or specificity gaps.",
+    "4": "A cold reader can verify and act on it without reconstructing missing context."
+  },
+  "acceptance": {
+    "all_required_claims_supported": true,
+    "unsupported_claims": 0,
+    "privacy_violations": 0,
+    "minimum_dimension_score": 3,
+    "candidate_may_regress_dimensions": 0,
+    "candidate_must_reduce_primary_input_metric": true
+  }
+}

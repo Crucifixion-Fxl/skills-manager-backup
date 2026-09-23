@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "status": "partial_materials_received",
+  "assets": [
+    {
+      "id": "phone-frame-group-202",
+      "path": "assets/shared/phone-frames/group-202.png",
+      "kind": "phone_frame",
+      "source": "用户提供 Group 202.png",
+      "status": "provided",
+      "usage": "共享正面手机框，本次试做采用",
+      "size": [
+        3134,
+        6528
+      ],
+      "screen_bounds_approx": [
+        125,
+        110,
+        3015,
+        6310
+      ],
+      "screen_interior": "opaque_white",
+      "has_status_bar": false,
+      "notes": "原图外部透明；截图需上层圆角蒙版，屏幕边界需出图时目视核对。"
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "23020fcf-c196-454e-9085-88f7bcd0ab24",
+  "path": "litellm-cend-integration",
+  "path_key": "litellm-cend-integration",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/litellm-cend-integration",
+    "branch": null
+  }
+}

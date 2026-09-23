@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "401b05b4-d205-49f3-8c7d-d18a094ea854",
+  "path": "dev-infra",
+  "path_key": "dev-infra",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/dev-infra",
+    "branch": null
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "d7120661-ecb1-490d-8a71-cb29843f85bc",
+  "path": "weekly-report",
+  "path_key": "weekly-report",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/weekly-report",
+    "branch": null
+  }
+}

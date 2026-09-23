@@ -1,0 +1,33 @@
+# GCP Cloud SQL logical database (Database) — developer-facing, GCP-only.
+# References a physical DatabaseInstance and auto-creates a per-app database +
+# user + grant, ESO password + PushSecret to Vault
+# secret/gcp/cloudsql/application/{{database_app}}/{{engine}}. The app consumes
+# that Vault path with recipes/k8s/shared-db-external-secret.yaml.tmpl.
+#
+# Required slots:
+#   {{database_claim_name}}  claim name, e.g. {{app}}-logical-{{engine}}
+#   {{namespace}}            target application namespace
+#   {{app}}                  canonical kebab-case owner application slug
+#   {{database_app}}         {{app}} with every '-' replaced by '_'
+#   {{engine}}               mysql | postgres
+#   {{instance_ref_name}}    the physical DatabaseInstance claim name
+#   {{database_name}}        logical db name (snake_case); omit line to default to spec.app
+#
+# The claim MUST satisfy fleet policy require-database-snake-case-name:
+# platform.addx.io/app-slug (kebab) and spec.app (snake) mechanically related.
+# Do not hand-write raw provider-sql User/Grant; do not put business accounts or
+# table names in the platform repo.
+
+apiVersion: platform.addx.io/v1alpha1
+kind: Database
+metadata:
+  name: {{database_claim_name}}
+  namespace: {{namespace}}
+  annotations:
+    platform.addx.io/app-slug: {{app}}
+spec:
+  app: {{database_app}}
+  engine: {{engine}}
+  instanceRef:
+    name: {{instance_ref_name}}
+  databaseName: {{database_name}}

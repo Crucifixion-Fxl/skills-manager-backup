@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "5d6e987a-a574-453e-bfb5-8156fef5f40b",
+  "path": "opensource-audit",
+  "path_key": "opensource-audit",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/opensource-audit",
+    "branch": null
+  }
+}

@@ -1,0 +1,32 @@
+levels:
+  L1:
+    name: public
+    examples:
+      - open-source compiler toolchains
+      - Maven Central cache
+      - npm registry cache
+      - public model weights
+    pvc_allowed: true
+    runner_isolation: instance runner acceptable
+  L2:
+    name: internal-low-sensitive
+    examples:
+      - internal SDK binaries
+      - closed-source compiler binaries without license keys
+      - commercial compiler installation files without secrets
+    pvc_allowed: true
+    runner_isolation: group or project locked runner required
+  L3:
+    name: sensitive
+    examples:
+      - license key files
+      - API tokens
+      - private keys
+      - personal data
+      - customer data
+    pvc_allowed: false
+    alternative:
+      - GitLab CI/CD Variables masked and protected
+      - Kubernetes Secret
+      - Vault
+      - license server

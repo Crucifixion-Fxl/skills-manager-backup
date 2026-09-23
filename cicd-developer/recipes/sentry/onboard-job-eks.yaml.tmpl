@@ -1,0 +1,95 @@
+# sentry-onboard-job-eks.yaml.tmpl
+#
+# Sentry 自助 Job —— **EKS 集群专用**（所有 EKS 集群都有 base/sentry-onboard 镜像，含
+#   3 个 staging EKS + eu-prod-data，由 DEV/base-images 扇出）。
+# TKE cn-main 用 onboard-job-tke.yaml.tmpl 不走本模板。
+#
+# Sentry 自助接入的 ArgoCD Sync hook Job —— 每次 sync 跑一次（幂等）：
+#   1. 用 app-scoped SA JWT 换 Vault token
+#   2. 读 `secret/cicd/sentry/tokens/{instance}` 拿 admin token
+#   3. 调 Sentry API 建 project（已存在则 idempotent）
+#   4. 把 DSN 写 Vault platform 路径
+#
+# 必填槽位：
+#   {{app}}        kebab-case
+#   {{image}}      sentry-onboard 镜像完整路径（不含 tag）= 本集群 Harbor host + `/base/sentry-onboard`：
+#                    <local-harbor>/base/sentry-onboard
+#                  统一 base/ 工具镜像，所有集群一致（DEV/base-images 扇出到每个集群 Harbor）；
+#                  <local-harbor> 查 references/data/clusters.yaml -> clusters[].harbor_url（如
+#                  harbor-00249-us-tech.addx.live；TKE 是 harbor-cn.addx.live）。
+#                  Kyverno require-harbor-image-path 全 fleet 放行 base/，无需豁免。
+#   {{sentry_onboard_image_tag}}  平台批准的不可变 tag / commit SHA；禁止 `latest`
+#
+# 选填槽位（按目标集群条件加）：
+#   {{aws_cn_node_group}}        AWS CN EKS target 必填（cn-prod / cn-tech-service / cn-dev / cn-staging），值：
+#                                   589 cn-tech-service: nat-egress
+#                                   741 cn-prod:         sentry-egress
+#                                   801 cn-staging:      nat-outbound
+#                                   801 cn-dev:          nat-outbound
+#                                US/EU/TKE 集群不需要——走 internal ALB/CLB 本内网
+#   {{aws_cn_toleration_key}}    跟 node-group 配套的 taint key（如 dedicated）
+#   {{aws_cn_toleration_value}}  对应 toleration value（同 node_group 名）
+#
+# ⭐ hook-delete-policy: HookSucceeded,HookFailed（**不是** BeforeHookCreation）
+# - 不用 BeforeHookCreation：它每次 sync 前删旧建新，hook 或同 wave peer 持续失败时 op 永不 finalize
+#   → phase 卡 Running 僵尸 → 焊死该 app 后续所有 sync（见 troubleshooting/argocd-app-stuck-phase-running.md 模式 1）。
+# - 成功+失败都清：op 仍正常 finalize（成功 Succeeded / 失败 Failed 后退避，无僵尸）。HookFailed 确保失败 Job
+#   不残留——残留的失败 Job 会被 ArgoCD 每次 resync 重判 Failed（毒化 sync），并在升 image tag 时触发
+#   spec.template immutable 卡 sync；万一残留，`kubectl delete job <app>-sentry-onboard` 再 sync。
+# 副作用：Job 无论成败都即时删，pod 日志只能从 ELK/Sentry 看。
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{app}}-sentry-onboard
+  annotations:
+    argocd.argoproj.io/hook: Sync                     # 每次 sync 重跑（Job 幂等）
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded,HookFailed
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 604800                     # 成功/失败 Job 都由 hook-delete-policy 终态即时清；ttl 7d 仅兜底
+  template:
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{app}}-sentry-onboard
+      # imagePullSecrets 必须显式（hard rule #24 对 hook Job pod 同样适用）：
+      # EKS 集群 Kyverno mutate 自动注入；TKE cn-main 没这个 mutation → 拉私有 harbor 走匿名 → 401
+      imagePullSecrets:
+        - name: harbor-registry-secret
+      nodeSelector:
+        kubernetes.io/arch: amd64                     # sentry-onboard 镜像目前 amd64 only
+        # AWS CN EKS target 必须加 NAT 出口 NodePool，否则走节点 EIP 不在 Sentry CLB 白名单 → timeout/504：
+        # node-group: {{aws_cn_node_group}}
+      # tolerations:                                  # 跟 nodeSelector 配套；仅 AWS CN EKS target 加
+      #   - key: {{aws_cn_toleration_key}}
+      #     operator: Equal
+      #     value: {{aws_cn_toleration_value}}
+      #     effect: NoSchedule
+      volumes:
+        - name: vault-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  audience: https://kubernetes.default.svc   # 必须跟 Vault role bound_audiences 匹配
+                  expirationSeconds: 3600
+      containers:
+        - name: onboard
+          image: {{image}}:{{sentry_onboard_image_tag}}
+          imagePullPolicy: Always
+          envFrom:
+            - configMapRef:
+                name: {{app}}-sentry-onboard-config
+          volumeMounts:
+            - name: vault-token
+              mountPath: /var/run/secrets/vault
+              readOnly: true
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits:   { cpu: 500m, memory: 256Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65534
+            capabilities: { drop: [ALL] }

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "17ad258c-a80e-4294-ab40-e3739f508eca",
+  "path": "addx-console-admin",
+  "path_key": "addx-console-admin",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/addx-console-admin",
+    "branch": null
+  }
+}

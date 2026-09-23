@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "c8253ed1-c6e4-4e9e-9a1b-3d85b45d87c8",
+  "path": "ninedata",
+  "path_key": "ninedata",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/ninedata",
+    "branch": null
+  }
+}

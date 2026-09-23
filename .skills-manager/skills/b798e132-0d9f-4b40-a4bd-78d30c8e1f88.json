@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "b798e132-0d9f-4b40-a4bd-78d30c8e1f88",
+  "path": "domain-workspace-onboarding",
+  "path_key": "domain-workspace-onboarding",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/domain-workspace-onboarding",
+    "branch": null
+  }
+}

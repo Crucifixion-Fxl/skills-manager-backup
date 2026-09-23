@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "d80226a3-e087-4de0-bd56-5d999628f724",
+  "path": "engagement-touchpoint-integration",
+  "path_key": "engagement-touchpoint-integration",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/engagement-touchpoint-integration",
+    "branch": null
+  }
+}

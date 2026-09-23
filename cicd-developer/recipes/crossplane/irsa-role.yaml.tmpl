@@ -1,0 +1,60 @@
+# crossplane-irsa-role.yaml.tmpl
+#
+# IRSA (IAM Roles for Service Accounts) —— 让 Pod 通过 ServiceAccount 直接访问
+# AWS 服务（S3 / DynamoDB / SQS 等），无需 AK/SK。
+#
+# 跟 Crossplane App Role（recipes/crossplane/rds-rolepolicy.yaml.tmpl）的区别：
+#
+#   |              | App Role（用于 Crossplane 代建资源） | IRSA Role（Pod 直接用）|
+#   |--------------|-----------------------------------|---------------------|
+#   | 信任主体       | CrossplaneProviderRole            | EKS OIDC Provider   |
+#   | 用途          | Crossplane 代理创建 AWS 资源         | Pod 直接访问 AWS 服务  |
+#   | 文件命名       | {app}-iam.yaml                     | {app}-irsa.yaml      |
+#
+# 必填槽位：
+#   {{app}}                kebab-case
+#   {{namespace}}          Pod 跑的 namespace
+#   {{sa_name}}            ServiceAccount 名字（通常 = {{app}}）
+#   {{oidc_provider_arn}}  目标集群的 EKS OIDC Provider ARN
+#                          查 v1 crossplane/irsa.md 的"各集群 OIDC Provider ARN"表
+#                          或 `aws eks describe-cluster --name <cluster> --query cluster.identity.oidc.issuer`
+#   {{oidc_provider_url}}  ARN 对应的 URL（去掉 `arn:<partition>:iam::<account>:oidc-provider/` 前缀）
+#   {{partition}}          aws | aws-cn
+#   {{account_id}}         目标集群的 AWS account id（查 clusters.yaml）
+#
+# 配套：必须同时写 crossplane-irsa-rolepolicy.yaml.tmpl（权限策略）+
+#       k8s 端的 ServiceAccount（带 eks.amazonaws.com/role-arn annotation）。
+
+apiVersion: iam.aws.m.upbound.io/v1beta1
+kind: Role
+metadata:
+  name: crossplane-app-{{app}}-irsa
+  annotations:
+    crossplane.io/external-name: crossplane-app-{{app}}-irsa
+spec:
+  forProvider:
+    assumeRolePolicy: |
+      {
+        "Version": "2012-10-17",
+        "Statement": [{
+          "Effect": "Allow",
+          "Principal": {
+            "Federated": "{{oidc_provider_arn}}"
+          },
+          "Action": "sts:AssumeRoleWithWebIdentity",
+          "Condition": {
+            "StringEquals": {
+              "{{oidc_provider_url}}:sub": "system:serviceaccount:{{namespace}}:{{sa_name}}",
+              "{{oidc_provider_url}}:aud": "sts.amazonaws.com"
+            }
+          }
+        }]
+      }
+    permissionsBoundary: arn:{{partition}}:iam::{{account_id}}:policy/CrossplaneAppBoundary
+    tags:
+      managed-by: crossplane
+      app: {{app}}
+      type: irsa
+  providerConfigRef:
+    name: default
+    kind: ClusterProviderConfig

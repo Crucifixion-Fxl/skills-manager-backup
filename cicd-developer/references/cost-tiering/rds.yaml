@@ -1,0 +1,93 @@
+# cost-tiering/rds.yaml
+#
+# AWS RDS Instance（非 Aurora 单实例）的成本分档。
+#
+# 消费方：
+#   - workflows/add-rds.md
+#   - recipes/crossplane/rds-instance.yaml.tmpl（注释里引用规则）
+#
+# 规则：
+#   1. dev/pre **必须** 用 min-tier 值，除非 cd-requirements.md 显式说明升档原因
+#   2. prod **必须** 用 prod 列原值；任何字段下调需在 cd-requirements.md 留 override 记录
+#   3. publiclyAccessible 任何 env 都不许 true（硬红线，网络安全规则 #2）
+#   4. 自 2026-06-01 起，**staging + tech-service**（6 集群 us/eu/cn-staging + tech-us/eu/cn）
+#      的新部署应用**不再按本表创建 app-owned RDS**，只能消费 shared-middleware（hard-rule #29）：
+#      每个 app 通过 kind:Database Composition 在 shared RDS 实例上拿到自己的 database+user，
+#      凭证落在 secret/{env}/rds/application/{app}/database（platform-resource-credential，
+#      region-less，key: host/port/username/password），app 用 ExternalSecret 读取。
+#      ✅ 共享 MySQL 自助已上线（2026-06-03，6 集群，provider-sql + provider-kubernetes vault
+#      交付）：写 kind:Database{app,env,engine:mysql} 即可，不再 Ops Todo。postgres 自助
+#      2026-06-04 已上线(engine:postgres,app 用自有 schema、public 不可写);mariadb Composition
+#      未部署 → 仍 Ops Todo。staging/tech tier 仅保留给 legacy/迁移/平台自身的 app-owned RDS 实例。
+#      也**不允许**用 StatefulSet+PVC 自托管 mysql/postgres 绕过本表（hard-rule #30，软约定需理由）。
+#   4b. **prod（prod-us/eu/cn）没有 shared-middleware**：prod 数据库继续用本表 prod tier 的
+#      app-owned 托管 RDS（或 Aurora），multiAZ + 加密 + 删除保护；**不是**自托管 StatefulSet。
+#   5. pre 允许多个 app 共享同一实例（用不同 database 隔离）；prod 必须独立
+#   6. 新建 app-owned MySQL RDS 统一使用 8.4 LTS。默认 minor 与参数组/option group
+#      由 engine_contracts.mysql 锁定；禁止继续生成 8.0。
+#
+# Schema：
+#   notes        资源说明（含 immutable 字段警告）
+#   engine_contracts  新实例的 engine version family 契约
+#   immutable    创建后 AWS 不接受 in-place modify 的字段
+#                  prod-bound 的实例，这些字段必须 day 1 就按 prod 值设
+#   dev / staging / pre / prod   各 env 的规格
+#                  四个 env 都必须列，哪怕值相同（避免"我没看到 prod 不一样"事故）
+
+notes: |
+  immutable 字段：storageEncrypted / username / dbName / engine 创建后无法 in-place
+  修改。如果这个实例以后会去 prod，创建时就按 prod 值设；"先按 staging 起、以后改
+  storageEncrypted=true"需要走 delete-and-rebuild（见 workflows/migrate-immutable-rds-field.md）。
+  自 2026-06-01 起，新部署应用 **staging / tech-service**（6 集群 us/eu/cn-staging + tech-us/eu/cn；
+  **按 cluster 名判别非 env**——tech-service env=prod，见规则 #4/hard-rule #29）不再按本表创建
+  app-owned RDS，而是通过 kind:Database 在 shared RDS 实例上拿到自己的 database+user，凭证落在
+  secret/{env}/rds/application/{app}/database（platform-resource-credential，region-less），
+  app 用 ExternalSecret 读取。✅ 共享 MySQL 自助 2026-06-03 已上线 6 集群（provider-sql +
+  provider-kubernetes vault 交付）：engine=mysql 直接写 kind:Database{app,env,engine:mysql},
+  不再 Ops Todo。postgres 同已上线(engine:postgres,app 用自有 schema、public 不可写);mariadb 未部署仍 Ops Todo。
+  legacy app-owned RDS 实例在 staging 仅保留用于迁移/平台用途。
+
+engine_contracts:
+  mysql:
+    default_engine_version: "8.4.10"
+    allowed_engine_version_regex: '^8\.4\.[0-9]+$'
+    parameter_group_name: default.mysql8.4
+    option_group_name: default:mysql-8-4
+    notes: |
+      MySQL 8.4 是当前 LTS family。2026-07-22 已通过 AWS RDS API 验证 8.4.10
+      同时可用于 us-east-1、eu-central-1、cn-north-1。新实例禁止使用 8.0；如需
+      非默认 8.4 minor，必须在 cd-requirements.md 记录理由，并逐 target region
+      运行 describe-db-engine-versions 验证可用性。
+
+immutable:
+  - storageEncrypted
+  - username
+  - dbName
+  - engine
+
+dev: &rds_min
+  instanceClass: db.t3.micro
+  allocatedStorage_gb: 20
+  storageType: gp3
+  multiAZ: false
+  backupRetentionPeriod_days: 1
+  storageEncrypted: false
+  deletionProtection: false
+  skipFinalSnapshot: true
+  managementPolicies: ["*"]          # non-prod may delete with its CR
+  publiclyAccessible: false
+
+staging: *rds_min
+pre: *rds_min
+
+prod:
+  instanceClass: db.t4g.small        # 起步规格，按观测负载升档
+  allocatedStorage_gb: 50            # 预估写入量 +50% headroom
+  storageType: gp3
+  multiAZ: true                       # prod 强制
+  backupRetentionPeriod_days: 7       # 7-35 区间；默认 7，合规要求高再升
+  storageEncrypted: true              # prod 强制（immutable）
+  deletionProtection: true            # prod 强制
+  skipFinalSnapshot: false            # prod 强制；同时要设 finalSnapshotIdentifier
+  managementPolicies: ["Observe", "Create", "Update", "LateInitialize"]  # orphan-safe: no Delete
+  publiclyAccessible: false

@@ -1,0 +1,49 @@
+{
+  "body": {
+    "object_attributes": {
+      "action": "create",
+      "content": "v1",
+      "diff_url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot/-/wikis/Recording-Runbook-0913082019/diff?version_id=09a5141db614c5bcb13146dade77c1e0ff06ccc7",
+      "format": "markdown",
+      "slug": "Recording-Runbook-0913082019",
+      "title": "Recording Runbook 0913082019",
+      "url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot/-/wikis/Recording-Runbook-0913082019",
+      "version_id": "09a5141db614c5bcb13146dade77c1e0ff06ccc7"
+    },
+    "object_kind": "wiki_page",
+    "project": {
+      "avatar_url": null,
+      "ci_config_path": null,
+      "default_branch": "main",
+      "description": null,
+      "git_http_url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot.git",
+      "git_ssh_url": "ssh://[REDACTED]:2224/buzz-sync-test/pilot.git",
+      "homepage": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot",
+      "http_url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot.git",
+      "id": 2,
+      "name": "pilot",
+      "namespace": "buzz-sync-test",
+      "path_with_namespace": "buzz-sync-test/pilot",
+      "ssh_url": "ssh://[REDACTED]:2224/buzz-sync-test/pilot.git",
+      "url": "ssh://[REDACTED]:2224/buzz-sync-test/pilot.git",
+      "visibility_level": 0,
+      "web_url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot"
+    },
+    "user": {
+      "avatar_url": null,
+      "email": "[REDACTED]",
+      "id": 6,
+      "name": "Buzz Sync Developer (localstack)",
+      "username": "buzz-sync-dev"
+    },
+    "wiki": {
+      "default_branch": "main",
+      "git_http_url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot.wiki.git",
+      "git_ssh_url": "ssh://[REDACTED]:2224/buzz-sync-test/pilot.wiki.git",
+      "path_with_namespace": "buzz-sync-test/pilot.wiki",
+      "web_url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot/-/wikis/home"
+    }
+  },
+  "event_header": "Wiki Page Hook",
+  "received_at": "2026-09-13T08:21:25.928789+00:00"
+}

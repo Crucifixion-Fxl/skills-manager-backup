@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+  <title id="title">Work Method Demo</title>
+  <desc id="desc">Product-style work method demo social card</desc>
+  <rect width="1200" height="630" fill="#10140f"/>
+  <radialGradient id="green" cx="20%" cy="10%" r="75%">
+    <stop offset="0%" stop-color="#8fd36d" stop-opacity="0.26"/>
+    <stop offset="62%" stop-color="#8fd36d" stop-opacity="0"/>
+  </radialGradient>
+  <radialGradient id="blue" cx="80%" cy="45%" r="66%">
+    <stop offset="0%" stop-color="#75b9ff" stop-opacity="0.22"/>
+    <stop offset="68%" stop-color="#75b9ff" stop-opacity="0"/>
+  </radialGradient>
+  <rect width="1200" height="630" fill="url(#green)"/>
+  <rect width="1200" height="630" fill="url(#blue)"/>
+  <rect x="64" y="60" width="1072" height="510" rx="24" fill="#151c14" stroke="rgba(246,240,221,0.18)"/>
+  <text x="92" y="140" fill="#8fd36d" font-family="SFMono-Regular, Cascadia Code, Consolas, monospace" font-size="24" font-weight="800">WORK METHOD DEMO</text>
+  <text x="92" y="260" fill="#f6f0dd" font-family="Aptos, Segoe UI, PingFang SC, Microsoft YaHei, sans-serif" font-size="72" font-weight="900">把工作方法写成</text>
+  <text x="92" y="344" fill="#f6f0dd" font-family="Aptos, Segoe UI, PingFang SC, Microsoft YaHei, sans-serif" font-size="72" font-weight="900">产品级 HTML demo</text>
+  <text x="96" y="430" fill="#d6d0bd" font-family="Aptos, Segoe UI, PingFang SC, Microsoft YaHei, sans-serif" font-size="30">Motivation · Decision rule · Real tool demo · Review loop</text>
+  <g transform="translate(92 486)" font-family="SFMono-Regular, Cascadia Code, Consolas, monospace" font-size="21" font-weight="700">
+    <rect width="188" height="54" rx="10" fill="rgba(143,211,109,0.12)" stroke="rgba(143,211,109,0.42)"/>
+    <text x="22" y="34" fill="#8fd36d">Real demo</text>
+    <rect x="212" width="188" height="54" rx="10" fill="rgba(117,185,255,0.12)" stroke="rgba(117,185,255,0.40)"/>
+    <text x="234" y="34" fill="#75b9ff">HTML page</text>
+    <rect x="424" width="180" height="54" rx="10" fill="rgba(246,240,221,0.07)" stroke="rgba(246,240,221,0.22)"/>
+    <text x="446" y="34" fill="#f6f0dd">Reviewable</text>
+  </g>
+</svg>

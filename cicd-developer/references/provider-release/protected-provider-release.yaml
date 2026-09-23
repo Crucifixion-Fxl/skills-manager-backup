@@ -1,0 +1,160 @@
+# Protected Crossplane Provider release-infrastructure profile.
+#
+# This is authoritative route data, not a release manifest. It bounds the only
+# values that `protected-provider-release-infrastructure.yaml.tmpl` may render.
+# A missing local GitOps authority record is a STOP: do not invent a runner path.
+schema_version: v1
+profile: protected-crossplane-provider-internal-release
+provider_sources:
+  - repository: DEV/provider-upjet-gcp
+    protected_refs: [main]
+source_harbor:
+  registry: harbor-12571-sg-devops.addx.live
+  project: base
+  allowed_repositories:
+    - base/provider-family-gcp
+    - base/provider-gcp-managedkafka
+release_repositories:
+  - base/provider-family-gcp
+  - base/provider-gcp-managedkafka
+runner:
+  protected_tag: provider-release-protected
+  dedicated: true
+  shared_runner_reuse: forbidden
+  registration:
+    token_source: unresolved-admin-prerequisite
+    owner: unresolved-admin-prerequisite
+    token_read_or_reuse: forbidden
+  controls:
+    protected: required
+    locked: required
+    run_untagged: false
+    broad_docker_config: forbidden
+    privileged: forbidden-unless-exact-approved-recipe
+    service_account_override: forbidden-unless-exact-approved-recipe
+  gitops:
+    mode: gitops-only
+    coordinated_pair: required
+    authority_records:
+      - repository: DEV/k8s
+        protected_ref: master
+        parent_path: clusters/aws-125710977284-sg-devops/cicd/gitlab-runner/
+      - repository: DEV/argocd-apps
+        protected_ref: main
+        parent_path: aws-125710977284-sg-devops/
+    # These are profile-selected desired identifiers, not evidence that either
+    # child exists. Verify both parent records and both absent children before
+    # an additive, two-repository review may be proposed.
+    planned_additions:
+      overlay:
+        repository: DEV/k8s
+        parent_path: clusters/aws-125710977284-sg-devops/cicd/gitlab-runner/
+        desired_file: values-override-provider-release-protected-amd64.yaml
+        runner_tag: provider-release-protected
+        child_precondition: absent-before-additive-creation
+      application:
+        repository: DEV/argocd-apps
+        parent_path: aws-125710977284-sg-devops/
+        desired_file: gitlab-runner-provider-release-protected-amd64.yaml
+        chart_path: cicd/apps/gitlab-runner
+        runner_tag: provider-release-protected
+        child_precondition: absent-before-additive-creation
+    authority_evidence_required: true
+    # Read-only verified snapshot. Both parent paths exist at these exact
+    # protected-ref commits and both planned children are absent. These commits
+    # age: re-verify against fresh protected refs before any additive child
+    # proposal; this snapshot is not a substitute for fresh evidence.
+    authority_evidence:
+      verified_at: "2026-08-18"
+      parents:
+        - repository: DEV/k8s
+          protected_ref: master
+          commit: 7c5a7dc267f09ace198a66102bfbf4eae3cc783f
+        - repository: DEV/argocd-apps
+          protected_ref: main
+          commit: bebe645d7372a8c573589cd9442074682d9c981a
+      planned_children_absent: true
+    # Fleet precedent that must NOT be copied wholesale into the child files.
+    precedent_conflicts:
+      - runner: gitlab-runner-shared-validation-amd64
+        observed: >-
+          reuses the legacy shared registration secret referenced as
+          gitlab-runner-token via runners.secret (runnerTokenExternalSecret
+          null) and runs with protected=false and locked=false
+        ruling: >-
+          valid precedent only for a dedicated tagged runner pair; token reuse
+          and relaxed controls are forbidden for provider-release-protected
+          per registration and controls above
+credentials:
+  approved_delivery: [vault, eso]
+  mount_mode: path-files-only
+  allowed_roots:
+    - .release-secrets/
+  forbidden: [plaintext-in-git, docker-config-json, environment-values]
+robot_permissions:
+  allow: [pull, push]
+  deny: [delete, admin, project-admin, repository-create]
+verifier:
+  binary_path: .release-tools/verify-release-evidence
+  checksum_algorithm: sha256
+  trust_root: platform-approved-sigstore-trust-root
+  required_bindings: [signature, provenance, source-ref, source-commit]
+scanner:
+  policy: zero-critical-zero-high
+  exception_authority: security-release-owner
+immutability:
+  tag_policy: immutable-semver-only
+  retention_policy: retain-immutable-release-evidence
+  delete: forbidden
+rollout:
+  sync: manual-only
+  prune: false
+  delete: false
+  install: separately-approved
+publisher_contract:
+  # Read-only snapshot of the local publisher checkout. It is an activation gate,
+  # not an assertion that any desired infrastructure already exists.
+  # 7b5ab3f6 is the merge of the shared-runner publisher MR (!15).
+  repository: DEV/provider-upjet-gcp
+  commit: 7b5ab3f6e7a288582de2e8ec87d77139b13e9c3
+  verified_at: "2026-08-18"
+  # Platform owner decision recorded 2026-08-18 (publish from the shared
+  # runner): this project publishes from the shared runner-sg-nat tag. The
+  # dedicated provider-release-protected runner, its registration token, and the
+  # k8s + argocd-apps child files are dropped for this project; the shared
+  # runner's lack of exclusive filesystem control is the accepted residual risk,
+  # documented in the provider repository's docs/ci-release.md. The generic
+  # dedicated-runner workflow below remains valid for future projects wanting it.
+  observed_runner_tag: runner-sg-nat
+  desired_runner_tag: runner-sg-nat
+  credential_delivery: protected-gitlab-file-variables
+  observed_credential_profile: .release-secrets/profile.json
+  observed_verifier_path: .release-tools/verify-release-evidence
+  activation: blocked-until-harbor-and-security-inputs-arrive
+  blockers:
+    - harbor-fixed-repositories-and-no-delete-robot-unresolved
+    - security-approved-evidence-policy-and-production-adapter-unresolved
+write_sets:
+  engineering_skills:
+    repository: engineering/skills
+    allowed_paths:
+      - .claude/skills/cicd-developer/references/data/routes-build.yaml
+      - .claude/skills/cicd-developer/references/data/stop-conditions.yaml
+      - .claude/skills/cicd-developer/references/provider-release/
+      - .claude/skills/cicd-developer/recipes/ci/
+      - .claude/skills/cicd-developer/validators/
+      - .claude/skills/cicd-developer/workflows/
+      - .claude/skills/cicd-developer/tests/
+  runner_gitops:
+    repositories:
+      - repository: DEV/k8s
+        allowed_paths:
+          - clusters/aws-125710977284-sg-devops/cicd/gitlab-runner/
+      - repository: DEV/argocd-apps
+        allowed_paths:
+          - aws-125710977284-sg-devops/
+    mode: conditional-coordinated-gitops-only
+  harbor:
+    mode: ops-todo-only
+    allowed_actions: [create-fixed-repositories, create-no-delete-robot, assign-protected-variables]
+forbidden_operations: [publish, fan-out, gitops-install, kubernetes-live-action, gcp-live-action]

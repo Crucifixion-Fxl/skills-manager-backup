@@ -1,0 +1,7 @@
+interface:
+  display_name: "AI Paper Visual Storytelling"
+  short_description: "把 AI 论文草稿、截图和 demo 视频整理成可审校的 HTML/SVG 论文图。"
+  default_prompt: "使用 $ai-paper-visual-storytelling 将这些论文内容、截图或 demo 视频整理成 AI paper 可用的 HTML/SVG 图稿。"
+
+policy:
+  allow_implicit_invocation: true

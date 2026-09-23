@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "b91d1ba0-fdb8-4e28-aede-8fa8464b9e9d",
+  "path": "code-review-2",
+  "path_key": "code-review-2",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/code-review",
+    "branch": null
+  }
+}

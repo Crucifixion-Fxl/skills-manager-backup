@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "f8dac169-281f-4617-8a2d-7339227af68d",
+  "path": "tracker-manager",
+  "path_key": "tracker-manager",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/tracker-manager",
+    "branch": null
+  }
+}

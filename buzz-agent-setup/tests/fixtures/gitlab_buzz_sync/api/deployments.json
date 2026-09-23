@@ -1,0 +1,51 @@
+{
+  "body": [
+    {
+      "created_at": "2026-09-13T08:21:23.935Z",
+      "deployable": null,
+      "environment": {
+        "created_at": "2026-09-13T08:21:23.874Z",
+        "external_url": null,
+        "id": 1,
+        "name": "rec-staging",
+        "slug": "rec-staging",
+        "updated_at": "2026-09-13T08:21:23.874Z"
+      },
+      "id": 1,
+      "iid": 1,
+      "ref": "main",
+      "sha": "07a9dd7e9e1991a0be385aa10f368f2d4dea0957",
+      "status": "success",
+      "updated_at": "2026-09-13T08:21:24.141Z",
+      "user": {
+        "avatar_url": null,
+        "id": 6,
+        "locked": false,
+        "name": "Buzz Sync Developer (localstack)",
+        "public_email": null,
+        "state": "active",
+        "username": "buzz-sync-dev",
+        "web_url": "http://gitlab.localstack.test:8929/buzz-sync-dev"
+      }
+    }
+  ],
+  "headers": {
+    "content-type": "application/json",
+    "x-next-page": "",
+    "x-page": "1",
+    "x-per-page": "100",
+    "x-total": "1",
+    "x-total-pages": "1"
+  },
+  "request": {
+    "as": "bot",
+    "method": "GET",
+    "path": "projects/2/deployments",
+    "query": {
+      "order_by": "updated_at",
+      "sort": "asc",
+      "updated_after": "2026-09-13T08:20:19Z"
+    }
+  },
+  "status": 200
+}

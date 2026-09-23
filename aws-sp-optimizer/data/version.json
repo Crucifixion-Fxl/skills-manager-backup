@@ -1,0 +1,107 @@
+{
+  "schema_version": 1,
+  "last_refreshed_at": "2026-04-17T09:28:38.410263+00:00",
+  "aws_sp_optimizer_version": "0.1.0",
+  "regions": {
+    "eu-west-1": {
+      "sp_version": "20260416164016",
+      "od_version": "20260416214125",
+      "sp_refreshed_at": "2026-04-17T09:28:38.410263+00:00",
+      "od_refreshed_at": "2026-04-17T09:28:38.410263+00:00",
+      "ratio_entries_count": 14947
+    },
+    "ap-southeast-1": {
+      "sp_version": "20260416164016",
+      "od_version": "20260416214125",
+      "sp_refreshed_at": "2026-04-17T09:28:38.410263+00:00",
+      "od_refreshed_at": "2026-04-17T09:28:38.410263+00:00",
+      "ratio_entries_count": 12974
+    },
+    "us-east-1": {
+      "sp_version": "20260416164016",
+      "od_version": "20260416214125",
+      "sp_refreshed_at": "2026-04-17T09:28:38.410263+00:00",
+      "od_refreshed_at": "2026-04-17T09:28:38.410263+00:00",
+      "ratio_entries_count": 17619
+    },
+    "us-west-1": {
+      "sp_version": "20260416164016",
+      "od_version": "20260416214125",
+      "sp_refreshed_at": "2026-04-17T09:28:38.410263+00:00",
+      "od_refreshed_at": "2026-04-17T09:28:38.410263+00:00",
+      "ratio_entries_count": 10423
+    },
+    "ap-northeast-2": {
+      "sp_version": "20260416164016",
+      "od_version": "20260416214125",
+      "sp_refreshed_at": "2026-04-17T09:28:38.410263+00:00",
+      "od_refreshed_at": "2026-04-17T09:28:38.410263+00:00",
+      "ratio_entries_count": 11386
+    },
+    "ap-northeast-1": {
+      "sp_version": "20260416164016",
+      "od_version": "20260416214125",
+      "sp_refreshed_at": "2026-04-17T09:28:38.410263+00:00",
+      "od_refreshed_at": "2026-04-17T09:28:38.410263+00:00",
+      "ratio_entries_count": 16691
+    },
+    "eu-west-2": {
+      "sp_version": "20260416164016",
+      "od_version": "20260416214125",
+      "sp_refreshed_at": "2026-04-17T09:28:38.410263+00:00",
+      "od_refreshed_at": "2026-04-17T09:28:38.410263+00:00",
+      "ratio_entries_count": 11495
+    },
+    "eu-central-1": {
+      "sp_version": "20260416164016",
+      "od_version": "20260416214125",
+      "sp_refreshed_at": "2026-04-17T09:28:38.410263+00:00",
+      "od_refreshed_at": "2026-04-17T09:28:38.410263+00:00",
+      "ratio_entries_count": 16777
+    },
+    "ap-east-1": {
+      "sp_version": "20260416164016",
+      "od_version": "20260416214125",
+      "sp_refreshed_at": "2026-04-17T09:28:38.410263+00:00",
+      "od_refreshed_at": "2026-04-17T09:28:38.410263+00:00",
+      "ratio_entries_count": 5415
+    },
+    "us-west-2": {
+      "sp_version": "20260416164016",
+      "od_version": "20260416214125",
+      "sp_refreshed_at": "2026-04-17T09:28:38.410263+00:00",
+      "od_refreshed_at": "2026-04-17T09:28:38.410263+00:00",
+      "ratio_entries_count": 17756
+    },
+    "ap-southeast-2": {
+      "sp_version": "20260416164016",
+      "od_version": "20260416214125",
+      "sp_refreshed_at": "2026-04-17T09:28:38.410263+00:00",
+      "od_refreshed_at": "2026-04-17T09:28:38.410263+00:00",
+      "ratio_entries_count": 13531
+    },
+    "sa-east-1": {
+      "sp_version": "20260416164016",
+      "od_version": "20260416214125",
+      "sp_refreshed_at": "2026-04-17T09:28:38.410263+00:00",
+      "od_refreshed_at": "2026-04-17T09:28:38.410263+00:00",
+      "ratio_entries_count": 10964
+    },
+    "af-south-1": {
+      "sp_version": "20260416164016",
+      "od_version": "20260416214125",
+      "sp_refreshed_at": "2026-04-17T09:28:38.410263+00:00",
+      "od_refreshed_at": "2026-04-17T09:28:38.410263+00:00",
+      "ratio_entries_count": 7262
+    },
+    "eu-south-1": {
+      "sp_version": "20260416164016",
+      "od_version": "20260416214125",
+      "sp_refreshed_at": "2026-04-17T09:28:38.410263+00:00",
+      "od_refreshed_at": "2026-04-17T09:28:38.410263+00:00",
+      "ratio_entries_count": 6690
+    }
+  },
+  "lambda_refreshed_at": "2026-04-17T09:28:38.410263+00:00",
+  "fargate_refreshed_at": "2026-04-17T09:28:38.410263+00:00"
+}

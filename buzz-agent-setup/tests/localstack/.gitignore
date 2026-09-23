@@ -1,0 +1,3 @@
+# Runtime state of stack.py: test keys, GitLab PATs (0600), logs, prompts.
+.state/
+__pycache__/

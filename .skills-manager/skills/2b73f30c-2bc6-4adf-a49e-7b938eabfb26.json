@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "2b73f30c-2bc6-4adf-a49e-7b938eabfb26",
+  "path": "aws-sp-optimizer",
+  "path_key": "aws-sp-optimizer",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/aws-sp-optimizer",
+    "branch": null
+  }
+}

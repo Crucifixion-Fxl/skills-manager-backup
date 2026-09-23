@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "e5af72ef-ab15-4103-9443-d95eafc2062e",
+  "path": "execution-review",
+  "path_key": "execution-review",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/execution-review",
+    "branch": null
+  }
+}

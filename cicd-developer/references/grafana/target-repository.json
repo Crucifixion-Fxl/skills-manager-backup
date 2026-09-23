@@ -1,0 +1,6 @@
+{
+  "dashboardUriTemplate": "https://grafana-us.addx.live/d/{uid}",
+  "defaultBranch": "main",
+  "project": "DEV/grafana-dashboards-as-code",
+  "remote": "https://gitlab.addx.ai/DEV/grafana-dashboards-as-code.git"
+}

@@ -1,0 +1,135 @@
+{
+  "gitlab_revision": "c481e1bd1b8",
+  "gitlab_version": "18.0.0",
+  "objects": {
+    "access_token_expires_at": "2026-09-16",
+    "access_token_id": 8,
+    "access_token_name": "rec-expiring-0913082019",
+    "binding_note_id": 15,
+    "branch": "feature/1-recording-0913082019",
+    "commit_1": "2d9852ce11673b2c246d6c7af9b4baadf6261da5",
+    "commit_2": "33a2250fbe88eda7ee825409bc1d43b7f7a5af7a",
+    "commit_note": "Recording commit comment",
+    "deployment_id": 1,
+    "draft_mr_iid": 2,
+    "feature_flag": "rec_flag_0913082019",
+    "issue_iid": 1,
+    "issue_note_id": 14,
+    "milestone_id": 1,
+    "mr_iid": 1,
+    "mr_note_id": 17,
+    "mr_pipeline_id": 1,
+    "rails_drop": {
+      "dropped": [
+        {
+          "id": 1,
+          "name": "test:unit",
+          "status": "failed"
+        }
+      ],
+      "pipelines": {
+        "1": "manual"
+      },
+      "token_hook": {
+        "active_hooks": true,
+        "token_id": 8
+      }
+    },
+    "stamp": "0913082019",
+    "statuses": {
+      "branch_success": {
+        "http": 201,
+        "message": null,
+        "pipeline_id": 3,
+        "ref": "feature/1-recording-0913082019"
+      },
+      "main_failed": {
+        "http": 403,
+        "message": "403 Forbidden",
+        "pipeline_id": null,
+        "ref": null
+      },
+      "main_failed_as_maintainer": {
+        "http": 201,
+        "pipeline_id": 2,
+        "ref": "main"
+      },
+      "mr_ref_failed": {
+        "http": 400,
+        "message": {
+          "name": [
+            "has already been taken"
+          ]
+        },
+        "pipeline_id": null,
+        "ref": null
+      }
+    },
+    "tag": "rec-v0913082019",
+    "task_iid": 2,
+    "temp_branch": "rec-temp-0913082019",
+    "wiki_slug": "Recording-Runbook-0913082019"
+  },
+  "project_id": 2,
+  "recorded_at": "2026-09-13T08:20:19Z",
+  "scrubbed": [
+    "tokens",
+    "e-mail addresses",
+    "avatar URLs",
+    "LAN host -> gitlab.localstack.test"
+  ],
+  "supplemented": "main failed commit status posted by the Maintainer (Developer gets 403 on protected main); pipelines re-recorded with the same updated_after",
+  "users": {
+    "bot": {
+      "id": 4,
+      "username": "buzz-sync-bot"
+    },
+    "dev": {
+      "id": 6,
+      "username": "buzz-sync-dev"
+    },
+    "maintainer": {
+      "id": 7,
+      "username": "buzz-sync-maintainer"
+    }
+  },
+  "webhooks": {
+    "access_token_hook": "fired for the recording token only via Gitlab::DataBuilder::ResourceAccessTokenPayload (same call as PersonalAccessTokens::ExpiringWorker#execute_web_hooks)",
+    "hook_flags_accepted": [
+      "confidential_issues_events",
+      "confidential_note_events",
+      "deployment_events",
+      "feature_flag_events",
+      "issues_events",
+      "job_events",
+      "merge_requests_events",
+      "note_events",
+      "pipeline_events",
+      "push_events",
+      "releases_events",
+      "resource_access_token_events",
+      "tag_push_events",
+      "wiki_page_events"
+    ],
+    "hook_flags_requested_but_ignored": [
+      "milestone_events"
+    ],
+    "kinds_received": [
+      "access_token",
+      "build",
+      "deployment",
+      "feature_flag",
+      "issue",
+      "merge_request",
+      "note",
+      "pipeline",
+      "push",
+      "release",
+      "tag_push",
+      "wiki_page",
+      "work_item"
+    ],
+    "mr_pipeline_failure": "manual MR job dropped with Ci::Build#drop!(:script_failure) (no runner)",
+    "receiver": "docker gateway of the GitLab container, listening only while recording"
+  }
+}

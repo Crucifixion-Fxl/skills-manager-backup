@@ -1,0 +1,18 @@
+# create-pir runtime artifacts — should never be committed.
+#
+# scripts/create_pir_event.py uses ffmpeg to split videos into MPEG-TS segments
+# (.ts files) at runtime. Normally these go to a tempfile.mkdtemp() path under
+# /tmp/create_pir_video_*/ and are auto-cleaned by Session.tmp_dirs in the
+# create_one() finally block.
+#
+# This .gitignore is defensive — in case someone:
+#   1. changes the workdir to be repo-relative by mistake
+#   2. manually runs ffmpeg from the repo root for debugging
+#   3. has a pre-commit hook that copies tmp files into the repo
+# the .ts slices still won't pollute the index.
+#
+# If a future contributor genuinely wants to commit a real .ts file as a test
+# fixture, they need to deliberately `git add -f scripts/test_videos/<name>.ts`
+# and add a corresponding `binary` entry to .gitattributes.
+
+scripts/test_videos/*.ts

@@ -1,0 +1,379 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-04-22T04:10:52.137336+00:00",
+  "script_version": "0.1.0",
+  "elapsed_seconds": 40.22,
+  "status": "ok_with_adjustment",
+  "context": {
+    "account_id": "002497567426",
+    "org_id": "o-4bw6d7ou28",
+    "profile": "aws-002497567426-us-tech-service",
+    "payer_account_id": "002497567426",
+    "org_alias": "a4x-us",
+    "member_accounts_count": 1,
+    "primary_region": "us-east-1",
+    "discount_rate_used": 0.17,
+    "discount_source": "aws_public_pricing_api_weighted",
+    "pricing_cache_version": "v1",
+    "pricing_cache_age_hours": 220.18,
+    "discovered_regions": [
+      {
+        "region": "us-east-1",
+        "cost_share_pct": 1.0
+      }
+    ],
+    "applied_exclude_filter": null
+  },
+  "baseline": {
+    "requested_window": {
+      "end": "2026-04-13T00:00:00+00:00",
+      "days": 90
+    },
+    "actual_window": {
+      "end": "2026-04-03T00:00:00+00:00",
+      "days": 90
+    },
+    "sample_size_hours": 2160,
+    "expected_sample_size_hours": 2160,
+    "completeness_pct": 1.0,
+    "raw_stats": {
+      "p0": 8.3,
+      "p5": 8.3,
+      "p10": 8.3,
+      "p17": 8.3,
+      "p25": 8.3,
+      "p50": 8.3,
+      "p75": 8.3,
+      "p83": 8.3,
+      "p90": 8.3,
+      "p95": 8.3,
+      "p100": 8.3,
+      "mean": 8.3,
+      "std": 0.0,
+      "min": 8.3,
+      "max": 8.3
+    },
+    "trend_classification": "stable",
+    "trend_buckets": [
+      {
+        "period": "2026-01-03~2026-02-02",
+        "sample_size": 720,
+        "p17": 9.1,
+        "mean": 9.1,
+        "min": 9.1,
+        "max": 9.1
+      },
+      {
+        "period": "2026-02-02~2026-03-04",
+        "sample_size": 720,
+        "p17": 9.1,
+        "mean": 9.1,
+        "min": 9.1,
+        "max": 9.1
+      },
+      {
+        "period": "2026-03-04~2026-04-03",
+        "sample_size": 720,
+        "p17": 9.1,
+        "mean": 9.1,
+        "min": 9.1,
+        "max": 9.1
+      }
+    ],
+    "trend_b3_over_b1_ratio": 1.0,
+    "non_monotonic_details": null,
+    "discount_audit": {
+      "d_raw": 0.17,
+      "d_calibrated": 0.17,
+      "e_sp": 0.09,
+      "e_od": 0.09,
+      "edp_uniform": true,
+      "calibration_applied": false,
+      "e_sp_inferred_from_e_od": false,
+      "source": "aws_public_pricing_api_weighted",
+      "pricing_cache_version": "v1",
+      "pricing_cache_fetched_at": "2026-04-13T00:00:00+00:00",
+      "mix_window_days": 30,
+      "coverage_pct": 1.0,
+      "matched_entries": 10800,
+      "unmatched_entries": 0,
+      "unmatched_top10_by_cost": []
+    }
+  },
+  "current_sps": [],
+  "recommendation": {
+    "C_star_total_per_hour": 8.3,
+    "C_existing_effective_per_hour": 0.0,
+    "delta_per_hour_to_buy": 8.3,
+    "annual_delta_usd": 72708.0,
+    "expected_annual_sp_fee_usd": 66164.28,
+    "expected_annual_savings_usd": 13551.72,
+    "coverage_after_purchase_pct": 1.0,
+    "formula_branch": "stationary",
+    "discount_rate_d": 0.17,
+    "discount_rate_source": "aws_public_pricing_api_weighted",
+    "bootstrap_95ci_on_C_star": [
+      8.3,
+      8.3
+    ],
+    "bootstrap_se": 0.0,
+    "trend_aware_audit": null,
+    "must_review_before_acting": false
+  },
+  "search_summary": {
+    "total_candidates": 75,
+    "passed": 25,
+    "rejected_by_category": {
+      "sp_transition_in_window": {
+        "count": 50
+      }
+    },
+    "top_5_alternatives": [
+      {
+        "rank": 1,
+        "window": {
+          "end": "2026-04-03T00:00:00+00:00",
+          "days": 90
+        },
+        "deviation_score": 10,
+        "trend_classification": "stable",
+        "completeness_pct": 1.0,
+        "sample_size_hours": 2160
+      },
+      {
+        "rank": 2,
+        "window": {
+          "end": "2026-04-02T00:00:00+00:00",
+          "days": 90
+        },
+        "deviation_score": 11,
+        "trend_classification": "stable",
+        "completeness_pct": 1.0,
+        "sample_size_hours": 2160
+      },
+      {
+        "rank": 3,
+        "window": {
+          "end": "2026-04-01T00:00:00+00:00",
+          "days": 90
+        },
+        "deviation_score": 12,
+        "trend_classification": "stable",
+        "completeness_pct": 1.0,
+        "sample_size_hours": 2160
+      },
+      {
+        "rank": 4,
+        "window": {
+          "end": "2026-03-31T00:00:00+00:00",
+          "days": 90
+        },
+        "deviation_score": 13,
+        "trend_classification": "stable",
+        "completeness_pct": 1.0,
+        "sample_size_hours": 2160
+      },
+      {
+        "rank": 5,
+        "window": {
+          "end": "2026-03-30T00:00:00+00:00",
+          "days": 90
+        },
+        "deviation_score": 14,
+        "trend_classification": "stable",
+        "completeness_pct": 1.0,
+        "sample_size_hours": 2160
+      }
+    ]
+  },
+  "risks": [
+    {
+      "severity": "low",
+      "code": "untagged_cost_fraction_high",
+      "must_review_before_acting": false,
+      "summary": "More than 10% of SP-eligible cost is untagged",
+      "details": {
+        "fraction": 0.102,
+        "threshold": 0.1
+      },
+      "interpretation": "Tag coverage is low; root-cause attribution via resource_tags_user_service is limited",
+      "user_facing_explanation": "\u8d85\u8fc7 10% \u7684 SP \u9002\u7528\u6210\u672c\u672a\u6253\u6807\u7b7e\uff0c\u540e\u7eed\u5f52\u56e0\u6210\u672c\u5f52\u5c5e\u7684\u80fd\u529b\u53d7\u9650",
+      "recommended_actions_for_llm": [
+        "Mention the tag gap as a follow-up improvement"
+      ]
+    }
+  ],
+  "warnings": [
+    {
+      "code": "pricing_cache_age_hours_high",
+      "severity": "info",
+      "message": "Pricing cache is older than 7 days",
+      "context": {
+        "age_hours": 220.18,
+        "threshold_hours": 168,
+        "cached_version": "v1"
+      }
+    },
+    {
+      "severity": "info",
+      "code": "edp_uniform_confirmed",
+      "message": "EDP applies uniformly to SP and OD (e=0.0900). No calibration applied.",
+      "context": {}
+    }
+  ],
+  "purchase_instructions": {
+    "headline_warning": "\u26a0\ufe0f SP purchase is IRREVERSIBLE. Once executed, you commit to a fixed hourly fee for 365 days. AWS does NOT allow cancellation, refund, or grace-period reversal.",
+    "summary": {
+      "product": "1 year No Upfront Compute Savings Plan",
+      "commitment_per_hour_usd": 8.3,
+      "annual_total_usd": 72708.0,
+      "profile": "aws-002497567426-us-tech-service",
+      "target_account": "002497567426",
+      "target_account_role": "Org management/payer",
+      "coverage_scope": "All EC2 BoxUsage (non-Spot) + Fargate + Lambda across all member accounts in Org o-4bw6d7ou28"
+    },
+    "step_1_lookup_offering_id": {
+      "purpose": "Fetch the current Compute SP offering ID. AWS offering IDs are stable per region/term/payment combination but should be re-fetched at purchase time to guarantee freshness.",
+      "command": "aws savingsplans describe-savings-plans-offerings --profile aws-002497567426-us-tech-service --plan-types Compute --durations 31536000 --currencies USD --payment-options 'No Upfront' --query 'searchResults[?planType==`Compute`] | [0].offeringId' --output text",
+      "expected_output": "A single offering ID string (UUID-like, ~36 chars)",
+      "failure_modes": [
+        "Empty output \u2192 offering not available in this region; check AWS service health",
+        "Permission denied \u2192 profile lacks savingsplans:DescribeSavingsPlansOfferings",
+        "Multiple results \u2192 query filter needs tightening"
+      ]
+    },
+    "step_2_create_savings_plan": {
+      "purpose": "THE IRREVERSIBLE PURCHASE STEP. After this command succeeds, you are committed to paying $8.3000/hr \u00d7 8760 hours = $72,708.00 regardless of actual usage.",
+      "command_template": "aws savingsplans create-savings-plan --profile aws-002497567426-us-tech-service --savings-plan-offering-id <PASTE_OFFERING_ID_FROM_STEP_1> --commitment '8.3000' --client-token 'sp-optimizer-2026-04-22-002497567426' --tags 'ManagedBy=aws-sp-optimizer-skill,PurchasedAt=2026-04-22,Methodology=newsvendor-p17,DiscountRate=0.1700,RecommendedBy=aws-sp-optimizer-skill-v2'",
+      "parameters_explained": {
+        "--profile": {
+          "value": "aws-002497567426-us-tech-service",
+          "why_this_value": "SP is bought at the Org payer account 002497567426; coverage propagates to all member accounts via consolidated billing.",
+          "verification": "aws sts get-caller-identity --profile aws-002497567426-us-tech-service"
+        },
+        "--savings-plan-offering-id": {
+          "value": "<from step 1>",
+          "meaning": "AWS internal SKU identifying the SP product",
+          "source_of_truth": "describe-savings-plans-offerings",
+          "why_fresh": "AWS rotates offering IDs when pricing changes"
+        },
+        "--commitment": {
+          "value": "8.3000",
+          "unit": "USD per hour",
+          "meaning": "Fixed hourly fee AWS will charge for 365 days",
+          "source_of_truth": "Computed by aws-sp-optimizer using newsvendor formula",
+          "formula_inputs": {
+            "d_calibrated": 0.17,
+            "C_star_total": 8.3,
+            "C_existing_effective": 0.0,
+            "C_new_delta": 8.3,
+            "formula_branch": "stationary"
+          }
+        },
+        "--client-token": {
+          "value": "sp-optimizer-2026-04-22-002497567426",
+          "meaning": "Idempotency key; retry-safe",
+          "safety": "Same token \u2192 same SP (no double-purchase). Change the token only for a genuinely new purchase."
+        },
+        "--tags": {
+          "value": "see command template",
+          "purpose": "Resource tags for audit trail. They appear in CUR's resource_tags_aws_* columns for correlation with this run."
+        }
+      },
+      "what_aws_does_when_executed": [
+        "1. Authenticates the request against the profile's IAM policy",
+        "2. Validates the offering ID is currently purchasable",
+        "3. Validates the commitment is within account SP quota (default $1000/hr)",
+        "4. Creates the SavingsPlan resource (state: payment-pending \u2192 active)",
+        "5. Begins accruing the hourly fee immediately upon 'active' state",
+        "6. Begins applying the SP discount to eligible compute usage immediately"
+      ],
+      "what_aws_does_NOT_do": [
+        "Send an email confirmation \u2014 the purchase is silent",
+        "Allow cancellation, refund, or adjustment within any grace period",
+        "Warn you if the commitment exceeds your historical usage",
+        "Prorate the first hour \u2014 billing starts from the hour of activation",
+        "Check that the commitment matches other SPs you already own"
+      ],
+      "post_purchase_verification": {
+        "immediate_check": {
+          "command": "aws savingsplans describe-savings-plans --profile aws-002497567426-us-tech-service --states active --query 'savingsPlans[?commitment==`8.3000`]'",
+          "expected": "One entry with state='active' (or 'payment-pending' initially), start=today, end=today+365d"
+        },
+        "cost_explorer_visible_at": "Within 24 hours in Cost Explorer",
+        "cur_visible_at": "Next CUR refresh cycle (24-48 hours); line_item_line_item_type='SavingsPlanRecurringFee'",
+        "utilization_check_at_week_1": "aws ce get-savings-plans-utilization --profile aws-002497567426-us-tech-service --time-period Start=<today+7d>,End=<today+8d> --granularity DAILY"
+      }
+    },
+    "safety_checklist_before_running": [
+      {
+        "check": "Profile account match",
+        "command": "aws sts get-caller-identity --profile aws-002497567426-us-tech-service",
+        "expected": "Account = 002497567426"
+      },
+      {
+        "check": "Org membership unchanged",
+        "command": "aws organizations describe-organization --profile aws-002497567426-us-tech-service",
+        "expected": "Id = o-4bw6d7ou28, MasterAccountId = 002497567426"
+      },
+      {
+        "check": "No new SP purchased since recommendation",
+        "command": "aws savingsplans describe-savings-plans --profile aws-002497567426-us-tech-service --states active",
+        "expected": "Same set of active SPs as when recommendation was generated"
+      },
+      {
+        "check": "Recommendation age",
+        "condition": "Recommendation was generated at most 7 days ago",
+        "if_older": "Re-run aws-sp-optimizer before purchasing"
+      },
+      {
+        "check": "User has budget authority",
+        "condition": "Confirm ability to commit $72,708.00/year"
+      },
+      {
+        "check": "Service quota allows commitment",
+        "note": "Default SP commitment quota is $1000/hr"
+      }
+    ],
+    "alternatives_if_not_confident": [
+      {
+        "strategy": "Buy half first, re-evaluate in 30 days",
+        "command_delta": "Change --commitment '8.3000' to '4.1500'",
+        "rationale": "Lower risk; can buy the remaining half later"
+      },
+      {
+        "strategy": "Wait 1 week and re-run",
+        "rationale": "Gives more data if the trend signal was marginal"
+      },
+      {
+        "strategy": "Purchase via AWS console",
+        "url": "https://console.aws.amazon.com/cost-management/home#/savings-plans/purchase",
+        "rationale": "Visual confirmation step before commit"
+      },
+      {
+        "strategy": "Cross-check with AWS's own recommendation",
+        "command_delta": "aws ce get-savings-plans-purchase-recommendation --savings-plans-type COMPUTE_SP --term-in-years ONE_YEAR --payment-option NO_UPFRONT --lookback-period-in-days SIXTY_DAYS",
+        "rationale": "If AWS's own algo gives a similar number (\u00b120%), confidence is high"
+      }
+    ]
+  },
+  "adjustments_made": [
+    {
+      "reason": "sp_transition_in_window: requested window failed validation",
+      "action": "Selected candidate (end=2026-04-03, days=90) with deviation_score=10",
+      "trade_off": {
+        "freshness_loss_days": 10,
+        "duration_loss_days": 0,
+        "deviation_score": 10
+      },
+      "requested_window": {
+        "end": "2026-04-13T00:00:00+00:00",
+        "days": 90
+      },
+      "actual_window": {
+        "end": "2026-04-03T00:00:00+00:00",
+        "days": 90
+      }
+    }
+  ]
+}

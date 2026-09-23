@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "b5f5ba70-d0e5-4f77-91da-31aa7ed5ddc5",
+  "path": "embed-vendor-artifacts",
+  "path_key": "embed-vendor-artifacts",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/embed-vendor-artifacts",
+    "branch": null
+  }
+}

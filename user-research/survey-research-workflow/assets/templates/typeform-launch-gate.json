@@ -1,0 +1,23 @@
+{
+  "schema_version": "2.0",
+  "platform": "typeform",
+  "generated_by": "survey_preflight.js",
+  "form_id": "",
+  "instrument_sha256": "",
+  "evidence_manifest_sha256": "",
+  "evidence": {},
+  "survey_quality_gate_status": "block",
+  "readback_diff_status": "block",
+  "logic_test_status": "block",
+  "mobile_test_status": "block",
+  "response_test_status": "block",
+  "owner_publish_confirmation": {
+    "status": "pending",
+    "confirmed_by": "",
+    "confirmed_at": ""
+  },
+  "blockers": [
+    "Generate this file with survey_preflight.js build-typeform-gate; do not mark it pass manually."
+  ],
+  "status": "block"
+}

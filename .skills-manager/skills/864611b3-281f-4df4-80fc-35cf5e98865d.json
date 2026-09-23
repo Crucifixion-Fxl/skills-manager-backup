@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "864611b3-281f-4df4-80fc-35cf5e98865d",
+  "path": "clawplex-workspace-learner",
+  "path_key": "clawplex-workspace-learner",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/clawplex-workspace-learner",
+    "branch": null
+  }
+}

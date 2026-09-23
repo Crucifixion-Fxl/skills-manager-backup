@@ -1,0 +1,4 @@
+interface:
+  display_name: "示波器自动化"
+  short_description: "通过 VISA/SCPI 安全测量、截图和读取示波器波形"
+  default_prompt: "使用 $oscilloscope-automation 检测示波器并读取 CH1 的频率、占空比和峰峰值。"

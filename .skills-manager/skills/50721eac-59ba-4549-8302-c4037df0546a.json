@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "50721eac-59ba-4549-8302-c4037df0546a",
+  "path": "sre-agent",
+  "path_key": "sre-agent",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/sre-agent",
+    "branch": null
+  }
+}

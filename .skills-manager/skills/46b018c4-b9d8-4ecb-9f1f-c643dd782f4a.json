@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "46b018c4-b9d8-4ecb-9f1f-c643dd782f4a",
+  "path": "product-tech-research",
+  "path_key": "product-tech-research",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/product-tech-research",
+    "branch": null
+  }
+}

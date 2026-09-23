@@ -1,0 +1,260 @@
+{
+  "schema_version": 1,
+  "skill_name": "firmware-security-compliance",
+  "evals": [
+    {
+      "id": 1,
+      "slug": "exact-version-and-dependency-boundary",
+      "mode": "offline_fixture",
+      "setup": "离线合成夹具，所有名称、版本、摘要标签均为测试数据。仅提供两个冻结版本及其实际依赖代码，不访问真实仓库，不执行代码，不连接设备。设备为 Linux ARM 局域网服务端；本例只判断 BLE 会话值生成。",
+      "prompt": "请分别判断 Sensor-X release/2.1 与 develop/2.2 是否已经消除固定 BLE 会话值，只根据以下冻结证据，不把一个版本的结论套给另一个。release/2.1 main SHA=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa；lock.json:1 provisioning=1.3.0, artifact_digest=fixture-old；artifact fixture-old/responder.cc:10 session=FIXED_TEST_VALUE_NOT_A_CREDENTIAL。develop/2.2 main SHA=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb；lock.json:1 provisioning=1.4.0, artifact_digest=fixture-new；artifact fixture-new/responder.cc:10 if (!csprng(session,16)) return ERROR; :11 issue_session(session)。两个归档均已按锁定摘要匹配且函数是目标构建实际调用路径。旧 release 的发行说明附了新版改动标题，但没有升级依赖。未提供握手鉴权、报文认证或 BLE 栈配置。请给出现状、证据和下一步，不修改任何文件。",
+      "expected_output": "分别指出 release/2.1 仍使用固定值，develop/2.2 已采用 CSPRNG 并拒绝随机源失败；证据绑定各自 SHA 和实际归档。只关闭 develop 的固定值子问题，其他身份验证与链路保护待核验。",
+      "assertions": [
+        {"name": "target_release_keeps_old_finding", "check": "必须依据 release 锁定的 1.3.0 实现指出固定会话值仍在，不能被发行说明或 develop 修复覆盖。"},
+        {"name": "verified_new_dependency_gets_credit", "check": "必须承认 develop 实际采用 1.4.0 的随机生成与失败拒绝，不能把全部版本统一写成固定值。"},
+        {"name": "no_authentication_inference", "check": "不得由随机生成推断已完成手机身份验证、消息完整性、防重放或 BLE 认证加密。"},
+        {"name": "frozen_evidence_only", "check": "输出区分两个冻结版本及归档证据，不声称实时远端、成品镜像或实机已验证，不进行外部访问。"}
+      ]
+    },
+    {
+      "id": 2,
+      "slug": "random-session-is-not-authentication",
+      "mode": "offline_fixture",
+      "setup": "离线合成伪代码，均为同一类 MCU BLE 配网业务，已完整列出本例握手及命令处理的相关路径。密码原语作为经过验证的标准库接口给出，不要求实现或运行算法；没有真实秘密。",
+      "prompt": "审查方案 A/B 的 BLE 会话保护。A/responder.c:10 if (!csprng(session_key,16)) return ERROR; :11 send(xor_public_bootstrap(session_key)); :12 ignore(client_proof); :20 on_command(c) { return dispatch(xor_decode(c,session_key)); }。xor_public_bootstrap 的常量和解码算法为协议公开内容；握手对任意连接者开放；无 MAC、序号、认证链路前提。B/responder.c:10 if (!authenticated_key_exchange_verify_device_and_owner()) return ERROR; :11 derive_session_keys_from_exchange(); :20 on_command(c) { if (!verify_aead_and_fresh_sequence(c)) return ERROR; if (!session_authorizes(c.operation)) return DENIED; return dispatch(c); }。B 的失败分支不调用 dispatch，绑定的会话密钥不明文或可公开还原地发送；随机源失败退出握手。请承认各自已做的措施并说明剩余缺口，不要仅由 token 或 secure 等名称下结论。",
+      "expected_output": "A 已解决固定会话值，但随机值的交付与后续处理没有证明调用者身份，也不提供可靠保密、报文认证或防重放；建议使用认证握手、会话授权及标准消息保护。B 在本例给定路径中具备对应控制，不能扩大为整个产品合规。",
+      "assertions": [
+        {"name": "randomness_credit_only", "check": "明确承认 A 的随机源和失败处理，但不得将其等同于鉴权完成。"},
+        {"name": "bootstrap_and_command_chain", "check": "必须追踪 A 的公开 bootstrap、忽略证明和无 MAC/序号命令路径，而非只指出使用 XOR 的函数名。"},
+        {"name": "positive_authenticated_session", "check": "承认 B 提供的已验证身份握手、会话权限、AEAD 及新鲜序号检查，并限定为给定路径。"},
+        {"name": "concrete_remediation", "check": "A 的方案同时覆盖首次认证、会话密钥安全交付和后续消息授权/完整性/重放，不能只建议把随机值加长。"}
+      ]
+    },
+    {
+      "id": 3,
+      "slug": "ble-window-command-order-and-advertising",
+      "mode": "offline_fixture",
+      "setup": "离线合成夹具，设备有物理配网按钮，BLE 广播与应用命令路径已给出。广告中的标识仅为占位符，不代表真实设备或个人。未提供实机抓包。",
+      "prompt": "比较 BLE 实现 A/B。A/ble.c:10 on_button() { connectable_until=now+180s; } :11 on_bound() { advertise_with_rotating_private_address(); payload={model,stable_device_identifier}; } :20 on_message(m) { if(m.op==UNBIND) return clear_owner(); if(!authenticated_session(m)) return DENIED; return dispatch(m); }。A 的稳定标识在地址轮换后保持不变。B/ble.c:10 同样只有 180 秒配网窗；:11 broadcast_payload={model,state}; :12 使用轮换隐私地址且载荷没有其他稳定标识；:20 on_message(m) { if(!authenticated_session(m)) return DENIED; if(!session_can_perform(m.op)) return DENIED; return dispatch(m); }。B 配网窗到期后停止配网连接；已绑定设备按业务需求保留无敏感身份的发现广播。请分别说明窗口、敏感命令授权和广播隐私，给出准确的整改。",
+      "expected_output": "A 的物理窗口是已有访问面限制，但 UNBIND 绕过会话检查，稳定广告载荷仍可被关联；不能因地址轮换或限时而判定安全。B 在给定范围已将高权限命令置于验证后并避免稳定广播标识，不能要求所有业务发现广播无条件关闭。",
+      "assertions": [
+        {"name": "window_not_identity", "check": "承认 A 的限时窗口，同时明确它不验证调用者身份。"},
+        {"name": "unbind_precedes_auth", "check": "准确指出 A 的 UNBIND 在会话验证前执行，修复应调整所有敏感命令的共同授权路径。"},
+        {"name": "payload_correlates_rotating_address", "check": "指出稳定广播载荷可跨地址轮换关联，不得把 RPA/随机地址等同完整广播隐私。"},
+        {"name": "positive_scope_respects_device_function", "check": "认可 B 对敏感命令和稳定标识的措施，不能凭持续发现广播就断言其未授权控制或凭据泄漏。"}
+      ]
+    },
+    {
+      "id": 4,
+      "slug": "wifi-credential-lifecycle-and-cache",
+      "mode": "offline_fixture",
+      "setup": "离线合成夹具，比较 Linux SoftAP 凭据轮换路径。CSPRNG、持久化、AP 实际配置与 responder 缓存的行为均在输入中明确；没有系统登录账户信息。",
+      "prompt": "审查 A/B/C 三个 SoftAP 实现。A/wifi.c:10 if(!csprng_password(new_pwd)) return ERROR; :11 if(!nv_save(new_pwd)) return ERROR; :12 if(!apply_ap(new_pwd)) return ERROR; :13 responder.set_ready(true);。A 的 responder 保留启动时读到的 old_pwd，GET_AP_CREDENTIALS 返回该缓存；解绑成功后 AP 已使用 new_pwd，重启会重新从 NV 读新值。B/wifi.c:10 同样生成随机密码；:11 若 NV/AP 更新失败就清除 ready 并报错；:12 读取实际已应用凭据；读取失败不宣告 ready；:13 responder.refresh(actual_pwd); :14 responder.set_ready(true);。B 重启读取已持久化的新值。C/wifi.c:10 password=SHA256(public_device_serial)[0:16]，设备序列号可从广播读取。请区分已实现的随机性、轮换事务/缓存一致性与可预测密码，并给出方案。",
+      "expected_output": "A 已随机生成并持久化且检查失败，但解绑后的缓存未刷新，不能说随机密码没有实现；B 补上应用状态与对外缓存一致性；C 只有唯一性，公开序列号不能单独构成安全密码秘密来源。不得推断 root 一机一密或 Wi-Fi 凭据加密存储。",
+      "assertions": [
+        {"name": "existing_random_persistence_recognized", "check": "必须承认 A 的随机、保存及错误返回，不把缓存问题写成全部未实现。"},
+        {"name": "stale_responder_cache_found", "check": "定位 A 对外 responder 仍回传旧值，并提出刷新缓存与 ready/失败状态一致的方案。"},
+        {"name": "positive_lifecycle_credit", "check": "承认 B 给出的持久化、实际应用、缓存、重启及失败不就绪行为，不凭空添加输入未出现的同类缺陷。"},
+        {"name": "serial_is_not_secret", "check": "指出 C 的公开序列号可预测性，建议 CSPRNG 或受保护设备秘密参与的 KDF；不得因每台唯一就判安全。"},
+        {"name": "credential_domains_separate", "check": "不得将 SoftAP 密码状态推导为 root 账户每机密码、BLE 鉴权或静态存储加密已完成。"}
+      ]
+    },
+    {
+      "id": 5,
+      "slug": "adb-host-authentication-versus-root-password",
+      "mode": "offline_fixture",
+      "setup": "离线合成镜像和精确二进制分析证据，不连接 ADB、不读取主机私钥、不破解密码。所有公钥/密码字段均只提供类型与状态。设备为 Linux，预置信任密钥与产线发行流程未提供。",
+      "prompt": "解释两份 BSP 的 ADB 和 root 登录状态。共同证据：/etc/passwd:1 root UID=0,shell=/bin/bash；/etc/shadow:1 存在未锁定的预置密码哈希，未提供值；/etc/inittab:20 console执行/bin/login；usb_start.sh:10 root 启动 adbd且无切换用户参数。BSP A/profile.d/adb.sh:1 ADB_SECURE=1，启动链确认该变量导出到 adbd；该精确二进制读取它，使用 /adb_keys 中的受信任 RSA 公钥验证随机挑战签名，失败拒绝 OPEN；USB和TCP共用该认证。成功后 shell直接exec('/bin/bash',['-l'])，已查该完整路径无降权/第二次密码认证，文件同步共用已认证传输。BSP B 的其它代码相同但生效 ADB_SECURE=0，分支直接允许 OPEN。两者都没有实机 UID/网络可达性记录。请回答是否免认证、是否需要 root 密码、是否固定弱密码，并给生产策略。",
+      "expected_output": "A 已启用主机公钥认证，不是任意电脑免认证；认证后按给定启动路径继承 root 且不询问账户密码。B 的认证开关关闭，应报告未经主机认证即可进入给定服务路径。root 有预置未锁定哈希，但弱口令/实际出厂替换未证实。两者生产默认开放策略与认证强度分别评估。",
+      "assertions": [
+        {"name": "authenticated_adb_not_open_to_every_host", "check": "明确 A 需要受信任私钥证明，不得因开发电脑直接进入或不弹密码就写无认证。"},
+        {"name": "disabled_auth_branch_detected", "check": "明确 B 生效配置关闭认证，不能仅凭二进制包含 RSA 验证函数就将 B 判为已认证。"},
+        {"name": "shell_login_flag_not_account_login", "check": "区分 bash -l 与 /bin/login，区分 ADB 主机身份、认证后进程权限和系统密码。"},
+        {"name": "hash_not_proof_of_weak_password", "check": "只确认未锁定预置哈希，不猜测明文、不将固定哈希等同已证实弱密码、不声称产线已替换或未替换。"},
+        {"name": "production_policy_and_runtime_limit", "check": "给出生产默认关闭/受控短时授权、维护主机密钥范围与撤销建议，并明确未实机验证 UID/可达性；不把公开信任公钥当私钥泄漏。"}
+      ]
+    },
+    {
+      "id": 6,
+      "slug": "independent-usb-services-and-shell-dataflow",
+      "mode": "offline_fixture",
+      "setup": "离线合成启动配置与产测伪代码。仅进行代码审查，不产生利用载荷、不发送请求、不下载或执行任何文件。两项服务是不同进程，实际构建包含所列代码。",
+      "prompt": "审查 USB 暴露面 A/B。两者 ADB 都要求受信任主机签名。A/S70:1 启用ADB+RNDIS；A/S80:1 app --factory-ota=0；A/S99:1 start vendor_factory_server；A/factory.c:10 listen(RNDIS_ADDR,6000); :11 if(frame.magic!=EXPECTED_FRAME) return ERROR; :12 if(!within_factory_window()) return DENIED; :13 url=frame.audio_url; :14 system(concat('download-tool ',url));。协议允许客户端控制 url，没有身份校验或转义，时间窗有效后可到该分支。B 的 vendor_factory_server 在 release 默认不启动；维护开启先校验绑定本设备、用途和有效期的签名授权，帧处理校验授权会话；音频下载使用 download_library(url)，仅允许 HTTPS 来源白名单，并验证返回文件类型。请指出实际入口和调用链风险，以及 B 覆盖了哪些措施，不执行验证。",
+      "expected_output": "A 的 RNDIS 产测不继承 ADB 认证，固定帧头/时间窗不是身份；app 的 factory-ota 关闭不影响独立 vendor 服务，外部 URL 拼进 shell 是注入缺陷。B 在给定路径具有默认关闭、维护授权及取消 shell 拼接措施，应分别认可。",
+      "assertions": [
+        {"name": "independent_protocols_independent_auth", "check": "不得以 ADB 公钥认证为 RNDIS 产测背书，必须分开列出两条入口。"},
+        {"name": "second_startup_path_not_hidden", "check": "必须追踪 S99 的独立服务，不能因 S80 factory-ota=0 宣布产测入口全部关闭。"},
+        {"name": "untrusted_url_reaches_shell", "check": "明确 frame.audio_url 到字符串拼接再到 system 的数据流与前提，不需要提供攻击字符串。"},
+        {"name": "positive_changes_are_specific", "check": "认可 B 默认关闭、签名维护授权及库调用/来源校验；不声称所有 USB 或所有下载处理已无漏洞。"},
+        {"name": "no_effects", "check": "不构造或运行注入载荷，不向设备发送请求，不调用真实下载或写入操作。"}
+      ]
+    },
+    {
+      "id": 7,
+      "slug": "http-resource-auth-and-sensitive-diagnostics",
+      "mode": "offline_fixture",
+      "setup": "离线合成 HTTP 文件与诊断代码，完整列出路由前置回调和处理链；网络可达性尚无实机证据。固定诊断文件清单是测试路径，不含真实内容。",
+      "prompt": "比较局域网设备 HTTP 实现 A/B。A/server.c:10 listen('*:7080'); :11 middleware=log_request_only; :12 register('/recordings',list_recordings); :13 register('/diagnostics/create',create); :14 register('/diagnostics/download',download)。A/files.c:10 验证file_id格式；:11 realpath结果必须位于/storage；:12 查元数据得到实际录像路径并read。A/diag.c:10 include_sensitive=body.get_bool('include_sensitive_config',false); :11 create_bundle(include_sensitive); :12 若true，固定收集/wifi/config和/nv/config.bin；:13 download只检查bundle_id和ready状态再输出文件。A没有其他调用者认证/资源授权，业务状态必须允许且文件存在。B 在统一回调先验证所有者会话和目标资源权限，失败不进handler；release诊断拒绝敏感开关且仅输出白名单脱敏字段，不收集原始凭据。请给出风险范围、条件和方案。",
+      "expected_output": "A 在端口可达且业务条件满足时允许未认证读取固定业务资源及可开启的敏感诊断；不是已证明整台设备任意路径读取。默认 false、路径检查及文件 ID 检查不能替代身份和资源授权。B 的统一授权及字段白名单对应解决这些给定路径问题。",
+      "assertions": [
+        {"name": "auth_and_path_validation_distinct", "check": "明确 A 的路径限制/ID合法性已存在，但没有验证请求者及资源权限。"},
+        {"name": "sensitive_flag_followed_to_sink", "check": "必须追踪未授权请求可设 true 到原始无线/NV文件进入诊断包并可下载，不能以默认 false 判安全。"},
+        {"name": "file_scope_not_exaggerated", "check": "结论限定固定业务资源和诊断清单，保留可达性、设备状态及文件存在条件，不称为已证实任意文件读取。"},
+        {"name": "positive_middleware_and_minimization", "check": "认可 B 在处理函数前执行的身份/资源授权及生产白名单脱敏，并给 A 同等具体方案，不能只建议关闭 CORS。"}
+      ]
+    },
+    {
+      "id": 8,
+      "slug": "cors-policy-versus-demonstrated-browser-path",
+      "mode": "offline_fixture",
+      "setup": "离线合成 CORS 配置与冻结浏览器测试记录。不得进行新的浏览器或网络操作；测试记录只是本例权威输入，不表示当前宿主或产品的真实结果。",
+      "prompt": "判断四份证据足以支持什么结论。A仅提供server.c:10 Access-Control-Allow-Origin:*；未提供路由认证、凭据模式、响应内容、浏览器版本、安全上下文、预检或私网访问限制。B提供同类星号响应头，另有冻结测试记录：指定测试浏览器和配置下，外部页面向可达的设备只读GET接口发起无凭据请求；接口不要求身份；测试环境没有阻断该私网请求；无自定义头且无需预检；响应200，页面脚本成功读取固定测试录像列表。该记录不含写操作测试。C提供显式Origin白名单，但原生客户端可直连，接口仍未认证。D给定冻结测试：指定环境的浏览器表单POST已送达设备控制端点，端点不校验身份或Origin且接受表单类型；设备测试状态已改变，但页面脚本因CORS无法读取响应。请区分CORS策略缺口、已经验证的浏览器路径、跨站操作和API身份认证，不扩大结论。",
+      "expected_output": "A 可报告宽泛 CORS 配置风险，不能断言任意网页必然成功读取或控制；B 可在指定环境/条件下确认跨站读取该列表，不能扩成全部浏览器或写控制；C 的白名单不解决原生客户端无认证访问；D 已证实给定条件下跨站操作产生副作用，响应不可读不能消除此风险。",
+      "assertions": [
+        {"name": "header_only_is_not_proven_exploit", "check": "A 不得直接写成已证实恶意网页无条件可读/可控，必须列出决定结论所缺的条件。"},
+        {"name": "verified_read_path_gets_credit", "check": "B 必须承认给定冻结测试证实的读取路径，不能将已提供的全部条件仍笼统写成没有证据。"},
+        {"name": "browser_and_operation_scope", "check": "B 结论限定指定环境、无凭据GET与列表读取，不声称所有浏览器、认证凭据模式或写操作均可利用。"},
+        {"name": "cors_is_not_api_authorization", "check": "指出 C 的白名单并不授权请求者；承认 D 给定测试中跨站请求已改变状态，不得因响应不可读就否认操作风险。建议接口认证及适用的 CSRF 防护。"}
+      ]
+    },
+    {
+      "id": 9,
+      "slug": "content-hash-signature-and-rollback-separated",
+      "mode": "offline_fixture",
+      "setup": "离线合成 OTA 伪代码和 CI 配置；不执行刷写。标准签名库、受保护信任锚与最低安全版本存储在正例中作为已核验前提给出。本例不评估其它启动链。",
+      "prompt": "比较 OTA A/B。A/install.c:10 manifest=parse_unsigned_json(package); :11 if(SHA256(actual_payload)!=manifest.sha256) return ERROR; :12 if(manifest.base_version==current_version) choose_diff(); else choose_full(); :13 install_to_inactive_slot(); :14 boot_failure_reverts_slot();。攻击者可同时替换载荷和包内manifest；CI对固件登记API请求计算HMAC，但设备不验证该HMAC。B/install.c:10 if(!verify_manifest_signature(protected_publisher_key,manifest_bytes,signature)) return ERROR; :11 manifest=parse_verified_manifest(); :12 if(SHA256(actual_payload)!=manifest.sha256) return ERROR; :13 if(manifest.security_version<protected_minimum_security_version) return ERROR; :14 install_to_inactive_slot(); :15 成功确认后按抗断电协议提交受保护安全版本下限。签名覆盖产品、载荷摘要和security_version；恢复路径执行同一校验。请逐项承认与指出缺口。",
+      "expected_output": "A 已有真实内容摘要比较及 A/B 恢复，但摘要来源未认证，CI HMAC不是设备验签，full/diff选择和回退不构成最低安全版本保护；建议签名覆盖可信描述与所有升级入口及防降级状态。B 在所给前提下具有对应控制，不扩大为 Secure Boot 或整机认证已完成。",
+      "assertions": [
+        {"name": "actual_hash_check_recognized", "check": "不得把 A 写成只比大小或没有内容完整性检查；必须承认它确实计算并比较 SHA-256。"},
+        {"name": "unsigned_expected_hash_not_publisher_auth", "check": "指出载荷与无签名manifest可一起替换，因此摘要比较不能证明发布者身份；CI请求HMAC不能代替设备验签。"},
+        {"name": "rollback_not_recovery_or_diff_selection", "check": "分开判断 full/diff兼容选择、A/B故障恢复和最低安全版本保护，不能将前两者计作防降级完成。"},
+        {"name": "positive_ota_scope", "check": "承认 B 的可信签名覆盖、真实内容比较、受保护版本下限及恢复入口一致性，只限定这些 OTA 路径，不据此宣告 Secure Boot 或合规认证完成。"}
+      ]
+    },
+    {
+      "id": 10,
+      "slug": "reverted-fix-and-ci-gate-scope",
+      "mode": "offline_fixture",
+      "setup": "离线合成目标提交、历史差异与 CI 图，所有相关路径和跳过条件已经列出；没有实际模型、编译、Sanitizer 或生产 pipeline 运行结果。技术状态和流程状态应分开输出。",
+      "prompt": "评审目标 A/B，历史标题不能替代当前代码。A/history:commit_one新增diagnostic_require_owner(); commit_two移除该调用；A/HEAD/diag.c:10 直接create_bundle()，没有统一鉴权回调。A/ci.yml:10 mr_analysis只覆盖改动应用文件，工具缺失exit 0；:11 mr_sanitizer只跑telemetry子集且失败阻断；:12 nightly_sanitizer允许失败；:13 production_package needs=[]可单独触发。B/HEAD/diag.c:10 统一中间件要求所有者会话再create_bundle；B/ci.yml:10 release_checks验证已声明的生产源码范围，工具缺失/检查失败exit 1；:11 production_package必须等待release_checks和指定测试成功，输出制品绑定本次提交；未提供SBOM、密钥扫描、最终ELF保护检查或线上运行结果。请分别报告当前技术措施与交付流程，并给出需补项。",
+      "expected_output": "A 的历史鉴权已经撤回，不能算当前实现；局部 MR sanitizer 是已有措施，但工具缺失放行、nightly允许失败与独立发包使门禁覆盖有限。B 的当前身份校验和给定发包依赖设计应获认可，但不能宣称检查已跑过、SBOM齐备或最终ELF已加固。",
+      "assertions": [
+        {"name": "reverted_auth_not_current_fix", "check": "以 A HEAD 为准确认历史鉴权已移除，不得只按 commit_one 标题判定问题关闭。"},
+        {"name": "partial_ci_not_zero_or_complete", "check": "承认 A 局部 MR sanitizer 的阻断作用，同时准确指出工具缺失放行、nightly允许失败和独立生产打包的边界。"},
+        {"name": "positive_release_dependencies", "check": "认可 B 给出的失败拒绝和生产包依赖设计，以及目标HEAD中实际执行的身份验证。"},
+        {"name": "no_unrun_test_or_missing_domain_claim", "check": "不得把检查配置存在写成实际运行通过，不得将Sanitizer等同PIE/NX/Canary/RELRO，不得补造SBOM/密钥扫描结论。"},
+        {"name": "technical_and_process_separate", "check": "技术鉴权现状与CI/发行流程缺口分项输出，建议对应具体证据，不把所有事项混为一个安全已完成状态。"}
+      ]
+    },
+    {
+      "id": 11,
+      "slug": "unrelated-diff-still-reviews-release-baseline",
+      "mode": "offline_fixture",
+      "setup": "离线合成产品固件提交，已完整冻结本例 release 的主仓、BSP、启动脚本、设备凭据注入路径和四项本地入口；无实机记录。版本标签只指本夹具，不对应真实产品或截图。产品基线要求 UART 禁止共用凭据、ADB 默认关闭并受控维护、禁用 USB/RNDIS HTTP 路径。本例不评估其余安全域。",
+      "prompt": "本次 MR 只将 app/led.c:10 的灯效时长从 200ms 改为 300ms。比较目标版本 A 与完成整改的版本 B，分别给出产品基线状态和本次 MR 合并判断。A/main=fixture-a，deps.lock:1 BSP=fixture-bsp-a，构建核验所有下列文件实际进入 release 且从 MR base 到 HEAD 未改动：A/BSP/rootfs/accounts:1 install_shared_root_credential(FIXTURE_SHARED_CREDENTIAL)，同一测试占位凭据装入所有设备，完整产线配置无每机覆盖；:2 root 未锁定、UID=0；A/BSP/inittab:1 UART -> /bin/login；A/BSP/init/usb:1 enable(adb,rndis); :2 start_adbd(uid=0,host_auth=false)，OPEN 直接进入 shell；A/app/http.c:10 listen(RNDIS_ADDR,7080); :11 dispatch_without_auth()，该路由可改设备配置。B 的锁定 BSP 和产线记录确认 root 密码登录锁定、UART shell 不启动；ADB 在 release 默认关闭，维护只接受绑定设备、用途和有效期的签名许可及可信主机证明，使用无 root 权限的受限命令服务；USB/RNDIS HTTP 的构建和启动路径均被移除，业务 HTTP 只绑定指定 Wi-Fi 接口并执行所有者会话授权。B 的上述措施存在于实际构建输入。请不要只分析灯效 diff，也不要把所有历史缺口一律升级为合并阻断。",
+      "expected_output": "A 的无关业务 diff 不免除目标产品扫描：报告 BSP 中共用 root 登录凭据及一机一密缺失、默认开放且无认证的 root ADB、违反产品禁用要求的 RNDIS HTTP；各项注明存量及证据。产品基线未满足；MR 门禁另判，共用凭据命中 RL-06 不享受存量豁免，其余纯存量按原分级列债，不因基线扫描自动全部阻断。B 在给定范围完成对应实现，应逐项关闭缺口但保留成品/实机未验证边界。",
+      "assertions": [
+        {"name": "baseline_not_limited_to_changed_files", "check": "即使唯一 diff 是灯效，也必须追到目标锁定 BSP、账户、UART、ADB、RNDIS，报告给定四项基线缺口，不能因未改安全文件而 N/A/PASS。"},
+        {"name": "shared_root_and_missing_personalization", "check": "依据所有设备共用且无产线覆盖的明确证据报告 root 共用凭据与一机一密缺失；UART 的 /bin/login 与 ADB 的直接 shell 分开说明，不凭未给定的明文强度断言弱密码。"},
+        {"name": "adb_and_usb_are_independent_gaps", "check": "分别报告 ADB 默认开放、未认证及 root 权限，以及 RNDIS HTTP 未认证/未禁用，不混为同一认证机制。"},
+        {"name": "baseline_and_merge_are_separate", "check": "A 产品基线未满足；MR 按原存量分级独立判定，RL-06 共用凭据仍阻断，其他未扩大存量列债，不声称全部历史红线自动阻断，也不得因可不阻断而删掉基线缺口。"},
+        {"name": "implemented_baseline_gets_scoped_credit", "check": "逐项认可 B 的锁定/禁用、受控认证和最小权限、移除 USB 路径，限于已冻结构建输入；不宣称整机通过或实机已验证，不从真实版本截图补造历史事实。"}
+      ]
+    },
+    {
+      "id": 12,
+      "slug": "authenticated-usb-path-still-violates-disable-baseline",
+      "mode": "offline_fixture",
+      "setup": "离线合成产品策略与两份 release 构建。已核实该产品要求 USB/RNDIS 不承载任何 HTTP 控制服务，没有获批例外；Wi-Fi 所有者控制是正常功能。所有鉴权调用的有效性在本例作为已验证事实给出，不讨论算法实现。",
+      "prompt": "本次提交只改视频码率。A/product-policy:1 release 禁用 USB/RNDIS HTTP；A/release.conf:1 RNDIS=on；A/server.c:10 listen(RNDIS_ADDR,7080); :11 if(!verify_owner_session(req)) return DENIED; :12 if(!session_can_change_settings(req)) return DENIED; :13 change_settings(req)。冻结构建和路由映射证实该服务进入 release 且绑定 USB 网卡，base 与 HEAD 相同；它正确拒绝无凭据请求，ADB 已关闭。B/release.conf:1 RNDIS=off；B 构建排除 USB HTTP 注册/启动代码，所有启动入口的检查确认不能恢复该路径；B/server.c:10 listen(WIFI_STA_ADDR,7080)，继续执行相同身份及权限校验。请分别判断此条产品基线、已实现认证和 MR 存量处理。",
+      "expected_output": "A 具有真实身份和权限校验，不能报无认证；但产品明确要求禁用 USB HTTP，已认证不满足禁用要求，须报告存量产品基线缺口。该 MR 没扩大入口，按原规则列为不阻断本次变更的既有债；此合并判断不等于产品基线 PASS。B 从构建与启动移除了禁止路径，并保留 Wi-Fi 业务授权，可在所给证据范围关闭此缺口。",
+      "assertions": [
+        {"name": "explicit_disable_requirement_survives_auth", "check": "必须报告 A 未禁用 USB/RNDIS HTTP，不能因为所有者会话和资源授权存在就判该产品基线通过。"},
+        {"name": "authentication_is_not_erased", "check": "明确承认 A 已认证且已检查设置权限，不得把策略违规夸大成未认证访问、ADB 后门或已证实任意 root 执行。"},
+        {"name": "unchanged_debt_does_not_pass_baseline", "check": "分别输出产品基线不满足和 MR 纯存量不阻断，不以任一结论替代另一结论。"},
+        {"name": "disabled_path_positive_control", "check": "认可 B 的构建排除与启动入口禁用，并指出 Wi-Fi 业务认证仍保留；不把仅加认证当作本例禁用路径的充分修复。"}
+      ]
+    },
+    {
+      "id": 13,
+      "slug": "unknown-password-hash-neither-weak-nor-pass",
+      "mode": "offline_fixture",
+      "setup": "离线合成 UART 账户基线核验。产品允许受控串口登录，但要求密码凭据每机唯一、足够强、受保护注入并限制尝试。只提供哈希状态，不提供任何真实哈希或明文；禁止破解、猜测凭据或连接设备。",
+      "prompt": "本次 MR 只改音量参数。A 的目标 release 镜像记录：accounts:1 root 存在未锁定密码哈希（值、算法参数均未提供）；inittab:1 UART 调用 /bin/login；其余凭据生成、出厂替换、跨设备唯一性和尝试限制证据均未取得。本例没有证明哈希是否跨设备相同，也没有免密码登录证据。B 是新增凭据个性化实现后的冻结对照：provision.c:10 if(!csprng_per_device_secret()) return ERROR; :11 protected_inject(device_bound_password_verifier); :12 wipe_temporary_secret(); B 的目标产线记录确认每机独立生成且所有发行设备均经过该步骤，无共用默认回退；login.c:10 verify_with_approved_password_hash_and_parameters(); :11 enforce_attempt_limit()；验收记录确认失败拒绝、重启仍使用本机凭据；记录不泄漏明文或哈希值。请判断 A/B 的 UART 凭据基线，并明确未知和已证实缺失的区别，不因本次未触碰 UART 就跳过。",
+      "expected_output": "A 只能确认未锁定的本地密码入口，无法证明弱口令、共用口令或免密；每机唯一性、强度及尝试限制必须列为未核验，不能将产品基线记 PASS，也不能仅凭未知命中 RL-06。B 新增生成、受保护注入、无共用回退、限制尝试及重启保持的证据支持所给范围基线满足；UART 认证不证明 ADB 或其它调试入口安全。",
+      "assertions": [
+        {"name": "hash_unknown_is_not_weak_or_shared", "check": "A 不得被断言为弱密码、通用默认密码、免密 root 或一机一密已证实缺失；不从单个未知哈希推测其明文、强度或跨设备相等。"},
+        {"name": "unverified_baseline_cannot_pass", "check": "A 的每机凭据、强度、注入和尝试限制明确列为待核验并给出取证项，不能因没有确定弱密码证据就写 PASS/N/A 或完全省略此基线。"},
+        {"name": "unknown_is_not_automatic_rl06_block", "check": "不以未知哈希自动触发 RL-06 阻断；将产品基线未核验与 MR 是否有已证实阻断项分开说明。"},
+        {"name": "new_personalization_evidence_is_credited", "check": "认可 B 在目标发行链已落实每机生成、受保护注入、无共用回退和尝试限制，不再将同一条标为未实现；不扩大为其他账户/协议或全产品已合规。"}
+      ]
+    },
+    {
+      "id": 14,
+      "slug": "missing-actual-payload-hash-to-verified-content",
+      "mode": "offline_fixture",
+      "setup": "离线合成 OTA 实现，标准验签库、受保护公钥和防回滚状态已核验。所有升级/恢复入口均汇合到给定 apply 函数，完整调用链不含其它内容摘要或载荷签名检查。不运行下载、篡改测试或刷写。",
+      "prompt": "产品固件每次提交须核验实际内容完整性，本次 MR 只改录像计划。A/apply.c:10 if(!verify_manifest_signature(trusted_key,m)) return ERROR; :11 if(payload.length!=m.payload_size) return ERROR; :12 if(m.security_version<protected_minimum) return ERROR; :13 write_and_activate(payload)。签名 manifest 包含 sha256 字段，但 A 全部路径从未读取该字段，也不计算实际 payload 摘要；载荷本身无独立签名。上述实现 base/HEAD 相同。B 在步骤 13 前新增：if(SHA256(actual_payload_bytes)!=verified_manifest.sha256) return ERROR；只有比较成功才刷入同一份已核验字节，恢复入口也经过相同检查，失败不写入/激活。请比较从完全缺内容检查到新增检查的变化；不要把已有 manifest 验签或版本限制当作实际载荷已校验。",
+      "expected_output": "A 已有 manifest 验签和最低版本限制，但仅比较长度，没有将可信摘要与实际载荷绑定，必须报告实际内容 SHA-256 校验缺失，不能因 diff 无关而忽略；基线不满足，纯存量按原 MR 分级处理。B 在给定入口链中新增真实内容计算、可信期望值比较及失败拒绝，关闭该缺口；不推导 Secure Boot 或整个交付流程已完成。",
+      "assertions": [
+        {"name": "absent_content_check_reported_outside_diff", "check": "明确报告 A 完全缺失实际载荷内容校验，定位未使用的 manifest.sha256 和仅长度检查，不能因业务 diff 无关而跳过。"},
+        {"name": "metadata_signature_is_not_payload_check", "check": "承认 A 的 manifest 验签及受保护最低版本检查，但不得据此推断实际 payload 字节已经验证或把现有验签说成完全不存在。"},
+        {"name": "positive_hash_binds_written_bytes", "check": "认可 B 比较实际载荷 SHA-256 与已认证摘要、失败不写入/激活、刷入同一字节和恢复入口一致性，仅关闭所给范围内容校验缺口。"},
+        {"name": "baseline_failure_is_not_blanket_merge_block", "check": "产品基线不满足与纯存量 MR 分级分开，不能为本例临时增设所有历史缺口一律阻断的新门禁。"}
+      ]
+    },
+    {
+      "id": 15,
+      "slug": "credential-logging-without-any-redaction-to-allowlist",
+      "mode": "offline_fixture",
+      "setup": "离线合成 release 配网与诊断日志链，代码变量只有类型名称、没有真实敏感值。给定日志会持久化到可导出的诊断包；本例完整覆盖正常、失败及调试开关路径。基线禁止明文凭据和完整敏感请求进入日志。",
+      "prompt": "本次提交只调整电量图标，但请核验目标固件已有日志行为。A/provision.c:10 LOG_INFO('wifi_password=%s',wifi_password); :11 LOG_ERROR('cloud_token=%s request=%s',cloud_token,request_body)。A/logger.c:10 append_persistent_log(formatted_message)；A/diag.c:10 export_log_without_redaction()；这些路径在 release 生效且 base/HEAD 未改变，没有任何字段删除或脱敏步骤。B 新增统一日志事件白名单，只接受 event_id、错误码及非敏感阶段状态；正常/失败分支均不传凭据或请求正文；release 禁止切换到原始请求日志，诊断只导出该白名单输出。冻结测试使用无秘密的哨兵值覆盖所列分支，日志和导出均未包含哨兵值。请分别报告缺失实现、B 已增加的控制及范围。",
+      "expected_output": "A 完全未实现日志敏感字段控制，应沿凭据/请求变量→格式化日志→持久化→诊断导出的链报告基线缺口，即使本次 diff 无关。B 增加入口白名单、所有给定分支和导出一致保护，有冻结测试支持，应认可所给范围；不把白名单说成仅隐藏界面，也不扩成所有存储已加密或安全擦除。MR 存量处理另列。",
+      "assertions": [
+        {"name": "missing_redaction_reported_on_target", "check": "A 必须报告 Wi-Fi 密码、云 token 和请求正文进入持久日志/诊断的现存缺口，不能只审电量图标 diff 或只说建议改进。"},
+        {"name": "trace_secret_to_export_without_real_values", "check": "依据所给变量和数据流描述泄露范围，不要求打印真实秘密、不构造真实用户内容、不声称已向任意外部攻击者泄露。"},
+        {"name": "new_allowlist_control_is_credited", "check": "认可 B 从源头限制字段，覆盖错误/调试路径和导出，并准确引用冻结哨兵测试；不声称新跑过测试或把其它存储基线也判通过。"},
+        {"name": "debt_is_visible_separate_from_merge", "check": "产品日志基线未满足必须保留在报告中；纯存量未扩大按原分级处理，不因为未阻断 MR 而省略，也不临时将全部存量改为阻断。"}
+      ]
+    },
+    {
+      "id": 16,
+      "slug": "missing-reset-recovery-and-path-boundary-controls",
+      "mode": "offline_fixture",
+      "setup": "离线合成凭据生命周期及本地文件接口。产品明确要求恢复出厂删除用户凭据/缓存/备份，断电恢复不得重新启用已撤销凭据，文件接口限制在授权存储根目录。路径 API 行为作为已验证前提给出，不运行载荷、断电或文件写入。",
+      "prompt": "本次提交只改提示音，以下目标实现都为未改动的存量。A/reset.c:10 erase(user_config_only); :11 reboot()；已核实 Wi-Fi/云凭据、配网 responder 缓存、SD 密钥及备份仍保留。A/boot.c:10 if(primary_invalid) restore(backup_with_old_credentials)，恢复不查撤销状态，冻结故障记录确认解绑后断电重启重新启用旧凭据。A/files.c:10 if(!owner_session(req)) return DENIED; :11 path=concat('/storage/',req.relative_path); :12 read(path)，完整路径无规范化、根目录限制或 symlink 约束。B/reset.c:10 写入并持久化 RESET_PENDING 撤销标记；:11 擦除上述用户数据、凭据、缓存、密钥和备份；:12 完成后清除标记；B/boot.c:10 若 RESET_PENDING 则拒绝服务并继续擦除，不加载旧备份；B 凭据轮换使用持久撤销版本，所有恢复路径拒绝旧版本。B/files.c:10 同样先验所有者；:11 使用已核验的目录句柄约束 API，只允许授权 storage 根内解析，拒绝父级越界与所有 symlink 跳转；:12 在同一受限句柄读取；冻结测试覆盖恢复中每个持久化点断电、旧备份恢复及路径边界，均失败拒绝或继续擦除。请分别判断三项从缺失到实现的变化，不给攻击字符串。",
+      "expected_output": "A 应分别报告恢复出厂擦除不全、断电/备份恢复复活凭据和认证后文件路径越界缺少限制；不能因存在所有者认证而省略路径问题，不能因重启成功判恢复安全。B 提供持久撤销/重启继续擦除、恢复拒绝旧版本和受限句柄路径保护，应认可对应实现及冻结测试边界。产品基线与本次 MR 存量分级分别报告，不扩成所有操作都安全。",
+      "assertions": [
+        {"name": "factory_reset_missing_erasure_reported", "check": "报告 A 恢复出厂仅擦除配置，给定凭据/缓存/SD 密钥/备份仍在，不能以调用 erase 或 reboot 就判 RL-10 对应基线已满足。"},
+        {"name": "power_loss_and_backup_revoke_credentials", "check": "独立指出 A 断电恢复加载旧备份重新启用凭据；认可 B 持久撤销、重启继续擦除和所有恢复入口拒绝旧版本，不将可启动等同安全恢复。"},
+        {"name": "authenticated_request_still_needs_path_boundary", "check": "承认 A 所有者认证有效，同时报告其用户可控路径未经根目录/链接约束；不将其写成无认证访问，不提供利用字符串或宣称已实机证明任意文件读取。"},
+        {"name": "implemented_controls_and_test_scope", "check": "逐项认可 B 擦除及断电处理、撤销版本、受限路径句柄与给定冻结测试，不能称此次执行过测试，也不能把本例有限覆盖扩大成全产品通过。"},
+        {"name": "report_baseline_and_existing_debt_separately", "check": "无关提示音 diff 不得使三项存量缺口消失；产品基线未满足与 MR 按原存量分级处理分开说明，不引入全部存量一律阻断的新规则。"}
+      ]
+    },
+    {
+      "id": 17,
+      "slug": "restricted-ci-evidence-versus-authorized-local-source",
+      "mode": "offline_fixture",
+      "setup": "离线合成对照，同一固件候选版本分别在受限 CI 和已授权本地审查中处理。产品具有 UART、ADB、USB/RNDIS、BLE、SoftAP、OTA、本地文件、诊断及持久用户数据；本例明确审查 B01–B12 和 F01–F04，不将取证限制改成减少基线要求。所有工具返回和代码证据已冻结并内嵌，不需实际执行工具。A 为无人交互 CI：仅可读取给定 review-data；访问 review Git 数据只允许 materialize-review-diff.sh 按清单数字 ID 返回固定 base/head 的 diff，以及 verify-source-path.sh 返回固定 head 的 EXISTS/ABSENT/UNKNOWN，二者均不能提供未修改文件全文。不得自行使用 Git、API、网络、业务目录 Read/Glob 或自编脚本补齐。B 为用户明确授权的本地只读审查，候选 checkout、锁定依赖和相关完整源码均可检查；本例直接给出已核验的读取结果，不执行伪代码、不连接设备。",
+      "prompt": "本次 MR 主题是电量状态业务改动，候选 head=cccccccccccccccccccccccccccccccccccccccc，base=dddddddddddddddddddddddddddddddddddddddd。A 的 review-data 声明 scope.status=complete、content.status=complete，唯一 modified 文件为 app/status.c，file-id=1；这只表示变更清单及 diff 完整。该完整 diff 新增错误分支：status.c:40 on_status_error(cloud_token)；:41 fd=open('/persist/device.log',APPEND)；:42 if(fd>=0) write(fd,cloud_token,strlen(cloud_token))；:43 close(fd)。输入契约明确 cloud_token 是正在使用的长期云凭据，新增路径会按原样写入持久日志，没有脱敏或替换；只提供变量名，没有真实值。已冻结的路径 helper 结果为 boot/debug_config.c=EXISTS、ota/apply.c=EXISTS、factory/personalize.c=UNKNOWN、docs/security/device-profile.yml=ABSENT，均绑定上述 head；没有这些文件的内容、构建配置、产线或制品证据。file-list 没有额外可物化文件 ID。请完成 A 的基线与增量结论，不因需要检查未改动安全路径而突破受控数据边界。\nB 是相同 head 的已授权本地审查，除同一 diff 外，完整启动链及构建配置确认生产 ADB 默认关闭，维护开启要求绑定设备和有效期的签名许可、可信主机证明及受限非 root 权限；完整 OTA 升级和恢复入口确认先验可信 manifest 签名，再比较实际写入字节的 SHA-256 与已认证摘要，并检查受保护的最低安全版本，失败不写入或激活。另有完整文件路由注册、前置回调及 handler 证据：files.c:10 验证 file_id；:11 仅允许 /storage 内指定资源；:12 read_and_return(resource)，整个调用链无调用者认证或资源授权；base/head 完整对照确认此入口未修改，未扩大。其他基线所需材料尚未取得，无成品或实机测试结果。请逐项承认 B 新增证据支持的结论，解释为何 A 的 UNKNOWN/EXISTS/ABSENT 不能支持同样结论，同时不要把 CI 取证限制泛化为禁止已授权本地源码审查。",
+      "expected_output": "A 保留完整 B01–B12/F01–F04 基线表：B08 根据实际 diff 报告新增长期凭据明文写入持久日志；其他缺少实现证据的项逐项待核验，说明所缺材料，不因业务主题或受限 CI 省略。EXISTS 仅证明路径存在，UNKNOWN 不能改成不存在，device-profile.yml 的 ABSENT 仅证明该约定文件缺失；变更清单完整不等于产品实现证据完整。不得调用或建议绕过两个 helper 获取业务源码，也不得虚构 helper 返回全文。证据不足不降低已由 diff 直接证明的问题。B 使用已授权完整证据认可 ADB 开启/认证/权限与 OTA 内容验证的对应控制，报告文件接口认证及授权缺口并承认已有路径限制；该入口为未扩大的存量，按原规则处理。两个环境均区分产品基线状态与 MR 增量结论，未核验项继续保留，不声称整机、制品或实机通过。",
+      "assertions": [
+        {"name": "restricted_ci_does_not_expand_data_access", "check": "A 不调用、不给出绕过边界的 Git/API/网络/业务目录 Read/Glob/自编取证脚本；明确 materialize helper 只返回列出的 diff，path helper 只返回存在性，不声称任一 helper 可补齐未修改全文，也不编造新的 file-id。"},
+        {"name": "path_status_is_not_implementation_status", "check": "EXISTS 不被当作 ADB 认证、OTA 校验或其他控制已实现的证据；UNKNOWN 不被改写为 ABSENT 或实现缺失；device-profile.yml 的 ABSENT 不证明产品没有安全控制；scope/content complete 不被扩大为完整固件源码证据。"},
+        {"name": "restricted_evidence_keeps_full_baseline_visible", "check": "A 逐项保留 B01–B12/F01–F04，B08 以外缺少实现证据的项标待核验并说明需要补充的证据层级；不得因业务 diff、取证受限或找不到文件而标 PASS/N/A、删去整类基线或宣布整机通过。"},
+        {"name": "direct_diff_finding_survives_missing_context", "check": "A 和 B 都依据新增写入分支报告长期云凭据进入持久日志的问题，定位变量到 write 的数据流并给出移除敏感输出的整改方向；不得因其他材料不足将该已确认问题降为未知，也不要求输出真实凭据。"},
+        {"name": "authorized_local_full_evidence_remains_usable", "check": "B 认可给定完整启动/构建链中的 ADB 控制及完整 OTA 入口中的签名、实际内容比较和版本下限；同时报告完整文件调用链缺认证/授权，承认已有路径边界。不得借用 A 的 CI 限制拒绝这些已授权本地证据，也不得把 B 的证据反填为 A 已核验。"},
+        {"name": "baseline_merge_and_execution_claims_stay_separate", "check": "分别给出产品基线未满足或未完成核验与 MR 增量结论；新增日志问题按实际 diff 处理，B 的未扩大文件访问存量按原规则列债，不新增全部存量阻断规则。其余未知继续保留，不宣称本次运行了 helper、固件测试或实机验证。"}
+      ]
+    }
+  ],
+  "contract": {
+    "version": 1,
+    "id_start": 1,
+    "case_count": 17,
+    "canonical_inputs": true,
+    "require_assertions": true,
+    "hide_tool_tokens": true
+  }
+}

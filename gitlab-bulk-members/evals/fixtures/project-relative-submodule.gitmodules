@@ -1,0 +1,7 @@
+[submodule "app-lib"]
+	path = vendor/app-lib
+	url = ../lib.git
+
+[submodule "platform-foo"]
+	path = vendor/platform-foo
+	url = ../../platform/foo.git

@@ -1,0 +1,69 @@
+{
+  "skill_name": "gitlab-bulk-members",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "给项目 `apps/mobile/app` 和默认分支里的 submodule 批量添加 `alice@example.com` Developer。`.gitmodules` 内容见 fixtures/project-absolute-submodule.gitmodules。先只输出 dry-run，不要执行。",
+      "expected_output": "应解析根项目和绝对 URL submodule `platform/lib-common`；人员公开输入按邮箱处理，先查 pending invitations，若邮箱唯一匹配现有用户再查 `/members/all/:user_id`；输出 dry-run 表并等待确认，不得直接写成员。",
+      "files": [
+        "fixtures/project-absolute-submodule.gitmodules"
+      ],
+      "assertions": [
+        {
+          "name": "absolute_submodule_resolved",
+          "check": "解析 git@gitlab.addx.ai:platform/lib-common.git 为 platform/lib-common"
+        },
+        {
+          "name": "email_first_contract",
+          "check": "公开输入只支持邮箱；先查 invitations?query=email，唯一匹配现有用户时才查 members/all"
+        },
+        {
+          "name": "dry_run_required",
+          "check": "只输出 dry-run 计划，不执行 POST/PUT 写操作"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "给项目 `apps/mobile/app` 和默认分支里的 submodule 批量添加 `qa-user@example.com` Reporter。`.gitmodules` 内容见 fixtures/project-relative-submodule.gitmodules。先只输出 dry-run，不要执行。",
+      "expected_output": "应按父项目 remote full path `apps/mobile/app` 解析相对 submodule：`../lib.git` -> `apps/mobile/lib`，`../../platform/foo.git` -> `apps/platform/foo`；邮箱走 invitations 路径，先查 pending invitations，并把 already invited / invite_or_existing_member_unverified / upgrade_invitation 纳入 dry-run。",
+      "files": [
+        "fixtures/project-relative-submodule.gitmodules"
+      ],
+      "assertions": [
+        {
+          "name": "relative_parent_namespace",
+          "check": "使用父项目 remote full path apps/mobile/app 作为相对 URL base"
+        },
+        {
+          "name": "relative_submodules_resolved",
+          "check": "解析 ../lib.git 为 apps/mobile/lib，解析 ../../platform/foo.git 为 apps/platform/foo"
+        },
+        {
+          "name": "email_invitation_path",
+          "check": "邮箱不强制预解析 user_id；先查 invitations?query=email，处理 already_invited / upgrade_invitation"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "给 Group `platform/team` 添加 `bob@example.com` Maintainer。先只输出 dry-run，不要执行。",
+      "expected_output": "应只解析 Group 并计划调用 Group members API。不得列 Group 子项目，不得调用 `/groups/:id/projects`，不得扫描任何子项目 `.gitmodules`。",
+      "files": [],
+      "assertions": [
+        {
+          "name": "group_direct_only",
+          "check": "Group 目标只添加 Group member"
+        },
+        {
+          "name": "no_group_project_expansion",
+          "check": "不调用 /groups/:id/projects 或 include_subgroups，不展开子项目"
+        },
+        {
+          "name": "no_group_submodule_scan",
+          "check": "不扫描 Group 子项目 .gitmodules"
+        }
+      ]
+    }
+  ]
+}

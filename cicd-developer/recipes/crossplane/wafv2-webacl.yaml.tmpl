@@ -1,0 +1,82 @@
+# crossplane-wafv2-webacl.yaml.tmpl
+#
+# Crossplane WAFv2 WebACL —— ALB ingress 入口请求层 WAF。
+#
+# ⚠️ **provider 版本要求**：`provider-aws-wafv2 >= v2.5.0`。
+# v2.0.0 在 Create 被中断后会进入 upjet stuck-state（ARN 拼接 bug），**不要用** v2.0.0。
+#
+# 必填槽位：
+#   {{app}}                 kebab-case；WebACL 命名 `{{app}}-waf`
+#   {{region}}              AWS region，如 us-east-1
+#   {{rule_json}}           完整 AWS API JSON 字符串（PascalCase keys），rules 列表
+#                           **不是** Terraform 风格的 nested struct
+#   {{tags_app}}            通常 = {{app}}（用于 AWS 资源 tag）
+#
+# ⚠️ **schema 关键陷阱**（v2 m.upbound.io 跟 Terraform 风格 / 旧 schema 不兼容）：
+#
+#   | 字段 | 错误（Terraform 风格） | 正确（v2 m.upbound.io） |
+#   |------|----------------------|----------------------|
+#   | defaultAction | `- allow: [{}]` (array of 1) | `allow: {}` (Object) |
+#   | visibilityConfig | `- cloudwatchMetricsEnabled: ...` | `cloudwatchMetricsEnabled: ...` (Object) |
+#   | 规则 | `rule:` + struct nested blocks | **不存在**——全塞进 `ruleJson:` (AWS API JSON string，PascalCase) |
+#   | annotation `crossplane.io/external-name` | 设为 `<name>` | **不要设**——provider 自动写回 UUID (composite ID) |
+#
+# 配套：必须同时写 ProviderConfig + IAM Role + RolePolicy（见文件末尾"专属 ProviderConfig 方案"）
+# WAFv2 **不在** CrossplaneAppBoundary 默认允许列表，必须走 AssumeRoleChain。
+# 写到：crossplane-infra/<cluster_dir>/{$app}-waf.yaml（集中审批入口边界资源；应用仓只消费 ARN）
+#
+# 关联到 Ingress（add-ingress workflow Step 3 已经做这一步）：
+#   alb.ingress.kubernetes.io/wafv2-acl-arn: <WebACL ARN，含 UUID>
+#
+# ⚠️ **UUID 写死代价**：Ingress 注解直接写 ARN（含 UUID）。一旦 AWS 端 WebACL 重建，
+# UUID 变 → Ingress 失联 → ALB 失去 WAF 保护。
+# **WebACL 一旦投产不要随手删**；要 reset 走完整流程：disassociate-ALB → 删 → 重建 → 改 Ingress。
+
+apiVersion: wafv2.aws.m.upbound.io/v1beta1
+kind: WebACL
+metadata:
+  name: {{app}}-waf
+  # ⚠️ **不要** 加 crossplane.io/external-name annotation——provider 自动写 UUID
+spec:
+  forProvider:
+    name: {{app}}-waf
+    description: "WAF gate for {{app}}"
+    region: {{region}}
+    scope: REGIONAL                       # ALB 用 REGIONAL；CloudFront 用 CLOUDFRONT
+    defaultAction:
+      allow: {}                            # Object 形态，**不是** array
+                                           # 或 `block: {}` 默认拒
+    visibilityConfig:
+      cloudwatchMetricsEnabled: true       # Object 形态，**不是** array
+      metricName: {{app}}-waf
+      sampledRequestsEnabled: true
+    # 规则用 AWS API JSON 字符串（PascalCase keys: Name/Priority/Action/Statement/VisibilityConfig）
+    ruleJson: |
+{{rule_json}}
+    tags:
+      managed-by: crossplane
+      app: {{tags_app}}
+  providerConfigRef:
+    name: {{app}}                          # **专属** ProviderConfig（不是 default）
+    kind: ClusterProviderConfig
+
+# {{rule_json}} 示例（IP 限流 1000 req/5min/IP）：
+#       [
+#         {
+#           "Name": "RateLimitPerIP",
+#           "Priority": 0,
+#           "Action": { "Block": {} },
+#           "Statement": {
+#             "RateBasedStatement": {
+#               "Limit": 1000,
+#               "EvaluationWindowSec": 300,
+#               "AggregateKeyType": "IP"
+#             }
+#           },
+#           "VisibilityConfig": {
+#             "CloudWatchMetricsEnabled": true,
+#             "MetricName": "RateLimitPerIP",
+#             "SampledRequestsEnabled": true
+#           }
+#         }
+#       ]

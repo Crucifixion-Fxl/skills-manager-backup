@@ -1,0 +1,2 @@
+{ "id": 2399, "type": 1, "point": "account_delete_device_warning_page",
+  "parameters": [ { "eventId": 2399, "name": "device_count", "valueType": "4", "trackerType": 0, "isRequired": 0 } ] }

@@ -1,0 +1,147 @@
+{
+  "body": {
+    "changes": {
+      "merge_status": {
+        "current": "checking",
+        "previous": "preparing"
+      },
+      "prepared_at": {
+        "current": "2026-09-13 08:21:28 UTC",
+        "previous": null
+      },
+      "updated_at": {
+        "current": "2026-09-13 08:21:28 UTC",
+        "previous": "2026-09-13 08:21:17 UTC"
+      }
+    },
+    "event_type": "merge_request",
+    "labels": [],
+    "object_attributes": {
+      "action": "open",
+      "assignee_id": null,
+      "assignee_ids": [],
+      "author_id": 6,
+      "blocking_discussions_resolved": true,
+      "created_at": "2026-09-13 08:21:17 UTC",
+      "description": null,
+      "detailed_merge_status": "checking",
+      "draft": true,
+      "first_contribution": true,
+      "head_pipeline_id": null,
+      "human_time_change": null,
+      "human_time_estimate": null,
+      "human_total_time_spent": null,
+      "id": 2,
+      "iid": 2,
+      "labels": [],
+      "last_commit": {
+        "author": {
+          "email": "[REDACTED]",
+          "name": "Buzz Sync Developer (localstack)"
+        },
+        "id": "9ff4ed1660aef141905e9b75c223c25f45ebdb91",
+        "message": "wip: draft 0913082019",
+        "timestamp": "2026-09-13T08:21:16+00:00",
+        "title": "wip: draft 0913082019",
+        "url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot/-/commit/9ff4ed1660aef141905e9b75c223c25f45ebdb91"
+      },
+      "last_edited_at": null,
+      "last_edited_by_id": null,
+      "merge_commit_sha": null,
+      "merge_error": null,
+      "merge_params": {
+        "force_remove_source_branch": null
+      },
+      "merge_status": "checking",
+      "merge_user_id": null,
+      "merge_when_pipeline_succeeds": false,
+      "milestone_id": null,
+      "prepared_at": "2026-09-13 08:21:28 UTC",
+      "reviewer_ids": [],
+      "source": {
+        "avatar_url": null,
+        "ci_config_path": null,
+        "default_branch": "main",
+        "description": null,
+        "git_http_url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot.git",
+        "git_ssh_url": "ssh://[REDACTED]:2224/buzz-sync-test/pilot.git",
+        "homepage": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot",
+        "http_url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot.git",
+        "id": 2,
+        "name": "pilot",
+        "namespace": "buzz-sync-test",
+        "path_with_namespace": "buzz-sync-test/pilot",
+        "ssh_url": "ssh://[REDACTED]:2224/buzz-sync-test/pilot.git",
+        "url": "ssh://[REDACTED]:2224/buzz-sync-test/pilot.git",
+        "visibility_level": 0,
+        "web_url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot"
+      },
+      "source_branch": "feature/1-draft-0913082019",
+      "source_project_id": 2,
+      "state": "opened",
+      "state_id": 1,
+      "target": {
+        "avatar_url": null,
+        "ci_config_path": null,
+        "default_branch": "main",
+        "description": null,
+        "git_http_url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot.git",
+        "git_ssh_url": "ssh://[REDACTED]:2224/buzz-sync-test/pilot.git",
+        "homepage": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot",
+        "http_url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot.git",
+        "id": 2,
+        "name": "pilot",
+        "namespace": "buzz-sync-test",
+        "path_with_namespace": "buzz-sync-test/pilot",
+        "ssh_url": "ssh://[REDACTED]:2224/buzz-sync-test/pilot.git",
+        "url": "ssh://[REDACTED]:2224/buzz-sync-test/pilot.git",
+        "visibility_level": 0,
+        "web_url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot"
+      },
+      "target_branch": "main",
+      "target_project_id": 2,
+      "time_change": 0,
+      "time_estimate": 0,
+      "title": "Draft: Recording draft MR 0913082019",
+      "total_time_spent": 0,
+      "updated_at": "2026-09-13 08:21:28 UTC",
+      "updated_by_id": null,
+      "url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot/-/merge_requests/2",
+      "work_in_progress": true
+    },
+    "object_kind": "merge_request",
+    "project": {
+      "avatar_url": null,
+      "ci_config_path": null,
+      "default_branch": "main",
+      "description": null,
+      "git_http_url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot.git",
+      "git_ssh_url": "ssh://[REDACTED]:2224/buzz-sync-test/pilot.git",
+      "homepage": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot",
+      "http_url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot.git",
+      "id": 2,
+      "name": "pilot",
+      "namespace": "buzz-sync-test",
+      "path_with_namespace": "buzz-sync-test/pilot",
+      "ssh_url": "ssh://[REDACTED]:2224/buzz-sync-test/pilot.git",
+      "url": "ssh://[REDACTED]:2224/buzz-sync-test/pilot.git",
+      "visibility_level": 0,
+      "web_url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot"
+    },
+    "repository": {
+      "description": null,
+      "homepage": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot",
+      "name": "pilot",
+      "url": "ssh://[REDACTED]:2224/buzz-sync-test/pilot.git"
+    },
+    "user": {
+      "avatar_url": null,
+      "email": "[REDACTED]",
+      "id": 6,
+      "name": "Buzz Sync Developer (localstack)",
+      "username": "buzz-sync-dev"
+    }
+  },
+  "event_header": "Merge Request Hook",
+  "received_at": "2026-09-13T08:21:28.911645+00:00"
+}

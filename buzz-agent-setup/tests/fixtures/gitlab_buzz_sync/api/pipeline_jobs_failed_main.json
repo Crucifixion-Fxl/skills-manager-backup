@@ -1,0 +1,20 @@
+{
+  "body": [],
+  "headers": {
+    "content-type": "application/json",
+    "x-next-page": "",
+    "x-page": "1",
+    "x-per-page": "100",
+    "x-total": "0",
+    "x-total-pages": "1"
+  },
+  "request": {
+    "as": "bot",
+    "method": "GET",
+    "path": "projects/2/pipelines/2/jobs",
+    "query": {
+      "scope[]": "failed"
+    }
+  },
+  "status": 200
+}

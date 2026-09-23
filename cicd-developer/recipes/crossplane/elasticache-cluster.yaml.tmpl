@@ -1,0 +1,50 @@
+# crossplane-elasticache-cluster.yaml.tmpl
+#
+# AWS ElastiCache Redis Cluster —— 单节点、无副本，**仅 dev / staging / pre**。
+# prod 必须用 elasticache-replicationgroup.yaml.tmpl。
+#
+# 必填槽位：
+#   {{app}}                 kebab-case
+#   {{env_keyword}}         如 staging-us
+#   {{namespace}}           K8s namespace（Redis CR 写这里）
+#   {{node_type}}           从 cost-tiering/redis.yaml（默认 t4g 家族，如 cache.t4g.micro；
+#                           高资源占用由 cd-requirements.md 指定 r8g/m8g）
+#   {{num_nodes}}           从 cost-tiering/redis.yaml（Cluster 通常 = 1）
+#   {{management_policies}} 从 cost-tiering/redis.yaml（非 prod 通常为 ["*"]）
+#   {{region}}              AWS region
+#   {{redis_security_group}}  从同集群其它 app 应用仓 overlay 的 redis.yaml 或 crossplane-infra legacy redis YAML 复制
+#                              （跟 RDS SG 一般不同，可能是单独的 SG）
+#
+# 连接 Secret 契约：
+#   最终 `<app>-redis-conn` 必须是 `address` + `port`。
+#   Cluster kind 通常由 provider 先写 `port` / ownerRef，再由 crossplane-conn-patcher
+#   从 cacheNodes[0].address 补 `address`。PushSecret 只能依赖最终契约，不要读 endpoint。
+
+apiVersion: elasticache.aws.m.upbound.io/v1beta1
+kind: Cluster
+metadata:
+  name: {{app}}-{{env_keyword}}-redis
+  namespace: {{namespace}}
+  annotations:
+    crossplane.io/external-name: {{app}}-{{env_keyword}}-redis
+spec:
+  managementPolicies: {{management_policies}}
+  forProvider:
+    engine: valkey                      # 默认 Valkey（非 Redis OSS）；CRD engine 字段接受 redis|valkey
+    engineVersion: "9.1"                # 已验证 us/cn 可用；family valkey9
+    nodeType: {{node_type}}
+    numCacheNodes: {{num_nodes}}        # Cluster kind 通常 = 1
+    port: 6379
+    subnetGroupName: crossplane-default
+    securityGroupIds:
+      - {{redis_security_group}}
+    region: {{region}}
+    tags:
+      app: {{app}}
+      env: {{env_keyword}}
+      managed-by: crossplane
+  writeConnectionSecretToRef:
+    name: {{app}}-redis-conn
+  providerConfigRef:
+    name: {{app}}
+    kind: ClusterProviderConfig

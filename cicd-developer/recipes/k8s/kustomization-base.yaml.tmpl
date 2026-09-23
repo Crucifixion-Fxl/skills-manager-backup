@@ -1,0 +1,22 @@
+# k8s/base/kustomization.yaml — Lists the base resources that every overlay inherits.
+#
+# Required slots: none.
+#
+# If the workflow needs configMapGenerator, it must add that stanza explicitly with
+# concrete filenames; do not leave placeholder slots in the base template.
+#
+# Files referenced here are NOT slots; they are fixed filenames the workflow must
+# create alongside this file (rollout.yaml, service.yaml).
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - rollout.yaml
+  - service.yaml
+
+# configMapGenerator: emit only if the workflow has app config files
+# configMapGenerator:
+#   - name: <app>-config
+#     files:
+#       - app.properties

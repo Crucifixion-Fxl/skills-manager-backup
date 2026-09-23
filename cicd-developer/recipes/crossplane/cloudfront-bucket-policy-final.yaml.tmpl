@@ -1,0 +1,44 @@
+# Final BucketPolicy for CloudFront OAC.
+#
+# Required slots:
+#   {{app}}              bucket owner app; providerConfigRef.name
+#   {{bucket_name}}      private S3 bucket name
+#   {{region}}           S3 bucket AWS region
+#   {{partition}}        aws | aws-cn for the S3 ARN
+#   {{account_id}}       bucket owner AWS account id
+#   {{distribution_id}}  CloudFront Distribution ID from crossplane.io/external-name
+#
+# This is the required final state after the first Distribution becomes Ready.
+
+apiVersion: s3.aws.m.upbound.io/v1beta1
+kind: BucketPolicy
+metadata:
+  name: {{bucket_name}}-cloudfront
+spec:
+  forProvider:
+    region: {{region}}
+    bucketRef:
+      name: {{bucket_name}}
+    policy: |
+      {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Sid": "AllowCloudFrontOAC",
+            "Effect": "Allow",
+            "Principal": {
+              "Service": "cloudfront.amazonaws.com"
+            },
+            "Action": "s3:GetObject",
+            "Resource": "arn:{{partition}}:s3:::{{bucket_name}}/*",
+            "Condition": {
+              "StringEquals": {
+                "AWS:SourceArn": "arn:aws:cloudfront::{{account_id}}:distribution/{{distribution_id}}"
+              }
+            }
+          }
+        ]
+      }
+  providerConfigRef:
+    name: {{app}}
+    kind: ClusterProviderConfig

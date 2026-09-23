@@ -1,0 +1,12 @@
+{
+  "_comment": "Real (sanitised) error texts. Every signature id in assets/signatures.json must have >=1 sample here that it matches — this is the contract that keeps the skill updateable from new errors.",
+  "samples": [
+    {"sig": "grok-402-balance", "text": "API error (status 402 Payment Required): Grok Build usage balance exhausted"},
+    {"sig": "glm-1308", "text": "Request rejected (429) · [1308][已达到 5 小时使用上限，2026-09-18 18:36:35 后可继续使用。如需超限额按量付费使用，可联系管理员开启超额按量付费。][<request id>]"},
+    {"sig": "glm-1310", "text": "Request rejected (429) · [1310][已达到使用上限，2026-09-24 09:00:00 后可继续使用。][<request id>]"},
+    {"sig": "glm-1302", "text": "Request rejected (429) · [1302][请求过于频繁，请稍后再试][<request id>]"},
+    {"sig": "claude-usage-limit", "text": "You've hit your weekly limit · resets 12am (UTC)"},
+    {"sig": "claude-auth", "text": "I couldn't process the last request: authentication failed. Please re-authenticate the CLI (e.g. run claude /login"},
+    {"sig": "codex-usage-limit", "text": "You've hit your usage limit. Try again at 4:15 PM."}
+  ]
+}

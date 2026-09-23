@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "6e30b311-ccee-474c-8c08-b8598ead744a",
+  "path": "local-fullstack-debug",
+  "path_key": "local-fullstack-debug",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/local-fullstack-debug",
+    "branch": null
+  }
+}

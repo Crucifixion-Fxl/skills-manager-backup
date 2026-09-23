@@ -1,0 +1,52 @@
+# service-catalog-onboarding skill: API drift gate jobs（往 .gitlab-ci.yml 的 lint stage 追加）
+# 配套脚本：scripts/api-drift/{check-routes.py,check-schemas.py,check-api-refs.sh}
+#
+# 用法：把下面 3 个 job 复制到目标仓 .gitlab-ci.yml 的 lint stage（若没有 lint stage 先建一个 stages: [..., lint, ...]）。
+# `needs: []` 让 drift gate 不等其它 lint job，跑完直接报；`rules: changes:` 让只有 routes / types / openapi / 脚本本身变了才跑
+# （不浪费 CI 资源），nightly schedule 兜底（即使没人改、定时也扫一遍以发现间接漂移如依赖升级带来的字段变化）。
+
+# §5: 路径集合 drift gate —— routes.go ↔ openapi.yaml paths
+api:drift:routes:
+  stage: lint
+  image: python:3.11-slim
+  needs: []
+  script:
+    - python3 scripts/api-drift/check-routes.py
+  rules:
+    - changes:
+        - backend/internal/handler/routes.go
+        - api/*.openapi.yaml
+        - scripts/api-drift/check-routes.py
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+
+# §5: 字段集合 drift gate —— Go struct ↔ OpenAPI components.schemas
+api:drift:schemas:
+  stage: lint
+  image: python:3.11-slim
+  needs: []
+  script:
+    - pip install --quiet pyyaml
+    - python3 scripts/api-drift/check-schemas.py
+  rules:
+    - changes:
+        - backend/internal/types/*.go
+        - api/*.openapi.yaml
+        - scripts/api-drift/check-schemas.py
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+
+# §5.1: providesApis / consumesApis 引用反查 —— 用 service-catalog-search 验 catalog 解析
+api:lint:refs-resolve:
+  stage: lint
+  image: alpine:3.19
+  needs: []
+  before_script:
+    - apk add --no-cache curl jq yq git bash
+  script:
+    - bash scripts/api-drift/check-api-refs.sh
+  rules:
+    - changes:
+        - catalog-info.yaml
+        - scripts/api-drift/check-api-refs.sh
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+  variables:
+    BACKSTAGE_URL: "https://idp.example.com"   # 内部门户地址；按需改 CI/CD variable

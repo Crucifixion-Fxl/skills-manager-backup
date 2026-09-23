@@ -1,0 +1,35 @@
+# Shared Database claim — canonical application identity and physical DB name.
+#
+# Slots:
+#   {{app}}                 canonical kebab-case owner application slug
+#   {{database_app}}        {{app}} with every '-' replaced by '_'
+#   {{database_claim_name}} {{app}}-{{engine}} for a primary claim; for a
+#                           secondary PostgreSQL claim use
+#                           {{app}}-postgres-<purpose with '_' replaced by '-'>
+#   {{namespace}}           target application namespace
+#   {{env}}                 dev | staging | pre | prod
+#   {{engine}}              mysql | redis | postgres
+#   {{purpose_field}}       empty for a primary claim; for a secondary
+#                           PostgreSQL claim exactly "  purpose: <purpose>"
+#
+# New claims MUST keep platform.addx.io/app-slug and spec.app mechanically
+# related. In a standard {phase}-{app} namespace, {{app}} must also equal the
+# namespace suffix. An optional purpose is lower_snake_case (2-20 characters),
+# is valid only with engine=postgres, and never changes either owner field.
+# After the target capability gate in shared-middleware/README.md passes, it
+# derives a separate PostgreSQL role/database/schema {{database_app}}_<purpose>
+# and canonical Vault key postgres-<purpose with '_' replaced by '-'>. Do not add
+# host, administrator, Vault path, owner, or privilege fields.
+
+apiVersion: platform.addx.io/v1alpha1
+kind: Database
+metadata:
+  name: {{database_claim_name}}
+  namespace: {{namespace}}
+  annotations:
+    platform.addx.io/app-slug: {{app}}
+spec:
+  app: {{database_app}}
+  env: {{env}}
+  engine: {{engine}}
+{{purpose_field}}

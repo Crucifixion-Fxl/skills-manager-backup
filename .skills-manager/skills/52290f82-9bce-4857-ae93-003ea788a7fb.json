@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "52290f82-9bce-4857-ae93-003ea788a7fb",
+  "path": "device-cloud-test-management",
+  "path_key": "device-cloud-test-management",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/device-cloud-test-management",
+    "branch": null
+  }
+}

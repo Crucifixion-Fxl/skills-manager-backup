@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "edfdeaed-8e80-4f9e-82b4-25ce14535444",
+  "path": "shopify-figma-component-delivery",
+  "path_key": "shopify-figma-component-delivery",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/shopify-figma-component-delivery",
+    "branch": null
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "5cc3fb4b-575b-4203-a32a-61f56fa3873a",
+  "path": "lab-feature-onboarding",
+  "path_key": "lab-feature-onboarding",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/lab-feature-onboarding",
+    "branch": null
+  }
+}

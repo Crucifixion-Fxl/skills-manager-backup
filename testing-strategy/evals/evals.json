@@ -1,0 +1,59 @@
+{
+  "skill_name": "testing-strategy",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "我有一个 Java Spring Boot + Flutter 项目（后端+APP），需要生成完整的测试方案。后端通过 WireMock mock 外部 API（GrowthBook、Entitlement Service），数据库用 MySQL。Flutter 端通过 Flutter Web + Playwright 做 E2E。请帮我生成 docs/testing/strategy.html。",
+      "expected_output": "生成的 strategy.html 应是 HTML 文档，并包含：(1) 10列层级总览表（含真实依赖/mock依赖列）(2) 分层逻辑表 (3) Mock 基础设施 SSOT (4) AC级追溯矩阵 (5) 场景数据表 (6) 质量门禁表。L3 应标注黑盒原则。文档目录应包含 scenarios/*.html。",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "我的项目是 Go 后端 + React 前端（后端+WEB），用 Playwright 做 E2E 测试，Testcontainers 做集成测试。请生成测试方案，特别是 L2 和 L3 的用例表格格式。",
+      "expected_output": "生成的方案应输出 HTML，并包含：(1) L2用例表按模块分节 (2) L3 E2E 表有 User Story 和定位/断言方式列 (3) 场景文件按 Epic + 技术模块拆分为 scenarios/*.html (4) 8列 AC 级追溯表格（场景|Smoke|L1|L2-1|L2-2|L3-1|L3-2|L4）。",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "我在 L3-2-app E2E 测试中发现一个 bug：CMS 返回的 touchpoint 内容缺少 paywallId 字段，导致 Flutter Widget 渲染崩溃。请告诉我应该怎么处理这个 bug——在哪个层级补测试？",
+      "expected_output": "应指出：(1) 这个 bug 应该在 L3-1-backend 被发现（CMS 字段完整性验证）(2) 需要在 L3-1 补充 CMS content completeness 用例 (3) L1 补充 null 字段防御性断言 (4) 遵循 TDD：先写失败测试再修复。引用左移原则和禁止反模式。",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "feishu-bridge 的 identity-first onboarding 已合并，L3 用 fake-feishu 全绿。PO 问「真实飞书到底认不认这张绑定卡片」，我跑了 L4 测试（真实飞书测试应用），打算把终端输出复制粘贴进 MR 描述当证据。这样合规吗？应该怎么留 L4 证据？",
+      "expected_output": "应判定手抄终端输出不是证据（无溯源、可伪造、不绑定 SHA）。L4 不进 CI，必须由运行自证：生成人读 HTML 报告（Playwright 式），必含溯源头（git SHA/dirty、时间、操作人、脱敏命令、版本）、逐用例回执（如飞书 im/v1/messages 的 message_id）、负向对照结果、「本次不证明什么」范围声明；按项目约定提交（如 docs/testing/evidence/<date>-<slug>/）并在 MR 证据块引用；脱敏红线（secret/token/nsec/验证码不进报告，回执引 message_id 不贴消息全文）。引用证据契约规则。",
+      "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "我们有 900+ 个 L1/L2 单测，每次提交 CI 都全绿。老板要求「每一次测试都留下证据」，我打算每次 commit 都把 go test 输出渲染成 HTML 一起提交进仓库。这个方案你怎么评价？",
+      "expected_output": "应明确反对逐 commit 向仓库提交报告文件（时间戳 churn、rebase 后作废、无审查价值）。CI 可跑层的证据 = pipeline 本身：job URL + report artifact + MR 描述证据摘要块（自动/半自动生成）。commit 级 TDD 证明靠红绿 commit 约定 + 重放工具（tddproof/故意破坏验证/mutation），在 MR 报告的 TDD 节律块汇总，而不是每次运行一份文件。证据挂 MR/运行，不挂 commit。",
+      "files": []
+    },
+    {
+      "id": 6,
+      "prompt": "reviewer 问「这个 MR 的测试证据覆盖了所有需求吗？」我们的 User Story 在 docs/product/**/**.html（有 AC 子句锚点），用例编号写在测试代码 // ID: / // AC: 注释里，还有一份手填的追溯矩阵表。怎么回答 reviewer？",
+      "expected_output": "需求覆盖必须从需求 SSOT 生成而不是手填：US AC 子句锚点 ∪ 代码声明的用例编号 ∩ 本次运行报告 → 三张清单（本次覆盖 / 有用例但本次未跑 / 无用例缺口）。手填矩阵必须被生成版替换（必然腐烂）。需求源只认一个 SSOT（仓内文档或 issue 二选一，禁止双向挖）。覆盖带时效：source_dirty=true 或旧 SHA 上的运行不算覆盖。",
+      "files": []
+    },
+    {
+      "id": 7,
+      "prompt": "我想让 CI bot 每次 pipeline 结束在 MR 里发一条 comment 贴完整测试报告 JSON，L4 的截图也贴 comment 里，reviewer 不用点开 artifact。另外我们有个 credential-free 的离线产品线，也想挂同一个 bot。行吗？",
+      "expected_output": "应区分存储与通知：comment 只承载通知/时间戳/人工签核（GitLab 身份背书的执行事件，L4-Manual 签核尤其有价值），不存证据本体（可编辑可删、无保留期、与 SSOT 漂移后出现两份真相）。报告 JSON 与截图属证据本体，走仓内 evidence 文件或 pipeline artifact。bot comment 应单条 upsert 不逐次追加。平台写操作（bot 身份）须按产品线单独授权；credential-free/离线产品线不挂平台写 bot。强制呈现面只有三个：仓内 evidence 文件、pipeline artifact、MR 描述证据块。",
+      "files": []
+    },
+    {
+      "id": 8,
+      "prompt": "L4 测试报告要给 PO 和 MR reviewer 看，他们不想读 JSON。报告应该长什么样、包含哪些块？",
+      "expected_output": "Playwright 式自包含单 HTML（无外部 CDN、无脚本，纯 HTML+CSS）：顶部 summary cards（总数/pass/fail/skip/耗时）、按 suite/包分组的可折叠用例树（<details>）、失败断言原文与日志/回执作为附件挂在 case 下、状态过滤或分组。L4 特有块：溯源头（SHA/dirty/时间/操作人/命令脱敏/版本）、逐用例回执（message_id 等服务端凭据）、负向对照、「本次不证明什么」范围声明、脱敏声明。同款渲染器复用于 L3（吃 go test -json）。",
+      "files": []
+    },
+    {
+      "id": 9,
+      "prompt": "我要 review 一个带着测试证据的 MR。除了看代码，证据本身应该 review 什么？",
+      "expected_output": "三问框架：(1) 覆盖全吗——diff 触及的每条 AC ↔ 用例 ID ↔ 证据条目，缺口显式披露； (2) 真的吗——证据绑定本 MR 的 SHA（非旧运行重贴）、L1-L3 有 CI job URL、L4 溯源头完整（操作人/范围声明）、source_dirty=false 或有解释、机器生成而非手抄； (3) 能证伪吗——负向对照存在、红绿 commit 有重放证明（tddproof）、关键路径过 mutation。卫生项：脱敏（无 secret/token/nsec）、新鲜度（触及面最后一次改动后重跑）、L4/L3 发现 bug 的左移追溯。已有 TDD/假绿检查（红绿节律、vacuous 问句）应与之合并执行。",
+      "files": []
+    }
+  ]
+}

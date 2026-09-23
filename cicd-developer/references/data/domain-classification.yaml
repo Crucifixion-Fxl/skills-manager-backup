@@ -1,0 +1,127 @@
+# domain-classification.yaml
+#
+# 决策树：先识别 domain (ops/builder)，再识别二级分类，再识别 app type。
+# workflow 把用户描述往这棵树上套，得到面向人的 (domain, sub_category, human_app_type)。
+# 注意：本文件的 app_types / examples[].app_type 是中文判定线索；workflow 最终写入
+# cd-requirements.md 的 `$app_type` 必须是 env-keywords.yaml 使用的部署路由 slug：
+# c-end / restricted-admin / builder / data / observability。
+#
+# 消费方：
+#   - workflows/interview-cd-requirements.md Step 2
+#   - 路由 prod env keyword 时（restricted-admin prod 走 tech-service 集群）
+#
+# Schema：
+#   decision_order  按顺序判定，**不要** 跳步
+#   domains[<name>] 域定义 + 触发条件 + 二级分类 + 典型应用类型
+#   examples[]      典型应用归类参考表
+
+decision_order:
+  - "1. 先判定 domain：ops 还是 builder"
+  - "2. 如果 ops，继续判定二级分类：受限管控后台 / 面向 C 端服务"
+  - "3. 再判定 app_type"
+  - "4. 歧义时优先按更保守的 ops 处理，并解释依据"
+
+domains:
+
+  ops:
+    triggers:
+      - 系统直接服务 C 端用户、App、设备、终端
+      - 系统承载、消费、治理 C 端数据
+      - 系统访问或编排其他 ops 域应用
+      - 系统承担 C 端业务的配置、治理、实验、内容投放、客服、审核、发布
+    sub_categories:
+
+      restricted-admin:
+        full_name: 受限管控后台
+        description: |
+          面向内部运营 / 客服 / 审核 / 内容管理 / 实验配置 / 发布治理人员。
+          默认受限访问、受控发布、带审计要求。
+          **prod 部署到 tech-service 集群 + namespace 前缀 prod-（prod-{app}）**（不在 *-eks-prod）。
+        app_types:
+          - 管理后台         # admin / console / cms / GrowthBook / etc.
+          - 数据分析/离线任务  # superset / grafana / prometheus / etc. （观测台也归这里）
+
+      c-end:
+        full_name: 面向 C 端服务
+        description: |
+          直接给 App / 设备 / 终端 / C 端用户提供运行时能力。
+          默认线上服务，对外提供能力或承接业务流量。
+          **prod 部署到 *-eks-prod 集群**（直接承接 C 端流量）。
+        app_types:
+          - 直接面向 APP/终端的服务
+          - 数据分析/离线任务
+
+  builder:
+    triggers:
+      - 只服务生产环节本身
+      - 主要职责是构建 / 打包 / 发布 / 产测 / 物模型 / 生产流程衔接
+      - 不直接承载 C 端数据处理
+      - 不以治理 C 端业务为主要职责
+    sub_categories: null               # builder 不分二级
+    app_types:
+      - 生产环节应用   # GitLab / 产测后台 / 物模型平台
+      - 生产环节任务   # 流水线、批量任务、产物处理
+
+# 典型应用归类参考（拿不准时对照）
+examples:
+  - app: support-center
+    domain: ops
+    sub_category: c-end
+    app_type: 直接面向 APP/终端的服务
+    why: 直接服务 C 端用户问题处理与体验治理
+  - app: naturehood
+    domain: ops
+    sub_category: c-end
+    app_type: 直接面向 APP/终端的服务
+    why: 直接面向 C 端用户或终端
+  - app: GrowthBook
+    domain: ops
+    sub_category: restricted-admin
+    app_type: 管理后台
+    why: 控制 C 端实验、开关和配置生效；不是 C 端界面但治理 C 端
+  - app: CMS
+    domain: ops
+    sub_category: restricted-admin
+    app_type: 管理后台
+    why: 管理面向 C 端展示的内容、素材、文案
+  - app: Admin / Console
+    domain: ops
+    sub_category: restricted-admin
+    app_type: 管理后台
+    why: 面向内部人员进行配置、审核、发布、治理
+  - app: Superset
+    domain: ops
+    sub_category: restricted-admin
+    app_type: 数据分析/离线任务
+    why: 业务分析报表；内部受控访问，不直接承接 C 端流量
+  - app: Grafana
+    domain: ops
+    sub_category: restricted-admin
+    app_type: 数据分析/离线任务
+    why: 内部观测告警平台
+  - app: Prometheus
+    domain: ops
+    sub_category: restricted-admin
+    app_type: 数据分析/离线任务
+    why: 指标采集查询基础设施
+  - app: GitLab
+    domain: builder
+    sub_category: null
+    app_type: 生产环节应用
+    why: 代码托管 + CI/CD + 发布流程基础设施
+  - app: 产测管理后台
+    domain: builder
+    sub_category: null
+    app_type: 生产环节应用
+    why: 设备生产测试与工厂流程；不治理 C 端业务
+  - app: 物模型平台
+    domain: builder
+    sub_category: null
+    app_type: 生产环节应用
+    why: 设备定义、协议、生产接入
+
+# 决策歧义时的兜底
+ambiguity_resolution:
+  - principle: 不确定 ops vs builder → 按 ops 处理（更保守）
+  - principle: 不确定 c-end vs restricted-admin → 看是否直接给 C 端用户用功能；不是 → restricted-admin
+  - principle: 系统既给 C 端也给内部（如同一套支持系统既有 admin 也有 api）→ 按子模块分别归类（admin → restricted-admin，api → c-end）

@@ -1,0 +1,73 @@
+{
+  "schema_version": 1,
+  "receipt_kind": "bi_issue_write_permission_canary",
+  "permission_scope": "gitlab_issue_write_only",
+  "recorded_at_utc": "2026-09-15T05:09:52Z",
+  "executed_by": "jchen via Codex session",
+  "attestation": "unsigned_operator_observation",
+  "snapshot_only": true,
+  "contains_secret": false,
+  "readiness": {
+    "gitlab_issue_write": "ready_with_disclosed_platform_limits",
+    "superset": "blocked_pending_admin_password_rotation"
+  },
+  "method": {
+    "reviewed_commit": "8556029c8410cff7ff5a26d796ab581d1c9918d1",
+    "candidate_html_sha256": "dfbd94689453efc6665038aa31cf06e78726f0978da8327517e2289907f89d5b"
+  },
+  "gitlab": {
+    "base_url": "https://gitlab.addx.ai",
+    "version": "18.0.0",
+    "project_id": 1175,
+    "bot_user_id": 985,
+    "token_id": 952,
+    "access_level": 20,
+    "scopes": [
+      "api",
+      "read_repository"
+    ],
+    "expires_at": "2027-08-31",
+    "active": true,
+    "revoked": false,
+    "external": true,
+    "membership_project_ids": [
+      1175
+    ],
+    "internal_visible_count": 0,
+    "prior_exposed_token": {
+      "token_id": 946,
+      "active": false,
+      "revoked": true
+    }
+  },
+  "canary": {
+    "issue_iid": 16,
+    "note_id": 604938,
+    "author_user_id": 985,
+    "marker": "data-review-evidence-index:v1",
+    "create_status": 201,
+    "first_read_status": 200,
+    "update_same_note_status": 200,
+    "second_read_status": 200,
+    "admin_cleanup_status": 204,
+    "agent_read_after_cleanup_status": 404,
+    "remaining_project_marker_count": 0
+  },
+  "runtime": {
+    "service": "buzz-local-nh-bi.service",
+    "active": true,
+    "main_pid": 2643769,
+    "started_at_utc": "2026-09-15T05:08:45Z",
+    "workers": 1,
+    "token_matches_env": true,
+    "approver_allowlist_matches_env": true,
+    "superset_password_loaded": false,
+    "superset_credential_state": "blocked_pending_rotation",
+    "env_mode": "0600",
+    "prompt_mode": "0600",
+    "prompt_sha256": "1693517a9eeb5033d26d2957ffcd0133505cb3f729b197d30e6121935d5220c7"
+  },
+  "remaining_actions": [
+    "Rotate the dedicated nh_bi Superset password after its accidental tool-output exposure."
+  ]
+}

@@ -1,0 +1,18 @@
+naming:
+  helm_release_name: "gitlab-runner-{{purpose}}"
+  runner_tag: "runner-{{region}}-{{purpose}}"
+  locked_runner_tag: "runner-{{region}}-{{project}}-{{purpose}}-locked"
+  pvc_name: "{{project}}-{{purpose}}-cache"
+  mount_path: "/mnt/{{project}}"
+  values_file: "values-override-{{purpose}}.yaml"
+  values_dir: "cicd/gitlab-runner/{{purpose}}-extras/"
+rules:
+  mount_path:
+    - Do not use broad directories such as /mnt, /var, /opt, or /tmp directly.
+    - Keep paths short because project CI variables often reference them.
+  pvc:
+    - Name must be unique in the runner namespace.
+    - Use ReadWriteMany.
+  argocd:
+    - PVC Application sync-wave should be "-10".
+    - Runner Application sync-wave should be "10".

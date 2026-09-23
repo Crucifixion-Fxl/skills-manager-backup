@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "8c7406ad-7cc5-4d63-99d7-502fc338d912",
+  "path": "share-device",
+  "path_key": "share-device",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/share-device",
+    "branch": null
+  }
+}

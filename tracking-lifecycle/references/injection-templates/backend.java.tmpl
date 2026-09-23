@@ -1,0 +1,46 @@
+// =============================================================================
+// 后端埋点注入模板 — tracking-lifecycle Step 5
+// 占位符: {{point}}, {{params}}
+// 后端只有 SELF_DEFINE 类型，无 PV/CLK/EXP 区分
+// =============================================================================
+
+// --- import (注入到文件顶部) ---
+import com.addx.tracking.config.snowplow.SnowPlowManager;
+
+// =============================================================================
+// SELF_DEFINE — 云服务自定义事件
+// 注入位置: 业务逻辑触发点，必须用 catchSnowPlowError 包装
+// =============================================================================
+SnowPlowManager.catchSnowPlowError(sm -> {
+    Map<String, Object> params = new HashMap<>();
+    {{params}}
+    sm.analyticSelfEvent("{{point}}", params);
+});
+
+// =============================================================================
+// SELF_DEFINE — 带实体对象的自定义事件
+// 注入位置: 同上，适用于已有参数实体类的场景
+// =============================================================================
+SnowPlowManager.catchSnowPlowError(sm -> {
+    sm.analyticSelfEvent("{{point}}", {{entity}});
+});
+
+// =============================================================================
+// SELF_DEFINE — 本地服务事件 (iot-service-local)
+// 注入位置: 业务逻辑触发点，通过 Spring 注入 SnowPlowManager
+// =============================================================================
+
+// 在类中声明:
+// @Autowired
+// private SnowPlowManager snowPlowManager;
+
+SnowPlowManager.catchSnowPlowError(sm -> {
+    Map<String, Object> dataMap = new HashMap<>();
+    {{params}}
+    Map<String, Object> context = snowPlowManager.getBaseMap("{{point}}", "self_event");
+    snowPlowManager.analytic(
+        "iglu:com.iot_local/{{schema}}/jsonschema/{{schema_version}}",
+        dataMap,
+        context
+    );
+});

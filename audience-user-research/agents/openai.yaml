@@ -1,0 +1,4 @@
+interface:
+  display_name: "User Research"
+  short_description: "Run Project research from VOC to an unsent Brevo draft"
+  default_prompt: "Use $audience-user-research with the injected Audience Project key. Discover the authenticated Project from self-context, follow exact API readback from optional VOC and Idea through Typeform, selection, materialization, Brevo sync and an unsent Campaign Draft, and stop on ambiguous effects without direct provider access."

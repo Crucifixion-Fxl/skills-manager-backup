@@ -1,0 +1,20 @@
+{
+  "version": 2,
+  "sender_pubkey": "0000000000000000000000000000000000000000000000000000000000000001",
+  "state_dir": "/abs/path/to/desk-state/responsible-send",
+  "gitlab": {
+    "base_url": "https://gitlab.example.test",
+    "token_env": "EXAMPLE_PROJECT_1234_GITLAB_TOKEN",
+    "projects": [
+      1234
+    ]
+  },
+  "channels": [
+    "00000000-0000-4000-8000-000000000000"
+  ],
+  "people_file": "/abs/path/to/desk-state/people.json",
+  "buzz": {
+    "cli_path": "/abs/opt/buzz-0.5.23/usr/bin/buzz",
+    "cli_sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  }
+}

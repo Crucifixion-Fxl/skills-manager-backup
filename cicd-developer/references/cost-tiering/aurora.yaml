@@ -1,0 +1,75 @@
+# cost-tiering/aurora.yaml
+#
+# AWS Aurora Cluster + ClusterInstance 的成本分档。
+#
+# 消费方：workflows/add-aurora.md
+#
+# Schema 同 rds.yaml；v2 m.upbound.io 用 managementPolicies 表达 Delete /
+# Orphan 语义，不使用 spec.deletionPolicy。
+
+notes: |
+  Aurora 由 Cluster + 一个或多个 ClusterInstance 组成。
+  storageEncrypted 同样是 immutable。
+  prod 必须让 managementPolicies 去掉 Delete（CR 删除时 **不** 带走 AWS
+  资源），同时靠 AWS 层 deletionProtection + skipFinalSnapshot=false 兜底数据安全。
+  自 2026-06-01 起，新部署应用 **staging / tech-service**（6 集群 us/eu/cn-staging + tech-us/eu/cn；
+  **按 cluster 名判别非 env**——tech-service env=prod，见 hard-rule #29）不再按本表创建 app-owned
+  Aurora，也不允许 StatefulSet 自托管（#30）。终态是通过 kind:Database Composition 在 shared 实例上
+  拿到 per-app database+user（凭证落 secret/{env}/aurora/application/{app}/<key>，region-less）。
+  **但 Aurora 连共享实例都还没有、kind:Database 消费 Composition 也未落地** → 当前 STOP 产 Ops Todo
+  让平台补（不是手搓凭证，也不是单 app 自建）。**真 prod 集群（`*-eks-prod`，非 tech-service）无
+  shared-middleware** → 走本表 prod tier 的 app-owned Aurora。legacy app-owned Aurora 仅保留用于迁移/平台用途。
+
+# 引擎版本契约（新建 app-owned Aurora 的默认 engineVersion）。
+#
+# DB 默认走 Aurora（读写分离 + writer/reader endpoint）；RDS 单实例 MySQL
+# Community 默认不选（见 rds.yaml 的 mysql 分支，需 cd-requirements 记录理由才 override）。
+# 消费方：workflows/add-aurora.md Step 1（$engine_version 默认值）。
+#
+# 版本可用性验证记录（2026-09-15，AWS RDS describe-db-engine-versions）：
+#   - aurora-mysql       8.0.mysql_aurora.3.10.3  已验证 us-east-1 可用
+#   - aurora-postgresql  16.14                    已验证 us-east-1 可用
+# 用其它 minor 时，必须在 cd-requirements.md 记录理由，并逐 target region 跑
+# describe-db-engine-versions 验证可用性。
+engine_contracts:
+  aurora-mysql:
+    default_engine_version: "8.0.mysql_aurora.3.10.3"   # Aurora MySQL v3.10.3（兼容 MySQL 8.0）
+    notes: |
+      Aurora MySQL v3 family。这是 DB 默认引擎（禁止默认用 RDS 单实例 MySQL Community）。
+      engineVersion 用 Aurora 专用完整串（不是 RDS Community 的 8.4.x）。
+  aurora-postgresql:
+    default_engine_version: "16.14"
+    notes: |
+      postgres 需求同样默认走 Aurora（aurora-postgresql），不做 RDS 单实例约束。
+
+immutable:
+  - storageEncrypted
+  - username
+  - databaseName
+  - engine
+
+# clusterInstanceClass 规格约定：
+#   - 默认起步 Graviton t4g 家族（burstable，成本低）。
+#   - 高资源占用实例改用 r8g / m8g 家族——**由用户在 cd-requirements.md 显式指定**
+#     （本表不自动升档；workflow 只按 cd-requirements 取值并校验与本表一致或有 override 理由）。
+#   - prod 起步默认 db.r8g.large（高内存 Graviton4；已验证 us-east-1 / cn-north-1 orderable）。
+dev: &aurora_min
+  clusterInstanceClass: db.t4g.medium   # Aurora 最小实例规格（Graviton burstable 起步）
+  clusterInstanceReplicas: 1
+  backupRetentionPeriod_days: 1
+  storageEncrypted: false
+  deletionProtection: false
+  skipFinalSnapshot: true
+  managementPolicies: ["*"]             # 含 Delete；CR 删则 AWS 资源一起清理
+
+staging: *aurora_min
+pre: *aurora_min
+
+prod:
+  clusterInstanceClass: db.r8g.large    # prod 起步；高占用可 cd-requirements override 更大 r8g/m8g
+  clusterInstanceReplicas: 2            # prod 强制 ≥2；跨 AZ HA + reader 分流
+  backupRetentionPeriod_days: 7
+  storageEncrypted: true
+  deletionProtection: true
+  skipFinalSnapshot: false
+  managementPolicies: ["Observe", "Create", "Update", "LateInitialize"]

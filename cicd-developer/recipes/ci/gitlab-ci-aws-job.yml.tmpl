@@ -1,0 +1,33 @@
+# GitLab CI job snippet for CI -> AWS via Job Pod IRSA.
+#
+# Required slots:
+#   {{job_name}}                unique job name
+#   {{stage}}                   existing or new stage name
+#   {{runner_tag_amd64}}        target cluster runner tag
+#   {{aws_cli_version}}         e.g. 2.27.50
+#   {{namespace}}               KUBERNETES_NAMESPACE_OVERWRITE; CI job namespace,
+#                               not necessarily the runtime app namespace
+#   {{sa_name}}                 KUBERNETES_SERVICE_ACCOUNT_OVERWRITE
+#   {{aws_region}}              AWS_DEFAULT_REGION
+#   {{script_lines_indented_4}} job script, each line indented 4 spaces and prefixed with "- "
+#   {{rules_lines_indented_4}}  rules block entries indented 4 spaces
+#
+# CI image must come from Harbor base. If `${HARBOR_REGISTRY}/base/aws-cli`
+# is not registered in DEV/base-images, workflow must create that MR or emit a
+# blocking Ops Todo.
+
+{{job_name}}:
+  stage: {{stage}}
+  tags:
+    - {{runner_tag_amd64}}
+  image:
+    name: ${HARBOR_REGISTRY}/base/aws-cli:{{aws_cli_version}}
+    entrypoint: [""]
+  variables:
+    KUBERNETES_NAMESPACE_OVERWRITE: {{namespace}}
+    KUBERNETES_SERVICE_ACCOUNT_OVERWRITE: {{sa_name}}
+    AWS_DEFAULT_REGION: {{aws_region}}
+  script:
+{{script_lines_indented_4}}
+  rules:
+{{rules_lines_indented_4}}

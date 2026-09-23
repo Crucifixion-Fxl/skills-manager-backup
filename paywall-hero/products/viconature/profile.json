@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "product_id": "viconature",
+  "display_name": "VicoNature",
+  "status": "partial_materials_received",
+  "positioning": {
+    "primary_emphases": [],
+    "supported_claims": []
+  },
+  "appearance": {
+    "default_hardware_model": null,
+    "distinguishing_features": [
+      "棕色双坡屋顶，屋顶可见深色太阳能板，主体为深绿色箱体。",
+      "正面透明储粮区域中嵌有竖向黑色圆角摄像头组件，边缘呈银白色，上下排列圆形区域；下方为可见镜头。",
+      "前方为绿色接粮盘及向外伸出的杆状栖架；图示带红色花形盖的透明小容器，底部有安装连接部。"
+    ],
+    "reference_asset_ids": [
+      "viconature-feeder-reference-01"
+    ],
+    "evidence_scope": "用户于 2026-09-08 提供的当前参考图；仅用于该图所示硬件外观，型号未提供。"
+  },
+  "brand": {
+    "primary_color": null,
+    "accent_color": "#5AC4A7",
+    "fonts_by_locale": {},
+    "visual_preferences": []
+  },
+  "default_phone_frame_id": null,
+  "output": {
+    "logical_width": 275,
+    "logical_height": 220,
+    "scale": 3,
+    "pixel_width": 825,
+    "pixel_height": 660,
+    "aspect_ratio": "5:4",
+    "height_policy": "default_adjustable"
+  },
+  "paywall_placement": {
+    "display_height": null,
+    "crop_mode": null,
+    "overlay_safe_areas": []
+  },
+  "assets": [
+    {
+      "id": "viconature-feeder-reference-01",
+      "path": "assets/viconature/hardware/vn_feeder.jpeg",
+      "kind": "hardware_reference",
+      "locale": null,
+      "model": null,
+      "source": "用户于 2026-09-08 提供：vn_feeder.jpeg",
+      "usage": "当前产品硬件外观参考；非默认手机框或真实 App 截图",
+      "status": "provided",
+      "sha256": "b6298ec9e93c38eb7436c22b0288fc49efba667f163a02a0d2041e14b3988e77",
+      "notes": "白底组合宣传图，含鸟、手机示意、配件陈列和 2K HD RECORDING 标识；不是透明底独立硬件素材。配件仅记录为图中可见，不默认全部出现在头图。"
+    },
+    {
+      "id": "vn-home-subscribed-en-01",
+      "path": "assets/viconature/screenshots/home-subscribed-en.png",
+      "kind": "screenshot",
+      "locale": "en",
+      "model": null,
+      "source": "用户本次识鸟卖点试做提供： 首页订阅后 111.png",
+      "usage": "真实手机界面和鸟名局部放大来源",
+      "status": "provided",
+      "sha256": "3de641fe4d7d810dc9bff4892c4c34a6d236d37f003be8ee96b23b4acbdfa982"
+    }
+  ]
+}

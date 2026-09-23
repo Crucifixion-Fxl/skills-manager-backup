@@ -1,0 +1,87 @@
+{
+  "contract_source": {
+    "availability": "reviewed_feature_commit",
+    "repository": "services/audiences",
+    "revision": "054f87add9dae6babfcce73ae63f60912d2d36f0"
+  },
+  "contracts": {
+    "audience-platform-public-v1.openapi.json": {
+      "sha256": "cd087ec69a5c8300360de0773c10d2edcb1b88308fca5a0b856149815b487a7b",
+      "source_path": "audience-workflow/api/audience-platform-public-v1.openapi.json"
+    },
+    "audience-platform-public-v2.openapi.json": {
+      "sha256": "5879b1c2210c6252cfbb1adabd4cb741daad9a9934fbb7563493a83f19b015ed",
+      "source_path": "audience-workflow/api/audience-platform-public-v2.openapi.json"
+    },
+    "project-control-plane.openapi.json": {
+      "availability": "reviewed_feature_commit",
+      "repository": "services/audiences",
+      "revision": "054f87add9dae6babfcce73ae63f60912d2d36f0",
+      "sha256": "6846d5595268fbc5ea4ff0161149a79d6fbc4c774d0d6f273958e6844c939dee",
+      "source_path": "audience-workflow/api/project-control-plane.openapi.json"
+    }
+  },
+  "files": {
+    ".gitignore": "7f5fd1e17beed6728370efed3821dcaf00e6b80108d2c98f12aee3b14a52c49f",
+    "MANIFEST.in": "79e6f49d5a9b895e160c7323dfd9a9607b61418bde688fbbbb8395c69cef9f6d",
+    "README.md": "c297ae9c9f26f408db6872f4dbcbd150e35d1070f38438a93a7cdb8277cbae1a",
+    "SKILL.md": "c738bd1b5d6b8a103adaf690e3c66d82e0451e69414d375cf981b917c5270bde",
+    "agents/openai.yaml": "080e321ec7cb4f42a064d68877bff3581c316682c902c4efd3635f53d52212f7",
+    "contracts/audience-platform-public-v1.openapi.json": "cd087ec69a5c8300360de0773c10d2edcb1b88308fca5a0b856149815b487a7b",
+    "contracts/audience-platform-public-v2.openapi.json": "5879b1c2210c6252cfbb1adabd4cb741daad9a9934fbb7563493a83f19b015ed",
+    "contracts/operation-registry.json": "a66b8c1574dbb5b97232937a4c7f1414bea4d0e858317f06208af9ef124ff837",
+    "contracts/project-control-plane.openapi.json": "6846d5595268fbc5ea4ff0161149a79d6fbc4c774d0d6f273958e6844c939dee",
+    "contracts/semantic-owner.json": "e0e55db0bec680dbe91a910e0ff3f7087964d8869b7293eceb867a7cb59821fb",
+    "evals/evals.json": "5bc6cfcd61ac75191cf4a35c215af2efdfa7353ebed354282a79ec23343d6ad1",
+    "pyproject.toml": "75e4ead1617d89a4dd47dca459d7b85f747b55472ef956e383cb790943680a91",
+    "references/api-tdd-loop.md": "c1a34e8b91c6aead8c4e6e5e03bea2b3505125f4243550085588a54987bbb3f8",
+    "references/datahub-schema-search.md": "15d65db5534180488b88b0f0be2a077e373b3569a56b72122fe3abc7785427e1",
+    "references/errors-and-recovery.md": "ccc7d16eaac661e21e0bca1cf10a45bf8e84556ad1bb37def9108ce204e97ae7",
+    "references/host-configuration.md": "9004a4fa6bf378e49a0da287ee62ae12eaf0d810619b23c546e137cdc715fe9a",
+    "references/outcome-writing.md": "8ea690094cf47e2034240e9d8b24da0932f5eab1bc4386f94075c22d9adc48c2",
+    "references/platform-api.md": "1ab53087ff8e3f86d7c1bcdff5d4484b8877cd61f759fcd1ef5e685758f77a30",
+    "references/questionnaire-design.md": "5e3a85fb740d2bee8771ffcb2fa2fc9baf5e8af884fd8ff41727d1567306167b",
+    "references/reporting.md": "c10a05f8a98bdf402ae71c1cc79ab2caa04f87daa0430d83c6556c79128f027e",
+    "references/research-method.md": "07fd00c9197d3049c53038bf8a55558404fd712b90bbde643d30ba650f316ee3",
+    "references/result-output.md": "494c5b7bcfd40e91ebdffc0d9a7c0285c44b54b7ede7e63735768a57e70d2468",
+    "references/runtime-guidance.md": "d5b04a2bc51ce9c6415f3e46271fc463be9fb4e43aec4b1d3adb65f83c7ed8f8",
+    "references/typeform-research.md": "70fdf6f0b988915c552949ae6f4cae8f7d53703210415f4a79da9fec003026af",
+    "references/user-journey.md": "0e2ae733ffdaae985be15f75f49957dbbe8c359538834226bfa1f25a6b32d1ad",
+    "scripts/api.py": "699ac21fe4011ae8405ad219e76f9bd94bc380a2e9552d32d4646c60c37fe534",
+    "scripts/check_secrets.py": "295638381933d4c11787d7e7cc6f75f9fba100282bd02c6be956256f273c0a03",
+    "scripts/preflight.py": "dc6b33e6f35ad06db11741b74eec66ad9c2da1efd257ff38472c127e7bd22a18",
+    "scripts/tdd_native_voc_journey.py": "359e9be534a7d20c00a498aa115c2b9268c3ba099eae4b1551abddfb4dadce07",
+    "scripts/tdd_user_research_journey.py": "84d2badadc2adc78b23510e5c466320dfc1bdbd7e4dd679b83c7709b51d1c284",
+    "scripts/update_operation_registry.py": "186e8380a710657e20883d983b884fed7aa850c4515c94440241954e213bf944",
+    "scripts/update_source_lock.py": "f1d04f3e447be6da8dcbec0e428a5d4eea8231484a3968392fb2ce72e8f28114",
+    "setup.py": "fd4ed96582e7094ddde6e158d8e151e9e87509c25cf52db9fbdfb1bef9fb092a",
+    "src/user_research/__init__.py": "26e311d4dfea7fef5ce652505514506d16e3efaf31409adf21153de0ed3a8b0c",
+    "src/user_research/__main__.py": "c613963d3e0c993fe1b253fd4a40ff9b1c132ce265704441c2754ac66ebd2788",
+    "src/user_research/allowlist.py": "ec40722fd78953c392d5b830418a9a9c96ebdd00b09037d3beb3c8c954950f46",
+    "src/user_research/cli.py": "b4c52e511ddc8a385fc05133bea29f024f06ce079d84ea8c5d63806a3fb8e56e",
+    "src/user_research/client.py": "68c7902c80409260948707dcb1fe5fb5adfb350e12f8a7c1f6b62b002a75f0a7",
+    "src/user_research/contract_validation.py": "3e71237dd10ebcd768cefec6f0e6b153240e1d55971589f23ef8d302810cca6a",
+    "src/user_research/environment.py": "c5af86c798dcd69f954da3a60140a9ae499c413abe4c3bfc95cc42657c15f3f5",
+    "src/user_research/operations.py": "9301c8168c3059018ffd2e325c58cfd54f276d8011234e6c49b35c2f8fd300a0",
+    "tests/fixtures/coldstart_journey_cases.json": "d2ae084975c5ccf46715d14f1024eeaf02fbc118b116fa6bb21cb66e193951a4",
+    "tests/fixtures/research_journey_http.json": "01e950e5e8c35ac60a45ba8289ef46a68b9a79e70a9b8be94e0ff19b6fb683eb",
+    "tests/test_allowlist.py": "18b3563c35ee890fcd00e2834dd6b6ff57435c8ac36c4efbb81f42dfb3a04eb8",
+    "tests/test_check_secrets.py": "30cee094b758ee0e59276a03528a1128251aec35beb3e9741a3fcb4bc2921a9f",
+    "tests/test_cli.py": "36a1409f28e3cfcdcacaa5adad762bffee5c5ee29cbe9ae87883a1c89a56f209",
+    "tests/test_client.py": "8db4114156b39e3adf8e6cce670012f0e1b68bb0ba48d225baeb9fe4084f8db8",
+    "tests/test_contracts.py": "3c0b4c7f564601a67faabee8d8b7947196d8e830358efe12177339f62ea80bd8",
+    "tests/test_environment.py": "f38b128785df7d923d504b4d23500698bbf82ea6dd0aa04780f494f07a683ab9",
+    "tests/test_history_monitor.py": "17ed03dd3f090a5e7917b88d810fe78230c12fc9fa00d53065c1eeb8eca785b2",
+    "tests/test_native_voc_journey.py": "b1ba345be2407d592593fef656e43901940a0d40d2445fe3d2c6728181657263",
+    "tests/test_packaging.py": "d06820346924e122b2d130d93fa1234d9f231553a8d55cc143e72b6c048fa9a8",
+    "tests/test_token_only_journey.py": "5d946983e091e0e0ddb5d28d8aa77f727ef9d36f68564059d9e89afd129e5799",
+    "tests/test_typeform_journey.py": "f0e74d12530ee2a21dbefb484f58e8c13173033f2a7a4ecf69aaef546046c9ea"
+  },
+  "schema_version": 5,
+  "semantic_owner_file": {
+    "availability": "canonical_git",
+    "origin": "git@gitlab.addx.ai:lli/user-research-skill.git",
+    "repository": "lli/user-research-skill",
+    "revision": "14dab06b962a792332da11a839e58ee209f60986"
+  }
+}

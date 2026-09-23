@@ -1,0 +1,42 @@
+# Reproducible Node build + Nginx port-80 compatibility runtime.
+#
+# Use this variant only when a confirmed source/runtime contract requires the
+# container itself to listen on privileged port 80 and the migration owner has
+# explicitly approved the root-master exception. Prefer
+# dockerfile-static-web.txt and an unprivileged port >= 1024 for new contracts.
+#
+# Required slots:
+#   {{node_version}}       pinned exact Node semver, e.g. 20.19.4 (never latest/range)
+#   {{nginx_version}}      pinned exact Nginx semver, e.g. 1.28.0 (never latest/range)
+#   {{build_script}}       exact package.json script key, e.g. build:staging-us
+#   {{static_output_dir}}  explicit relative build output, e.g. dist
+#   {{nginx_conf_path}}    reviewed Nginx config path in the build context
+#   {{port}}               must be exactly 80 for this compatibility variant
+#
+# The workflow renders one Dockerfile.<env-keyword> per target. Only
+# repository-tracked, non-secret bundle-time configuration may feed the build.
+# Do not add frontend environment values, tokens, passwords, or credentials as
+# Docker build ARG/ENV values: browser bundles are public artifacts.
+# The reviewed bundle config source stays in cd-requirements.md and is selected
+# by build_script. Free-form requirement text is never interpolated here.
+# Because this recipe uses COPY . ., the workflow must review the effective
+# Docker context and framework auto-loaded config. Untracked, ignored, generated,
+# or credential-bearing config must be removed or excluded by a reviewed
+# .dockerignore before build.
+#
+# CN target rule: before writing this Dockerfile for any CN / TKE / aws-cn
+# target, new-service.md Step 7 must rewrite both external FROM images to
+# reviewed ${HARBOR_REGISTRY}/base/... mirrors and add ARG HARBOR_REGISTRY.
+#
+FROM node:{{node_version}}-alpine AS builder
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . .
+RUN npm run {{build_script}}
+
+FROM nginx:{{nginx_version}}-alpine
+COPY {{nginx_conf_path}} /etc/nginx/conf.d/default.conf
+COPY --from=builder /app/{{static_output_dir}}/ /usr/share/nginx/html/
+EXPOSE {{port}}
+USER root

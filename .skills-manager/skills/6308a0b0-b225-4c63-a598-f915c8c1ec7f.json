@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "6308a0b0-b225-4c63-a598-f915c8c1ec7f",
+  "path": "gitlab-pipeline-health",
+  "path_key": "gitlab-pipeline-health",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/gitlab-pipeline-health",
+    "branch": null
+  }
+}

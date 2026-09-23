@@ -1,0 +1,15 @@
+{
+  "body": {
+    "message": "401 Unauthorized"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "request": {
+    "as": "bot",
+    "method": "GET",
+    "path": "projects/2/access_tokens",
+    "query": {}
+  },
+  "status": 401
+}

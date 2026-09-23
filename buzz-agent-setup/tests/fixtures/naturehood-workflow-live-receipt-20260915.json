@@ -1,0 +1,251 @@
+{
+  "schema_version": 1,
+  "receipt_kind": "naturehood_scheduled_workflows_l4",
+  "recorded_at_utc": "2026-09-15T10:52:25Z",
+  "executed_by": "jchen via Codex session",
+  "attestation": "unsigned_operator_observation",
+  "snapshot_only": true,
+  "contains_secret": false,
+  "method": {
+    "plugin_revision": "24165734c0f671fa17fa376e12c3ce2e2db160a6",
+    "test_level": "L4",
+    "contract": "Trigger each real Naturehood analysis Workflow, require the registered Agent to acknowledge and publish in the originating NIP-10 thread, then inspect evidence coverage, output boundaries and write count."
+  },
+  "channel": {
+    "id": "40ad7888-23a7-452c-96b5-8e062d82a06c",
+    "name": "naturehood",
+    "visibility": "stream/open"
+  },
+  "workflows": {
+    "delivery_progress": {
+      "workflow_id": "78cb093b-2b07-470c-8bf4-a82eef7564e1",
+      "run_id": "3f93aa2b-f11b-4830-92d6-0783c8503bc8",
+      "trigger_event_id": "496c4012c71c2d36d97d34e12625d704e0f6d83efbf0b9520712dbdaff8031fe",
+      "root_event_id": "496c4012c71c2d36d97d34e12625d704e0f6d83efbf0b9520712dbdaff8031fe",
+      "agent_pubkey": "6cf19cd67ea1bdd015182827bec8d1d21f90a2de94ac03392b24da62212d8c49",
+      "ack_event_id": "fa21792260057c414ec0633bf15bf17793001a487bb736b6a3546aebc25c796e",
+      "final_event_id": "f1319bbcea6311215cfcb05b9844f14ef25cc657a9eb146d2cfd225bb9b92c48",
+      "final_content_sha256": "0dac498a42d6c6d879b29226dccdecedb806fde2b33801b935da12529eac3e1b",
+      "final_length_chars": 6000,
+      "trigger_accepted": true,
+      "ack_is_nip10_reply": true,
+      "final_is_nip10_reply": true,
+      "coverage": {
+        "open_feature_items": 35,
+        "open_feature_pages": 1,
+        "active_milestones": 3,
+        "reported_items": 12
+      },
+      "assertions": {
+        "complete_pagination": true,
+        "evidence_links": true,
+        "uncertainty_disclosed": true,
+        "no_code_volume_completion_estimate": true
+      },
+      "configuration_finding": {
+        "observed": "missing_run_parameters",
+        "status": "remediated",
+        "workflow_update_event_id": "c85211c48dc53482db53c1d60cf42f236502e7931690e3cb30100a5c4b2cca2a",
+        "added_parameters": [
+          "subject",
+          "period",
+          "comparison_window",
+          "analysis_time",
+          "asset_discovery"
+        ]
+      }
+    },
+    "data_review": {
+      "workflow_id": "f324d138-ebc7-4821-a165-fdbc031342a3",
+      "run_id": "7c9f895d-cde3-4001-b2f7-6e89844c56de",
+      "trigger_event_id": "471eb63648fa15e84a18305e0321c88f420bb9e2bdb32c63129365795730266f",
+      "root_event_id": "471eb63648fa15e84a18305e0321c88f420bb9e2bdb32c63129365795730266f",
+      "agent_pubkey": "0f7dd8ae94a68e2de771c5111b9e9f350f4a02c3a5655c27c3357c23cd13c9c9",
+      "ack_event_id": "4417492fc81554a386ae1845569c98da82b4a842403f6f5b5bca68aaac891277",
+      "final_event_id": "37d380ea3b95d323457e14360244c7ec4daeff4448f8304ec886d8fd05a41cd7",
+      "final_content_sha256": "8eb0ed20cf2b9219d8164bbbe6f15ee2764f6a57a11404efb37f73c3a61227bc",
+      "final_length_chars": 3145,
+      "trigger_accepted": true,
+      "ack_is_nip10_reply": true,
+      "final_is_nip10_reply": true,
+      "initial_attempt": {
+        "run_id": "4c35f087-cb1b-4750-a501-f81822d9b77d",
+        "root_event_id": "e3136f919b1d9559adda53d8a2856656353ef2edff9fd35343397b15117e33d6",
+        "ack_event_id": "763815e0956a5e6c5064fec5bd64a5dd8c9e1173ce09504e0225dc7f5fa321e9",
+        "outcome": "blocked-detailed-publication",
+        "safe_summary_event_id": "41ad2022466ffb3aebb52d85d46ab99ed61d36467db22ccc6bf48885074f5249",
+        "safe_summary_content_sha256": "63608c719770ca6669c218a22809b0b317fccd2851a88717b1a2427cadd25f15"
+      },
+      "configuration_finding": {
+        "observed": "missing_same_thread_output_authorization",
+        "status": "remediated",
+        "prompt_sha256": "2295f0d43921ecebd647935ea00ba9db64fe36f8984557e85a227625acc1b411"
+      },
+      "growthbook_inventory": {
+        "experiments": {
+          "read": 641,
+          "total": 641,
+          "pages": 7
+        }
+      },
+      "superset_inventory": {
+        "dashboards": {
+          "read": 422,
+          "total": 422,
+          "pages": 5
+        },
+        "charts": {
+          "read": 5537,
+          "total": 5537,
+          "pages": 56
+        },
+        "datasets": {
+          "read": 2249,
+          "total": 2249,
+          "pages": 23
+        }
+      },
+      "assertions": {
+        "complete_pagination": true,
+        "source_window_timezone_filter_dedup": true,
+        "zero_vs_missing_vs_query_failure_distinguished": true,
+        "causality_not_overclaimed": true,
+        "same_thread_pre_authorized_publication": true,
+        "no_raw_rows_identifiers_sql_or_secrets": true,
+        "controlled_links_only": true,
+        "small_cohort_suppressed": true,
+        "environment_verified_or_degraded": true
+      },
+      "gitlab_writeback": "readonly",
+      "gitlab_write_count": 0
+    }
+  },
+  "outer_loop_final_revision": {
+    "recorded_at_utc": "2026-09-15T12:22:07Z",
+    "plugin_revision": "00c0c9f4c47c2e87569b65db22f0b93484bb69c7",
+    "setup": "latest_skill_reinstalled_and_channel_reconfigured",
+    "runtime_contract_passed": true,
+    "runtime_contract_tests": 13,
+    "workflows": {
+      "delivery_progress": {
+        "workflow_id": "78cb093b-2b07-470c-8bf4-a82eef7564e1",
+        "run_id": "ec201b3a-b2c9-4f88-8349-5bf1e914824f",
+        "root_event_id": "9f095fdbb57d99876552883eed26ea9201e1c00bf8709e976bd02b31781e3832",
+        "agent_pubkey": "6cf19cd67ea1bdd015182827bec8d1d21f90a2de94ac03392b24da62212d8c49",
+        "ack_event_id": "3edfe2261cf103b33dbecc9596e6e5f2a3d4764c55d9fabe8518fc818cb94a67",
+        "final_event_id": "f91878c47574f0d342f80d7cc678f5993862374ae7f8eef07f7c1af4b83c57f5",
+        "final_content_sha256": "1707c4ee374d7544831a2e768ef4bf3dc491f10a62a489499f03e252d9669193",
+        "final_length_chars": 7210,
+        "root_has_agent_mention": true,
+        "ack_is_nip10_reply": true,
+        "final_is_nip10_reply": true,
+        "effect_contract_passed": true,
+        "coverage": {
+          "open_feature_items": 35,
+          "open_feature_pages": 1,
+          "branches_read": 688,
+          "branch_pages": 7,
+          "active_milestones": 3,
+          "reported_items": 12
+        },
+        "assertions": {
+          "complete_pagination": true,
+          "evidence_links": true,
+          "comparison_to_prior_snapshot": true,
+          "release_candidate_and_combined_package_acceptance": true,
+          "uncertainty_disclosed": true,
+          "no_code_volume_completion_estimate": true
+        }
+      },
+      "data_review": {
+        "workflow_id": "f324d138-ebc7-4821-a165-fdbc031342a3",
+        "run_id": "fdc351b1-7b28-4bc3-b375-f02948cdbb72",
+        "root_event_id": "ac22a10fec07facbceb87354018748d44756f07434048cc23ee96cec03b22629",
+        "agent_pubkey": "0f7dd8ae94a68e2de771c5111b9e9f350f4a02c3a5655c27c3357c23cd13c9c9",
+        "ack_event_id": "68f5419bb8bf0056aff9ebaf559b0a420e7aea0e480673f99f6ae1b13b59348f",
+        "final_event_id": "5ecb122b9887ac3b5db9277cffb8670376d0d806b621e281315dbb9428be0006",
+        "final_content_sha256": "89725276726fe06d5f64b183319254dcd66087259fbc6cdd5cb7aee5abf8c855",
+        "final_length_chars": 3471,
+        "root_has_agent_mention": true,
+        "ack_is_nip10_reply": true,
+        "final_is_nip10_reply": true,
+        "effect_contract_passed": true,
+        "same_thread_pre_authorized_publication": true,
+        "requested_per_run_disclosure_approval": false,
+        "gitlab_writeback": "readonly",
+        "gitlab_write_count": 0,
+        "gitlab_inventory": {
+          "issues": {
+            "read": 73,
+            "total": 73,
+            "pages": 1
+          },
+          "notes": {
+            "read_unique": 225,
+            "advertised": 226,
+            "all_advertised_pages_requested": true
+          }
+        },
+        "growthbook_inventory": {
+          "experiments": {
+            "read": 641,
+            "total": 641,
+            "pages": 7
+          }
+        },
+        "superset_inventory": {
+          "dashboards": {
+            "read": 422,
+            "total": 422,
+            "pages": 5
+          },
+          "charts": {
+            "read": 5537,
+            "total": 5537,
+            "pages": 56,
+            "unique_ids": 5537
+          },
+          "datasets": {
+            "read": 2249,
+            "total": 2249,
+            "pages": 23,
+            "unique_ids": 2249
+          }
+        },
+        "pagination_retry_request_event_id": "2560758514bbc751cbc09310e34b864ea965d08a7d74b14c7e9c164aec4c5e88",
+        "pagination_retry_ack_event_id": "02883e0376723f318fdb82187f8b77337807c4c6572f90208c6f95a999122518",
+        "pagination_retry_event_id": "cd8ee67fe6d717f95706948566b6f62acfa9a5fd9745cf8aea66502e9141d62f",
+        "pagination_retry_content_sha256": "a267281750613f930811218ccb2d1ab2a46acf346e34e3c334be978a957f27ba",
+        "pagination_retry_length_chars": 1112,
+        "pagination_retry_is_nip10_reply": true,
+        "asset_candidates": {
+          "chart_ids": [
+            4507
+          ],
+          "dataset_ids": [
+            2288,
+            3505
+          ]
+        },
+        "aggregate_query": {
+          "status": "success",
+          "row_count": 0,
+          "partition_days": 0,
+          "interpretation": "data_coverage_gap_not_usage_zero"
+        },
+        "assertions": {
+          "complete_pagination_after_retry": true,
+          "source_window_timezone_filter_partition_dedup_sample_missingness": true,
+          "zero_vs_missing_vs_query_failure_distinguished": true,
+          "causality_not_overclaimed": true,
+          "no_raw_rows_identifiers_sql_secrets_or_temporary_links": true,
+          "controlled_links_only": true,
+          "small_cohort_suppressed": true,
+          "coverage_statement_corrected": true,
+          "publication_candidates_unchanged": true,
+          "effect_conclusion_unchanged": true
+        }
+      }
+    }
+  }
+}

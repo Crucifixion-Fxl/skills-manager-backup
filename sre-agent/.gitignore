@@ -1,0 +1,6 @@
+.sre-agent/
+.sre-agent-debug/
+.sre-agent-*/
+__pycache__/
+*.pyc
+.pytest_cache/

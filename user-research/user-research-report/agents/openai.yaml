@@ -1,0 +1,4 @@
+interface:
+  display_name: "User Research Report"
+  short_description: "Turn structured findings into auditable research reports"
+  default_prompt: "Use $user-research-report to write an evidence-backed user research report."

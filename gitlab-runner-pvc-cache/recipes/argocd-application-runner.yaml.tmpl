@@ -1,0 +1,44 @@
+# ArgoCD Application - {{runner_release_name}}
+#
+# Slots:
+#   runner_release_name, pvc_name, mount_path, runner_application_name
+#   k8s_repo_url, k8s_target_revision, base_values_file
+#   values_overlay_path, runner_namespace
+#
+# Dedicated GitLab Runner release that mounts {{pvc_name}} at {{mount_path}}.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: {{runner_application_name}}
+  namespace: argo-cd
+  labels:
+    app.kubernetes.io/part-of: cicd-stack
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    argocd.argoproj.io/sync-wave: "10"
+    notifications.argoproj.io/subscribe.on-health-degraded.feishu-ops: ""
+    notifications.argoproj.io/subscribe.on-sync-failed.feishu-ops: ""
+spec:
+  project: default
+  sources:
+    - repoURL: {{k8s_repo_url}}
+      targetRevision: {{k8s_target_revision}}
+      path: runner-base
+      helm:
+        valueFiles:
+          - {{base_values_file}}
+          - $overlay/{{values_overlay_path}}
+    - repoURL: {{k8s_repo_url}}
+      targetRevision: {{k8s_target_revision}}
+      ref: overlay
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: {{runner_namespace}}
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

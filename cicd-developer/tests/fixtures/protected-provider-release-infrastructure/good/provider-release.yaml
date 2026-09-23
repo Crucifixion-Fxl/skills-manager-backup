@@ -1,0 +1,84 @@
+schemaVersion: v1
+kind: ProtectedProviderReleaseInfrastructureCandidate
+metadata:
+  name: provider-upjet-gcp-release
+spec:
+  providerSource:
+    repository: DEV/provider-upjet-gcp
+    protectedRef: main
+  runner:
+    protectedTag: provider-release-protected
+    dedicated: true
+    sharedRunnerReuse: forbidden
+    registration:
+      tokenSource: unresolved-admin-prerequisite
+      owner: unresolved-admin-prerequisite
+      tokenReadOrReuse: forbidden
+    controls:
+      protected: required
+      locked: required
+      runUntagged: false
+      broadDockerConfig: forbidden
+      privileged: forbidden-unless-exact-approved-recipe
+      serviceAccountOverride: forbidden-unless-exact-approved-recipe
+    gitops:
+      mode: gitops-only
+      coordinatedPair: required
+      authorityEvidence:
+        overlay:
+          repository: DEV/k8s
+          protectedRef: master
+          commit: 7c5a7dc267f09ace198a66102bfbf4eae3cc783f
+          parentPath: clusters/aws-125710977284-sg-devops/cicd/gitlab-runner/
+        application:
+          repository: DEV/argocd-apps
+          protectedRef: main
+          commit: bebe645d7372a8c573589cd9442074682d9c981a
+          parentPath: aws-125710977284-sg-devops/
+      plannedAdditions:
+        overlay:
+          repository: DEV/k8s
+          parentPath: clusters/aws-125710977284-sg-devops/cicd/gitlab-runner/
+          desiredFile: values-override-provider-release-protected-amd64.yaml
+          runnerTag: provider-release-protected
+          childPrecondition: absent-before-additive-creation
+        application:
+          repository: DEV/argocd-apps
+          parentPath: aws-125710977284-sg-devops/
+          desiredFile: gitlab-runner-provider-release-protected-amd64.yaml
+          chartPath: cicd/apps/gitlab-runner
+          runnerTag: provider-release-protected
+          childPrecondition: absent-before-additive-creation
+  registry:
+    host: harbor-12571-sg-devops.addx.live
+    project: base
+    repositories: [base/provider-family-gcp, base/provider-gcp-managedkafka]
+    robot:
+      allow: [pull, push]
+      deny: [delete, admin, project-admin, repository-create]
+  credentials:
+    delivery: vault-or-eso
+    mountMode: path-files-only
+    profilePath: .release-secrets/profile.json
+    usernamePath: .release-secrets/harbor-username
+    passwordPath: .release-secrets/harbor-password
+  evidenceVerifier:
+    binaryPath: .release-tools/verify-release-evidence
+    checksum:
+      algorithm: sha256
+      value: sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    trustRoot: platform-approved-sigstore-trust-root
+    requiredBindings: [signature, provenance, source-ref, source-commit]
+  vulnerabilityPolicy:
+    maximumCritical: 0
+    maximumHigh: 0
+    exceptionAuthority: security-release-owner
+  release:
+    immutableTagsOnly: true
+    retention: retain-immutable-release-evidence
+    publish: separately-approved
+  rollout:
+    sync: manual-only
+    prune: false
+    delete: false
+    install: separately-approved

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "32c541c9-06ca-4c95-be93-d949832cf50f",
+  "path": "gitlab-runner-pvc-cache",
+  "path_key": "gitlab-runner-pvc-cache",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/gitlab-runner-pvc-cache",
+    "branch": null
+  }
+}

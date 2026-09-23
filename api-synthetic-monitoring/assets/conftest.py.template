@@ -1,0 +1,83 @@
+"""Pytest configuration for API synthetic monitoring.
+
+Provides:
+- --env CLI option
+- env_config session fixture
+- Automatic Feishu notification on test failures via pytest_sessionfinish
+"""
+
+import json
+import os
+import tempfile
+
+import pytest
+
+from config import load_config
+from lib.feishu import send_failure_card
+
+
+def pytest_addoption(parser):
+    parser.addoption(
+        "--env",
+        action="store",
+        default="local",
+        help="Target environment: local, staging-us, prod-us, ...",
+    )
+
+
+@pytest.fixture(scope="session")
+def env_config(request):
+    env = request.config.getoption("--env")
+    return load_config(env)
+
+
+# ---------------------------------------------------------------------------
+# Failure collection + Feishu notification
+# ---------------------------------------------------------------------------
+
+_failures: list[dict[str, str]] = []
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    outcome = yield
+    report = outcome.get_result()
+    if report.when == "call" and report.failed:
+        detail = str(report.longrepr)[:200] if report.longrepr else "unknown"
+        _failures.append({"test": report.nodeid, "detail": detail})
+
+
+def pytest_sessionfinish(session, exitstatus):
+    if not _failures:
+        return
+
+    webhook_url = os.environ.get("FEISHU_WEBHOOK_URL")
+    webhook_secret = os.environ.get("FEISHU_WEBHOOK_SECRET")
+    # Debug log (no secrets) — useful for diagnosing protected-branch issues
+    print(
+        f"[smoke notify] webhook_url_set={bool(webhook_url)} "
+        f"webhook_secret_set={bool(webhook_secret)}"
+    )
+    if not webhook_url:
+        print("[smoke notify] skipping — FEISHU_WEBHOOK_URL not available "
+              "(usually means branch isn't protected)")
+        return
+
+    env = session.config.getoption("--env", default="unknown")
+    job_url = os.environ.get("CI_JOB_URL")
+    rp_url = os.environ.get("SMOKE_RP_LAUNCH_URL")
+
+    print(f"[smoke notify] sending Feishu card: env={env} failures={len(_failures)}")
+    send_failure_card(
+        webhook_url=webhook_url,
+        env=env,
+        failures=_failures,
+        job_url=job_url,
+        rp_url=rp_url,
+        webhook_secret=webhook_secret,
+    )
+    print("[smoke notify] Feishu card sent")
+
+    failures_path = os.path.join(tempfile.gettempdir(), "smoke_failures.json")
+    with open(failures_path, "w") as f:
+        json.dump(_failures, f)

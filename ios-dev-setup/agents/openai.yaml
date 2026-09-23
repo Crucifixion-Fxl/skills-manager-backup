@@ -1,0 +1,4 @@
+interface:
+  display_name: "iOS Dev Setup"
+  short_description: "安装 Xcode，检查权限与证书并搭建 g0 iOS 环境"
+  default_prompt: "Use $ios-dev-setup to install Xcode, verify GitLab and signing access, and set up g0 iOS."

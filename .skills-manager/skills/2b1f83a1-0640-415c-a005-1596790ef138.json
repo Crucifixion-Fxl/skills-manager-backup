@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "2b1f83a1-0640-415c-a005-1596790ef138",
+  "path": "harness-failover",
+  "path_key": "harness-failover",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/harness-failover",
+    "branch": null
+  }
+}

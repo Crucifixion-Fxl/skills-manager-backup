@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "ca016983-9217-4e5a-8fe4-4e043fb73758",
+  "path": "ucloud-cli",
+  "path_key": "ucloud-cli",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/ucloud-cli",
+    "branch": null
+  }
+}

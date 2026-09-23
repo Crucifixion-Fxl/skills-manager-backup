@@ -1,0 +1,13 @@
+# Binary test fixtures committed in this skill — bypass git's text processing
+# (skip CRLF/LF conversion, text diff, text merge).
+#
+# Only covers fixtures that are *committed* to the repo. Runtime artifacts
+# (e.g. ffmpeg-generated MPEG-TS slices) are handled by .gitignore instead —
+# different concern, different file.
+#
+# Path-scoped: limit binary marking to test asset directories only, so future
+# source files elsewhere stay text-mode.
+
+scripts/test_videos/*.mp4      binary
+scripts/test_images/**/*.jpg   binary
+scripts/test_images/**/*.jpeg  binary

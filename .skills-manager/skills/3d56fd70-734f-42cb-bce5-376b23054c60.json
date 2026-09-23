@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "3d56fd70-734f-42cb-bce5-376b23054c60",
+  "path": "ingress-security-scan",
+  "path_key": "ingress-security-scan",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/ingress-security-scan",
+    "branch": null
+  }
+}

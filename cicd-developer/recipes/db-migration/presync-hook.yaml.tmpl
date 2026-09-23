@@ -1,0 +1,86 @@
+# db-migration-presync-hook.yaml.tmpl
+#
+# ArgoCD PreSync hook Job —— 在主资源 sync **之前** 跑 DB schema migration。
+# 失败必须阻断整个部署（新 Pod 不会启动）。
+#
+# 必填槽位：
+#   {{app}}                kebab-case
+#   {{namespace}}          ns
+#   {{migration_command}}  完整 binary 路径，如 `/usr/local/bin/<app>-migrate`
+#   {{envfrom_block}}      envFrom 引用列表（按 Secret 模式渲染）
+#   {{service_account_name}} 跟主应用一致；按是否跑过 add-irsa-role 填：
+#                            - 跑过（应用有 IRSA Role）→ 填 `<app>`，Job 复用同款 IRSA 凭证
+#                            - 没跑（仅 envFrom Secret 拿 DB 凭据）→ 填 `default`，避免引一个不存在的 SA
+#                            workflow add-db-migration Step 3 必须决策这一项
+#
+# {{envfrom_block}} 示例（模式 A —— 单 Secret）：
+#   - configMapRef:
+#       name: <app>-config
+#   - secretRef:
+#       name: <app>-secret
+#
+# {{envfrom_block}} 示例（模式 B —— 拆两个 Secret）：
+#   - configMapRef:
+#       name: <app>-config
+#   - secretRef:
+#       name: <app>-app-secret        # 业务密钥
+#   - secretRef:
+#       name: <app>-db-secret         # Crossplane PushSecret 写的 DB 连接信息
+#
+# 锁定的规则：
+#   1. `hook: PreSync` —— 主资源前跑
+#   2. `hook-delete-policy: BeforeHookCreation`
+#      BeforeHookCreation 下次 sync 自动删上次 Job（Job 字段大多 immutable，不删会冲突）
+#      不要加 HookSucceeded；否则 ArgoCD 会在成功后立刻删 Job，下面的 24h TTL 不会生效
+#   3. `backoffLimit: 1` —— 失败重试 1 次就放弃（avoid 大量重试 + 状态歧义）
+#   4. `ttlSecondsAfterFinished: 86400` —— K8s 1.23+ 自动 GC（保留 24h）
+#   5. `restartPolicy: Never` —— migration 不应靠 K8s 重启恢复
+#   6. **必须** 显式 `imagePullSecrets`（hard rule #24，hook Job pod 同样适用）
+#   7. **必须** 跟主应用同一个 SA —— IRSA / GKE Workload Identity 共用 DB 访问权限
+#   8. **不要** 同时改 envFrom 引用对象内容和触发 migration 的 image tag —— PreSync 跑在 ES 同步前
+#
+# 默认复用主应用 image：CI / Image Updater 已经维护 `<app>` 这一条 image
+# override，Job 只用 `command` 调 migration binary。
+# 如果团队明确构建独立 `<app>-migrate` image，必须同时补 CI target 和
+# Application Image Updater annotations / kustomize image override 的第二个 alias，
+# 否则 Job 会一直跑旧镜像。
+#   images:
+#     - name: <app>
+#       newName: <harbor>/cicd/<env>/<app>
+#       newTag: <sha>
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{app}}-migrate
+  namespace: {{namespace}}
+  annotations:
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 1                   # 失败重试 1 次
+  ttlSecondsAfterFinished: 86400    # 成功 24h 后 GC
+  template:
+    metadata:
+      labels:
+        app: {{app}}-migrate
+    spec:
+      serviceAccountName: {{service_account_name}}    # 跟主应用一致；没 IRSA 的应用填 default
+      imagePullSecrets:
+        - name: harbor-registry-secret
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: {{app}}             # 默认复用主应用 image；overlay images 替换 + Image Updater 写 SHA
+          imagePullPolicy: IfNotPresent
+          command:
+            - {{migration_command}}
+          envFrom:
+{{envfrom_block}}
+          resources:                  # Kyverno require-resources
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 1
+              memory: 1Gi

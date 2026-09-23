@@ -1,0 +1,57 @@
+# instances.yaml
+#
+# Vault 实例清单 + ClusterSecretStore（CSS）参考映射。
+#
+# 6 个 Vault 实例：3 ops（vault-{us,eu,cn}-new/addx.live）+ 3 builder
+# （vault-{us,eu,cn}.builder.addx.live）。Ops / tech-service 域集群使用
+# `vault-backend`；builder 域 dev/staging 集群统一使用
+# `vault-builder-backend` 显式命名。
+# tech-service tier 一律 ops 域（见 references/vault-paths/domain-binding.md）。
+#
+# 消费方：
+#   - workflows/*.md（看哪个 vault 实例）
+#   - clusters.yaml 中 clusters[].vault 字段引用本文件 vaults{} 的 key
+#   - clusters.yaml 中 clusters[].vault_css 是 workflow 生成普通 ES/PushSecret 的权威入口
+#
+# Schema：
+#   vaults:
+#     <key>:
+#       url               vault https URL
+#       purpose           简短用途说明
+#       css_in_cluster    集群内 ClusterSecretStore 名字（null = K8s CSS 不连）
+#
+#   cluster_secret_store_mapping:
+#     按集群域映射到 CSS 名字的参考摘要；workflow 不直接消费，改查 clusters[].vault_css。
+
+vaults:
+  vault-us-prod:
+    url: vault-us-new.addx.live
+    purpose: Ops 应用（US region）
+    css_in_cluster: vault-backend
+  vault-eu-prod:
+    url: vault-eu.addx.live
+    purpose: Ops 应用（EU region）
+    css_in_cluster: vault-backend
+  vault-cn-prod:
+    url: vault-cn.addx.live
+    purpose: Ops 应用（CN region）
+    css_in_cluster: vault-backend
+  vault-us-builder:
+    url: vault-us.builder.addx.live
+    purpose: us-eks-staging explicit builder CSS + 开发者本地 dev/staging（US 后端）
+    css_in_cluster: vault-builder-backend
+  vault-eu-builder:
+    url: vault-eu.builder.addx.live
+    purpose: eu-eks-staging explicit builder CSS + 开发者本地 dev/staging（EU 后端）
+    css_in_cluster: vault-builder-backend
+  vault-cn-builder:
+    url: vault-cn.builder.addx.live
+    purpose: cn-eks-dev/cn-eks-staging explicit builder CSS + 开发者本地 dev/staging（CN 后端）
+    css_in_cluster: vault-builder-backend
+
+# CSS 名字按集群 domain 映射的参考摘要。
+# workflow 写普通 ExternalSecret / PushSecret 时使用 clusters.yaml -> vault_css。
+# Sentry DSN 例外见 references/sentry/README.md -> SENTRY_DSN_CSS。
+cluster_secret_store_mapping:
+  ops:     vault-backend            # explicit/default ops store alias
+  builder: vault-builder-backend    # explicit builder store alias

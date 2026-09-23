@@ -1,0 +1,140 @@
+"""项目分析脚本模板——按 Key Research Question 切分。
+
+使用方法：
+  1. 把本文件 copy 到 <project_dir>/scripts/analyze.py
+  2. 改 KEY_RESEARCH_QUESTIONS 字典：填本项目的 KRQ + 对应 logical_qid
+  3. 改每个 _analyze_<krq_id> 函数：用通用统计函数组合业务分析
+  4. monitor main.py 跑完通用 ingest + quality 后会调用本脚本的 run() 函数
+
+设计原则：
+  - 通用统计函数从 user_research_monitor.lib import，不重复造轮子
+  - 业务逻辑（哪几道题归到哪个 KRQ / 怎么交叉分析）写在本文件里，跟项目一起版本控制
+  - 输出 findings_data.json 到 <project_dir>/<output_root>/<batch>/findings_data.json
+"""
+from __future__ import annotations
+
+import json
+import os
+import sys
+from pathlib import Path
+
+# 让 Python 能 import skill 内的 lib。
+# 推荐通过 user-research-monitor/scripts/main.py 调用；main.py 会设置
+# USER_RESEARCH_MONITOR_SKILL_DIR 和 PYTHONPATH。
+skill_dir = os.environ.get("USER_RESEARCH_MONITOR_SKILL_DIR")
+if skill_dir:
+    scripts_dir = Path(skill_dir) / "scripts"
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+
+try:
+    import lib  # noqa: E402
+except ModuleNotFoundError as exc:
+    raise SystemExit(
+        "Cannot import user-research-monitor lib. "
+        "Run this script through user-research-monitor/scripts/main.py, "
+        "or set USER_RESEARCH_MONITOR_SKILL_DIR to the skill directory."
+    ) from exc
+
+
+# ============================================================
+# 项目专用配置 — LLM 接到新调研时填
+# ============================================================
+
+# Key Research Question 清单
+# 每个 KRQ 对应一组 logical_qid + 适用 cohort + 信号强度自评
+KEY_RESEARCH_QUESTIONS = {
+    "krq_1": {
+        "title": "<KRQ 1 一句话标题>",                  # ← 改这里
+        "questions": ["<Q_id>", "..."],                 # ← 改这里：本 KRQ 涉及题号
+        "applicable_cohorts": ["all"],                   # "all" 或 ["cohort_a", "cohort_b"]
+        "confidence_note": "🟢 强 / 🟡 中 / 🔴 弱",      # ← 自评
+        "method_note": "选择题三角验证 / 量表 + 开放题 / ...",  # 方法学说明
+    },
+    # 复制此 block 加 krq_2 / krq_3 / ...
+}
+
+
+# ============================================================
+# KRQ 分析函数 — LLM 填业务逻辑
+# ============================================================
+
+def _analyze_krq_1(all_pairs: list, qmap: dict) -> dict:
+    """实现 KRQ 1 的具体分析。
+
+    可用工具（from lib）：
+      - distribution_for_choice(all_pairs, qmap, qid)           — 单选/多选分布
+      - scale_summary(all_pairs, qmap, qid)                     — 量表 mean/median/CI
+      - multi_select_frequency(all_pairs, qmap, qid)            — 多选频次
+      - open_text_dump(all_pairs, qmap, qid)                    — 开放题原文导出
+    可选参数：cohort_filter / high_threshold / low_threshold 等
+    """
+    spec = KEY_RESEARCH_QUESTIONS["krq_1"]
+    return {
+        "title": spec["title"],
+        "confidence": spec["confidence_note"],
+        "method": spec.get("method_note", ""),
+        "questions": {
+            qid: lib.distribution_for_choice(all_pairs, qmap, qid)
+            for qid in spec["questions"]
+        },
+        # 可加自定义业务交叉分析，如：
+        # "cross_analysis": _custom_cross_analysis(all_pairs, qmap),
+    }
+
+
+# 复制此 function 加 _analyze_krq_2 / ...
+
+
+# ============================================================
+# 主入口（不用改，自动遍历 KEY_RESEARCH_QUESTIONS）
+# ============================================================
+
+def run(project_dir: Path, snapshot_root: Path, lens: str = "conservative") -> dict:
+    """跑全部 KRQ 分析，输出 findings_data.json 到 snapshot_root。
+
+    Args:
+        project_dir: project 根目录（含 config/）
+        snapshot_root: 本批数据快照根目录（含 raw/ + cleaned/）
+        lens: "conservative" / "strict" — 用哪种清洗口径的数据
+    """
+    # 加载配置 + 数据
+    excluded = lib.load_excluded_response_ids(project_dir)
+    qmap_dict = lib.load_qmap(project_dir)
+    bundle = lib.load_responses(snapshot_root, lens=lens, excluded_response_ids=excluded)
+    all_pairs = bundle["all"]
+    meta = bundle["meta"]
+
+    # 跑每个 KRQ
+    findings = {
+        "meta": {
+            "project_dir": str(project_dir),
+            "snapshot_root": str(snapshot_root),
+            "lens": lens,
+            **meta,
+        },
+        "key_research_questions": list(KEY_RESEARCH_QUESTIONS.keys()),
+    }
+    for krq_id in KEY_RESEARCH_QUESTIONS:
+        fn_name = f"_analyze_{krq_id}"
+        if fn_name not in globals():
+            print(f"⚠️  {fn_name} 函数未定义，跳过 {krq_id}")
+            continue
+        findings[krq_id] = globals()[fn_name](all_pairs, qmap_dict)
+
+    # 输出
+    out_path = snapshot_root / "findings_data.json"
+    out_path.write_text(json.dumps(findings, ensure_ascii=False, indent=2))
+    print(f"✓ findings → {out_path}")
+    print(f"  样本：原始 {meta['raw_total']} - 剔除 {meta['excluded']} = 有效 {meta['valid_total']}")
+    return findings
+
+
+if __name__ == "__main__":
+    import argparse
+    p = argparse.ArgumentParser()
+    p.add_argument("--project-dir", required=True, type=Path)
+    p.add_argument("--snapshot-root", required=True, type=Path)
+    p.add_argument("--lens", default="conservative", choices=["conservative", "strict"])
+    args = p.parse_args()
+    run(args.project_dir, args.snapshot_root, args.lens)

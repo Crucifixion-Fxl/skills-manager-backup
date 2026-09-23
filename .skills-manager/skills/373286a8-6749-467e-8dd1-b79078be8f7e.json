@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "373286a8-6749-467e-8dd1-b79078be8f7e",
+  "path": "temporal",
+  "path_key": "temporal",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/temporal",
+    "branch": null
+  }
+}

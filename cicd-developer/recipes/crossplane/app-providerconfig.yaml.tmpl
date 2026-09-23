@@ -1,0 +1,48 @@
+# Crossplane App Role + per-app ClusterProviderConfig.
+#
+# Use this before data-resource templates whose providerConfigRef.name is {{app}}
+# (RDS / Aurora / Redis / S3 / WAFv2 variants with app-scoped roles).
+#
+# Required slots:
+#   {{app}}         kebab-case
+#   {{partition}}   aws | aws-cn
+#   {{account_id}}  target AWS account id
+
+apiVersion: iam.aws.m.upbound.io/v1beta1
+kind: Role
+metadata:
+  name: crossplane-app-{{app}}
+  annotations:
+    crossplane.io/external-name: crossplane-app-{{app}}
+spec:
+  forProvider:
+    assumeRolePolicy: |
+      {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Principal": {
+              "AWS": "arn:{{partition}}:iam::{{account_id}}:role/CrossplaneProviderRole"
+            },
+            "Action": "sts:AssumeRole"
+          }
+        ]
+      }
+    permissionsBoundary: arn:{{partition}}:iam::{{account_id}}:policy/CrossplaneAppBoundary
+    tags:
+      managed-by: crossplane
+      app: {{app}}
+  providerConfigRef:
+    name: default
+    kind: ClusterProviderConfig
+---
+apiVersion: aws.m.upbound.io/v1beta1
+kind: ClusterProviderConfig
+metadata:
+  name: {{app}}
+spec:
+  credentials:
+    source: IRSA
+  assumeRoleChain:
+    - roleARN: arn:{{partition}}:iam::{{account_id}}:role/crossplane-app-{{app}}

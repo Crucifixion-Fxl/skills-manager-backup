@@ -1,0 +1,21 @@
+# CloudFront Origin Access Control for a private S3 origin.
+#
+# Required slots:
+#   {{cdn_name}}  CloudFront resource name, e.g. my-app-staging-us-cdn
+#   {{app}}       providerConfigRef.name; per-app ClusterProviderConfig
+#
+# Write to: app repo k8s/overlays/<env-keyword>/cloudfront-oac.yaml
+
+apiVersion: cloudfront.aws.m.upbound.io/v1beta1
+kind: OriginAccessControl
+metadata:
+  name: {{cdn_name}}-oac
+spec:
+  forProvider:
+    name: {{cdn_name}}-oac
+    originAccessControlOriginType: s3
+    signingBehavior: always
+    signingProtocol: sigv4
+  providerConfigRef:
+    name: {{app}}
+    kind: ClusterProviderConfig

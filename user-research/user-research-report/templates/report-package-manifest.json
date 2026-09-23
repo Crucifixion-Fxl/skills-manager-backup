@@ -1,0 +1,23 @@
+{
+  "version": "v1",
+  "research_goals": [
+    {
+      "id": "sample-profile",
+      "main_marker": "Sample profile",
+      "evidence_marker": "Sample profile"
+    },
+    {
+      "id": "primary-research-question",
+      "main_marker": "Primary research question",
+      "evidence_marker": "Primary research question"
+    }
+  ],
+  "shared_facts": [
+    {
+      "id": "effective-sample",
+      "main_marker": "Effective sample: 100",
+      "evidence_marker": "Effective sample: 100"
+    }
+  ],
+  "required_files": []
+}

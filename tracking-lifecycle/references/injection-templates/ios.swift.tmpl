@@ -1,0 +1,75 @@
+// =============================================================================
+// iOS 埋点注入模板 — tracking-lifecycle Step 5
+// 占位符: {{page}}, {{module}}, {{component}}, {{point}}, {{params}}
+// =============================================================================
+
+// --- import (注入到文件顶部) ---
+import TrackerCore
+
+// =============================================================================
+// PV — 页面浏览
+// 注入位置: viewDidLoad() 中
+// =============================================================================
+override func viewDidLoad() {
+    super.viewDidLoad()
+    self.track(spmB: "{{page}}")
+    // 带业务参数:
+    // self.track(spmB: "{{page}}", params: [{{params}}])
+}
+
+// =============================================================================
+// CLK — 点击事件
+// 注入位置: @objc func xxxAction() 按钮点击回调，放在业务逻辑之前
+// =============================================================================
+@objc func {{component}}Action() {
+    self.track(spmType: .clk, params: [
+        kSpmB: "{{page}}",
+        kSpmC: "{{module}}",
+        kSpmD: "{{component}}",
+        {{params}}
+    ])
+    // ... 业务逻辑
+}
+
+// =============================================================================
+// EXP — 曝光事件（静态 View）
+// 注入位置: init() 或布局完成后，仅上报一次
+// =============================================================================
+self.track(spmType: .exp, params: [
+    kSpmB: "{{page}}",
+    kSpmC: "{{module}}",
+    {{params}}
+])
+
+// =============================================================================
+// EXP — 曝光事件（TableView / CollectionView Cell）
+// 注入位置: tableView(_:willDisplay:forRowAt:) 或 collectionView(_:willDisplay:forItemAt:)
+// =============================================================================
+func tableView(_ tableView: UITableView, willDisplay cell: UITableViewCell, forRowAt indexPath: IndexPath) {
+    cell.track(spmType: .exp, params: [
+        kSpmB: "{{page}}",
+        kSpmC: "{{module}}",
+        {{params}}
+    ])
+}
+
+// =============================================================================
+// CLK — Cell 点击事件
+// 注入位置: tableView(_:didSelectRowAt:)
+// =============================================================================
+func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+    let cell = tableView.cellForRow(at: indexPath)
+    cell?.track(spmType: .clk, params: [
+        kSpmB: "{{page}}",
+        kSpmC: "{{module}}",
+        kSpmD: "{{component}}",
+        {{params}}
+    ])
+    // ... 业务逻辑
+}
+
+// =============================================================================
+// SELF_EVENT — 自定义事件
+// 注入位置: 业务逻辑触发点
+// =============================================================================
+Tracker.track(eventKey: "{{point}}", params: [{{params}}])

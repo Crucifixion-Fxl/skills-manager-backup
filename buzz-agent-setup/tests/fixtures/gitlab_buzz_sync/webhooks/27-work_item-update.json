@@ -1,0 +1,91 @@
+{
+  "body": {
+    "changes": {
+      "title": {
+        "current": "Recording task 0913082019 renamed",
+        "previous": "Recording task 0913082019"
+      },
+      "updated_at": {
+        "current": "2026-09-13 08:21:29 UTC",
+        "previous": "2026-09-13 08:21:28 UTC"
+      },
+      "updated_by_id": {
+        "current": 7,
+        "previous": null
+      }
+    },
+    "event_type": "work_item",
+    "labels": [],
+    "object_attributes": {
+      "action": "update",
+      "assignee_id": null,
+      "assignee_ids": [],
+      "author_id": 7,
+      "closed_at": null,
+      "confidential": false,
+      "created_at": "2026-09-13 08:21:28 UTC",
+      "customer_relations_contacts": [],
+      "description": null,
+      "discussion_locked": null,
+      "due_date": null,
+      "duplicated_to_id": null,
+      "human_time_change": null,
+      "human_time_estimate": null,
+      "human_total_time_spent": null,
+      "id": 2,
+      "iid": 2,
+      "labels": [],
+      "last_edited_at": null,
+      "last_edited_by_id": null,
+      "milestone_id": null,
+      "moved_to_id": null,
+      "project_id": 2,
+      "relative_position": null,
+      "severity": "unknown",
+      "state": "opened",
+      "state_id": 1,
+      "time_change": 0,
+      "time_estimate": 0,
+      "title": "Recording task 0913082019 renamed",
+      "total_time_spent": 0,
+      "type": "Task",
+      "updated_at": "2026-09-13 08:21:29 UTC",
+      "updated_by_id": 7,
+      "url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot/-/work_items/2"
+    },
+    "object_kind": "work_item",
+    "project": {
+      "avatar_url": null,
+      "ci_config_path": null,
+      "default_branch": "main",
+      "description": null,
+      "git_http_url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot.git",
+      "git_ssh_url": "ssh://[REDACTED]:2224/buzz-sync-test/pilot.git",
+      "homepage": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot",
+      "http_url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot.git",
+      "id": 2,
+      "name": "pilot",
+      "namespace": "buzz-sync-test",
+      "path_with_namespace": "buzz-sync-test/pilot",
+      "ssh_url": "ssh://[REDACTED]:2224/buzz-sync-test/pilot.git",
+      "url": "ssh://[REDACTED]:2224/buzz-sync-test/pilot.git",
+      "visibility_level": 0,
+      "web_url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot"
+    },
+    "repository": {
+      "description": null,
+      "homepage": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot",
+      "name": "pilot",
+      "url": "ssh://[REDACTED]:2224/buzz-sync-test/pilot.git"
+    },
+    "user": {
+      "avatar_url": null,
+      "email": "[REDACTED]",
+      "id": 7,
+      "name": "Buzz Sync Maintainer (localstack)",
+      "username": "buzz-sync-maintainer"
+    }
+  },
+  "event_header": "Issue Hook",
+  "received_at": "2026-09-13T08:21:30.430572+00:00"
+}

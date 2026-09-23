@@ -1,0 +1,20 @@
+# 月度架构坏味道。方法在 architecture-smell-scan。有 -debt 则 <scanner-name> 用它，否则用 -dev。
+name: monthly-architecture-smell
+description: Monthly architecture smell scan. Method lives in the Skill.
+trigger:
+  on: schedule
+  cron: "30 1 1 * *"
+steps:
+  - id: wake
+    action: send_message
+    text: >-
+      @<scanner-name> 使用 $addx:architecture-smell-scan。
+      对象：Canvas 代码仓库清单的主业务仓；分析时点：触发时；
+      对比窗口：上期同仓 reviewed.json。只读，不改被扫仓。
+      最终报告走 helper，sources：person <channel_admin_username>、
+      person <core_eng_username>（缺席写未通知）。ack 不加站立受众。
+      最终报告发出后，对报告里「需要人处理」的每一项（最多 5 项，没有就不发），
+      在同一 Thread 再发一条行动消息：一句话写清事项和链接，sources 用该项的责任人
+      （GitLab 作者／assignee／reviewer 的用户名，作 person locator；不在 people_file 就写未通知）；
+      同一个人在同一 Thread 只通知一次。
+      最终报告超过约 8 行时按 references/feishu-doc-report.md 写成飞书文档（你自己的 bot 建、只读授权给群、发摘要），Buzz Thread 只发摘要和文档链接。

@@ -1,0 +1,62 @@
+# crossplane-s3-bucket-policy-read.yaml.tmpl
+#
+# Owner-side BucketPolicy for a consumer app reading an existing app-owned S3
+# bucket. Use only when the bucket already exists and belongs to another app or
+# account in the same AWS partition.
+#
+# 必填槽位：
+#   {{app}}                bucket owner app；providerConfigRef.name 也用它
+#   {{bucket_name}}        existing bucket name
+#   {{region}}             bucket region
+#   {{partition}}          aws | aws-cn（必须和 consumer role ARN 同 partition）
+#   {{consumer_app}}       consumer app，做 metadata suffix / audit
+#   {{consumer_role_arn}}  consumer 自己账号里的 IRSA role ARN
+#   {{policy_sid}}         PascalCase sid suffix, e.g. AnalyticsApi
+#   {{read_prefix}}        允许读取的 prefix，末尾建议带 `/`，例如 data/prod/
+#
+# 注意：
+# - 不要把 Principal 写成 account root 或 "*"。
+# - 不要为了跨账号读关闭 BucketPublicAccessBlock；具名 role ARN 不是 public policy。
+# - 跨 partition (`aws` ↔ `aws-cn`) 不适用；走 workflow STOP + Vault AK/SK fallback。
+
+apiVersion: s3.aws.m.upbound.io/v1beta1
+kind: BucketPolicy
+metadata:
+  name: {{bucket_name}}-read-{{consumer_app}}
+spec:
+  forProvider:
+    region: {{region}}
+    bucketRef:
+      name: {{bucket_name}}
+    policy: |
+      {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Sid": "Allow{{policy_sid}}List",
+            "Effect": "Allow",
+            "Principal": {
+              "AWS": "{{consumer_role_arn}}"
+            },
+            "Action": "s3:ListBucket",
+            "Resource": "arn:{{partition}}:s3:::{{bucket_name}}",
+            "Condition": {
+              "StringLike": {
+                "s3:prefix": ["{{read_prefix}}*"]
+              }
+            }
+          },
+          {
+            "Sid": "Allow{{policy_sid}}Read",
+            "Effect": "Allow",
+            "Principal": {
+              "AWS": "{{consumer_role_arn}}"
+            },
+            "Action": "s3:GetObject",
+            "Resource": "arn:{{partition}}:s3:::{{bucket_name}}/{{read_prefix}}*"
+          }
+        ]
+      }
+  providerConfigRef:
+    name: {{app}}
+    kind: ClusterProviderConfig

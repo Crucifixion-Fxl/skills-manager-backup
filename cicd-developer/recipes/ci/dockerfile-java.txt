@@ -1,0 +1,32 @@
+# Java 服务的 Dockerfile 模板（Maven wrapper 模式）。
+#
+# 必填槽位：
+#   {{java_version}}     e.g. 21（pin LTS 主版本）
+#   {{jar_path}}         Maven 构建产物路径，e.g. target/app-0.1.0.jar
+#                        默认 target/<artifactId>-<version>.jar
+#   {{port}}             container 监听端口
+#
+# 设计要点：
+#   - 用 eclipse-temurin（OpenJDK 官方发行）而不是 OracleJDK
+#   - 多阶段：builder 跑 Maven wrapper 拿 jar，runtime 只装 JRE
+#   - 启动参数走 ENTRYPOINT exec form 而不是 shell form（SIGTERM 能传到 java 进程）
+#   - 用 non-root user
+#   - 内存：JVM 默认按 cgroup 算，不用手动 -Xmx；如果想锁内存上限可加 -XX:MaxRAMPercentage=75.0
+#   - CN / TKE / aws-cn target：写盘前按 new-service.md Step 7 把 FROM 改为
+#     ${HARBOR_REGISTRY}/base/...，并补 ARG HARBOR_REGISTRY
+
+FROM eclipse-temurin:{{java_version}}-jdk AS builder
+WORKDIR /build
+COPY pom.xml ./
+COPY src ./src
+# 项目必须带 Maven wrapper；没有 mvnw 时先让开发者补 wrapper，或另起其他构建系统模板 MR
+COPY mvnw .mvn ./
+RUN ./mvnw -B -DskipTests package
+
+FROM eclipse-temurin:{{java_version}}-jre
+WORKDIR /app
+COPY --from=builder /build/{{jar_path}} /app/app.jar
+RUN useradd --create-home --uid 1000 app && chown -R app:app /app
+USER app
+EXPOSE {{port}}
+ENTRYPOINT ["java", "-XX:MaxRAMPercentage=75.0", "-jar", "/app/app.jar"]

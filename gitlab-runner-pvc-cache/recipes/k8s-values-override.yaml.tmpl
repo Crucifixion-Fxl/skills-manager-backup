@@ -1,0 +1,81 @@
+# GitLab Runner - {{cache_purpose}} cache (PVC-backed)
+#
+# Slots:
+#   cache_purpose, cache_description, runner_release_name, gitlab_internal_url
+#   runner_concurrent, runner_image_registry, runner_token_secret, runner_tag
+#   request_concurrency, runner_limit, harbor_registry, s3_cache_bucket
+#   s3_cache_region, runner_namespace, default_job_image, runner_helper_image
+#   job_cpu_request, job_memory_request, pvc_name, mount_path, runner_iam_role_arn
+#
+# Dedicated runner release for CI jobs that need to persist {{cache_description}}
+# across Kubernetes executor pods.
+#
+# Sensitivity: L1 public only when this release is registered as an instance
+# runner. Runner tags are not security boundaries.
+
+gitlab-runner:
+  fullnameOverride: {{runner_release_name}}
+  gitlabUrl: {{gitlab_internal_url}}
+  concurrent: {{runner_concurrent}}
+
+  image:
+    registry: {{runner_image_registry}}
+
+  nodeSelector:
+    kubernetes.io/arch: amd64
+    node-group: gitlab-runner-manager
+
+  runners:
+    secret: {{runner_token_secret}}
+    tags: "{{runner_tag}}"
+    config: |
+      [[runners]]
+        output_limit = 51200
+        pre_build_script = "mkdir -p /kaniko/.docker && cp /kaniko/.docker-secret/config.json /kaniko/.docker/config.json 2>/dev/null; true"
+        request_concurrency = {{request_concurrency}}
+        limit = {{runner_limit}}
+        clone_url="{{gitlab_internal_url}}"
+        environment = ["HARBOR_REGISTRY={{harbor_registry}}"]
+        [runners.cache]
+          Type = "s3"
+          Shared = true
+          [runners.cache.s3]
+            BucketName = "{{s3_cache_bucket}}"
+            BucketLocation = "{{s3_cache_region}}"
+            AuthenticationType = "iam"
+        [runners.kubernetes]
+          namespace = "{{runner_namespace}}"
+          image = "{{default_job_image}}"
+          helper_image = "{{runner_helper_image}}"
+          image_pull_secrets = ["harbor-registry-secret", "repository"]
+          pull_policy = ["if-not-present", "always"]
+          ephemeral_storage_limit_overwrite_max_allowed = "100Gi"
+          cpu_request = "{{job_cpu_request}}"
+          memory_request = "{{job_memory_request}}"
+          poll_timeout = 1800
+          namespace_overwrite_allowed = ".+-(staging|pre|prod|dev)$"
+          service_account_overwrite_allowed = ".+"
+          [runners.kubernetes.node_selector]
+            "kubernetes.io/arch" = "amd64"
+            "node-group" = "gitlab-runner"
+          [runners.kubernetes.pod_labels]
+            "ci.gitlab.com/project-name" = "${CI_PROJECT_NAME}"
+            "ci.gitlab.com/ref-protected" = "${CI_COMMIT_REF_PROTECTED}"
+            "ci.gitlab.com/job-id" = "${CI_JOB_ID}"
+            "ci.gitlab.com/pipeline-id" = "${CI_PIPELINE_ID}"
+          [runners.kubernetes.pod_annotations]
+            "ci.gitlab.com/project-path" = "${CI_PROJECT_PATH}"
+          [[runners.kubernetes.volumes.secret]]
+            name = "harbor-registry-secret"
+            mount_path = "/kaniko/.docker-secret"
+            read_only = true
+            [runners.kubernetes.volumes.secret.items]
+              ".dockerconfigjson" = "config.json"
+          [[runners.kubernetes.volumes.pvc]]
+            name = "{{pvc_name}}"
+            mount_path = "{{mount_path}}"
+            read_only = false
+
+  rbac:
+    serviceAccountAnnotations:
+      eks.amazonaws.com/role-arn: {{runner_iam_role_arn}}

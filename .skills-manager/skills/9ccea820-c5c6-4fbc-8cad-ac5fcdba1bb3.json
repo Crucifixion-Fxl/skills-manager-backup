@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "9ccea820-c5c6-4fbc-8cad-ac5fcdba1bb3",
+  "path": "oci-cli",
+  "path_key": "oci-cli",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/oci-cli",
+    "branch": null
+  }
+}

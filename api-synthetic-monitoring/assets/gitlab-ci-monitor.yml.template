@@ -1,0 +1,61 @@
+# Append to .gitlab-ci.yml (NOT a full CI config — just the API monitoring job).
+#
+# Prerequisites in the existing .gitlab-ci.yml:
+#   1. `stages` MUST include `test` (ci-templates contract — see SKILL.md)
+#   2. Workflow rules must allow:
+#        - $CI_PIPELINE_SOURCE == "schedule"
+#        - $CI_PIPELINE_SOURCE == "web" | "api"
+#      Otherwise the scheduled / manual trigger is rejected.
+#   3. Add PYTHON_IMAGE variable if not already present:
+#        PYTHON_IMAGE: "python:3.11-slim"
+
+# ===========================================================================
+# API Synthetic Monitoring — 主动巡检（API health checks on deployed environments）
+# ===========================================================================
+# Design: docs/architecture/<module>/api-monitoring.md
+# Runbook: docs/deployment/api-monitoring.md
+#
+# Required CI Variables (protected + masked unless noted):
+#   FEISHU_WEBHOOK_URL, FEISHU_WEBHOOK_SECRET      (failure alerts)
+#   SMOKE_RP_ENDPOINT (protected, not masked)      (RP server URL)
+#   SMOKE_RP_PROJECT, SMOKE_RP_TOKEN               (RP launch reporting)
+#
+# URLs per environment live in smoke/envs.py (checked in).
+# Scheduled pipeline: */5 * * * *  (see GitLab project Schedules UI)
+
+smoke:patrol:
+  stage: test
+  image: $PYTHON_IMAGE
+  tags:
+    - runner-sg-nat     # needs public-internet egress for Ingress URLs
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+    - if: '$CI_PIPELINE_SOURCE == "api"'
+    - if: '$CI_COMMIT_BRANCH == "staging"'
+      changes:
+        - smoke/**/*
+        - .gitlab-ci.yml
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes:
+        - smoke/**/*
+        - .gitlab-ci.yml
+  parallel:
+    matrix:
+      # Add prod-us / prod-eu / prod-cn as they come online;
+      # each entry must also exist in smoke/envs.py.
+      - ENV: [staging-us]
+  before_script:
+    - cd smoke && pip install --quiet -e .
+  script:
+    - >-
+      python -m pytest checks/
+      --env=$ENV
+      -v
+      --tb=short
+      --reportportal
+      --rp-endpoint=$SMOKE_RP_ENDPOINT
+      --rp-project=$SMOKE_RP_PROJECT
+      --rp-api-key=$SMOKE_RP_TOKEN
+      --rp-launch="api-monitor-$ENV"
+  timeout: 2m

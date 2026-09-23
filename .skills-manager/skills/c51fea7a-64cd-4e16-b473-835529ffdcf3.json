@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "c51fea7a-64cd-4e16-b473-835529ffdcf3",
+  "path": "create-pir",
+  "path_key": "create-pir",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/create-pir",
+    "branch": null
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "69f9499c-1926-4b2c-9619-54092c912a9b",
+  "path": "brand-name-checker",
+  "path_key": "brand-name-checker",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/brand-name-checker",
+    "branch": null
+  }
+}

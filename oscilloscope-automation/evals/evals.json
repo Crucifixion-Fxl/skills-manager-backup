@@ -1,0 +1,37 @@
+{
+  "skill_name": "oscilloscope-automation",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "检测当前连接的示波器，并读取 CH1 的频率、周期、正占空比和峰峰值，保存一张屏幕截图。",
+      "expected_output": "先枚举并执行 *IDN?，只有 MHO5104/00.02.00 为 hardware_verified 时才通过 rigol-mho5104 适配器测量；输出带 idn、resource、adapter、verification、单位和 scope_error 的 JSON，并保存无 TMC 头的 PNG。",
+      "files": [],
+      "assertions": [
+        {"name": "identify_first", "check": "在型号专属测量前执行 *IDN? 并匹配适配器"},
+        {"name": "duty_normalized", "check": "MHO/DHO5000 的 PDUTy 比例乘以 100 后标记为百分数"},
+        {"name": "error_evidence", "check": "结果包含 :SYSTem:ERRor:NEXT? 返回值"}
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "把 MHO5104 CH1 当前波形读取成 1000 点 CSV，但不要改变我后续手工使用示波器的现场。",
+      "expected_output": "读取并保存波形传输设置，使用 NORMal/BYTE 获取前导参数和 TMC 数据，换算 time_s/voltage_v，最终在 finally 恢复原传输设置。",
+      "files": [],
+      "assertions": [
+        {"name": "binary_safe", "check": "二进制读取期间禁用 read_termination 并解析 TMC Block"},
+        {"name": "calibrated_csv", "check": "CSV 包含 index、time_s、voltage_v 和 code"},
+        {"name": "restore_finally", "check": "无论成功失败都恢复 source、mode、format 和 points"}
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "我接了一台鼎阳示波器，直接照 MHO5104 的命令帮我读取截图和占空比。",
+      "expected_output": "拒绝猜测兼容性；先 identify。若无鼎阳适配器，只允许明确的只读查询，不发送 RIGOL 型号专属测量或截图命令。",
+      "files": [],
+      "assertions": [
+        {"name": "no_vendor_guess", "check": "不向未匹配设备发送 RIGOL 专属命令"},
+        {"name": "unsupported_visible", "check": "明确返回 unsupported 或缺少适配器"}
+      ]
+    }
+  ]
+}

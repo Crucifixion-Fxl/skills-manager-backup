@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>报告标题（一句话说清主题与裁决）</title>
+<!--
+  自包含单文件 HTML 调研报告模板（product-tech-research skill）
+  原则：零外部依赖（无 CDN/外链 CSS/JS/图片，图用内联 SVG/CSS）→ private Pages、离线、邮件附件都能开。
+  用法：复制本文件改内容；或写新报告时 Read 本文件（或同系列既有报告前 ~420 行）复用 CSS，保持系列视觉一致。
+  完整方法论见 ../references/html-report-method.md
+-->
+<style>
+  :root {
+    --accent: #1f9e6e;          /* 主题色：按项目换色相即可，其余变量联动 */
+    --accent-dark: #157a54;
+    --accent-soft: #e6f6ef;
+    --accent-soft2: #d2efe2;
+    --bg: #f7f8f9;
+    --card: #ffffff;
+    --ink: #1c2127;
+    --ink-soft: #4a5560;
+    --ink-faint: #7a8693;
+    --border: #e2e6ea;
+    --border-strong: #cdd4da;
+    --zebra: #f4f7f6;
+    --warn-bg: #fff5e9;  --warn-border: #f0b35a;  --warn-ink: #8a5400;
+    --danger-bg: #fdecec; --danger-border: #e89b9b; --danger-ink: #9a2a2a;
+    --insight-bg: #eaf4ff; --insight-border: #8bbef0; --insight-ink: #1a4f86;
+    --code-bg: #f0f2f4;
+    --shadow: 0 1px 3px rgba(20,30,40,0.07), 0 6px 18px rgba(20,30,40,0.05);
+    --radius: 12px;
+    --maxw: 1440px;             /* 正文吃满页宽；TOC 悬浮不占列 */
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Arial, "Noto Sans CJK SC", sans-serif;
+    background: var(--bg); color: var(--ink); line-height: 1.7; font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent-dark); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* ===== Hero 头图 ===== */
+  header.hero {
+    background: linear-gradient(135deg, #14543c 0%, #1f9e6e 60%, #2bb87f 100%);
+    color: #fff; padding: 54px 24px 46px; text-align: center;
+  }
+  header.hero .kicker { text-transform: uppercase; letter-spacing: 3px; font-size: 12px; opacity: 0.85; margin-bottom: 14px; }
+  header.hero h1 { margin: 0 auto 14px; font-size: 2.05rem; line-height: 1.25; max-width: 900px; font-weight: 750; }
+  header.hero p.subtitle { margin: 0 auto; max-width: 760px; font-size: 1.05rem; opacity: 0.94; }
+  header.hero .meta { margin-top: 22px; font-size: 0.85rem; opacity: 0.82; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+  header.hero .meta span { background: rgba(255,255,255,0.15); padding: 5px 13px; border-radius: 999px; }
+
+  /* ===== 布局：单列正文 + 悬浮折叠 TOC（导航设计核心，正文吃满页宽） ===== */
+  .shell { max-width: var(--maxw); margin: 0 auto; display: block; padding: 32px 24px 80px; }
+  nav.toc {
+    position: fixed; top: 14px; left: 14px; z-index: 60;
+    background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 8px; box-shadow: 0 4px 18px rgba(20,30,40,0.18); font-size: 0.9rem; max-width: 320px;
+  }
+  nav.toc .toc-body { display: none; min-width: 264px; max-height: calc(100vh - 120px); overflow-y: auto; padding: 4px 8px 8px; }
+  nav.toc.open .toc-body { display: block; margin-top: 8px; }
+  nav.toc h2 { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 1.5px; color: var(--ink-faint); margin: 0 0 12px; }
+  nav.toc ol { list-style: none; margin: 0; padding: 0; counter-reset: toc; } /* CSS counter 自动编号：增删章节不用改号 */
+  nav.toc li { margin: 2px 0; }
+  nav.toc a { display: block; padding: 6px 10px; border-radius: 7px; color: var(--ink-soft); counter-increment: toc; line-height: 1.35; }
+  nav.toc a::before { content: counter(toc); display: inline-block; width: 22px; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
+  nav.toc a:hover { background: var(--accent-soft); color: var(--accent-dark); text-decoration: none; }
+  .toc-toggle {
+    display: block; background: var(--accent-dark); color: #fff; border: none;
+    padding: 9px 16px; font-size: 0.92rem; font-weight: 650; border-radius: 9px; cursor: pointer; width: 100%; text-align: left;
+  }
+
+  /* ===== 正文卡片与标题 ===== */
+  main { min-width: 0; }
+  section.block {
+    background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 30px 32px; margin-bottom: 26px; box-shadow: var(--shadow); scroll-margin-top: 16px;
+  }
+  h2.section-title {
+    font-size: 1.45rem; font-weight: 740; margin: 0 0 8px; padding-bottom: 12px;
+    border-bottom: 2px solid var(--accent-soft2); display: flex; align-items: baseline; gap: 12px;
+  }
+  h2.section-title .num { color: var(--accent); font-size: 1.05rem; font-weight: 800; background: var(--accent-soft); border-radius: 8px; padding: 2px 10px; flex: 0 0 auto; }
+  h3 { font-size: 1.12rem; margin: 26px 0 10px; font-weight: 680; }
+  h4 { font-size: 1rem; margin: 18px 0 8px; color: var(--accent-dark); font-weight: 680; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 10px 0; padding-left: 22px; }
+  li { margin: 5px 0; }
+  strong { font-weight: 680; color: var(--ink); }
+  code { background: var(--code-bg); border-radius: 5px; padding: 1px 6px; font-family: "SF Mono","JetBrains Mono",Consolas,monospace; font-size: 0.86em; color: #345; }
+  hr.soft { border: none; border-top: 1px solid var(--border); margin: 22px 0; }
+
+  /* ===== 置信度 pill：每个关键论断标 高/中/低，诚实标注推断 ===== */
+  .pill { display: inline-block; font-size: 0.72rem; font-weight: 700; padding: 2px 9px; border-radius: 999px; vertical-align: middle; letter-spacing: 0.3px; white-space: nowrap; }
+  .pill.hi  { background: #def3e8; color: #15724f; border: 1px solid #9bd9bd; }
+  .pill.mid { background: #fdf2dc; color: #8a5d00; border: 1px solid #efcf8c; }
+  .pill.lo  { background: #fbe2e2; color: #962d2d; border: 1px solid #e6a6a6; }
+  .pill.tag { background: var(--accent-soft); color: var(--accent-dark); border: 1px solid var(--accent-soft2); }
+
+  /* ===== Callout：insight=洞察/裁决, warn=注意/勘误, danger=风险/来源质量警告 ===== */
+  .callout { border-radius: 10px; padding: 14px 18px; margin: 16px 0; font-size: 0.95rem; border: 1px solid; }
+  .callout .label { font-weight: 750; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.6px; display: block; margin-bottom: 5px; }
+  .callout.insight { background: var(--insight-bg); border-color: var(--insight-border); color: #173a5c; }
+  .callout.insight .label { color: var(--insight-ink); }
+  .callout.warn { background: var(--warn-bg); border-color: var(--warn-border); color: #5e4413; }
+  .callout.warn .label { color: var(--warn-ink); }
+  .callout.danger { background: var(--danger-bg); border-color: var(--danger-border); color: #6e2222; }
+  .callout.danger .label { color: var(--danger-ink); }
+
+  /* ===== 表格：横向滚动 wrap + 斑马纹 + sticky 表头；宽矩阵加 .matrix 冻结首列 ===== */
+  .table-wrap { overflow-x: auto; margin: 18px 0; border: 1px solid var(--border-strong); border-radius: 10px; -webkit-overflow-scrolling: touch; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.86rem; min-width: 560px; }
+  table.wide { min-width: 1120px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  thead th { background: var(--accent-dark); color: #fff; font-weight: 650; position: sticky; top: 0; font-size: 0.82rem; border-bottom: none; }
+  tbody tr:nth-child(even) { background: var(--zebra); }
+  tbody tr:hover { background: var(--accent-soft); }
+  td.rowhdr, th[scope="row"] { font-weight: 680; color: var(--ink); background: #eef2f1; }
+  tbody tr:nth-child(even) td.rowhdr { background: #e7edec; }
+  table.matrix { table-layout: fixed; }            /* 配 <colgroup> 显式列宽 */
+  table.matrix th:first-child, table.matrix td:first-child {
+    position: sticky; left: 0; z-index: 3; box-shadow: 2px 0 4px rgba(20,30,40,0.08);
+  }
+  table.matrix thead th:first-child { z-index: 4; background: var(--accent-dark); }
+  table.matrix td.rowhdr { background: #eef2f1; }
+  table.matrix tbody tr:nth-child(even) td.rowhdr { background: #e7edec; }
+  .scroll-hint { font-size: 0.78rem; color: var(--ink-faint); margin: -8px 0 14px; font-style: italic; }
+
+  /* ===== Statband：执行摘要 KPI 数据带 ===== */
+  .statband { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; margin: 20px 0; }
+  .stat { background: linear-gradient(160deg, var(--accent-soft), #fff); border: 1px solid var(--accent-soft2); border-radius: 10px; padding: 14px 10px; text-align: center; }
+  .stat .v { font-size: 1.4rem; font-weight: 800; color: var(--accent-dark); line-height: 1.15; }
+  .stat .l { font-size: 0.74rem; color: var(--ink-soft); margin-top: 4px; line-height: 1.3; }
+
+  /* ===== hbars：CSS 横向条形图（仅用于「分类对比」；时间序列禁用，见图表选型规则） ===== */
+  .hbars { margin: 14px 0; }
+  .hbar { display: grid; grid-template-columns: 190px 1fr 110px; gap: 10px; align-items: center; margin: 7px 0; font-size: 0.84rem; }
+  .hbar .blabel { text-align: right; color: var(--ink-soft); font-weight: 600; line-height: 1.25; }
+  .hbar .btrack { background: var(--code-bg); border-radius: 6px; height: 20px; position: relative; overflow: hidden; }
+  .hbar .bfill { position: absolute; top: 0; left: 0; bottom: 0; border-radius: 6px; background: var(--accent); min-width: 6px; }
+  /* 区间条：style="left:30%;width:20%" 表示从下限到上限 */
+  .hbar .bfill.alt { background: #5b9bd5; } .hbar .bfill.warn { background: var(--warn-border); } .hbar .bfill.danger { background: #d9776f; }
+  .hbar .bval { font-weight: 700; font-variant-numeric: tabular-nums; font-size: 0.8rem; line-height: 1.25; }
+  .chart-title { font-size: 0.88rem; font-weight: 750; margin: 20px 0 4px; }
+  .chart-note { font-size: 0.78rem; color: var(--ink-faint); margin: 6px 0 0; }
+
+  /* ===== 小图卡片网格 ===== */
+  .chart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin: 18px 0; }
+  .chart-card { background: #fbfdfc; border: 1px solid var(--border-strong); border-radius: 10px; padding: 14px 16px; }
+  .chart-card h4 { margin: 0 0 8px; }
+  .chart-card .hbar { grid-template-columns: 120px 1fr 90px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 0.78rem; color: var(--ink-soft); margin-top: 8px; }
+  .legend .key { display: inline-flex; align-items: center; gap: 5px; }
+  .legend .sw { width: 11px; height: 11px; border-radius: 3px; display: inline-block; }
+  .donut-wrap { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+
+  /* ===== 双列小卡 ===== */
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0; }
+  .minicard { background: var(--accent-soft); border: 1px solid var(--accent-soft2); border-radius: 10px; padding: 14px 16px; font-size: 0.92rem; }
+  .minicard h4 { margin: 0 0 6px; }
+
+  /* ===== SVG 原理图/散点图容器：svg 自适应宽度，窄屏横向滚动 ===== */
+  .diagram-wrap { overflow-x: auto; margin: 18px 0; border: 1px solid var(--border-strong); border-radius: 10px; background: #fbfdfc; padding: 8px; }
+  .diagram-wrap svg { display: block; width: 100%; height: auto; min-width: 760px; }
+  .arch-box { fill: #fff; stroke: var(--accent); stroke-width: 1.5; }
+  .arch-box.edge { fill: var(--accent-soft); stroke: var(--accent-dark); }
+  .arch-box.cloud { fill: #eaf4ff; stroke: #5b9bd5; }
+  .arch-box.store { fill: #fff5e9; stroke: var(--warn-border); }
+  .arch-label { font-size: 13px; font-weight: 700; fill: var(--ink); font-family: inherit; }
+  .arch-sub { font-size: 10.5px; fill: var(--ink-soft); font-family: inherit; }
+  .arch-arrow { stroke: var(--ink-soft); stroke-width: 1.6; fill: none; marker-end: url(#arrowhead); }
+  .arch-arrow.dash { stroke-dasharray: 5 4; }
+
+  /* ===== 时间线（路线图/公司史） ===== */
+  .timeline { margin: 18px 0; }
+  .phase { display: grid; grid-template-columns: 110px 1fr; gap: 16px; border-left: 3px solid var(--accent-soft2); }
+  .phase .pleft { text-align: right; padding: 14px 14px 14px 0; }
+  .phase .pleft .pnum { font-weight: 800; color: var(--accent-dark); font-size: 1.05rem; }
+  .phase .pleft .ptime { font-size: 0.8rem; color: var(--ink-faint); }
+  .phase .pright { padding: 14px 0 18px 18px; border-left: 2px solid var(--border); margin-left: -2px; position: relative; }
+  .phase .pright::before { content: ""; position: absolute; left: -9px; top: 20px; width: 14px; height: 14px; border-radius: 50%; background: var(--accent); border: 3px solid #fff; box-shadow: 0 0 0 1px var(--accent); }
+  .phase .pright h4 { margin: 0 0 4px; color: var(--ink); }
+
+  /* ===== inline 引用角标：关键论断处直链来源 ===== */
+  a.ref { font-size: 0.68em; vertical-align: super; margin-left: 2px; color: var(--accent-dark); white-space: nowrap; opacity: 0.85; font-weight: 650; }
+  a.ref:hover { opacity: 1; }
+
+  /* ===== 来源清单（双栏） ===== */
+  .src-list { font-size: 0.85rem; column-count: 2; column-gap: 32px; }
+  .src-list a { word-break: break-all; }
+
+  footer.foot { text-align: center; padding: 30px 20px 50px; color: var(--ink-faint); font-size: 0.85rem; }
+  .toplink { display: inline-block; margin-top: 10px; font-size: 0.8rem; color: var(--accent-dark); }
+
+  /* ===== 响应式 ===== */
+  @media (max-width: 940px) {
+    .shell { padding: 16px 14px 60px; }
+    nav.toc { max-width: calc(100vw - 28px); }
+    .grid2, .chart-row { grid-template-columns: 1fr; }
+    section.block { padding: 22px 18px; }
+    header.hero h1 { font-size: 1.55rem; }
+    .statband { grid-template-columns: repeat(3, 1fr); }
+    .hbar { grid-template-columns: 120px 1fr 80px; }
+    .phase { grid-template-columns: 78px 1fr; }
+  }
+  @media (max-width: 560px) { .statband { grid-template-columns: repeat(2, 1fr); } .src-list { column-count: 1; } }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="kicker">产品技术研究报告 · Product &amp; Tech Research</div>
+  <h1>报告主标题：主题 + 交付物（拆解 / 全景 / 可行性）</h1>
+  <p class="subtitle">一段话副标题：给谁看、覆盖什么、给出什么裁决。</p>
+  <div class="meta">
+    <span>版本日期：YYYY-MM</span>
+    <span>读者：XXX</span>
+    <span>方法：N 路并行 agent WebSearch 调研</span>
+  </div>
+</header>
+
+<div class="shell">
+
+  <!-- 悬浮折叠 TOC：默认收起，正文满宽；点条目自动收起 -->
+  <nav class="toc" id="toc">
+    <button class="toc-toggle" id="tocToggle">目录 · Contents ▾</button>
+    <div class="toc-body">
+      <h2>目录</h2>
+      <ol>
+        <li><a href="#s1">执行摘要 (TL;DR)</a></li>
+        <li><a href="#s2">组件示例（写作时删除本节）</a></li>
+        <li><a href="#s3">参考来源 (Sources)</a></li>
+      </ol>
+    </div>
+  </nav>
+
+  <main>
+
+  <section class="block" id="s1">
+    <h2 class="section-title"><span class="num">01</span> 执行摘要 (TL;DR)</h2>
+    <p><strong>开头第一段直接给结论。</strong>正文论断带置信度 <span class="pill hi">高</span><span class="pill mid">中</span><span class="pill lo">低</span>，关键数字带来源角标<a class="ref" href="https://example.com" target="_blank" rel="noopener">[来源名]</a>。查不到的写 unknown，不编造。</p>
+
+    <div class="statband">
+      <div class="stat"><div class="v">$37M</div><div class="l">KPI 一行说明</div></div>
+      <div class="stat"><div class="v">40,000+</div><div class="l">KPI 一行说明</div></div>
+      <div class="stat"><div class="v">~75%</div><div class="l">KPI 一行说明</div></div>
+      <div class="stat"><div class="v">4M+</div><div class="l">KPI 一行说明</div></div>
+      <div class="stat"><div class="v">&lt;$5</div><div class="l">KPI 一行说明</div></div>
+      <div class="stat"><div class="v">30x</div><div class="l">KPI 一行说明</div></div>
+    </div>
+
+    <div class="callout warn">
+      <span class="label">Verdict · 核心裁决</span>
+      一段话裁决：结论 + 关键依据 + 对读者的行动含义。
+    </div>
+    <div class="callout danger">
+      <span class="label">来源质量警告 / 方法局限</span>
+      哪些渠道被反爬、哪些来源是 AI 生成伪造规格、哪些引文经转引（标 ⚠️）——如实声明。
+    </div>
+  </section>
+
+  <section class="block" id="s2">
+    <h2 class="section-title"><span class="num">02</span> 组件示例（写作时删除本节，按需取用）</h2>
+
+    <p class="chart-title">图：分类对比用 hbars（时间序列禁用此组件，必须用时间轴柱状图）</p>
+    <div class="hbars">
+      <div class="hbar"><div class="blabel">条目 A</div><div class="btrack"><div class="bfill" style="width:100%"></div></div><div class="bval">$42</div></div>
+      <div class="hbar"><div class="blabel">条目 B</div><div class="btrack"><div class="bfill warn" style="width:62%"></div></div><div class="bval">$26</div></div>
+      <div class="hbar"><div class="blabel">区间条（BOM 等）</div><div class="btrack"><div class="bfill alt" style="left:30%;width:25%"></div></div><div class="bval">$330–525</div></div>
+    </div>
+    <p class="chart-note">脚注：口径说明 / 估算依据 / 不可比时注明。</p>
+
+    <div class="chart-row">
+      <div class="chart-card">
+        <h4>时间序列 → 时间轴柱状图（SVG）</h4>
+        <svg viewBox="0 0 460 215" width="100%" role="img" aria-label="时间轴柱状图示例">
+          <line x1="24" y1="172" x2="446" y2="172" stroke="#7a8693" stroke-width="1.5"/>
+          <rect x="43" y="156" width="40" height="16" rx="2" fill="#9bd9bd"/>
+          <text x="63" y="148" text-anchor="middle" style="font-size:11px;font-weight:700">~5,000</text>
+          <text x="63" y="190" text-anchor="middle" style="font-size:11px;fill:#4a5560">2021</text>
+          <rect x="187" y="123" width="40" height="49" rx="2" fill="#5fc398"/>
+          <text x="207" y="115" text-anchor="middle" style="font-size:11px;font-weight:700">15,000+</text>
+          <text x="207" y="190" text-anchor="middle" style="font-size:11px;fill:#4a5560">2022</text>
+          <rect x="403" y="42" width="40" height="130" rx="2" fill="#1f9e6e"/>
+          <text x="423" y="34" text-anchor="middle" style="font-size:11.5px;font-weight:800;fill:#157a54">40,000+</text>
+          <text x="423" y="190" text-anchor="middle" style="font-size:11px;fill:#4a5560">2026</text>
+          <!-- 年份间距按真实时间比例放置（2021/2022/2026 不等距） -->
+        </svg>
+        <p class="chart-note">柱子 x 坐标按真实年份比例摆放，缺年留空。</p>
+      </div>
+      <div class="chart-card">
+        <h4>占比 → SVG donut（stroke-dasharray，周长 2πr≈339.3@r54）</h4>
+        <div class="donut-wrap">
+          <svg viewBox="0 0 160 160" width="150" role="img" aria-label="占比环图示例">
+            <circle cx="80" cy="80" r="54" fill="none" stroke="#f0b35a" stroke-width="26"/>
+            <circle cx="80" cy="80" r="54" fill="none" stroke="#1f9e6e" stroke-width="26"
+                    stroke-dasharray="254.5 339.3" transform="rotate(-90 80 80)"/>
+            <text x="80" y="76" text-anchor="middle" style="font-size:20px;font-weight:800;fill:#157a54">~75%</text>
+            <text x="80" y="96" text-anchor="middle" style="font-size:11px;fill:#4a5560">标签</text>
+          </svg>
+          <div class="legend" style="flex-direction:column;align-items:flex-start;gap:8px">
+            <span class="key"><span class="sw" style="background:#1f9e6e"></span>分项 A ~75%</span>
+            <span class="key"><span class="sw" style="background:#f0b35a"></span>分项 B ~25%</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <h3>宽对比矩阵：colgroup 固定列宽 + 冻结首列</h3>
+    <p class="scroll-hint">← 小屏可横向滚动；首列产品名滚动时不消失。</p>
+    <div class="table-wrap">
+      <table class="wide matrix" style="min-width:900px">
+        <colgroup><col style="width:128px"><col style="width:200px"><col style="width:200px"><col style="width:200px"></colgroup>
+        <thead><tr><th>产品</th><th>维度一</th><th>维度二</th><th>维度三</th></tr></thead>
+        <tbody>
+          <tr><td class="rowhdr">产品 A<a class="ref" href="https://example.com" target="_blank" rel="noopener">[官网]</a></td><td>…</td><td>…</td><td>…</td></tr>
+          <tr><td class="rowhdr">产品 B</td><td>…</td><td>…</td><td>…</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>原理图 / 流程图：diagram-wrap + 内联 SVG（marker 全文只定义一次）</h3>
+    <div class="diagram-wrap">
+      <svg viewBox="0 0 1080 180" width="1080" role="img" aria-label="流程图示例">
+        <defs>
+          <marker id="arrowhead" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+            <path d="M0,0 L7,3 L0,6 z" fill="#4a5560"/>
+          </marker>
+        </defs>
+        <rect class="arch-box edge" x="30" y="50" width="200" height="80" rx="10"/>
+        <text x="130" y="80" class="arch-label" text-anchor="middle">① 输入（已有）</text>
+        <text x="130" y="102" class="arch-sub" text-anchor="middle">要点一行</text>
+        <rect class="arch-box cloud" x="300" y="50" width="200" height="80" rx="10"/>
+        <text x="400" y="80" class="arch-label" text-anchor="middle">② 处理</text>
+        <rect class="arch-box store" x="570" y="50" width="200" height="80" rx="10"/>
+        <text x="670" y="80" class="arch-label" text-anchor="middle">③ 变现</text>
+        <path class="arch-arrow" d="M230,90 L298,90"/>
+        <path class="arch-arrow" d="M500,90 L568,90"/>
+        <path class="arch-arrow dash" d="M670,130 C670,170 130,170 130,132"/>
+        <text x="400" y="166" class="arch-sub" text-anchor="middle">飞轮回环（虚线）</text>
+      </svg>
+    </div>
+
+    <h3>时间线（路线图 / 公司史）</h3>
+    <div class="timeline">
+      <div class="phase">
+        <div class="pleft"><div class="pnum">Phase 0</div><div class="ptime">0–4 月</div></div>
+        <div class="pright"><h4>阶段标题</h4><p>阶段内容。</p></div>
+      </div>
+      <div class="phase">
+        <div class="pleft"><div class="pnum">Phase 1</div><div class="ptime">4–10 月</div></div>
+        <div class="pright"><h4>阶段标题</h4><p>阶段内容。</p></div>
+      </div>
+    </div>
+
+    <div class="grid2">
+      <div class="minicard"><h4>小结卡 A</h4>一句话要点。</div>
+      <div class="minicard"><h4>小结卡 B</h4>一句话要点。</div>
+    </div>
+  </section>
+
+  <section class="block" id="s3">
+    <h2 class="section-title"><span class="num">03</span> 参考来源 (Sources)</h2>
+    <p style="font-size:0.88rem;color:var(--ink-soft)">正文关键论断处已加 [角标] 直链来源；本节为完整清单，按主题分组。</p>
+    <h4>主题分组一</h4>
+    <div class="src-list">
+      <a href="https://example.com/a" target="_blank" rel="noopener">example.com/a</a><br>
+      <a href="https://example.com/b" target="_blank" rel="noopener">example.com/b</a>
+    </div>
+  </section>
+
+  </main>
+</div>
+
+<footer class="foot">
+  <p>本报告基于截至 YYYY-MM 的公开研究语料综合而成。标注「推断 / 中 / 低置信」处为基于行为映射或第三方来源的判断，非官方确认。</p>
+  <a class="toplink" href="#s1">↑ 回到顶部</a>
+</footer>
+
+<script>
+  // TOC 开合（唯一的 JS；渐进增强，无外部依赖）
+  (function () {
+    var btn = document.getElementById('tocToggle');
+    var toc = document.getElementById('toc');
+    if (btn && toc) {
+      btn.addEventListener('click', function () {
+        toc.classList.toggle('open');
+        btn.textContent = toc.classList.contains('open') ? '目录 · Contents ▴' : '目录 · Contents ▾';
+      });
+      toc.querySelectorAll('a').forEach(function (a) {
+        a.addEventListener('click', function () {
+          toc.classList.remove('open');
+          btn.textContent = '目录 · Contents ▾';
+        });
+      });
+    }
+  })();
+</script>
+
+</body>
+</html>

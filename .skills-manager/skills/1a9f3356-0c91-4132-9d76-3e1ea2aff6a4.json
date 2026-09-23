@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "1a9f3356-0c91-4132-9d76-3e1ea2aff6a4",
+  "path": "log-ingestion-elasticsearch",
+  "path_key": "log-ingestion-elasticsearch",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/log-ingestion-elasticsearch",
+    "branch": null
+  }
+}

@@ -1,0 +1,60 @@
+stages:
+  - lint
+  - verify
+
+ruff:
+  stage: lint
+  image: python:3.9-slim
+  script:
+    - python -m pip install --disable-pip-version-check --no-cache-dir ruff==0.7.4
+    - python -m ruff check .
+
+verify:
+  stage: verify
+  image: python:3.9-slim
+  script:
+    - python scripts/check_secrets.py
+    - PYTHONPATH=src python -m unittest discover -s tests -v
+    - python -m compileall -q src tests scripts
+    - python scripts/update_operation_registry.py --check
+    - python scripts/update_source_lock.py --check
+    - python -m pip wheel --disable-pip-version-check --no-build-isolation --no-deps --wheel-dir dist .
+    - >-
+      python -c
+      'import glob, zipfile;
+      wheel = glob.glob("dist/*.whl"); assert len(wheel) == 1;
+      names = zipfile.ZipFile(wheel[0]).namelist();
+      assert not any(name.endswith("SKILL.md") or "/references/" in name or "/agents/" in name for name in names)'
+    - python -m venv /tmp/audience-sync-wheel-smoke
+    - /tmp/audience-sync-wheel-smoke/bin/pip install --disable-pip-version-check --no-index --no-deps dist/*.whl
+    - >-
+      /tmp/audience-sync-wheel-smoke/bin/python -c
+      'from importlib import resources;
+      from audience_sync import AudienceSyncClient, CONTRACT_REVISION, CONTRACT_STATE, OPERATION_SPECS;
+      from audience_sync.contract_validation import validate_operation_response;
+      from audience_sync.project_operations import PROJECT_CONTRACT_REVISION, PROJECT_OPERATION_SPECS, PERSONAL_KEY_OPERATION_SPECS;
+      assert CONTRACT_REVISION == "audience-sync-v2";
+      assert CONTRACT_STATE == "published_operations";
+      assert len(OPERATION_SPECS) == 9;
+      assert PROJECT_CONTRACT_REVISION == "audience-project-v3";
+      assert len(PROJECT_OPERATION_SPECS) == 13;
+      assert len(PERSONAL_KEY_OPERATION_SPECS) == 1;
+      local = AudienceSyncClient.local_capabilities();
+      assert "effects_available" not in local;
+      assert "effects_require_confirmation" not in local;
+      root = resources.files("audience_sync").joinpath("contracts");
+      assert root.joinpath("audience-sync-v2.openapi.json").is_file();
+      assert root.joinpath("operation-registry.json").is_file();
+      assert root.joinpath("source.json").is_file();
+      assert root.joinpath("project-control-plane.openapi.json").is_file();
+      assert root.joinpath("project-operation-registry.json").is_file();
+      assert callable(validate_operation_response)'
+    - >-
+      /tmp/audience-sync-wheel-smoke/bin/python -c
+      'import json, subprocess;
+      result = subprocess.run(["/tmp/audience-sync-wheel-smoke/bin/audience-sync-api", "capabilities"], check=True, capture_output=True, text=True);
+      payload = json.loads(result.stdout);
+      assert payload["contract_revision"] == "audience-project-v3";
+      assert len(payload["operations"]) == 14;
+      assert "get_sync_capabilities" not in payload["operations"];
+      assert payload["local_operations"] == ["summarize_project_keys"]'

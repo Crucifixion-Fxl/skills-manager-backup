@@ -1,0 +1,33 @@
+schema_version: 1
+assessment_id: security-iot-joint-assess
+scope:
+  durable: true
+  multi_repository: true
+  independent_roadmap: true
+  owner_status: pending
+  reusable_standard: false
+  single_source_owned: false
+  temporary_project: false
+boundary:
+  proposed_name: null
+  key: null
+  summary: Joint discovery of physical and video security outcomes and reusable IoT platform capabilities.
+  includes:
+    - Durable physical and video security outcomes and cross-repository workflows.
+    - Reusable IoT platform contracts, compatibility, adoption, and platform release governance.
+  excludes:
+    - Temporary feature delivery, Issue or MR checkouts, and source-repository implementation details.
+repositories:
+  - git@gitlab.addx.ai:cloud/iot-service-unified.git
+  - git@gitlab.addx.ai:SYS/intelli_vision_fw.git
+  - git@gitlab.addx.ai:platforms/lattice.git
+candidate_boundaries:
+  - label: Physical and video security outcomes
+    domain_type_candidate: stable-business-domain
+    final_name: null
+    boundary_key: null
+  - label: Shared IoT platform capabilities
+    domain_type_candidate: shared-platform-domain
+    final_name: null
+    boundary_key: null
+excluded_materials: []

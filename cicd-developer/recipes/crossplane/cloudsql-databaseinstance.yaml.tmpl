@@ -1,0 +1,31 @@
+# GCP Cloud SQL physical instance (DatabaseInstance) — declarative, GCP-only.
+# Platform/SRE-owned in most cases; one instance backs many logical databases.
+# The Composition auto-injects writeConnectionSecretToRef and the provider
+# auto-emits the 4-key connection secret (<physName>-pc: endpoint/port/username/
+# password) on Create. DO NOT hand-write writeConnectionSecretToRef, do not build
+# the connection secret by hand, do not assemble ESO for it.
+#
+# Required slots:
+#   {{instance_name}}      claim name, e.g. {{app}}-{{engine}}
+#   {{namespace}}          target namespace
+#   {{engine}}             mysql | postgres
+#   {{version}}            MYSQL_8_4 (mysql) | POSTGRES_16 (postgres)
+#   {{disk_size_gb}}       integer, e.g. 10
+#
+# Constraints:
+#   spec.tier is fixed to db-custom-1-3840 (other tiers need a documented reason).
+#   spec.availabilityType is ZONAL. Red line: Provider Delete is a no-op; never
+#   import/adopt/migrate/delete an existing instance.
+
+apiVersion: platform.addx.io/v1alpha1
+kind: DatabaseInstance
+metadata:
+  name: {{instance_name}}
+  namespace: {{namespace}}
+spec:
+  engine: {{engine}}
+  version: {{version}}
+  tier: db-custom-1-3840
+  diskSizeGb: {{disk_size_gb}}
+  availabilityType: ZONAL
+  defaultShared: false

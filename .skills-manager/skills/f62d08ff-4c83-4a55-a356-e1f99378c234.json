@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "f62d08ff-4c83-4a55-a356-e1f99378c234",
+  "path": "paper-ui-design",
+  "path_key": "paper-ui-design",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/paper-ui-design",
+    "branch": null
+  }
+}

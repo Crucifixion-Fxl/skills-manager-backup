@@ -1,0 +1,161 @@
+{
+  "body": [
+    {
+      "author": {
+        "avatar_url": null,
+        "id": 6,
+        "locked": false,
+        "name": "Buzz Sync Developer (localstack)",
+        "public_email": null,
+        "state": "active",
+        "username": "buzz-sync-dev",
+        "web_url": "http://gitlab.localstack.test:8929/buzz-sync-dev"
+      },
+      "body": "assigned to @buzz-sync-dev",
+      "commands_changes": {},
+      "confidential": false,
+      "created_at": "2026-09-13T08:21:11.900Z",
+      "id": 13,
+      "imported": false,
+      "imported_from": "none",
+      "internal": false,
+      "noteable_id": 1,
+      "noteable_iid": 1,
+      "noteable_type": "Issue",
+      "project_id": 2,
+      "resolvable": false,
+      "system": true,
+      "type": null,
+      "updated_at": "2026-09-13T08:21:11.970Z"
+    },
+    {
+      "author": {
+        "avatar_url": null,
+        "id": 6,
+        "locked": false,
+        "name": "Buzz Sync Developer (localstack)",
+        "public_email": null,
+        "state": "active",
+        "username": "buzz-sync-dev",
+        "web_url": "http://gitlab.localstack.test:8929/buzz-sync-dev"
+      },
+      "body": "Recording comment for @buzz-sync-maintainer\n> quoted line\n<!-- hidden -->",
+      "commands_changes": {},
+      "confidential": false,
+      "created_at": "2026-09-13T08:21:12.668Z",
+      "id": 14,
+      "imported": false,
+      "imported_from": "none",
+      "internal": false,
+      "noteable_id": 1,
+      "noteable_iid": 1,
+      "noteable_type": "Issue",
+      "project_id": 2,
+      "resolvable": false,
+      "system": false,
+      "type": null,
+      "updated_at": "2026-09-13T08:21:12.668Z"
+    },
+    {
+      "author": {
+        "avatar_url": null,
+        "id": 4,
+        "locked": false,
+        "name": "Buzz Sync Bot (localstack)",
+        "public_email": null,
+        "state": "active",
+        "username": "buzz-sync-bot",
+        "web_url": "http://gitlab.localstack.test:8929/buzz-sync-bot"
+      },
+      "body": "<!-- gitlab-buzz-binding:v1 {\"channel_id\":\"829d28fc-d009-4efd-9cf0-3df65d0ed9be\",\"iid\":1,\"object\":\"issue\",\"project_id\":2,\"root_event_id\":\"abababababababababababababababababababababababababababababababab\"} -->\n🔗 Buzz Thread: buzz://message?channel=829d28fc-d009-4efd-9cf0-3df65d0ed9be&id=abababababababababababababababababababababababababababababababab&thread=abababababababababababababababababababababababababababababababab",
+      "commands_changes": {},
+      "confidential": false,
+      "created_at": "2026-09-13T08:21:13.101Z",
+      "id": 15,
+      "imported": false,
+      "imported_from": "none",
+      "internal": false,
+      "noteable_id": 1,
+      "noteable_iid": 1,
+      "noteable_type": "Issue",
+      "project_id": 2,
+      "resolvable": false,
+      "system": false,
+      "type": null,
+      "updated_at": "2026-09-13T08:21:13.101Z"
+    },
+    {
+      "author": {
+        "avatar_url": null,
+        "id": 6,
+        "locked": false,
+        "name": "Buzz Sync Developer (localstack)",
+        "public_email": null,
+        "state": "active",
+        "username": "buzz-sync-dev",
+        "web_url": "http://gitlab.localstack.test:8929/buzz-sync-dev"
+      },
+      "body": "mentioned in merge request !1",
+      "commands_changes": {},
+      "confidential": false,
+      "created_at": "2026-09-13T08:21:29.131Z",
+      "id": 20,
+      "imported": false,
+      "imported_from": "none",
+      "internal": false,
+      "noteable_id": 1,
+      "noteable_iid": 1,
+      "noteable_type": "Issue",
+      "project_id": 2,
+      "resolvable": false,
+      "system": true,
+      "type": null,
+      "updated_at": "2026-09-13T08:21:29.168Z"
+    },
+    {
+      "author": {
+        "avatar_url": null,
+        "id": 7,
+        "locked": false,
+        "name": "Buzz Sync Maintainer (localstack)",
+        "public_email": null,
+        "state": "active",
+        "username": "buzz-sync-maintainer",
+        "web_url": "http://gitlab.localstack.test:8929/buzz-sync-maintainer"
+      },
+      "body": "mentioned in commit 8ac847d0d8aea921273b558fe4663d9c003db0ef",
+      "commands_changes": {},
+      "confidential": false,
+      "created_at": "2026-09-13T08:22:20.574Z",
+      "id": 22,
+      "imported": false,
+      "imported_from": "none",
+      "internal": false,
+      "noteable_id": 1,
+      "noteable_iid": 1,
+      "noteable_type": "Issue",
+      "project_id": 2,
+      "resolvable": false,
+      "system": true,
+      "type": null,
+      "updated_at": "2026-09-13T08:22:20.583Z"
+    }
+  ],
+  "headers": {
+    "content-type": "application/json",
+    "x-next-page": "",
+    "x-page": "1",
+    "x-per-page": "100",
+    "x-total": "5",
+    "x-total-pages": "1"
+  },
+  "request": {
+    "as": "bot",
+    "method": "GET",
+    "path": "projects/2/issues/1/notes",
+    "query": {
+      "sort": "asc"
+    }
+  },
+  "status": 200
+}

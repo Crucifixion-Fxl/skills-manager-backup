@@ -1,0 +1,118 @@
+# crossplane-s3-bucket.yaml.tmpl
+#
+# Crossplane S3 Bucket。
+#
+# 必填槽位：
+#   {{app}}                kebab-case
+#   {{env_keyword}}        如 staging-us
+#   {{bucket_name}}        全局唯一（**immutable**！）；通常 {{app}}-{{env_keyword}}-<purpose>
+#                          建议 `{{app}}-{{env_keyword}}-data` / `-assets` / `-logs` 分用途
+#   {{region}}             AWS region
+#   {{account_id}}         bucket owner AWS account id；必须加引号保留前导 0
+#   {{partition}}          aws | aws-cn
+#
+# 选填（按 cost-tiering/s3.yaml 决定）：
+#   {{versioning_status}}  Enabled | Suspended；由 cost-tiering versioning 映射：false → Suspended、
+#                          true/Enabled → Enabled、prod business-decision 走 prod_self_check 后决定。
+#                          填进下方 BucketVersioning doc（始终存在；Suspended 对新 bucket 是幂等空操作）
+#   {{encryption}}         AES256 | aws:kms（默认 AES256）
+#   {{lifecycle_rules}}    YAML 片段；staging 必填 30d 过期或转 IA
+#
+# ⚠️ bucket name 是 **immutable**，全球唯一。命名时考虑：
+#   - 多 region 部署：bucket 是 region-scoped 但 name 是 global——staging-us + staging-eu
+#     bucket 不能同名
+#   - 删除 + 重建必须等 7 天 + 1 小时才能复用同名（AWS quirk）
+#
+# ⚠️ 网络安全硬红线：
+#   - publicAccessBlockConfiguration 全部 true（禁止任何 public 访问）
+#   - 想"public download" 必须走 CloudFront + signed URL，不是直接开 bucket public
+
+apiVersion: s3.aws.m.upbound.io/v1beta1
+kind: Bucket
+metadata:
+  name: {{bucket_name}}
+  annotations:
+    crossplane.io/external-name: {{bucket_name}}
+spec:
+  managementPolicies: ["Observe", "Create", "Update", "LateInitialize"]
+  forProvider:
+    region: {{region}}
+    tags:
+      app: {{app}}
+      env: {{env_keyword}}
+      managed-by: crossplane
+  providerConfigRef:
+    name: {{app}}
+    kind: ClusterProviderConfig
+
+---
+apiVersion: s3.aws.m.upbound.io/v1beta1
+kind: BucketPublicAccessBlock
+metadata:
+  name: {{bucket_name}}-pab
+spec:
+  forProvider:
+    bucket: {{bucket_name}}
+    blockPublicAcls: true
+    blockPublicPolicy: true
+    ignorePublicAcls: true
+    restrictPublicBuckets: true
+    region: {{region}}
+  providerConfigRef:
+    name: {{app}}
+    kind: ClusterProviderConfig
+
+---
+apiVersion: s3.aws.m.upbound.io/v1beta1
+kind: BucketServerSideEncryptionConfiguration
+metadata:
+  name: {{bucket_name}}-sse
+spec:
+  forProvider:
+    bucket: {{bucket_name}}
+    rule:
+      - applyServerSideEncryptionByDefault:
+          sseAlgorithm: {{encryption}}        # AES256 默认；aws:kms 需要指定 kmsMasterKeyId
+    region: {{region}}
+  providerConfigRef:
+    name: {{app}}
+    kind: ClusterProviderConfig
+
+---
+apiVersion: s3.aws.m.upbound.io/v1beta1
+kind: BucketVersioning
+metadata:
+  name: {{bucket_name}}-versioning
+spec:
+  forProvider:
+    bucket: {{bucket_name}}
+    region: {{region}}
+    versioningConfiguration:
+      - status: {{versioning_status}}        # Enabled | Suspended（dev/staging/pre 默认 Suspended；prod 业务决策）
+  providerConfigRef:
+    name: {{app}}
+    kind: ClusterProviderConfig
+
+---
+apiVersion: s3.aws.m.upbound.io/v1beta1
+kind: BucketLifecycleConfiguration
+metadata:
+  name: {{bucket_name}}-lifecycle
+spec:
+  forProvider:
+    bucket: {{bucket_name}}
+    region: {{region}}
+    expectedBucketOwner: "{{account_id}}"
+    rule:
+{{lifecycle_rules}}
+  providerConfigRef:
+    name: {{app}}
+    kind: ClusterProviderConfig
+
+# {{lifecycle_rules}} 示例（staging 30d 过期临时产物）：
+#       - id: expire-temp
+#         status: Enabled
+#         filter:
+#           - prefix: "tmp/"
+#         expiration:
+#           - days: 30

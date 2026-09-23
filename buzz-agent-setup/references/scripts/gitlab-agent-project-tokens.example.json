@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "host": "gitlab.addx.ai",
+  "projects": [
+    {
+      "project_id": 388,
+      "project_path": "FAC/factory-app",
+      "token_env": "FAC_FACTORY_APP_GITLAB_TOKEN",
+      "profile": "developer"
+    },
+    {
+      "project_id": 392,
+      "project_path": "FAC/factory-service",
+      "token_env": "FAC_FACTORY_SERVICE_GITLAB_TOKEN",
+      "profile": "developer"
+    },
+    {
+      "project_id": 396,
+      "project_path": "FAC/iot-model-service",
+      "token_env": "FAC_IOT_MODEL_SERVICE_GITLAB_TOKEN",
+      "profile": "developer"
+    },
+    {
+      "project_id": 397,
+      "project_path": "FAC/iot-model-ui",
+      "token_env": "FAC_IOT_MODEL_UI_GITLAB_TOKEN",
+      "profile": "reporter"
+    }
+  ]
+}

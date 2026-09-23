@@ -1,0 +1,71 @@
+# Cohort 配置模板
+#
+# 使用方法：
+#   1. copy 到 <project_dir>/config/cohort_mapping.yaml
+#   2. 改 research_batch / output_root / cohorts[] 几处占位
+#
+# Cohort 设计原则：
+#   - cohort_key 是内部代号，business_label 是人能直接理解的标签——报告里用 business_label，不用 key
+#   - 每个 cohort 的 source 决定数据来自哪——目前 API 适配器支持 google_form / typeform
+
+# ============================================================
+# 项目元信息
+# ============================================================
+
+research_batch: "<项目代号>"           # ← 改这里：如 "2026-06-pricing-pilot"
+output_root: "<相对路径>"              # ← 改这里：相对 project root，如 "data_analysis"
+
+# ============================================================
+# Cohort 列表
+# ============================================================
+
+cohorts:
+  - cohort_key: "<internal_key_1>"
+    business_label: "<清晰的业务标签 1>"
+    description: "<可选：cohort 业务定义>"
+    source:
+      type: google_form              # google_form | typeform
+      form_id: "<Google Forms ID>"
+
+  - cohort_key: "<internal_key_2>"
+    business_label: "<清晰的业务标签 2>"
+    description: "<可选>"
+    source:
+      type: google_form
+      form_id: "<Google Forms ID>"
+
+  # 复制此 block 加更多 cohort
+
+# ============================================================
+# 示例（参考，删除即可）
+# ============================================================
+
+# 示例 1：多 cohort 定量问卷
+# research_batch: "2026-06-concept-survey"
+# output_root: "data_analysis"
+# cohorts:
+#   - cohort_key: "segment_a"
+#     business_label: "细分用户 A"
+#     description: "满足项目定义的用户细分 A"
+#     source:
+#       type: google_form
+#       form_id: "1Abc...xyz"
+#   - cohort_key: "segment_b"
+#     business_label: "细分用户 B"
+#     description: "满足项目定义的用户细分 B"
+#     source:
+#       type: google_form
+#       form_id: "1Def...uvw"
+
+# 示例 2：Typeform（since/until 可选，使用 ISO 8601 UTC）
+# research_batch: "2026-06-typeform-survey"
+# output_root: "data_analysis"
+# cohorts:
+#   - cohort_key: "typeform_users"
+#     business_label: "Typeform 受访者"
+#     source:
+#       type: typeform
+#       form_id: "AbCdEf12"
+#       response_type: completed       # completed | partial | started
+#       since: "2026-06-01T00:00:00Z"
+#       until: "2026-06-30T23:59:59Z"

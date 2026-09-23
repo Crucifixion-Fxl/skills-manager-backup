@@ -1,0 +1,24 @@
+# ci-irsa-rolepolicy.yaml.tmpl
+#
+# 给 CI Job Pod IRSA role 挂权限策略。一个 purpose 可以按 AWS service 拆多个
+# RolePolicy，便于 audit。
+#
+# 必填槽位：
+#   {{app}}                      kebab-case
+#   {{purpose}}                  kebab-case purpose, e.g. engine-publisher
+#   {{service}}                  aws service suffix, e.g. s3 / lambda / dynamodb
+#   {{policy_json_indented_6}}   完整 IAM policy JSON，每行缩进 6 空格
+
+apiVersion: iam.aws.m.upbound.io/v1beta1
+kind: RolePolicy
+metadata:
+  name: crossplane-app-{{app}}-ci-{{purpose}}-irsa-{{service}}
+spec:
+  forProvider:
+    policy: |
+{{policy_json_indented_6}}
+    roleRef:
+      name: crossplane-app-{{app}}-ci-{{purpose}}-irsa
+  providerConfigRef:
+    name: default
+    kind: ClusterProviderConfig

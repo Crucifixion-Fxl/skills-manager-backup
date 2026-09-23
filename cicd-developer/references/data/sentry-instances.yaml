@@ -1,0 +1,45 @@
+# Sentry routing source for new onboarding. Select region from clusters.yaml;
+# the application ENV and Vault identity still come from env-keywords.yaml.
+# Known teams are discovery candidates, not an ownership/default-team decision.
+regions:
+  us:
+    instance: us-prod
+    api_url: https://sentry-us.addx.live
+    server_dsn_host: sentry-relay-us.addx.live
+    known_teams: [backend, frontend]
+  eu:
+    instance: eu-prod
+    api_url: https://sentry-eu.addx.live
+    server_dsn_host: sentry-relay-eu.addx.live
+    known_teams: [backend, frontend]
+  cn:
+    instance: cn-prod
+    api_url: https://sentry-cn.addx.live
+    server_dsn_host: sentry-relay-cn.addx.live
+    known_teams: [backend, team-zlin, team-mwang2]
+
+# Shared project identity; SDK environment MUST distinguish staging and production.
+# Vault ENV and permissions remain separate. Existing project + missing Vault
+# record still fails closed: verified operator seeding is required before retry.
+environments:
+  staging:
+    project_slug: "{app}"
+  prod:
+    project_slug: "{app}"
+
+# Regional relays resolve privately and are only defaults for server-side SDKs.
+# Client staging has no hostname default: verify brand/public ingest and actual
+# browser/device reachability before generating DSN_HOST. BRAND auto-rewrite in
+# the tool applies to prod only; nonempty BRAND in staging is rejected.
+# Leave staging BRAND unset and select the verified public DSN_HOST explicitly.
+ingest:
+  server_app_types: [backend, admin]
+  client_app_types: [mobile-app, web-frontend]
+  staging_client_host: verified-public-host-required
+  prod_client_host: brand-rewrite
+
+# Require this capability for generated PROJECT_SLUG/DSN_HOST configurations;
+# validate the artifact in the target Harbor, not merely the source Git SHA.
+image:
+  capability_commit: 598f389cfb5ae64cbff9ce4613361bfcf6c04241
+  source_digest: sha256:caee4ebb16a9cd5bbb2487a130c462324ba0e3e4c85f9071afd83a949ac1e4b0

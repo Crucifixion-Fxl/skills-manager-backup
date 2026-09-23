@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "b4d5a1b7-d1cc-45bf-a965-45adea32f823",
+  "path": "mock-engine",
+  "path_key": "mock-engine",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/mock-engine",
+    "branch": null
+  }
+}

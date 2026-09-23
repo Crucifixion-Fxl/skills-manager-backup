@@ -1,0 +1,138 @@
+# stop-conditions.yaml
+#
+# 硬停条件——任何模式下都必须求值。命中即 STOP，不"自由发挥"。
+#
+# 这跟 build_intents / troubleshoot_symptoms 不同：那两张表是"该走哪个文件"的
+# 路由；本表是"何时停下来"的护栏。
+#
+# 消费方：
+#   - workflows/*.md（每一步前自检）
+#   - troubleshooting/*.md（同上）
+#   - SKILL.md（顶层"硬规则"段引用）
+#
+# Schema：
+#   condition       停止条件（用户/数据/输出层面的）
+#   action          命中后该做什么
+
+stop_conditions:
+
+  - condition: 用户给的 env keyword 不在 env-keywords.yaml
+    action: STOP，问用户；**不要** 挑最接近的。
+
+  - condition: Build 要新建或扩展部署目标，但目标在 clusters.yaml 中不是 deployment_status=allowed（retired、未知、缺字段或无法唯一解析）
+    action: STOP，运行 check_deployment_target.py 保留准确错误和退役证据；不生成该目标部署、不默默改投其他集群。历史 entry 仅供 Review/Troubleshoot 查证；巡检覆盖范围不决定部署资格，allowed 也不替代 workflow 的目标 live readiness 检查。
+
+  - condition: 用户给的资源 kind 既不在 cost-tiering/<kind>.yaml 也不在 _global.yaml unknown_resources.exceptions
+    action: 产出 ops-todo（带 unknown_resources 三个必填输入），**不** 自动生成 manifest。
+
+  - condition: Vault 路径 resolver 没匹配到 vault-paths/rules.yaml 任何 rule
+    action: STOP，问用户；**不要** 凭印象拼路径。
+
+  - condition: validator 返回非 0
+    action: STOP，把错误原文打给用户；**不** "解释" 或"局部修复"。
+
+  - condition: Node 新服务有 static build 产出且没有 production runtime start command，但 runtime profile 未确认；或 static-web 的 package-lock 未被 Git 跟踪/与 package.json 不同步/不能通过 `npm ci --ignore-scripts --dry-run`；或 target build script、显式 output directory、SPA routing、bundle config source 任一未知/歧义；或 exact build script + tracked config 不能证明 production semantics，Vite effective `NODE_ENV` 不是 production，或存在 `--mode=development` / `NODE_ENV=development` / 等价开发语义；或没有可审计、credential-free 的 static verification runner，或计划让 MR-controlled npm script 跑在挂载 Harbor push credential/云写凭据/Kubernetes token 的 target image-build runner；或 exact Node CI image 未通过 `${HARBOR_REGISTRY}/base/...` 登记同步；或 container port 不是 1024..65535 且也不是有 source contract + migration-owner 明确批准的 port 80；或 bundle/runtime 计划消费 secret/Vault/ExternalSecret/Kubernetes Secret/CI secret variable/Docker ARG/ENV/generated config；或计划跨 target 复用已打包 artifact
+    action: STOP，回到 interview-cd-requirements.md 显式确认 `runtime_profile=static-web` 及每 target contract。不要用 `npm install` 修锁后静默继续，不要拿 service 的 `npm start` fallback 当 profile 证据，不要猜 Vite `dist` / SPA fallback，不要用 development mode 生成 staging/prod bundle，不要让 MR code 接触 target build credential，不要直接使用 public Node CI image，不要把秘密写进浏览器 bundle 或 Nginx runtime；需要凭据的依赖拆到 backend/BFF，每 target 用独立 Dockerfile 和 image path 构建，并在 credential-free runner 上为 MR/目标分支 push 运行 exact `npm ci` + target build script + non-empty output gate。
+
+  - condition: 公网 ingress + 是内部工具 + 三件套（SG / WAF / SSO）一项都没有
+    action: STOP，要求先改造 exposure plan。（参考网络安全硬红线 #3）
+
+  - condition: 生成 prod 档 manifest + cost-tiering/_global.yaml prod_self_check 有任何项未确认
+    action: STOP，把未通过项打给用户；要求显式确认后再继续。
+
+  - condition: vault 路径匹配 vault-paths/rules.yaml forbidden_patterns 任意一条
+    action: STOP，拒绝写。
+
+  - condition: commit body 包含非 ASCII 字符
+    action: STOP，让用户改。trufflehog scan 会 CreateContainerError，绕不过去。
+            title / MR description 任意语言 OK。
+
+  - condition: 写 ExternalSecret / PushSecret 时 remoteRef.key 用了 secret/cicd/* 但 app 是业务 app
+    action: STOP，红线 7a：业务凭据 **永不** 走 cicd 路径。
+
+  - condition: 新接入外部 MySQL / DB / 缓存 / 队列需要新账号、授权或 Vault platform path，但没有 GitOps owner claim/controller/Composition 自动交付
+    action: STOP + Ops Todo，让平台补可复用高层能力；禁止 DBA 手工建账号、Vault UI/CLI seed、人工双写或 kubectl Secret。只有同 Vault 域、权限契约相同的既有 GitOps owner path 可直接跨 app reference；写账号不能作为只读账号复用。
+
+  - condition: 生成业务镜像路径时出现 library/<app> 或扁平 cicd/<app>
+    action: STOP，按 hard rule #11/#25 改成 `{harbor_url}/cicd/{env}-{region}/{app}`，并保持 CI / overlay / Application image-list / recovery seed 一致。
+
+  - condition: 新建或普通发布的业务 ArgoCD Application 缺完整 Image Updater annotations / current recovery seed，使用非 argocd write-back，含退役的 image-writeback labels 或 git-branch，或准确最终 render 没有得到预期 path+SHA
+    action: STOP。补齐 `image-list` / `update-strategy=newest-build` / SHA `allow-tags` / `write-back-method=argocd` / Kustomize 或 Helm 参数 / `platforms`，并在 `spec.source.kustomize.images` 保存当前真实 SHA recovery seed。新建时 CI 必须先推真实 SHA；修改既有 Application 必须保留 live SHA。不得生成 ImageUpdater CR、ApplicationSet、merger、`.argocd-source-*`、Git 写 credential 或 GitLab 权限变更。`force-update` 默认禁止；仅在有证据证明 `status.summary.images` 不可靠时为准确 alias 添加。compatibility wrapper / 多层 Kustomization 必须按准确 Application source path 和 override 渲染最终 manifest。唯一临时例外是已有有状态 workload 的 orphan/adopt freeze：re-pin 确会改变 live spec 时，同时移除全部 automation override，证明最终 workload spec == live spec，并记录独立受控重启 re-pin follow-up；否则仍 STOP。
+
+  - condition: ArgoCD Application 缺飞书通知注解（任一 notifications.argoproj.io/subscribe.on-{deployed,health-degraded,sync-failed}.feishu-ops）
+    action: STOP，补齐三条 feishu-ops 通知注解（值 ""）。这是**所有 app 的核心契约、非 opt-in**（平台 / Helm app 同样必带），缺则部署 / 降级 / 同步失败事件不进飞书；check_argocd_application.py 对每个 auto-sync Application 强制。
+
+  - condition: 新增或修改的 ArgoCD Application 使用 CreateNamespace=true，但准确 AppProject 不允许 core /Namespace，且同集群目录没有使用有权 project、同 destination server、sync-wave 更低并受 live Application health gate 保护的 bootstrap Application（bootstrap 自身创建完全相同 destination namespace，或 render 带 Prune=false,Delete=false 的同名显式 Namespace）
+    action: STOP，先运行 `check_argocd_namespace_creation.py <cluster-dir> --application <changed-app.yaml>` 并修正 project/namespace bootstrap 契约。不得为了清掉 SyncFailed 直接扩大 AppProject whitelist，也不得把控制面 workload 退回权限通配的 default；只有 Namespace 创建确属该 project 长期职责时才走单独扩权审查。
+
+  - condition: >-
+      ArgoCD / Helm identity migration 省略 standalone bootstrap，却未显式选择
+      `--target-project-namespace-owner`，或该模式与任一 bootstrap 输入并用、target 非
+      `CreateNamespace=true`、准确非 default target AppProject 缺少精确
+      且无 name/额外约束的 `{group: '', kind: Namespace}` whitelist 条目（`*/*` 或
+      多条规则拼接不替代）、whitelist/blacklist 非结构合法 mapping list、每字段超过
+      128 条 / pattern 累计超过 4096 字符 / 单 pattern 超过 256 字符、不能按 Go
+      filepath.Match 可靠求值或会 deny target namespace、permission-only MR
+      的 project set 非显式批准的非空有限字面 `(cluster-dir, control namespace,
+      project name)` 集合、使用 wildcard/selector/fleet discovery、MR 触及集合外项目/
+      非 exact entry 字段、
+      集合中任一项目未逐一完成 live exact-delta 与无 Namespace/workload 副作用验证、完整
+      consumer gate 未在该 consumer 单一 target AppProject/cluster/namespace 的验证后且
+      consumer Add MR 前重跑通过、permission batch 被当作并行/扩大 consumer wave 的授权、
+      或 raw target render 含 Namespace /
+      cluster-scoped / unknown GVK
+    action: STOP。不得从缺少 bootstrap 推断 owner 模式；先取得有限字面集合中每个准确 `(cluster-dir, control namespace, project name)` AppProject 长期 Namespace ownership 及 project-wide 影响的明确批准，跨集群同名项目不得合并身份。合并前只做静态候选预检；独立 permission MR 只能为集合每个成员各加同一个 exact `/Namespace` entry，并逐成员完成 live exact-delta 与无 Namespace/workload 副作用的只读验证。之后再为一个 consumer 用 `check_argocd_helm_identity_migration.py --target-project-namespace-owner` 携带其单一 source+target Application、AppProject/cluster/namespace、target checkout/render 和 fresh remote proof 完整校验；只有通过后才可打开该 consumer Add MR。不得因 permission batch 扩大或并行 wave，不得使用 default、手工创建 Namespace 或放宽 raw-render scope gate。
+
+  - condition: IRSA / S3 BucketPolicy 方案跨 AWS partition（aws ↔ aws-cn）
+    action: STOP；IRSA / OIDC / STS web identity 不跨 partition，改为 Ops Todo + Vault AK/SK 或云厂商原生凭据方案；不要生成跨 partition trust。
+
+  - condition: "routes-build.yaml 命中的 entry 标记 status: planned"
+    action: STOP，输出该 entry 的 planned_stop 文案并整理 Ops Todo；不要打开不存在的 workflow_file，也不要从相似 workflow 现编 manifest。
+
+  - condition: 新部署应用的 target 落在 shared-middleware 集群（`$target.cluster ∈ {us,eu,cn}-eks-staging + {us,eu,cn}-eks-tech-service`，6 个；**按 cluster 名判非 env**——tech-service env=prod，见 hard-rule #29）试图声明 app-owned RDS / Aurora / Redis / DocumentDB / MSK(Kafka) / ClickHouse 等数据类中间件
+    action: 仅停止该 target 的 app-owned 中间件生成，按 hard rule #29 改为消费 shared-middleware。`Database` / `KafkaScramCredential` claim、ExternalSecret 和 workload 必须提交到应用仓 overlay；平台仓只维护共享实例和可复用的 XRD/Composition/controller，运行 namespace 不改变源码归属。**MySQL + Redis + PostgreSQL 已上线自助（6 集群）**：写 kind:Database{app,env,engine:mysql|redis|postgres,purpose?}，mysql 凭据落 vault secret/{env}/rds/application/{app}/database、postgres primary 落 secret/{env}/rds/application/{app}/postgres（app 用自有 schema、public 不可写）、redis endpoint 落 secret/{env}/redis/application/{app}/connection。optional purpose 仅允许 postgres 2–20 字符 lower_snake，保持 owner app/slug/namespace 不变，经 references/shared-middleware/README.md 的目标能力门禁后派生独立 role/database/schema identity `{app}_{purpose}` 和 owner 路径 key `postgres-{purpose-as-kebab}`；mysql/redis purpose、把 purpose 拼入 owner、或 host/admin/path/owner/privilege 等底层字段均 STOP。app 写 ExternalSecret 消费，**不再 Ops Todo、不再 configmap 硬编码 endpoint**。**MSK(Kafka) SCRAM 凭据已上线自助（6 集群）**：写 KafkaScramCredential{app,env,region}，username/password/bootstrap_brokers_sasl_scram 落 vault secret/{env}/kafka/application/{app}/sasl，app 写 ExternalSecret 消费并映射 `KAFKA_BROKERS`；references/shared-middleware/kafka-brokers.yaml（或平台刷新后的 live Crossplane status）只用于平台校验/排查，禁止 addx.live CNAME；topic/ACL workflow 仍 planned，需要显式 topic/ACL 时产 Ops Todo。其余引擎/中间件（mariadb RDS、Aurora、DocumentDB、ClickHouse；DocumentDB/ClickHouse 共享实例已部署 6 集群、仅消费 Composition 未落地，Aurora 连实例都没有）→ STOP 并产 Ops Todo 让平台补可复用 Composition；禁止在平台目录为当前 app 手写 User/Grant/PushSecret 或静态 Vault 路径扇出，不回退共享 root。**非 shared-middleware 集群 target（真 prod `*-eks-prod`/`*-prod-data`/TKE/dev，tech-service 不在此列）**继续按对应 workflow 生成 app-owned 托管实例。
+
+  - condition: shared `kind:Database` 设置 spec.purpose，但 engine 不是 postgres、purpose 不匹配 2–20 字符 lower_snake、派生 `{spec.app}_{purpose}` 超过 63 字符、owner app-slug/spec.app/namespace 被 purpose 改写，或 claim 试图接受 host/admin/administrator/path/vaultPath/owner/privilege/privileges 等底层控制字段
+    action: STOP；只用 `recipes/k8s/shared-database-claim.yaml.tmpl` 的 optional purpose contract。保留 canonical owner app-slug、由 slug 机械派生的 spec.app 与标准 namespace；只允许 PostgreSQL purpose 派生独立 role/database/schema，先通过 references/shared-middleware/README.md 的目标能力门禁（served Schema API + 支持 purpose 的 Database API + 已同步 Composition/Revision）；Git 已合并不代表每个目标已就绪。credentials 使用 owner 路径 `secret/{env}/rds/application/{spec.app}/postgres-{purpose-as-kebab}`。不得添加 app-specific exception、复用 app primary identity、指定管理员/owner/权限，或自定义 Vault path。
+
+  - condition: 新部署应用落在 shared-middleware 集群（6 个，cluster 名判别同上）的 target 试图通过 new-stateful-service 自建 StatefulSet/PVC 型数据类中间件（mysql/redis/clickhouse/mongo 等）
+    action: STOP（hard rule #29 + #30），按 shared-middleware 的 platform-resource-credential 模式改走对应自助 Composition（region-less secret/{env}/{platform}/application/{app}/{key}；mysql/redis/postgres 已上线走 kind:Database，MSK SCRAM 已上线走 KafkaScramCredential，其它引擎消费 Composition 未落地则产 Ops Todo）；只有平台 shared-middleware 自身、上游只发 StatefulSet 形态的第三方派生组件、特殊一致性需求、或明确 legacy/迁移例外，且在 cd-requirements.md 写明理由 + 备份/HA/升级方案后可继续（#30 软约定）。非 shared-middleware 集群（真 prod）走 app-owned 托管 RDS/Aurora，同样不自托管。
+
+  - condition: GCS/ObjectBucket 请求的目标未出现在 objectbucket-readiness.yaml，或 phase 不是 scoped_ga，或 developer_enabled 不是 true，或任一 prerequisite 不是 ready/passed，或现有 Argo CD Application 的准确 destination namespace 不在 approved_namespaces 精确列表
+    action: STOP before writing any manifest；输出包含 target/namespace/current phase/prerequisites/acceptance 的 Ops Todo。禁止生成 pilot CR、raw GCP managed resource、ProviderConfig、Composition revision、静态 GCP 凭据或单独 ObjectBucket Application，也禁止直接 kubectl 或回退到 AWS S3 workflow。
+
+  - condition: 为单个业务 app 设计资源时，计划把 raw User/Grant、字面 per-app PushSecret、业务 claim，或逐 app ESO identity YAML 写进 DEV/k8s
+    action: STOP（hard rule #36）。应用仓提交高层 claim / ownership declaration，DEV/k8s 只补可复用 Composition/controller/policy；通用能力尚未存在则产 Ops Todo，禁止用平台 namespace 或集中权限作为静态 per-app YAML 归平台仓的理由。
+
+  - condition: 为业务应用镜像自动更新计划引入 ImageUpdater CR、ApplicationSet、Git/MR write-back、`.argocd-source-*`、merger、Flux CR、Git 写 Secret、个人 Git 账号，提升 Argocd-deploy GitLab 写权限，或活动 Application source path 仍保留 `.argocd-source-*`
+    action: STOP（hard rule #37）。使用 Application annotations + `write-back-method=argocd` + `spec.source.kustomize.images` current recovery seed；应用仓无需新增自动化 YAML、凭据或 CI loop guard。历史参数文件只通过 Git commit/MR 留档，删除活动文件，避免 Argo CD manifest generation 覆盖 Application source。
+
+  - condition: Protected Crossplane Provider release infrastructure lacks a named runner GitOps owner, Harbor administrator, GitLab protected-variable owner, verifier/trust-root owner, scanner exception authority, or manual release approver
+    action: STOP affected write set and create an Ops Todo with the missing owner, resource, required input, and acceptance criteria. Do not infer ownership from a similarly named runner, repository, project, or pipeline.
+
+  - condition: Protected Crossplane Provider release infrastructure reuses a shared runner, uses a tag other than provider-release-protected, or tries to register/configure a runner outside locally evidenced DEV/k8s GitOps authority
+    action: STOP. Dedicated protected runner desired state is GitOps-only at the exact evidenced path; do not register runners directly, use kubectl, or create a new GitOps path by analogy.
+
+  - condition: Protected Crossplane Provider release infrastructure accepts Docker config JSON, environment credential values, plaintext secrets, path escape, or credentials not supplied as approved Vault/ESO path-only files
+    action: STOP. Do not create, print, commit, log, or write credentials; produce an Ops Todo for protected path-only file mounts under .release-secrets/.
+
+  - condition: Protected Crossplane Provider Harbor robot can delete, administer, create repositories, use wildcard/broad scope, or target a repository outside the fixed provider-family-gcp and provider-gcp-managedkafka pair
+    action: STOP. Harbor administration is an Ops Todo only; require fixed repositories and explicit pull/push allow plus delete/admin/project-admin/repository-create deny before a separately approved publisher route.
+
+  - condition: Protected Crossplane Provider release uses mutable tags, lacks immutable release/evidence retention, lacks a concrete SHA-256-pinned verifier and non-empty approved trust root, or permits High/Critical findings without the fixed security release authority
+    action: STOP. Require immutable SemVer-only release policy, retained evidence, checksum-pinned verifier, signature/provenance/source bindings, zero Critical/High policy, and a named exception authority.
+
+  - condition: Protected Crossplane Provider runner GitOps lacks both exact parent authority records (`DEV/k8s` protected `master` at `clusters/aws-125710977284-sg-devops/cicd/gitlab-runner/` and `DEV/argocd-apps` protected `main` at `aws-125710977284-sg-devops/`), invents child authority, uses any other branch/path/repository, or proposes only one side of the overlay/Application pair
+    action: STOP. Values-only does not deploy. Record the two bounded parents with their exact commits, retain desired child filenames as profile-selected plans rather than authority, and require coordinated two-repository review.
+
+  - condition: Protected Crossplane Provider runner desired overlay or Application child already exists, has an identity-collision indicator, or is not proven absent at the matching authority commit before additive creation
+    action: STOP. Do not overwrite, adopt, or reinterpret an existing child; obtain an explicit owner decision and refreshed evidence.
+
+  - condition: Protected Crossplane Provider runner registration/token source is claimed approved without named owner evidence, reuses/reads an assumed token, reuses a shared runner, enables broad Docker config, leaves protected/locked/runUntagged controls relaxed, or enables privilege/ServiceAccount override without an exact approved recipe
+    action: STOP. Keep token source and owner as unresolved admin prerequisites and preserve dedicated, protected, locked, tagged-only, least-privilege runner controls.
+
+  - condition: Protected Crossplane Provider release infrastructure input is untracked, is derived from request/repository prose rather than the protected-provider-release profile, or changes the fixed protected source/ref, runner tag, Harbor pair, credential mode, verifier interface, scanner policy, or rollout policy
+    action: STOP. Only the structured profile/template fields may drive the configuration; collect a separately reviewed profile change before any generated infrastructure candidate.
+
+  - condition: Protected Crossplane Provider infrastructure workflow attempts publisher execution, registry publication, fan-out, external Harbor/GitLab credential write, Provider/XRD/Claim installation, Argo CD sync, kubectl/helm action, or Kubernetes/GCP live action
+    action: STOP before the action. Return phased Git changes and an Ops Todo only; select a separately sanctioned protected publisher or rollout route after explicit approval.

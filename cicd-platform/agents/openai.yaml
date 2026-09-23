@@ -1,0 +1,4 @@
+interface:
+  display_name: "A4x CICD Platform"
+  short_description: "自动操作上线单、灰度开关/名单、预扩容、部署与 Apollo 发布"
+  default_prompt: "使用 $cicd-platform 检查 A4x 上线单，并安全执行用户指定的下一步操作。"

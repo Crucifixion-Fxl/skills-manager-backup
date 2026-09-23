@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "e120e8ea-740c-4613-b3f6-7b115137aee9",
+  "path": "crossplane-provider-author",
+  "path_key": "crossplane-provider-author",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/crossplane-provider-author",
+    "branch": null
+  }
+}

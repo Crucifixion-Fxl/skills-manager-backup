@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "43af936f-2ac3-450f-8997-0be1b9d84514",
+  "path": "data-driven-investigation",
+  "path_key": "data-driven-investigation",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/data-driven-investigation",
+    "branch": null
+  }
+}

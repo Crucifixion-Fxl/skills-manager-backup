@@ -1,0 +1,53 @@
+# crossplane-irsa-rolepolicy.yaml.tmpl
+#
+# 给 IRSA Role 挂权限策略。一个 Role 可以挂多个 RolePolicy（按 AWS 服务拆开
+# 便于 audit）。
+#
+# 必填槽位：
+#   {{app}}            kebab-case
+#   {{service}}        aws 服务名（s3 / sqs / dynamodb / kms ...，作 metadata.name 后缀）
+#   {{policy_json}}    完整 IAM policy JSON 字符串（带 Version + Statement 数组）
+#
+# ⚠️ **缩进规则（容易出错）**：`{{policy_json}}` 填的 JSON 是嵌入 YAML 块标量 `policy: |`，
+# 因为 `policy:` 缩进 4 空格，块标量内容必须**每行至少 6 空格起头**（4 + 2 = 6）。
+# 填槽时整体 JSON 缩进 6 空格再插入，**不要**写出顶到行首的 JSON。
+#
+# 错误示例（直接顶行首，YAML parse 会失败 "found character that cannot start any token"）：
+#     policy: |
+#     {
+#       "Version": "2012-10-17",
+#       ...
+#
+# 正确示例：
+#     policy: |
+#       {
+#         "Version": "2012-10-17",
+#         "Statement": [{
+#           "Effect": "Allow",
+#           "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:ListBucket"],
+#           "Resource": [
+#             "arn:aws:s3:::{{app}}-*",
+#             "arn:aws:s3:::{{app}}-*/*"
+#           ]
+#         }]
+#       }
+#
+# workflow add-s3-bucket Step 4 / add-irsa-role Step 3 必须保证 JSON 缩进 6 空格再填入。
+#
+# ⚠️ permissionsBoundary 在 Role 上挂了（见 irsa-role.yaml.tmpl），policy 不能
+# 超出 CrossplaneAppBoundary 允许的 action 集合。CrossplaneAppBoundary 拦的
+# action 完整列表见 v1 references/internal/permission-boundaries.md。
+
+apiVersion: iam.aws.m.upbound.io/v1beta1
+kind: RolePolicy
+metadata:
+  name: crossplane-app-{{app}}-irsa-{{service}}
+spec:
+  forProvider:
+    policy: |
+{{policy_json_indented_6}}
+    roleRef:
+      name: crossplane-app-{{app}}-irsa
+  providerConfigRef:
+    name: default
+    kind: ClusterProviderConfig

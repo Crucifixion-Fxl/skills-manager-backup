@@ -1,0 +1,8 @@
+*.egg-info/
+__pycache__/
+tests/smoke_logs/
+.pytest_cache/
+.hypothesis/
+.coverage
+.mypy_cache/
+.ruff_cache/

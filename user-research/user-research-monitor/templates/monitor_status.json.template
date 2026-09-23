@@ -1,0 +1,23 @@
+{
+  "snapshot_time": "ISO-8601 timestamp",
+  "report_readiness": "ready | not_ready | blocked",
+  "sample_sufficiency": "met | underfilled | uneven | unknown",
+  "cohorts": [
+    {
+      "cohort_key": "stable_cohort_id",
+      "business_label": "Human-readable cohort label",
+      "raw_n": 0,
+      "valid_n_conservative": 0,
+      "valid_n_strict": 0,
+      "minimum_valid_n": 0,
+      "status": "ready | underfilled | quality_risk | blocked"
+    }
+  ],
+  "quality_risks": [],
+  "followup_recommendation_inputs": {
+    "email_metrics": {},
+    "survey_completion": {},
+    "sample_bottlenecks": [],
+    "quality_bottlenecks": []
+  }
+}

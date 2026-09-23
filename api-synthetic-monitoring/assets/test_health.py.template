@@ -1,0 +1,28 @@
+"""Health check smoke tests — P1 severity."""
+
+import pytest
+import requests
+
+
+def test_api_health(env_config):
+    """API service /health returns 200 with status ok."""
+    if not env_config.api_url:
+        pytest.skip("API URL not configured (service not deployed yet)")
+    resp = requests.get(f"{env_config.api_url}/health", timeout=5)
+    assert resp.status_code == 200, (
+        f"API /health returned {resp.status_code}: {resp.text}"
+    )
+    body = resp.json()
+    assert body["status"] == "ok", f"API /health status: {body}"
+
+
+def test_admin_health(env_config):
+    """Admin /api/health returns 200 with status ok (probes DB + deps)."""
+    resp = requests.get(f"{env_config.admin_url}/api/health", timeout=10)
+    assert resp.status_code == 200, (
+        f"Admin /api/health returned {resp.status_code}: {resp.text}"
+    )
+    body = resp.json()
+    assert body["status"] == "ok", (
+        f"Admin health degraded: {body.get('checks', body)}"
+    )

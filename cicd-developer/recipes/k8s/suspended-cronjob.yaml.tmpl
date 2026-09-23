@@ -1,0 +1,115 @@
+# suspended-cronjob.yaml.tmpl
+#
+# GitOps registration template for a periodic Kubernetes CronJob. A source MR
+# must register this object with suspend=true and activation-review=pending.
+# A separate reviewed activation MR may change only those two fields.
+#
+# Required slots:
+#   {{cronjob_name}}                 stable CronJob name
+#   {{namespace}}                    existing owning Application namespace
+#   {{app}}                          application/logging label
+#   {{env_keyword}}                  exact environment keyword
+#   {{sync_wave}}                    registration ordering after prerequisites
+#   {{cron_schedule}}                standard five-field cron expression
+#   {{timezone_block}}               `  timeZone: "Area/Location"`, or empty only
+#                                      with documented target-API evidence
+#   {{concurrency_policy}}            Allow | Forbid | Replace
+#   {{starting_deadline_seconds}}     positive missed-run deadline
+#   {{successful_jobs_history_limit}} non-negative retained successful Jobs
+#   {{failed_jobs_history_limit}}     non-negative retained failed Jobs
+#   {{backoff_limit}}                 non-negative per-run retry limit
+#   {{cron_active_deadline_seconds}}  positive per-run deadline
+#   {{service_account_name}}          explicit reviewed ServiceAccount
+#   {{placement_block}}               complete nodeSelector/affinity/tolerations
+#                                      decision at pod-spec indentation
+#   {{run_as_user}}                   non-root UID supported by the image
+#   {{cron_image}}                    internal immutable tag plus sha256 digest
+#   {{cron_command_block}}            non-empty command list entries
+#   {{cron_args_block}}               non-empty args list entries
+#   {{cron_env_block}}                complete envFrom/env fields; `[]` is valid
+#   {{cpu_requests}}, {{memory_requests}}, {{ephemeral_storage_requests}}
+#   {{cpu_limits}}, {{memory_limits}}, {{ephemeral_storage_limits}}
+#   {{temp_size_limit}}               bounded writable /tmp
+
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{cronjob_name}}
+  namespace: {{namespace}}
+  annotations:
+    argocd.argoproj.io/sync-wave: "{{sync_wave}}"
+    ops.addx.io/activation-review: pending
+  labels:
+    app: {{app}}
+    app.kubernetes.io/name: {{app}}
+    app.kubernetes.io/component: scheduled-job
+spec:
+  schedule: "{{cron_schedule}}"
+{{timezone_block}}
+  suspend: true
+  concurrencyPolicy: {{concurrency_policy}}
+  startingDeadlineSeconds: {{starting_deadline_seconds}}
+  successfulJobsHistoryLimit: {{successful_jobs_history_limit}}
+  failedJobsHistoryLimit: {{failed_jobs_history_limit}}
+  jobTemplate:
+    metadata:
+      labels:
+        app: {{app}}
+        app.kubernetes.io/name: {{app}}
+        app.kubernetes.io/component: scheduled-job
+    spec:
+      backoffLimit: {{backoff_limit}}
+      activeDeadlineSeconds: {{cron_active_deadline_seconds}}
+      template:
+        metadata:
+          labels:
+            app: {{app}}
+            env: {{env_keyword}}
+            app.kubernetes.io/name: {{app}}
+            app.kubernetes.io/component: scheduled-job
+        spec:
+          automountServiceAccountToken: false
+          serviceAccountName: {{service_account_name}}
+          restartPolicy: Never
+          terminationGracePeriodSeconds: 30
+{{placement_block}}
+          imagePullSecrets:
+            - name: harbor-registry-secret
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: {{run_as_user}}
+            runAsGroup: {{run_as_user}}
+            fsGroup: {{run_as_user}}
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: run
+              image: {{cron_image}}
+              imagePullPolicy: IfNotPresent
+              command:
+{{cron_command_block}}
+              args:
+{{cron_args_block}}
+{{cron_env_block}}
+              resources:
+                requests:
+                  cpu: {{cpu_requests}}
+                  memory: {{memory_requests}}
+                  ephemeral-storage: {{ephemeral_storage_requests}}
+                limits:
+                  cpu: {{cpu_limits}}
+                  memory: {{memory_limits}}
+                  ephemeral-storage: {{ephemeral_storage_limits}}
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop:
+                    - ALL
+              volumeMounts:
+                - name: temp
+                  mountPath: /tmp
+          volumes:
+            - name: temp
+              emptyDir:
+                sizeLimit: {{temp_size_limit}}

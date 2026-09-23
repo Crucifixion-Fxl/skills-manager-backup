@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "3edc9c51-eb0c-49ac-be1b-0fb32cf59133",
+  "path": "architect",
+  "path_key": "architect",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/architect",
+    "branch": null
+  }
+}

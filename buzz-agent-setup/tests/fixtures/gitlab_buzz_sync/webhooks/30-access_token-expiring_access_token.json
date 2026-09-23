@@ -1,0 +1,34 @@
+{
+  "body": {
+    "event_name": "expiring_access_token",
+    "interval": "seven_days",
+    "object_attributes": {
+      "created_at": "2026-09-13 08:21:26 UTC",
+      "expires_at": "2026-09-16",
+      "id": 8,
+      "name": "rec-expiring-0913082019",
+      "user_id": 8
+    },
+    "object_kind": "access_token",
+    "project": {
+      "avatar_url": null,
+      "ci_config_path": null,
+      "default_branch": "main",
+      "description": null,
+      "git_http_url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot.git",
+      "git_ssh_url": "ssh://[REDACTED]:2224/buzz-sync-test/pilot.git",
+      "homepage": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot",
+      "http_url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot.git",
+      "id": 2,
+      "name": "pilot",
+      "namespace": "buzz-sync-test",
+      "path_with_namespace": "buzz-sync-test/pilot",
+      "ssh_url": "ssh://[REDACTED]:2224/buzz-sync-test/pilot.git",
+      "url": "ssh://[REDACTED]:2224/buzz-sync-test/pilot.git",
+      "visibility_level": 0,
+      "web_url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot"
+    }
+  },
+  "event_header": "Resource Access Token Hook",
+  "received_at": "2026-09-13T08:22:16.926668+00:00"
+}

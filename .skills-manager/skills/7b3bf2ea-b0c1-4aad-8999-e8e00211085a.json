@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "7b3bf2ea-b0c1-4aad-8999-e8e00211085a",
+  "path": "gitlab-issue-sop",
+  "path_key": "gitlab-issue-sop",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/gitlab-issue-sop",
+    "branch": null
+  }
+}

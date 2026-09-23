@@ -1,0 +1,25 @@
+# Repair executable permissions after populating a PVC-backed cache.
+#
+# Slots:
+#   extra_exec_path_globs  optional extra `-o -path "..."` fragments; leave empty for standard toolchains
+#
+# Source this file from a lock-held prepare/download wrapper, or copy the
+# function into that wrapper. The cache_root variable must already be set.
+
+repair_cached_executable_permissions() {
+    find "${cache_root}" -type d ! -perm -555 -exec chmod a+rx {} +
+    find "${cache_root}" \
+        \( -path "*/bin/*" -o -path "*/sbin/*" -o -path "*/libexec/*" {{extra_exec_path_globs}} \) \
+        -type f ! -perm -555 -exec chmod a+rx {} +
+
+    sample="$(
+        find "${cache_root}" \
+            \( -path "*/bin/*" -o -path "*/sbin/*" -o -path "*/libexec/*" {{extra_exec_path_globs}} \) \
+            -type f -print -quit 2>/dev/null
+    )"
+    if [ -n "${sample}" ] && [ ! -x "${sample}" ]; then
+        echo "ERROR: chmod failed or executable bit was not applied: ${sample}" >&2
+        ls -la "${sample}" >&2 || true
+        exit 1
+    fi
+}

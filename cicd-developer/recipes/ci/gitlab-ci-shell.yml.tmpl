@@ -1,0 +1,67 @@
+# .gitlab-ci.yml — shell（框架 / 一次性）
+#
+# 这是 CI 文件的**框架**：stages / 全局 variables / hidden job primitives。
+# Per-target build/manifest job 由 workflow 按 $targets[*].build_mode 循环
+# append `gitlab-ci-target-dual-arch.yml.tmpl` 或 `gitlab-ci-target-single-arch.yml.tmpl`
+# snippet 渲染。
+#
+# 必填槽位：
+#   {{app}}                    kebab-case
+#
+# DO NOT 把这个文件作为最终 CI 写盘——只是壳。完整 CI = 本文件 + 每 target 一份 snippet。
+#
+# DO NOT 用 docker:dind。Kaniko 是 runner-based 标准（无 privileged，cache via Harbor）。
+#
+# DO NOT 把整个 CI 模板覆盖已有 `.gitlab-ci.yml` —— 仓库已存在时 STOP 问用户合并策略。
+
+stages:
+  - test
+  - build
+  - manifest
+
+variables:
+  APP_NAME: {{app}}
+  # 业务镜像 host 由 runner 注入的 HARBOR_REGISTRY 决定（Option B 默认，见 hard-rules #25）。
+  # runner tag -> Harbor 查 clusters.yaml（历史 alias/tag 需另核验）；凭据走平台挂载的 /kaniko/.docker-secret/config.json。
+  # 禁止设项目级 HARBOR_* 变量覆盖（见 #9）。单 target / 老应用可改用字面 host（Option A）。
+  IMAGE_BASE: "${HARBOR_REGISTRY}/cicd"
+
+default:
+  retry:
+    max: 2
+    when:
+      - runner_system_failure
+      - stuck_or_timeout_failure
+
+.kaniko-build:
+  stage: build
+  image:
+    name: ${HARBOR_REGISTRY}/base/kaniko-executor:v1.23.2-debug
+    entrypoint: [""]
+  variables:
+    DOCKER_CONFIG: /kaniko/.docker
+  script:
+    - mkdir -p /kaniko/.docker
+    - cp /kaniko/.docker-secret/config.json /kaniko/.docker/config.json
+    - >-
+      /kaniko/executor
+      --context "${CI_PROJECT_DIR}"
+      --dockerfile "${CI_PROJECT_DIR}/${DOCKERFILE}"
+      --destination "${IMAGE_PATH}:${IMAGE_TAG}"
+      --build-arg "HARBOR_REGISTRY=${HARBOR_REGISTRY}"
+      --cache=true
+      --cache-repo="${IMAGE_PATH}/cache-${ARCH}"
+
+.manifest-fanin:
+  stage: manifest
+  image:
+    name: ${HARBOR_REGISTRY}/base/crane:v0.21.5
+    entrypoint: [""]
+  script:
+    - mkdir -p ~/.docker
+    - cp /kaniko/.docker-secret/config.json ~/.docker/config.json
+    - >-
+      crane index append
+      --tag "${IMAGE_PATH}:${TARGET_TAG}"
+      --manifest "${IMAGE_PATH}:${SOURCE_AMD64_TAG}"
+      --manifest "${IMAGE_PATH}:${SOURCE_ARM64_TAG}"

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "e159ae82-8dc5-4452-8391-07e5bc764ad4",
+  "path": "harbor",
+  "path_key": "harbor",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/harbor",
+    "branch": null
+  }
+}

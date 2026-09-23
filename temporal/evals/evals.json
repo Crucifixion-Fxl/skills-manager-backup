@@ -1,0 +1,77 @@
+{
+  "skill_name": "temporal",
+  "evals": [
+    {
+      "id": 0,
+      "prompt": "我是 SRE 团队的，在群 oc_sre_oncall 里。帮我每 5 分钟检查一下 K8s Pod 状态，有问题再告诉我就行。我的 agent_id 是 agent-sre-001。",
+      "expected_output": "Agent should generate a `temporal schedule create` command with: schedule ID following sched-{desc}-{nn} format, cron */5 * * * *, notify_rule=on_error, all memo fields populated, HEARTBEAT_OK injected into task_prompt",
+      "files": [],
+      "assertions": [
+        {
+          "name": "schedule_id_format",
+          "check": "Schedule ID follows sched-{description}-{number} naming convention"
+        },
+        {
+          "name": "cron_expression",
+          "check": "Cron expression is */5 * * * *"
+        },
+        {
+          "name": "notify_rule_on_error",
+          "check": "notify_rule is set to on_error (user said '有问题再告诉我')"
+        },
+        {
+          "name": "memo_fields_complete",
+          "check": "All 5 memo fields present: chat_id, agent_id, task_prompt, notify_rule, source"
+        },
+        {
+          "name": "heartbeat_ok_injected",
+          "check": "task_prompt includes [HEARTBEAT_OK] instruction"
+        }
+      ]
+    },
+    {
+      "id": 1,
+      "prompt": "我在 oc_data_team 群，agent_id 是 agent-data-002。帮我设一个每天早上 9 点发昨日系统运行报告的定时任务。",
+      "expected_output": "Agent should generate a `temporal schedule create` command with: cron 0 9 * * *, notify_rule=always, all memo fields, proper schedule ID",
+      "files": [],
+      "assertions": [
+        {
+          "name": "cron_daily_9am",
+          "check": "Cron expression is 0 9 * * *"
+        },
+        {
+          "name": "notify_rule_always",
+          "check": "notify_rule is set to always (user wants daily report pushed)"
+        },
+        {
+          "name": "memo_fields_complete",
+          "check": "All 5 memo fields present: chat_id, agent_id, task_prompt, notify_rule, source"
+        },
+        {
+          "name": "schedule_id_format",
+          "check": "Schedule ID follows sched-{description}-{number} naming convention"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "我在群 oc_sre_oncall，帮我看看这个群里有哪些定时任务？然后把 Pod 巡检那个删掉，不需要了。",
+      "expected_output": "Agent should: 1) use temporal schedule list + jq to filter by chat_id=oc_sre_oncall, 2) ask for user confirmation before deleting, 3) use temporal schedule delete with the correct schedule-id",
+      "files": [],
+      "assertions": [
+        {
+          "name": "list_with_chat_id_filter",
+          "check": "Uses temporal schedule list --output json with jq filtering by chat_id"
+        },
+        {
+          "name": "deletion_confirmation",
+          "check": "Asks for user confirmation before executing delete"
+        },
+        {
+          "name": "delete_command_correct",
+          "check": "Uses temporal schedule delete --schedule-id with the correct ID"
+        }
+      ]
+    }
+  ]
+}

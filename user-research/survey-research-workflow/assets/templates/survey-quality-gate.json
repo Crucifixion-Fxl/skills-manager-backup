@@ -1,0 +1,57 @@
+{
+  "schema_version": "1.3",
+  "workflow_mode": "production_workflow",
+  "publication_mode": "agent_publish",
+  "risk_level": "C",
+  "phase": "pre_wording",
+  "architecture": {
+    "selected": "single_survey | routed_survey | waves | split_sample | multi_method",
+    "owner_confirmed": false
+  },
+  "burden": {
+    "promised_minutes": null,
+    "typical_path_minutes": null,
+    "longest_path_minutes": null,
+    "owner_accepted_longest_minutes": null,
+    "conceptual_switches": null,
+    "owner_confirmed": false,
+    "status": "needs_fix"
+  },
+  "source_estimand_checks": [],
+  "coverage_recovery_checks": [],
+  "respondent_task_pairs": [],
+  "platform_workarounds": [],
+  "stakeholder_delivery": {
+    "coverage_summary_first": false,
+    "plain_language_main": false,
+    "respondent_copy_separated": false,
+    "methods_in_appendix": false,
+    "status": "needs_fix"
+  },
+  "agent_pretest": {
+    "evidence_class": "synthetic_cognitive_walkthrough",
+    "instrument_version": null,
+    "report_path": null,
+    "profile_count": 0,
+    "profile_coverage_rationale": null,
+    "critical_segments_covered": false,
+    "boundary_profile_included": false,
+    "counter_assumption_profile_included": false,
+    "cognitive_walkthrough_status": "needs_fix",
+    "path_walkthrough_status": "needs_fix",
+    "mobile_walkthrough_status": "not_required",
+    "human_pretest_status": "not_run",
+    "require_residual_risk_resolution": false,
+    "high_risk_triggers": [],
+    "residual_risks": [],
+    "owner_accepted_residual_risk": false,
+    "status": "needs_fix"
+  },
+  "reason_option_sets": [],
+  "closed_question_ids": [],
+  "option_order_checks": [],
+  "checks": [],
+  "blockers": [],
+  "overall_status": "needs_fix",
+  "launch_ready": false
+}

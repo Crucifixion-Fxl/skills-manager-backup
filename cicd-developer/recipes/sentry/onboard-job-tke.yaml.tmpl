@@ -1,0 +1,59 @@
+# sentry-onboard-job-tke.yaml.tmpl
+#
+# Sentry 自助 Job —— **TKE cn-main 专用**。
+# 跟 onboard-job-eks.yaml.tmpl 的差异（references/sentry/README.md TKE 差异表）：
+#   - image 固定 `harbor-cn.addx.live/base/sentry-onboard:<tag>`（base/ 不是 cicd/）
+#   - nodeSelector 仅 kubernetes.io/arch=amd64（无 AWS CN NAT egress NodePool）
+#   - imagePullSecrets 显式（TKE 无 mutation webhook 不自动注入）
+#
+# 必填槽位：
+#   {{app}}                       kebab-case；用于 app-scoped Job / ServiceAccount / ConfigMap 名
+#   {{sentry_onboard_image_tag}}  平台批准的不可变 tag / commit SHA；禁止 `latest`
+# 其他字段固定 —— TKE cn-main 集群一种部署形态。
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{app}}-sentry-onboard
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded,HookFailed   # 选型理由（为何不用 BeforeHookCreation + 为何成功失败都清）见 onboard-job-eks.yaml.tmpl 注释
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 604800                     # 成功/失败 Job 都由 hook-delete-policy 终态即时清；ttl 7d 仅兜底
+  template:
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{app}}-sentry-onboard
+      imagePullSecrets:
+        - name: harbor-registry-secret
+      nodeSelector:
+        kubernetes.io/arch: amd64
+      volumes:
+        - name: vault-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  audience: https://kubernetes.default.svc
+                  expirationSeconds: 3600
+      containers:
+        - name: onboard
+          image: harbor-cn.addx.live/base/sentry-onboard:{{sentry_onboard_image_tag}}
+          imagePullPolicy: Always
+          envFrom:
+            - configMapRef:
+                name: {{app}}-sentry-onboard-config
+          volumeMounts:
+            - name: vault-token
+              mountPath: /var/run/secrets/vault
+              readOnly: true
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits:   { cpu: 500m, memory: 256Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65534
+            capabilities: { drop: [ALL] }

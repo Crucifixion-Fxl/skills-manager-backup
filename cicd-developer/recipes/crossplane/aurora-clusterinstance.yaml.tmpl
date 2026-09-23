@@ -1,0 +1,44 @@
+# crossplane-aurora-clusterinstance.yaml.tmpl
+#
+# Aurora ClusterInstance —— 算节点。
+# prod 建议 ≥ 2 个跨 AZ（同 cost-tiering/aurora.yaml prod.clusterInstanceReplicas）。
+# workflow 按副本数循环跑这个模板。
+#
+# 必填槽位：
+#   {{app}}                kebab-case
+#   {{env_keyword}}        如 staging-us
+#   {{namespace}}          K8s namespace
+#   {{index}}              整数索引（1, 2, 3 ...），用在 name 后缀
+#   {{instance_class}}     从 cost-tiering/aurora.yaml 的 clusterInstanceClass（默认 t4g 家族，
+#                          prod 起步 db.r8g.large；高资源占用由 cd-requirements.md 指定 r8g/m8g）
+#   {{engine}}             aurora-postgresql | aurora-mysql（**必须**跟 Cluster 一致）
+#   {{region}}             AWS region
+#   {{management_policies}} YAML inline list；prod 为 ["Observe","Create","Update","LateInitialize"]，其余为 ["*"]
+#
+# 注意：
+#   - ClusterInstance 不写 writeConnectionSecretToRef（Cluster 那边输出 writer + reader endpoint）
+#   - ClusterInstance 的 AWS identifier 用 crossplane.io/external-name 显式声明
+#   - clusterIdentifier 引用同 namespace 的 Cluster external-name
+
+apiVersion: rds.aws.m.upbound.io/v1beta1
+kind: ClusterInstance
+metadata:
+  name: {{app}}-{{env_keyword}}-aurora-{{index}}
+  namespace: {{namespace}}
+  annotations:
+    crossplane.io/external-name: {{app}}-{{env_keyword}}-aurora-{{index}}
+spec:
+  managementPolicies: {{management_policies}}
+  forProvider:
+    clusterIdentifier: {{app}}-{{env_keyword}}-aurora
+    instanceClass: {{instance_class}}
+    engine: {{engine}}
+    publiclyAccessible: false          # 网络安全硬红线
+    region: {{region}}
+    tags:
+      app: {{app}}
+      env: {{env_keyword}}
+      managed-by: crossplane
+  providerConfigRef:
+    name: {{app}}
+    kind: ClusterProviderConfig

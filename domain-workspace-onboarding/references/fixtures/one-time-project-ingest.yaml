@@ -1,0 +1,18 @@
+schema_version: 1
+workspace_candidate: null
+owner_agent:
+  conversation_id: independent-evaluation
+  independent: true
+items:
+  - path: launch-2026-08/
+    category: temporary-project
+  - path: notes/performance-review.md
+    category: personal-material
+  - path: issue-123-worktree/
+    category: issue-mr-worktree
+  - path: investigation/query.sql
+    category: sql
+  - path: investigation/runtime.log
+    category: log
+  - path: service/docs/runbook.html
+    category: source-repository-detail

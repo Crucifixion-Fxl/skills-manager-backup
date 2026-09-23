@@ -1,0 +1,105 @@
+# ArgoCD Application — registers an app overlay with the cluster's ArgoCD.
+#
+# Default variant: Image Updater-managed business image. For the explicitly
+# approved pinned third-party variant in new-stateful-service.md Step 5, omit
+# all Image Updater annotations and the kustomize image override before writing.
+# Its overlay owns the verified fixed version; image automation slots below
+# are inapplicable. Keep project, notifications, finalizer and syncPolicy.
+#
+# Required slots:
+#   {{app_with_target_suffix}}  e.g. naturehood-api-staging-us (app + env keyword)
+#   {{app}}                     base app kebab-case，写到 labels.app（不带 target suffix）
+#   {{env_keyword}}             e.g. staging-us / prod-cn-tke，写到 labels.env
+#   {{project}}                 approved existing project in the exact target cluster;
+#                               verify repo/path/destination/resource contracts first.
+#                               Do not default to "default" or create an AppProject.
+#   {{source_repo_url}}         e.g. https://gitlab.addx.ai/applications/naturehood.git
+#                               Prefer HTTPS. Do not render git@gitlab.addx.ai:...
+#                               unless the target ArgoCD repo credential is verified.
+#   {{source_target_revision}}  e.g. staging, master, prod (branch name for env)
+#   {{source_path}}             e.g. k8s/api/overlays/staging-us
+#   {{destination_namespace}}   from references/data/env-keywords.yaml -> namespace_pattern
+#   {{harbor_image_path}}       full LITERAL business image path, e.g. harbor-39070-us-staging.addx.live/cicd/staging-us/{{app}}
+#                               MUST match overlay images[].newName (deploy side is always a literal
+#                               host). CI IMAGE_PATH defaults to ${IMAGE_BASE}/<env>-<region>/<app>
+#                               (Option B) and must RESOLVE (runner tag -> clusters.yaml,
+#                               with verified legacy aliases where applicable) to this same
+#                               host. Do NOT write ${IMAGE_BASE} here -- kustomize / Image Updater treat
+#                               it literally and the pull 404s. See hard-rules #25.
+#   {{app_platforms}}           linux/amd64,linux/arm64 (dual-arch) | linux/amd64
+#                               (single-arch), derived from target cluster.build_mode
+#   {{image_seed}}              real recovery SHA already present in the target Harbor,
+#                               with verified digest and required platforms. Generate/commit
+#                               an Application only after this evidence exists; never use
+#                               0000000, PENDING, latest, or a fabricated seed here.
+#                               Pending parameters belong in the workflow handoff only.
+#
+# DO NOT remove the finalizer. ArgoCD won't clean up resources on Application
+# delete without it.
+#
+# DO NOT remove syncPolicy.automated. Without it, Image Updater write-backs and
+# manifest changes require manual sync forever.
+#
+# DO NOT set syncPolicy.automated.prune = false. Prune is required so renamed/
+# removed resources actually get cleaned up.
+#
+# Notification annotations (feishu-ops) are required so deploy events / health
+# degraded / sync failures land in the team channel. Workflow MUST emit these.
+#
+# Image automation stays on the Application annotation contract:
+# - write-back-method=argocd lets Image Updater update the live Application
+#   override without writing to the application repository.
+# - spec.source.kustomize.images is the Git recovery seed. For a new app it must
+#   be the first real SHA already pushed by CI; for an existing app preserve the
+#   current live SHA so root-apps cannot downgrade it during recovery.
+# - Existing-Application incident-pin variant (manage-business-image-rollback):
+#   edit only the approved aliases' allow-tags and matching recovery seed entries.
+#   Pin uses an exact verified SHA regex with the same SHA seed; release restores
+#   the recorded original filter and keeps the currently verified fixed SHA seed.
+#   Preserve all other fields. Do not regenerate an existing Application from this
+#   template. Git seed does not switch the ignored live override; see the workflow
+#   for evidence, authorization before pin activation, and the argocd handoff.
+# - force-update is deliberately absent. Add alias.force-update=true only after
+#   proving this Argo CD instance does not expose the workload image in
+#   Application.status.summary.images.
+# Do not create an app-owned ImageUpdater CR, ApplicationSet, merger policy,
+# Git write credential, or .argocd-source-* file.
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: {{app_with_target_suffix}}
+  namespace: argo-cd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io     # REQUIRED; do not remove
+  labels:
+    app: {{app}}                                  # base app name (without target suffix)
+    env: {{env_keyword}}                          # e.g. staging-us
+  annotations:
+    notifications.argoproj.io/subscribe.on-deployed.feishu-ops: ""
+    notifications.argoproj.io/subscribe.on-health-degraded.feishu-ops: ""
+    notifications.argoproj.io/subscribe.on-sync-failed.feishu-ops: ""
+    argocd-image-updater.argoproj.io/image-list: app={{harbor_image_path}}
+    argocd-image-updater.argoproj.io/app.update-strategy: newest-build
+    argocd-image-updater.argoproj.io/app.allow-tags: "regexp:^[a-f0-9]{7,40}$"
+    argocd-image-updater.argoproj.io/write-back-method: argocd
+    argocd-image-updater.argoproj.io/app.kustomize.image-name: {{app}}
+    argocd-image-updater.argoproj.io/app.platforms: {{app_platforms}}
+spec:
+  project: {{project}}
+  source:
+    repoURL: {{source_repo_url}}
+    targetRevision: {{source_target_revision}}
+    path: {{source_path}}
+    kustomize:
+      images:
+        - {{app}}={{harbor_image_path}}:{{image_seed}}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: {{destination_namespace}}
+  syncPolicy:
+    automated:
+      prune: true                                 # REQUIRED
+      selfHeal: true                              # REQUIRED
+    syncOptions:
+      - CreateNamespace=true

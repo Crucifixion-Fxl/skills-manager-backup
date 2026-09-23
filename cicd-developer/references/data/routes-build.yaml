@@ -1,0 +1,349 @@
+# routes-build.yaml
+#
+# 用户意图 -> workflow 文件 的路由表（"build" 模式）。
+#
+# LLM 流程：
+#   1. 把用户显式提出的每项能力与 keywords 比对，先列出候选。
+#   2. 一个新服务 + 附加能力：先跑新服务，再按本文件顺序跑每个附加 workflow。
+#      多个独立附加能力也按本文件顺序跑；同一能力有多个同样合理候选则问一个澄清问题。
+#   3. 未匹配到 route 时 STOP，收集需求并产 Ops Todo；不要按“最接近”workflow 生成 YAML。
+#   4. 打开每个已选 workflow_file，从头到尾按 step 执行。
+#
+# 消费方：
+#   - SKILL.md（指向本唯一 inventory）
+#   - LLM 路由判断
+#
+# Schema：
+#   intent           简短标签
+#   keywords         触发词列表（小写、无标点）
+#   workflow_file    workflow 文件相对路径
+#   internal_calls   隐式前置 workflow（如 interview-cd-requirements）
+#   mode_keywords    可选；把 route 的精确关键词机械绑定到 workflow mode
+#   status           omitted | planned（planned = 占位，文件还没写）
+#
+# planned 路由是显式 STOP，不是"让 LLM 按名字现编一个 workflow"：
+# 命中 planned entry 时，输出 Ops Todo / issue 输入，说明该 workflow 尚未实现，
+# 不要打开不存在的 workflow_file，也不要从相似 workflow 推导 YAML。
+
+build_intents:
+
+  - intent: 准备业务镜像回滚固定或解除固定 MR
+    keywords:
+      - rollback pin mr
+      - rollback release mr
+      - rollback unpin mr
+      - 回滚 pin mr
+      - 固定回滚版本 mr
+      - 解除回滚固定 mr
+      - 解除 pin mr
+    mode_keywords:
+      pin: [rollback pin mr, 回滚 pin mr, 固定回滚版本 mr]
+      release: [rollback release mr, rollback unpin mr, 解除回滚固定 mr, 解除 pin mr]
+    workflow_file: workflows/manage-business-image-rollback.md
+    internal_calls: []
+
+  - intent: 同步已有 Flink Session 集群配置
+    keywords:
+      - update existing flink session configuration
+      - sync flink session configuration
+      - sync flink session config
+      - flink session overlay update
+      - flink session 配置同步
+      - 同步 flink session 配置
+      - 更新 flink session overlay
+      - 已有 flink session 配置更新
+    workflow_file: workflows/update-flink-session-config.md
+    internal_calls: []
+
+  - intent: 新建无状态服务
+    keywords: [new service, deploy service, new microservice, deploy app, set up service, static web, static spa, vite app]
+    workflow_file: workflows/new-service.md
+    internal_calls: [workflows/interview-cd-requirements.md]
+
+  - intent: 新建有状态服务
+    keywords: [stateful, persistent volume, pvc, statefulset, clickhouse standalone]
+    workflow_file: workflows/new-stateful-service.md
+    internal_calls: [workflows/interview-cd-requirements.md]
+
+  - intent: 新建一次性批处理任务（默认挂起）
+    keywords:
+      - one-shot job
+      - one time job
+      - one-time job
+      - suspended job
+      - data migration job
+      - data copy job
+      - 一次性任务
+      - 一次性 job
+      - 数据迁移 job
+      - 数据迁移服务
+    workflow_file: workflows/new-one-shot-job.md
+    internal_calls: [workflows/interview-cd-requirements.md]
+
+  - intent: 新建定时任务
+    keywords: [cronjob, scheduled job, dagster job, periodic]
+    workflow_file: workflows/new-cronjob.md
+    internal_calls: [workflows/interview-cd-requirements.md]
+
+  - intent: 给现有服务加 RDS
+    keywords: [add rds, add database, add postgres, add mysql, attach rds, provision rds, database user, mysql user, 数据库账号, mysql 账号, 最小权限账号]
+    workflow_file: workflows/add-rds.md
+    internal_calls: []
+
+  - intent: 加 Aurora
+    keywords: [add aurora, add aurora cluster, add reader writer]
+    workflow_file: workflows/add-aurora.md
+    internal_calls: []
+
+  - intent: 加 Redis
+    keywords: [add redis, add elasticache, add cache]
+    workflow_file: workflows/add-redis.md
+    internal_calls: []
+
+  - intent: 加 GCS ObjectBucket
+    keywords: [add gcs, create gcs bucket, gcs bucket, google cloud storage, objectbucket, object bucket]
+    workflow_file: workflows/add-object-bucket.md
+    internal_calls: []
+
+  - intent: 在 GCP 上加 Cloud SQL（物理实例 + 逻辑库）
+    keywords: [add cloudsql, create cloudsql, gcp cloud sql instance, gcp database instance, gcp mysql, gcp postgres, databaseinstance, cloudsql 实例, gcp 声明式数据库]
+    workflow_file: workflows/add-cloudsql.md
+    internal_calls: []
+
+  - intent: 加 S3 bucket
+    keywords: [add s3, create bucket, provision s3]
+    workflow_file: workflows/add-s3-bucket.md
+    internal_calls: []
+
+  - intent: 加 CloudFront / CDN
+    keywords: [add cloudfront, create cdn, cloudfront distribution, cdn for s3, signed url]
+    workflow_file: workflows/add-cloudfront.md
+    internal_calls: []
+
+  - intent: 准备受保护 Crossplane Provider 内部发布基础设施
+    keywords:
+      - protected crossplane provider release infrastructure
+      - protected provider publisher infrastructure
+      - provider upjet gcp protected release infrastructure
+      - crossplane provider harbor release runner
+    workflow_file: workflows/protected-provider-release-infrastructure.md
+    internal_calls: []
+
+  - intent: 加 Kafka topic + 消费者
+    keywords: [add kafka, kafka topic, kafka consumer, msk topic]
+    workflow_file: workflows/add-kafka-topic.md
+    internal_calls: []
+    status: planned
+    planned_stop: "STOP: add-kafka-topic workflow is not implemented; MSK/Kafka topic provisioning remains ops-led until a workflow exists."
+
+  - intent: 加 IRSA 角色 / AWS API 访问
+    keywords:
+      - add irsa
+      - aws api access
+      - iam role for service account
+      - access existing s3 bucket
+      - cross account s3
+      - read another app bucket
+    workflow_file: workflows/add-irsa-role.md
+    internal_calls: []
+
+  - intent: CI Job 直接调用 AWS API（Job Pod IRSA）
+    keywords:
+      - ci aws
+      - ci irsa
+      - job pod irsa
+      - gitlab ci aws
+      - upload to s3 from ci
+      - lambda deploy ci
+      - ci assume role
+    workflow_file: workflows/add-ci-aws-irsa.md
+    internal_calls: []
+
+  - intent: 扩展到新集群
+    keywords:
+      - add target cluster
+      - deploy to new region
+      - expand cluster
+      - new env target
+      - legacy source to empty target cluster
+      - jenkins managed workload to new cluster
+      - migrate legacy workload to new cluster
+      - migrate jenkins managed workload to another cluster
+      - migrate kubectl managed workload to another cluster
+      - move legacy service to target cluster
+    workflow_file: workflows/add-target-cluster.md
+    internal_calls: []
+    mode_keywords:
+      legacy-live:
+        - legacy source to empty target cluster
+        - jenkins managed workload to new cluster
+        - migrate legacy workload to new cluster
+        - migrate jenkins managed workload to another cluster
+        - migrate kubectl managed workload to another cluster
+        - move legacy service to target cluster
+
+  - intent: 将现有 kubectl 管理的无状态工作负载接入 Argo CD
+    keywords:
+      - adopt kubectl managed workload
+      - adopt kubectl-managed workload
+      - kubectl-managed workload
+      - kubectl-managed existing service
+      - existing kubectl-managed service
+      - adopt existing workload into argocd
+      - adopt existing kubectl-managed service into argo cd
+      - adopt legacy workload into argo cd
+      - migrate kubectl workload to gitops
+      - migrate existing kubectl-managed service to gitops
+      - 接管 kubectl 管理的存量工作负载
+    workflow_file: workflows/adopt-kubectl-workload-into-argocd.md
+    internal_calls: []
+
+  - intent: 迁移已有 Argo CD Application / Helm release 身份
+    keywords:
+      - rename existing argocd application
+      - rename existing argo cd application
+      - migrate existing argocd application identity
+      - migrate existing argo cd application identity
+      - rename existing helm release
+      - migrate existing helm release identity
+      - helm release identity migration
+      - 迁移已有 argocd application 身份
+      - 重命名已有 argocd application
+      - 重命名已有 helm release
+    workflow_file: workflows/migrate-argocd-helm-identity.md
+    internal_calls: []
+
+  - intent: 加 Ingress
+    keywords: [add ingress, expose public, add domain, expose service externally]
+    workflow_file: workflows/add-ingress.md
+    internal_calls: []
+
+  - intent: 接 Sentry（自助流程）
+    keywords:
+      - add sentry
+      - sentry onboard
+      - sentry project
+      - error monitoring
+      - sentry dsn
+    workflow_file: workflows/add-sentry.md
+    internal_calls: []
+
+  - intent: 接入日志（fluent-bit-base 采集）
+    keywords:
+      - add logging
+      - setup logging
+      - log integration
+      - fluent-bit label
+      - app env label
+      - ship logs to elasticsearch
+      - migrate to fluent-bit-base
+    workflow_file: workflows/add-logging.md
+    internal_calls: []
+
+  - intent: 注册 NineData DataSource（RDS 自助查询 + 变更）
+    keywords:
+      - add ninedata
+      - register ninedata datasource
+      - ninedata.addx.live
+      - self-serve sql
+      - schema change webui
+      - 9data
+    workflow_file: workflows/add-ninedata-datasource.md
+    internal_calls: []
+
+  - intent: 管理 Grafana Dashboard 源码
+    keywords:
+      - grafana dashboard
+      - grafana 面板
+      - grafana 看板
+      - dashboard as code
+      - dashboard-as-code
+      - prometheus dashboard
+      - victoria metrics dashboard
+      - victoriametrics dashboard
+      - promql dashboard
+      - grafana dashboard json
+      - grafana dashboard 校验
+      - grafana dashboard 验证
+    workflow_file: workflows/manage-grafana-dashboard.md
+    internal_calls: []
+
+  - intent: 接入 VictoriaMetrics 指标采集
+    keywords:
+      - vmservicescrape
+      - vm service scrape
+      - vmpodscrape
+      - vm pod scrape
+      - victoria metrics scrape
+      - victoriametrics scrape
+      - gke managed dcgm
+      - gke dcgm exporter
+      - dcgm scrape
+      - gpu metrics scrape
+      - gpu telemetry scrape
+      - dcgm 指标采集
+      - gpu 指标采集
+      - gpu 遥测采集
+      - 添加指标采集
+      - 配置指标抓取
+    workflow_file: workflows/manage-victoriametrics-scrape.md
+    internal_calls: []
+
+  - intent: 给云托管中间件（RDS/Redis/Kafka）接入指标采集
+    keywords:
+      - 中间件监控
+      - 中间件指标采集
+      - 采集 rds 指标
+      - 采集 redis 指标
+      - 采集 kafka 指标
+      - rds 监控
+      - redis 监控
+      - kafka 监控
+      - cloudwatch 采集
+      - managed metrics
+      - managed_sql
+      - managed_cache
+      - managed_broker
+      - metricscollector
+      - metrics collector
+      - cloud sql 监控
+      - memorystore 监控
+      - tencentdb 监控
+      - ckafka 监控
+      - 云数据库监控
+      - 托管中间件监控
+    workflow_file: workflows/add-managed-service-scrape.md
+    internal_calls: []
+
+  - intent: 仅写 cd-requirements
+    keywords: [draft cd requirements, write requirements, fill cd-requirements]
+    workflow_file: workflows/interview-cd-requirements.md
+    internal_calls: []
+
+  - intent: 切换 RDS immutable 字段（删旧建新）
+    keywords: [change storage encrypted, rds immutable, delete rebuild rds, change rds username]
+    workflow_file: workflows/migrate-immutable-rds-field.md
+    internal_calls: []
+
+  - intent: 加 DB schema migration（PreSync hook）
+    keywords:
+      - add db migration
+      - schema migration
+      - presync hook migration
+      - migrate schema
+      - flyway
+      - liquibase
+      - sql migration
+    workflow_file: workflows/add-db-migration.md
+    internal_calls: []
+
+route_conflicts:
+  - id: legacy-live-cross-cluster-vs-same-cluster-adoption
+    capability: legacy-workload-ownership-transition
+    participants:
+      - workflow_file: workflows/add-target-cluster.md
+        mode: legacy-live
+      - workflow_file: workflows/adopt-kubectl-workload-into-argocd.md
+        mode: default
+    resolution: ask-focused-clarification
+    question: Is this an empty cross-cluster target migration, or ownership adoption of existing objects in the source cluster?

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "8fb1e26d-066a-4aae-a736-0ff3cca468ca",
+  "path": "grafana-dashboard-alert-update",
+  "path_key": "grafana-dashboard-alert-update",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/grafana-dashboard-alert-update",
+    "branch": null
+  }
+}

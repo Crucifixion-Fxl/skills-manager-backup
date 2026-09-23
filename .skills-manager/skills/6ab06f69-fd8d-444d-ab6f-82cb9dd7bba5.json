@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "6ab06f69-fd8d-444d-ab6f-82cb9dd7bba5",
+  "path": "claude-code-permissions",
+  "path_key": "claude-code-permissions",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/claude-code-permissions",
+    "branch": null
+  }
+}

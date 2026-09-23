@@ -1,0 +1,27 @@
+# 每周 MR pipeline 健康。方法在 gitlab-pipeline-health。替换 <dev-name>、<platform-desk-name>（平台 Desk，如
+# gitsecops-desk）与站立受众 GitLab 用户名。转交每周一次、必做：它是平台反馈周报的完成信号，
+# 周报（platform-feedback-summary.yaml）必须排在它之后。
+name: weekly-mr-pipeline-health
+description: Weekly MR pipeline duration and failure-rate analysis. Method lives in the Skill.
+trigger:
+  on: schedule
+  # relay 的星期字段 1=周日：周一=2，周一到周五=2-6；名字写法（MON、MON-FRI）未验证，不要用。
+  cron: "30 1 * * 2"
+steps:
+  - id: wake
+    action: send_message
+    text: >-
+      @<dev-name> 使用 $addx:gitlab-pipeline-health。
+      窗口：上一 ISO 周周一 00:00 UTC 到触发时；时区：UTC；
+      分析时点：触发时。默认 Markdown 表，不要出图。
+      最终报告走 helper，sources：person <channel_admin_username>、
+      person <core_eng_username>（缺席写未通知）。ack 不加站立受众。
+      最终报告发出后，必须按 Canvas「平台 Agent（<platform-desk-name>）」一节的格式在同一 Thread
+      转交 <platform-desk-name> 一次：有平台层根因（CI 模板、runner、镜像仓库、跨仓权限）
+      就逐条列出，没有就写「无平台层根因」（不能省略，平台周报靠这条回执判断本频道已出完）；
+      转交排在行动消息之前。
+      最终报告发出后，对报告里「需要人处理」的每一项（最多 5 项，没有就不发），
+      在同一 Thread 再发一条行动消息：一句话写清事项和链接，sources 用该项的责任人
+      （GitLab 作者／assignee／reviewer 的用户名，作 person locator；不在 people_file 就写未通知）；
+      同一个人在同一 Thread 只通知一次。
+      最终报告超过约 8 行时按 references/feishu-doc-report.md 写成飞书文档（你自己的 bot 建、只读授权给群、发摘要），Buzz Thread 只发摘要和文档链接。

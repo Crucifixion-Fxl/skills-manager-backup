@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "bfdc9591-dbd8-4d49-9e8e-89c2cba84c72",
+  "path": "paywall-hero",
+  "path_key": "paywall-hero",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/paywall-hero",
+    "branch": null
+  }
+}

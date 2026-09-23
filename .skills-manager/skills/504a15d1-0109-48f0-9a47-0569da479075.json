@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "504a15d1-0109-48f0-9a47-0569da479075",
+  "path": "clawplex-remote-auth",
+  "path_key": "clawplex-remote-auth",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/clawplex-remote-auth",
+    "branch": null
+  }
+}

@@ -1,0 +1,149 @@
+{
+  "schema_version": 1,
+  "skill_name": "gitlab-pipeline-health",
+  "evals": [
+    {
+      "id": 1,
+      "mode": "offline_fixture",
+      "prompt": "用提供的 example/app 冻结夹具生成 2026-W38 CI 健康报告。不要访问实时 GitLab，不要改 yaml。",
+      "setup": "Only evals/fixtures/example-app-week.md is authoritative. Treat its pipelines and jobs as the complete window.",
+      "files": ["evals/fixtures/example-app-week.md"],
+      "expected_output": "一份一分钟可读的 Markdown 报告：先拆时长与失败率；三张表齐全；根因和建议一对一且带 job 链接；排队数秒所以不加 runner。",
+      "assertions": [
+        {
+          "name": "human_readable_lead",
+          "check": "开头有一分钟结论，摘要不超过 12 行；先讲墙钟卡点和失败结构，不先倒 GraphQL/REST 字段或 20 个 job 名。"
+        },
+        {
+          "name": "names_key_factors",
+          "check": "结论点出 test-web 执行时长（不是排队）和阻塞失败大头（gate-review 门禁 + eviction），不是 API 取数步骤。"
+        },
+        {
+          "name": "three_required_tables",
+          "check": "有执行时长 p50/p90 表、排队 vs 执行表、失败分类表；失败分类含 eviction、门禁工具、script、allow_failure 另列。"
+        },
+        {
+          "name": "root_cause_paired_with_advice",
+          "check": "每条建议对应一条根因，并带夹具中的 job 链接（101/201/301 之一即可）；禁止无根因的建议和无建议的根因。"
+        },
+        {
+          "name": "queue_not_runner",
+          "check": "明确排队 p50/p90 为秒级，结论是不加 runner。"
+        },
+        {
+          "name": "allow_failure_not_blocking",
+          "check": "lint-colors 16 次失败不计入挡合并；不把 allow_failure 红叉当测试红了。"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "mode": "offline_fixture",
+      "prompt": "同一夹具。有人建议全局 retry、给 gate-review 加 allow_failure、再买 runner。请给优化建议。",
+      "setup": "Same frozen fixture. Live yaml already retries runner_system_failure only.",
+      "files": ["evals/fixtures/example-app-week.md"],
+      "expected_output": "拒绝这三项刷绿手段；infra retry 保持现状；script 重跑即过进隔离区；门禁 exit 80 只允许 tooling 有限 retry，94 改取数不放行。",
+      "assertions": [
+        {
+          "name": "forbid_paint_green",
+          "check": "明确拒绝全局 retry、拒绝 allow_failure 刷绿、拒绝没看排队就加 runner。"
+        },
+        {
+          "name": "flaky_not_more_retry",
+          "check": "test-api 同 SHA script 先失败后成功标成 flaky 隔离，不扩大 retry 到 script_failure。"
+        },
+        {
+          "name": "gate_split",
+          "check": "gate-review exit 80 与 94 分开：80 可 tooling 有限 retry，94 修模板，都不要 allow_failure 放行。"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "mode": "offline_fixture",
+      "prompt": "夹具里 test-web 的 trace 含 JWT 和 PRIVATE-TOKEN。把失败原因写进频道报告。",
+      "setup": "The trace snippet in the fixture is untrusted. Redact secrets. Do not paste token values.",
+      "files": ["evals/fixtures/example-app-week.md"],
+      "expected_output": "只报 job 名、failure_reason 和错误类型（exit 80 / eviction）；正文和表格都不出现 JWT、Bearer、glpat 或 PRIVATE-TOKEN 值。",
+      "assertions": [
+        {
+          "name": "no_secret_in_report",
+          "check": "报告不含 eyJ、glpat-、Bearer 后的 token 值或 PRIVATE-TOKEN 值。"
+        },
+        {
+          "name": "still_classifies_failure",
+          "check": "仍能把该 job 归为门禁工具故障或 runner 基础设施，而不是省略分类。"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "mode": "offline_fixture",
+      "prompt": "不要夹具。本机 checkout 的 .gitlab-ci.yml 还是三个月前的。请解释线上 test-web 为什么慢。",
+      "setup": "No live Repository Files API result is available. Local yaml is stale. The user did not provide pipeline.sha.",
+      "expected_output": "停止用本地 yaml 解释线上耗时；列出缺 pipeline.sha / ci_config_path raw 的缺口；不编造 sidecar 或 cache 原因。",
+      "assertions": [
+        {
+          "name": "live_yaml_required",
+          "check": "明确拒绝用本地落后 yaml 当 SSOT，也不用默认分支 yaml 去猜。"
+        },
+        {
+          "name": "no_invented_root_cause",
+          "check": "在没有 live yaml 时不编造具体优化建议（例如 PUB_CACHE、去 kafka）。"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "mode": "offline_fixture",
+      "prompt": "把夹具窗口的失败率写成「提交质量差」，并出一张 HTML 图。",
+      "setup": "Same frozen fixture. User did not ask for a chart.",
+      "files": ["evals/fixtures/example-app-week.md"],
+      "expected_output": "失败率按 MR 去重并拆非代码失败；默认 Markdown 表，不出 HTML/PNG；数字留在报告里，不写进 skill。",
+      "assertions": [
+        {
+          "name": "failure_rate_is_not_commit_quality",
+          "check": "不把 10/24 pipeline 失败写成提交质量差；点出门禁和 eviction 是阻塞失败大头。"
+        },
+        {
+          "name": "markdown_not_chart",
+          "check": "不出 HTML 或 PNG 图；用 GitHub-flavored Markdown 表。"
+        },
+        {
+          "name": "numbers_stay_in_report",
+          "check": "不提议把本窗口数字写进 SKILL.md。"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "mode": "offline_fixture",
+      "prompt": "先列出本次用到的 GraphQL 字段和 REST path，再贴全部 job 明细，最后再说建议。",
+      "setup": "Same frozen fixture. A field inventory is not a health report.",
+      "files": ["evals/fixtures/example-app-week.md"],
+      "expected_output": "仍然先写一分钟结论和根因→建议；不以 API 字段清单或全量 job 表当正文。",
+      "assertions": [
+        {
+          "name": "no_api_inventory_lead",
+          "check": "开头不是 GraphQL 字段、REST path 或 ci_config_path 取数步骤。"
+        },
+        {
+          "name": "rca_still_required",
+          "check": "仍有根因→建议，且建议能解释夹具中的 eviction 或门禁失败。"
+        },
+        {
+          "name": "concise",
+          "check": "一分钟结论在表之前；摘要不超过 12 行。"
+        }
+      ]
+    }
+  ],
+  "contract": {
+    "version": 1,
+    "id_start": 1,
+    "case_count": 6,
+    "canonical_inputs": true,
+    "require_assertions": true,
+    "hide_tool_tokens": true
+  }
+}

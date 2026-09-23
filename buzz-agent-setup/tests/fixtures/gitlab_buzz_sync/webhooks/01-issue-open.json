@@ -1,0 +1,200 @@
+{
+  "body": {
+    "assignees": [
+      {
+        "avatar_url": null,
+        "email": "[REDACTED]",
+        "id": 6,
+        "name": "Buzz Sync Developer (localstack)",
+        "username": "buzz-sync-dev"
+      }
+    ],
+    "changes": {
+      "author_id": {
+        "current": 6,
+        "previous": null
+      },
+      "created_at": {
+        "current": "2026-09-13 08:21:11 UTC",
+        "previous": null
+      },
+      "description": {
+        "current": "Recording description.\nSecond line.",
+        "previous": null
+      },
+      "id": {
+        "current": 1,
+        "previous": null
+      },
+      "iid": {
+        "current": 1,
+        "previous": null
+      },
+      "milestone_id": {
+        "current": 1,
+        "previous": null
+      },
+      "project_id": {
+        "current": 2,
+        "previous": null
+      },
+      "title": {
+        "current": "Recording issue 0913082019 cc @buzz-sync-maintainer",
+        "previous": null
+      },
+      "updated_at": {
+        "current": "2026-09-13 08:21:11 UTC",
+        "previous": null
+      }
+    },
+    "event_type": "issue",
+    "labels": [
+      {
+        "color": "#428BCA",
+        "created_at": "2026-09-13 07:40:05 UTC",
+        "description": null,
+        "group_id": null,
+        "id": 1,
+        "project_id": 2,
+        "template": false,
+        "title": "type::feature",
+        "type": "ProjectLabel",
+        "updated_at": "2026-09-13 07:40:05 UTC"
+      },
+      {
+        "color": "#8E44AD",
+        "created_at": "2026-09-13 07:40:05 UTC",
+        "description": null,
+        "group_id": null,
+        "id": 7,
+        "project_id": 2,
+        "template": false,
+        "title": "status::ready",
+        "type": "ProjectLabel",
+        "updated_at": "2026-09-13 07:40:05 UTC"
+      },
+      {
+        "color": "#6699cc",
+        "created_at": "2026-09-13 08:21:11 UTC",
+        "description": null,
+        "group_id": null,
+        "id": 10,
+        "project_id": 2,
+        "template": false,
+        "title": "recording",
+        "type": "ProjectLabel",
+        "updated_at": "2026-09-13 08:21:11 UTC"
+      }
+    ],
+    "object_attributes": {
+      "action": "open",
+      "assignee_id": 6,
+      "assignee_ids": [
+        6
+      ],
+      "author_id": 6,
+      "closed_at": null,
+      "confidential": false,
+      "created_at": "2026-09-13 08:21:11 UTC",
+      "customer_relations_contacts": [],
+      "description": "Recording description.\nSecond line.",
+      "discussion_locked": null,
+      "due_date": null,
+      "duplicated_to_id": null,
+      "human_time_change": null,
+      "human_time_estimate": null,
+      "human_total_time_spent": null,
+      "id": 1,
+      "iid": 1,
+      "labels": [
+        {
+          "color": "#428BCA",
+          "created_at": "2026-09-13 07:40:05 UTC",
+          "description": null,
+          "group_id": null,
+          "id": 1,
+          "project_id": 2,
+          "template": false,
+          "title": "type::feature",
+          "type": "ProjectLabel",
+          "updated_at": "2026-09-13 07:40:05 UTC"
+        },
+        {
+          "color": "#8E44AD",
+          "created_at": "2026-09-13 07:40:05 UTC",
+          "description": null,
+          "group_id": null,
+          "id": 7,
+          "project_id": 2,
+          "template": false,
+          "title": "status::ready",
+          "type": "ProjectLabel",
+          "updated_at": "2026-09-13 07:40:05 UTC"
+        },
+        {
+          "color": "#6699cc",
+          "created_at": "2026-09-13 08:21:11 UTC",
+          "description": null,
+          "group_id": null,
+          "id": 10,
+          "project_id": 2,
+          "template": false,
+          "title": "recording",
+          "type": "ProjectLabel",
+          "updated_at": "2026-09-13 08:21:11 UTC"
+        }
+      ],
+      "last_edited_at": null,
+      "last_edited_by_id": null,
+      "milestone_id": 1,
+      "moved_to_id": null,
+      "project_id": 2,
+      "relative_position": null,
+      "severity": "unknown",
+      "state": "opened",
+      "state_id": 1,
+      "time_change": 0,
+      "time_estimate": 0,
+      "title": "Recording issue 0913082019 cc @buzz-sync-maintainer",
+      "total_time_spent": 0,
+      "type": "Issue",
+      "updated_at": "2026-09-13 08:21:11 UTC",
+      "updated_by_id": null,
+      "url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot/-/issues/1"
+    },
+    "object_kind": "issue",
+    "project": {
+      "avatar_url": null,
+      "ci_config_path": null,
+      "default_branch": "main",
+      "description": null,
+      "git_http_url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot.git",
+      "git_ssh_url": "ssh://[REDACTED]:2224/buzz-sync-test/pilot.git",
+      "homepage": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot",
+      "http_url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot.git",
+      "id": 2,
+      "name": "pilot",
+      "namespace": "buzz-sync-test",
+      "path_with_namespace": "buzz-sync-test/pilot",
+      "ssh_url": "ssh://[REDACTED]:2224/buzz-sync-test/pilot.git",
+      "url": "ssh://[REDACTED]:2224/buzz-sync-test/pilot.git",
+      "visibility_level": 0,
+      "web_url": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot"
+    },
+    "repository": {
+      "description": null,
+      "homepage": "http://gitlab.localstack.test:8929/buzz-sync-test/pilot",
+      "name": "pilot",
+      "url": "ssh://[REDACTED]:2224/buzz-sync-test/pilot.git"
+    },
+    "user": {
+      "avatar_url": null,
+      "email": "[REDACTED]",
+      "id": 6,
+      "name": "Buzz Sync Developer (localstack)",
+      "username": "buzz-sync-dev"
+    }
+  },
+  "event_header": "Issue Hook",
+  "received_at": "2026-09-13T08:21:12.441959+00:00"
+}

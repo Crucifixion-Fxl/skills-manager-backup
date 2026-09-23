@@ -1,0 +1,29 @@
+# =============================================================================
+# code-review 规则级门禁策略
+#
+# 此文件随 code-review Skill 一同分发，项目本地配置不可覆盖。
+# 路径使用小写 GitLab path_with_namespace；namespace 项按斜杠边界匹配后代项目，
+# project 项按完整路径精确匹配。不允许使用正则表达式或 glob 模式。
+# =============================================================================
+
+version: "1.1"
+
+rules:
+  chinese_literal:
+    # 未列出的项目仍执行 C1 检测，但发现项不阻断合并。
+    default_level: warning
+
+    # namespace 项适用于其所有后代项目；斜杠边界可避免
+    # "applications-tools/project" 被误判为属于 "applications"。
+    blocking_namespaces:
+      - applications
+      - platforms
+      - provisioning
+      - services
+      - test
+
+    # 精确项目路径用于补充 namespace 规则。
+    blocking_projects:
+      - swclien/g0-android
+      - swclien/g0-flutter-module
+      - swclien/g0-ios

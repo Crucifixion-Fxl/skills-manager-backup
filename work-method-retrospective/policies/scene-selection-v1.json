@@ -1,0 +1,15 @@
+{
+  "schema": "addx.work_method_scene_selection.v1",
+  "fingerprint": ["provider", "session_id", "task_id", "evidence_cutoff_at"],
+  "deduplication": "reuse unchanged frozen scene summaries by fingerprint",
+  "selection_order": [
+    "required-claim coverage",
+    "human decision or correction",
+    "verified outcome",
+    "cross-context diversity"
+  ],
+  "window_fields": ["goal", "constraint", "turning_point", "result"],
+  "max_scenes": 8,
+  "max_input_tokens": 200000,
+  "fallback_max_utf8_characters": 120000
+}

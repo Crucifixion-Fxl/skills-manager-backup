@@ -1,0 +1,104 @@
+# <Service> API 主动巡检 — 运维手册
+
+[<< 返回架构设计](../architecture/<module>/api-monitoring.md)
+
+| 文档状态 | 初稿 | YYYY-MM-DD |
+|---------|------|-----------|
+
+> 面向操作者的运维文档。架构设计 / ADR 请看架构文档。
+
+---
+
+## 组件边界
+
+| 组件 | 位置 | 职责 |
+|------|------|------|
+| smoke 测试代码 | `smoke/` | pytest suite + 环境发现 + 飞书通知 |
+| 环境 URL 配置 | `smoke/envs.py` | SSOT — 各 DC 的 URL |
+| CI 配置 | `.gitlab-ci.yml` | 触发规则、image、matrix |
+| GitLab Schedule | Schedule #N（5min cron） | 周期性触发 |
+| GitLab CI Variables | project settings | Feishu + RP 凭据 |
+| 飞书告警 | Bot webhook（signed） | 失败时实时通知 |
+| ReportPortal | `<RP URL>` | 历史结果聚合 |
+
+---
+
+## 日常操作
+
+### 触发一次巡检（不等 5min）
+
+```bash
+TOKEN=<personal access token>
+curl -s -X POST -H "PRIVATE-TOKEN: $TOKEN" \
+  "https://gitlab.addx.ai/api/v4/projects/<id>/pipeline?ref=master"
+```
+
+或 GitLab UI → CI/CD → Pipelines → Run pipeline。
+
+### 本地跑一次
+
+```bash
+make smoke
+# 或
+cd smoke && pip install -e . && python -m pytest checks/ --env=staging-us -v
+```
+
+### 查看历史结果
+
+- **GitLab**: CI/CD → Pipelines，筛选 source=schedule
+- **ReportPortal**: `<RP URL>` → project `<name>` → Launches
+- **飞书**: 监控群，失败时收红色卡片
+
+---
+
+## 常见操作场景
+
+### 添加新环境（新 DC 上线后）
+
+1. `smoke/envs.py` 加条目
+2. `.gitlab-ci.yml` 的 `parallel.matrix` 加 `ENV`
+3. 按 Git Flow 提 MR
+
+### 修改 Feishu / RP 凭据
+
+GitLab → Settings → CI/CD → Variables：
+- `FEISHU_WEBHOOK_URL` / `FEISHU_WEBHOOK_SECRET`
+- `SMOKE_RP_ENDPOINT` / `SMOKE_RP_PROJECT` / `SMOKE_RP_TOKEN`
+- 全部 **protected + masked**（endpoint 可不 mask，但必须 protected）
+
+### 暂停 / 恢复
+
+- UI: CI/CD → Schedules → Active 开关
+- API: `curl -X PUT -d "active=false" /api/v4/projects/<id>/pipeline_schedules/<N>`
+
+---
+
+## 故障排查
+
+### 飞书没收到告警
+
+1. 确认 pipeline 在 **protected branch** 上跑
+2. 看 job log，搜 `[smoke notify]`
+3. 手动测 webhook: `python -m lib.feishu --webhook=... --secret=... --env=manual`
+
+### RP 没有新 launch
+
+1. 看 pipeline 日志是否带 `--reportportal` 参数
+2. 确认 3 个 RP 变量都配置且能被拿到
+3. `curl $SMOKE_RP_ENDPOINT/composite/info` 验证可达
+
+### Pipeline 0 jobs + failed + 无 yaml_errors
+
+**已知坑**：`ci-templates` 需要 `test` stage。检查 `.gitlab-ci.yml` 的 stages 列表。
+
+### MR 上 code-review / sonarqube 标红
+
+那是 ci-templates 的 `.post` job（allow_failure），smoke:patrol 自己绿就是 OK。
+
+---
+
+## 参考
+
+- 架构设计：`docs/architecture/<module>/api-monitoring.md`
+- 实现计划：`docs/plans/YYYY-MM-DD-api-monitoring.md`
+- CI 模板源：`engineering/ci-templates:main/.gitlab-ci/entrypoint.yml`

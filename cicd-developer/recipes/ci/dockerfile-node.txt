@@ -1,0 +1,35 @@
+# Node.js 服务的多阶段 Dockerfile 模板。
+#
+# 必填槽位：
+#   {{node_version}}    e.g. 22（pin 主版本，不要 latest）
+#   {{port}}            container 监听端口
+#   {{start_cmd}}       JSON 数组形式，e.g. ["node", "dist/server.js"]
+#                       或 ["npm", "start"]
+#
+# 设计要点：
+#   - 用 alpine 基础减少镜像体积；如果有 native deps（sharp / canvas / better-sqlite3
+#     等）改 debian-slim
+#   - npm ci 原生使用 package-lock / npm-shrinkwrap 做可复现安装；
+#     **不要** npm install，也不要传 Yarn/pnpm 风格的 frozen lockfile 参数
+#   - 最终阶段不要带 dev deps（NODE_ENV=production；npm prune 也行）
+#   - 用 non-root user 跑（alpine 镜像有 node 用户 1000:1000）
+#   - **不要** copy node_modules from host（用 builder 阶段重新装）
+#   - CN / TKE / aws-cn target：写盘前按 new-service.md Step 7 把 FROM 改为
+#     ${HARBOR_REGISTRY}/base/...，并补 ARG HARBOR_REGISTRY
+
+FROM node:{{node_version}}-alpine AS builder
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+FROM node:{{node_version}}-alpine
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=builder /app/package*.json ./
+RUN npm ci --omit=dev && npm cache clean --force
+COPY --from=builder /app/dist ./dist
+EXPOSE {{port}}
+USER node
+CMD {{start_cmd}}

@@ -1,0 +1,123 @@
+# 项目专用质量规则。复制到 <project_dir>/config/quality_rules.yaml 后填写。
+#
+# 重要：
+# - 所有题目引用都是本项目的 logical_qid；skill 不提供任何默认题号。
+# - 删除不适用的示例，填写参数，并至少启用一条规则。
+# - 默认 policy=flag_only：只生成复核标记，不自动删除答卷。
+# - 如确需双口径自动剔除，明确改为 dual_threshold：
+#   S0 同时进入两种剔除口径，S1 仅进入严格口径，S2 仍只标记。
+# - 题目映射缺失默认报错。只有业务上允许缺题时，才对该规则写 on_missing: skip。
+
+version: 1
+policy: flag_only
+
+rules:
+  - id: required_core_answers
+    type: required_missing
+    label: 核心必答题缺失
+    severity: S0
+    enabled: false
+    params:
+      logical_qids: ["<required_logical_qid>"]
+
+  - id: completion_time_check
+    type: completion_time_outlier
+    label: 完成时长超出预期范围
+    severity: S2
+    enabled: false
+    params:
+      # metadata 使用标准化回答的 createTime / lastSubmittedTime。
+      # 仅当平台字段确实代表开始与完成时间时启用。
+      source: metadata
+      min_seconds: 60
+      max_seconds: 3600
+
+  - id: open_text_too_short
+    type: open_text_too_short
+    label: 开放题回答过短
+    severity: S2
+    enabled: false
+    params:
+      logical_qids: ["<open_text_logical_qid>"]
+      min_chars: 5
+      min_hits: 1
+      include_blank: false
+
+  - id: open_text_gibberish
+    type: open_text_gibberish
+    label: 开放题疑似无意义文本
+    severity: S1
+    enabled: false
+    params:
+      logical_qids: ["<open_text_logical_qid>"]
+      min_hits: 1
+
+  - id: repeated_scale_pattern
+    type: scale_uniform
+    label: 多道量表题使用同一档
+    severity: S2
+    enabled: false
+    params:
+      logical_qids: ["<scale_qid_1>", "<scale_qid_2>", "<scale_qid_3>"]
+      min_answered: 3
+      max_unique_values: 1
+
+  - id: narrow_scale_range
+    type: scale_range
+    label: 多道量表题区分度很低
+    severity: S2
+    enabled: false
+    params:
+      logical_qids: ["<scale_qid_1>", "<scale_qid_2>", "<scale_qid_3>"]
+      min_answered: 3
+      max_range: 1
+
+  - id: scale_answer_conflict
+    type: scale_mean_conflict
+    label: 两组相关打分明显冲突
+    severity: S2
+    enabled: false
+    params:
+      scale_logical_qids: ["<scale_qid_1>", "<scale_qid_2>"]
+      comparison_logical_qid: "<comparison_qid>"
+      mean_gte: 8
+      comparison_lte: 2
+
+  - id: top_bottom_overlap
+    type: choice_overlap
+    label: 应互相区分的选择发生重合
+    severity: S2
+    enabled: false
+    params:
+      left_logical_qid: "<left_choice_qid>"
+      right_logical_qid: "<right_choice_qid>"
+      min_overlap: 1
+
+  - id: exclusive_option_mixed
+    type: exclusive_choice_mixed
+    label: 互斥选项与其他选项同时选择
+    severity: S1
+    enabled: false
+    params:
+      logical_qid: "<multi_choice_qid>"
+      exclusive_values: ["<exclusive_option_text>"]
+
+  - id: cohort_answer_mismatch
+    type: cohort_answer_mismatch
+    label: 邀请分群与用户自报状态不一致
+    severity: S2
+    enabled: false
+    params:
+      logical_qid: "<self_report_qid>"
+      allowed_values_by_cohort:
+        "<cohort_key>": ["<allowed_answer_text>"]
+
+  - id: duplicate_fingerprint
+    type: duplicate_fingerprint
+    label: 短时间内出现相同关键答案组合
+    severity: S2
+    enabled: false
+    params:
+      logical_qids: ["<stable_qid_1>", "<stable_qid_2>"]
+      min_non_empty: 2
+      window_seconds: 600

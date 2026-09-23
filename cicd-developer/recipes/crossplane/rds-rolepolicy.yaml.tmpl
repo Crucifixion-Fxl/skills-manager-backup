@@ -1,0 +1,77 @@
+# Crossplane RDS RolePolicy — IAM permissions for Crossplane to manage RDS for an app.
+#
+# Required slots:
+#   {{app}}         kebab-case (used in role name + ARN scope)
+#   {{partition}}   aws | aws-cn (from clusters.yaml cluster.partition)
+#                   AWS CN (cn-prod / cn-tech-service / cn-dev / cn-staging) MUST use aws-cn
+#                   else IAM 拒收 "MalformedPolicy" 因 ARN partition 不匹配集群
+#   {{region}}      full AWS region name from clusters.yaml cluster.aws_region
+#                   e.g. us-east-1 / eu-central-1 / cn-northwest-1 / ap-southeast-1
+#   {{account_id}}  AWS account id (12 digits) — from clusters.yaml
+#
+# Split into Describe (Resource: "*") + Manage (Resource: app-scoped ARN) blocks.
+# This is REQUIRED — see comments below.
+
+apiVersion: iam.aws.m.upbound.io/v1beta1
+kind: RolePolicy
+metadata:
+  name: crossplane-app-{{app}}-rds
+spec:
+  forProvider:
+    policy: |
+      {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Sid": "RDSDescribe",
+            "Effect": "Allow",
+            "Action": [
+              "rds:DescribeDBInstances",
+              "rds:DescribeDBSubnetGroups",
+              "rds:DescribeDBParameterGroups",
+              "rds:DescribeDBSecurityGroups",
+              "rds:ListTagsForResource"
+            ],
+            "Resource": "*"
+          },
+          {
+            "Sid": "RDSManage",
+            "Effect": "Allow",
+            "Action": "rds:*",
+            "Resource": [
+              "arn:{{partition}}:rds:{{region}}:{{account_id}}:db:{{app}}-*",
+              "arn:{{partition}}:rds:{{region}}:{{account_id}}:cluster:{{app}}-*",
+              "arn:{{partition}}:rds:{{region}}:{{account_id}}:subgrp:*",
+              "arn:{{partition}}:rds:{{region}}:{{account_id}}:pg:*",
+              "arn:{{partition}}:rds:{{region}}:{{account_id}}:secgrp:*"
+            ]
+          }
+        ]
+      }
+    roleRef:
+      name: crossplane-app-{{app}}
+  providerConfigRef:
+    name: default
+    kind: ClusterProviderConfig
+
+# Why two statements:
+#   rds:DescribeDBInstances / ListTagsForResource etc. do NOT support resource-level
+#   ARN scoping. If you fold "rds:*" into the app-scoped ARN, Observe phase fails:
+#     User is not authorized to perform: rds:DescribeDBInstances
+#     on resource: arn:{{partition}}:rds:<region>:<acct>:db:*
+#   Reference: https://docs.aws.amazon.com/service-authorization/reference/list_amazonrds.html
+#   ("Resource types" column empty = action requires Resource: "*")
+#
+# Why subgrp/pg/secgrp use "*":
+#   subgrp is shared cluster preset crossplane-default — app prefix doesn't match.
+#   pg / secgrp use "*" to leave room for future custom parameter groups.
+#
+# DO NOT add to this policy:
+#   - manageMasterUserPassword=true RDS permissions  (password goes to Secrets
+#     Manager, breaks PushSecret chain; CrossplaneAppBoundary blocks
+#     secretsmanager:CreateSecret anyway)
+#   - Custom kmsKeyId + kms:CreateGrant/Encrypt  (boundary blocks these; use
+#     AWS-managed key with storageEncrypted=true)
+#   - ec2:Describe{SecurityGroups,Subnets,Vpcs,AvailabilityZones}  (only needed
+#     if Crossplane is asked to create SGs/Subnets — current standard uses
+#     preset shared SG + crossplane-default subnet group)

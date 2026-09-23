@@ -1,0 +1,4 @@
+interface:
+  display_name: "代码评审修复"
+  short_description: "安全判断并修复代码评审意见"
+  default_prompt: "读取真实评审意见并逐条验证，只修复确认有效的问题；通过保护业务行为的测试验证修复，并报告可核查的证据。"

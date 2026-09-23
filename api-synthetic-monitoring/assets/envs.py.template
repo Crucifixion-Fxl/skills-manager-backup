@@ -1,0 +1,22 @@
+"""Per-environment URLs for API synthetic monitoring.
+
+Add new envs here when they come online. Empty string means the service
+is not deployed yet — tests for that URL will be skipped automatically.
+
+SSOT for environment URLs. Secrets/tokens live in GitLab CI variables,
+not here.
+"""
+
+ENVIRONMENTS = {
+    "staging-us": {
+        "admin_url": "https://<service>-admin-staging.<company>.live",
+        "api_url": "",  # empty = service not deployed yet
+    },
+    # Uncomment as deployments come online:
+    # "prod-us": {
+    #     "admin_url": "https://<service>-admin.<company>.live",
+    #     "api_url": "https://<service>-api.<company>.live",
+    # },
+    # "prod-eu": {...},
+    # "prod-cn": {...},
+}

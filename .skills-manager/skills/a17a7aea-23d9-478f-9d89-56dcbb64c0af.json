@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "a17a7aea-23d9-478f-9d89-56dcbb64c0af",
+  "path": "personalized-paywall-uat",
+  "path_key": "personalized-paywall-uat",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills.git",
+    "subpath": "skills/personalized-paywall-uat",
+    "branch": null
+  }
+}

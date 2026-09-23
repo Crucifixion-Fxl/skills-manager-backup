@@ -1,0 +1,170 @@
+# env-keywords.yaml
+#
+# 用户口语化的环境名 -> 解析后的集群行映射。
+#
+# 用户说 "staging-us" / "prod-cn-restricted-admin"，workflow 不要让用户从清单里
+# 挑——直接查这张表得到 {集群, 命名空间模式, env, 适用 app 类型}。如果用户给的
+# keyword 不在表里，STOP，问用户。存在的 keyword 也必须通过 clusters.yaml 中
+# deployment_status == allowed 门禁；历史 lookup 不代表仍可新部署。
+#
+# 消费方：
+#   - workflows/*.md（Step "解析环境"）
+#   - SKILL.md（路由说明引用）
+#
+# Schema：
+#   env_keywords:
+#     <keyword>:
+#       cluster              clusters.yaml 中的 clusters[].name
+#       env                  dev | staging | pre | prod
+#       namespace_pattern    命名空间模板（{phase}-{app} 前缀式），{app} 槽位
+#       app_types            哪些部署路由 slug 解析到这一行
+#                            (c-end | restricted-admin | builder | data | observability)
+#
+# 重要规则（namespace 命名规范，2026-06 重定为前缀式）：
+#   namespace = "{phase}-{app}"（phase = staging | prod；dev = dev-{app}）。
+#   **前缀式，不是后缀**——旧的裸 {app} / {app}-prod / {app}-pre 已废弃。
+#   日志依据：使用共享 fluent-bit-base 的 business-namespace gate（Lua set_topic）时
+#   只放行 namespace == default 或以 staging-/pre-/prod-/canary-/test- 开头的；
+#   裸 {app} 会在 Lua 入口被 return -1 直接 drop（日志静默丢失，无告警）。
+#   前缀式天然满足该 gate；独立 collector 必须查实际 filter，不套用同一 drop 结论。
+#   集群只编码 region；env(phase) 由 namespace 前缀 +
+#   pod 的 env label（region-bearing，如 staging-us）共同承载。Kafka output 的 topic
+#   由实际 collector 的 app+env 解析决定，direct output 则查配置的 index/alias；
+#   不用完整 keyword 的语义猜 topic。同名 app 在不同集群用同名 namespace
+#   不冲突（集群隔离）。
+#
+#   restricted-admin（管理后台、控制台、可观测面板等）的 prod **不在** *-eks-prod，
+#   而是落同 region 的 tech-service 集群。现在 staging 已切独立 builder staging
+#   集群、pre 已废弃，tech-service 上同一 app 只剩 prod 一个环境，所以 namespace
+#   同样是 prod-{app}（不再用旧的 {app}-prod 后缀做同集群隔离）。
+#   precedent: support-admin-prod / engagement-admin-prod / developer-portal-prod
+#   都在 us-eks-tech-service（namespace prod-<app>）。
+#
+#   pre 已废弃：不再为新应用接入 pre-*；用户请求 pre 时 STOP（存量迁移另议）。
+#
+#   数仓集群（us-prod-data / eu-prod-data）是 ops 域的**混合环境集群**——staging
+#   与 prod 的 data 应用同驻一集群，靠 namespace 前缀区分（staging-{app} /
+#   prod-{app}）。两者都读 ops vault（vault-{region}-prod, vault-backend），
+#   vault 路径首段由 env-keyword 的 env 段决定（staging/prod）。这与 cn-k8s/TKE
+#   例外同理：env=staging 但读 ops vault，不是 builder vault。
+#
+#   dev-cn 仅保留历史 dev-{app} lookup：cn-eks-dev 已退役，禁止新 Build。
+#   dev- 也不在共享 fluent-bit Lua 日志 gate 白名单。
+#   例外：明确部署到 cn-k8s / TKE 的服务，即使 env=staging，也使用 cn-k8s ops
+#   域与 `vault-backend`。
+
+env_keywords:
+
+  # ----- staging（独立 builder staging 集群；不得路由到 tech-service / ops vault）-----
+  staging-us:
+    cluster: us-eks-staging
+    env: staging
+    namespace_pattern: "staging-{app}"
+    app_types: [c-end, restricted-admin, builder, data, observability]
+
+  staging-eu:
+    cluster: eu-eks-staging
+    env: staging
+    namespace_pattern: "staging-{app}"
+    app_types: [c-end, restricted-admin, builder, data, observability]
+
+  staging-cn:
+    cluster: cn-eks-staging
+    env: staging
+    namespace_pattern: "staging-{app}"
+    app_types: [c-end, restricted-admin, builder, data, observability]
+
+  staging-cn-tke:
+    cluster: cn-k8s
+    env: staging
+    namespace_pattern: "staging-{app}"
+    app_types: [c-end, restricted-admin, builder, data, observability]
+
+  # ----- pre（已废弃，2026-06 从路由表移除）-----
+  # pre-us / pre-eu / pre-cn 已删除：不再为新应用接入 pre。用户请求 pre-* 时会命中
+  # 本文件"keyword 不在表里 → STOP"的规则被直接拦住（存量迁移另议）。
+  # 注：pre 作为 vault 路径首段 / harbor path / 成本档位的合法 env 值仍保留在
+  # references/vault-paths/rules.yaml、hard-rules.yaml、cost-tiering/* 中，供存量
+  # pre 应用使用——那些是文法/策略，不是新部署路由入口。
+
+  # ----- dev 历史 lookup（cn-eks-dev 已退役，不再接受新 Build）-----
+  # 用户请求 dev-cn 时先命中 cluster lifecycle STOP；不要猜测替代集群或复活 runner。
+  dev-cn:
+    cluster: cn-eks-dev
+    env: dev
+    namespace_pattern: "dev-{app}"
+    app_types: [builder]
+
+  # ----- prod c-end / builder -----
+  prod-us:
+    cluster: us-eks-prod
+    env: prod
+    namespace_pattern: "prod-{app}"
+    app_types: [c-end, builder]
+
+  prod-eu:
+    cluster: eu-eks-prod
+    env: prod
+    namespace_pattern: "prod-{app}"
+    app_types: [c-end, builder]
+
+  prod-cn:
+    cluster: cn-prod                 # AWS CN 默认
+    env: prod
+    namespace_pattern: "prod-{app}"
+    app_types: [c-end]
+
+  prod-cn-tke:
+    cluster: cn-k8s
+    env: prod
+    namespace_pattern: "prod-{app}"
+    app_types: [c-end]
+
+  # ----- data（数仓集群是 ops 域混合环境集群：staging + prod 同驻，靠前缀区分）-----
+  # 两个 env 都读 ops vault（vault-{region}-prod, vault-backend）；env 段决定
+  # vault 路径首段。详见上方"重要规则"。
+  staging-us-data:
+    cluster: us-prod-data
+    env: staging
+    namespace_pattern: "staging-{app}"
+    app_types: [data]
+
+  prod-us-data:
+    cluster: us-prod-data
+    env: prod
+    namespace_pattern: "prod-{app}"
+    app_types: [data]
+
+  staging-eu-data:
+    cluster: eu-prod-data
+    env: staging
+    namespace_pattern: "staging-{app}"
+    app_types: [data]
+
+  prod-eu-data:
+    cluster: eu-prod-data
+    env: prod
+    namespace_pattern: "prod-{app}"
+    app_types: [data]
+
+  # ----- prod restricted-admin（落 tech-service 集群；namespace 前缀 prod-）-----
+  # 管理后台 / 控制台 / 内部门户 prod **不在** *-eks-prod 上。staging 已切独立
+  # 集群、pre 废弃 → tech-service 上同一 app 只剩 prod，namespace = prod-{app}
+  # （不再用旧 {app}-prod 后缀）。
+  prod-us-restricted-admin:
+    cluster: us-eks-tech-service
+    env: prod
+    namespace_pattern: "prod-{app}"
+    app_types: [restricted-admin]
+
+  prod-eu-restricted-admin:
+    cluster: eu-eks-tech-service
+    env: prod
+    namespace_pattern: "prod-{app}"
+    app_types: [restricted-admin]
+
+  prod-cn-restricted-admin:
+    cluster: cn-eks-tech-service
+    env: prod
+    namespace_pattern: "prod-{app}"
+    app_types: [restricted-admin]

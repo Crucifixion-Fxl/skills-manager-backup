@@ -1,0 +1,24 @@
+{
+  "schema_version": "1.0",
+  "form_id": "",
+  "instrument_sha256": "",
+  "test_cases": [
+    {
+      "test_case_id": "test_case_01",
+      "selector": {
+        "answer": {
+          "field_ref": "question_with_other_ref",
+          "operator": "equals",
+          "value": "test_case_01"
+        }
+      },
+      "answers": [
+        {
+          "field_ref": "question_ref",
+          "operator": "equals",
+          "value": "choice_ref"
+        }
+      ]
+    }
+  ]
+}
