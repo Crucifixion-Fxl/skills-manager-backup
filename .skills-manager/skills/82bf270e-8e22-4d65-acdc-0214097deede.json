@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "82bf270e-8e22-4d65-acdc-0214097deede",
+  "path": "writing-fragments",
+  "path_key": "writing-fragments",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://github.com/mattpocock/skills.git",
+    "subpath": "skills/in-progress/writing-fragments",
+    "branch": null
+  }
+}

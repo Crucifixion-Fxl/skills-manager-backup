@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "06e4bf74-45b2-4e54-a9b9-9ccd9f7341c7",
+  "path": "to-questionnaire",
+  "path_key": "to-questionnaire",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://github.com/mattpocock/skills.git",
+    "subpath": "skills/productivity/to-questionnaire",
+    "branch": null
+  }
+}

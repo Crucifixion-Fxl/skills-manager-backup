@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "f8d1afe3-67c7-41eb-9a4d-137b470b8e8c",
+  "path": "setup-pre-commit",
+  "path_key": "setup-pre-commit",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://github.com/mattpocock/skills.git",
+    "subpath": "skills/misc/setup-pre-commit",
+    "branch": null
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "10d06991-b108-44af-8b84-27d331aee47f",
+  "path": "handoff",
+  "path_key": "handoff",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://github.com/mattpocock/skills.git",
+    "subpath": "skills/productivity/handoff",
+    "branch": null
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "skill_id": "17108ef8-f350-4ac3-931d-7784039d2238",
+  "path": "wayfinder",
+  "path_key": "wayfinder",
+  "enabled": true,
+  "tags": [],
+  "source": {
+    "type": "git",
+    "ref": "https://github.com/mattpocock/skills.git",
+    "subpath": "skills/engineering/wayfinder",
+    "branch": null
+  }
+}

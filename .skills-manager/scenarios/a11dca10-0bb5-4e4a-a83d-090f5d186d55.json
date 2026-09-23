@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "scenario_id": "a11dca10-0bb5-4e4a-a83d-090f5d186d55",
-  "name": "Default",
+  "name": "Mattpocock",
   "description": "Default startup scenario",
-  "icon": null,
+  "icon": "briefcase",
   "sort_order": 0
 }
