@@ -6,6 +6,6 @@
   "tools": {
     "claude_code": true,
     "codex": true,
-    "cursor": false
+    "cursor": true
   }
 }
