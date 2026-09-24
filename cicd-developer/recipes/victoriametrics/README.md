@@ -18,3 +18,10 @@
 没有也不应新建 Kustomization。不要把它当作跨 namespace 通用模板；必须先完成 workflow
 规定的 GKE、CRD、精确 Pod 和 `metrics:9400` live read-only evidence，且只能以
 `--repo-context k8s` 校验该闭合 profile。
+
+## Application alert rules
+
+`vm-alert-rule.yaml.tmpl` belongs only to `workflows/manage-vmalert-rules.md`.
+Its destination is the registered evaluator namespace; its alert namespace label
+is the business namespace. Validate slot substitution and YAML quoting with
+`validators/check_vmalert_rules.py`; do not use it as a scrape recipe.

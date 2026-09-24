@@ -3,6 +3,7 @@
   "channel_id": "<channel-uuid>",
   "publisher_pubkey": "<todo-publisher-hex-pubkey>",
   "owner_pubkey": "<owner-hex-pubkey>",
+  "desk_pubkey": "<personal-channel-desk-hex-pubkey>",
   "done_authors": ["<owner-hex-pubkey>", "<assistant-hex-pubkey>"],
   "state_dir": "/home/<user>/.local/state/buzz-todo/<name>",
   "buzz": {

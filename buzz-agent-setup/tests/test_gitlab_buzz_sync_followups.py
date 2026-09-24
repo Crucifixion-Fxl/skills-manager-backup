@@ -171,7 +171,7 @@ class BareLinkHintTest(FollowupCase):
         self.assertTrue(any("#101" in text for text in self.plaque_texts()))
 
     def test_a_well_formed_link_to_a_human_message_is_ignored(self):
-        """L1-GIS-FU-011 人类随手贴的 buzz 深链指向人类消息：忽略，不停摆，issue 自开门牌。"""
+        """L1-GIS-FU-011 人类随手贴的 buzz 深链指向人类消息：忽略，不停摆，issue 以首条事实自开 root。"""
         self.seed_human_root()
         self.gitlab.issue_list[PID] = [make_issue(81, description=f"讨论见 {bare_link()}")]
         result = self.run_sync()

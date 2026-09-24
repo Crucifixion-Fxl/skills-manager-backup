@@ -7,8 +7,12 @@ machine. Read status before acting and resume from exact persisted evidence.
 
 1. Call `get_project_personal_key_context` with no selected Project. This verifies which Project the
    injected key belongs to and which actions it grants. Do not supply `project_id`.
-2. Keep the returned Project, binding revision and allowed actions for the whole journey.
-3. Read `personal_research_readiness`.
+2. Keep the returned Project, binding revision and allowed actions for the whole journey. The legacy response has
+   exactly those four fields including `credential_profile`; `research_track` is an optional fifth field. If absent,
+   use the existing `materialized_audience` path only. If present, accept only `materialized_audience` or
+   `questionnaire_only`; do not infer Project, track or grants from the key, Project name or credential profile.
+3. Read `personal_research_readiness` for `materialized_audience` (including a four-field legacy response); only an
+   explicit `questionnaire_only` Project skips warehouse readiness when creating its form.
 
 If the host attached a trusted report-request context, skip steps 1-3. Use the attached
 Project/request/source bindings. For `source_mode=native_dataset`, page owned Datasets with
@@ -81,8 +85,10 @@ New forms and reused forms are parallel paths. For a new questionnaire, author a
 human study title, supported field shapes, unique stable refs and internally valid Logic Jumps. Choice fields need a
 non-empty labeled `properties.choices` list; omit `choices` on text and other types that reject that property. Do not
 send `choices: []`. To reuse another same-Project Research form, send only `source_research_id` and omit `body` and
-`form_url`. When the user pastes a Typeform display URL (`https://form.typeform.com/to/...` or `.eu`), send that exact
-`form_url` and omit `body` and `source_research_id`. Do not clone a source form JSON into `body`, extract `form_id` and
+`form_url`. Only for `materialized_audience`, when the user pastes a Typeform display URL (`https://form.typeform.com/to/...` or `.eu`), send that exact
+`form_url` and omit `body` and `source_research_id`. For `questionnaire_only` (such as Neopace), shared Typeform account
+ownership does not establish Project ownership: use a new `body` or a same-Project `source_research_id`, never bare
+`form_url` or `source_materialization_run_id`. Do not clone a source form JSON into `body`, extract `form_id` and
 call Typeform, include recipient identity, or build a second local questionnaire DSL.
 
 Call `personal_research_journey_form` with the stable create key and exactly one of a native `body`,
@@ -174,7 +180,9 @@ approval flow. A successful outcome is an unsent Draft with an exact safe URL.
 ## 6. Generic questionnaire branch
 
 When readiness authoritatively reports no warehouse binding or zero scoped users, the user may choose a generic form.
-Create and read back Typeform normally, then stop the Platform distribution path. Do not create a source table,
+Create and read back Typeform normally, then stop the Platform distribution path. A `questionnaire_only` Project
+also keeps its Project Idea/Research and native VOC Actor/run/Dataset/report flows; only the warehouse audience,
+Brevo and Campaign Draft path is unavailable. Do not create a source table,
 upload users, fabricate tenant/bundle mapping, or treat query errors as zero population.
 
 Generic-link responses are ingested into the same answer store as `unmatched`. They remain valid questionnaire

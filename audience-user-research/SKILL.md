@@ -13,7 +13,9 @@ description: 通过 Audience Project Personal API 完成 VOC、Idea、Typeform �
 `https://audience-workflow-api-prod-us.addx.live`；Hermes 等 tool-only host 使用宿主注入的 origin，
 不要另拼 Admin、集群内 DNS 或猜测的 staging 地址。
 先按[宿主配置](references/host-configuration.md)验证注入的 Project Personal key，
-从 self-context 取得 `project_id`、绑定版本和实际权限；不要从 token、产品名或环境名猜 Project。
+从 self-context 取得 `project_id`、绑定版本和实际权限；`research_track` 可能缺席，缺席时只走既有
+`materialized_audience` 路径，不将其推断为 `questionnaire_only` 或增加任何权限。字段存在时只接受
+`materialized_audience` / `questionnaire_only`。不要从 token、产品名或环境名猜 Project 或 track。
 若该读取返回 `409 project_binding_revision_stale` 或 `binding_revision_stale`，原样重试同一 self-context 调用，
 不要当成缺 key、换 Project 或自行拼接 Project。后续 Project 操作只用返回的 `project_id`。
 若宿主已注入 trusted report-request context，跳过该验证。使用 attached Project/request 绑定；`source_mode=native_dataset` 时用 `project_cron_voc_dataset_list` / `metadata` / `items` 分页读取 owned items，直到 `has_more` 为 false，再 publish 声音和报告，不要提交 `source_coverage`。空的 report-source 不是缺证据。读失败则 fail 该 request，不要发 0/0/0 占位报告。
@@ -28,7 +30,7 @@ Typeform body 使用原生结构和稳定 question/choice `ref`；选择题必�
 
 ## 标准路径
 
-1. 读取 self-context，只使用已认证 Project 及其实际 `allowed_actions`。若用户要查看历史或继续既有工作，按已获权限分别分页列出 Project Ideas、Research；Ideas 和 Research 共用 `limit=50`、从 `offset=0` 开始，按返回的 `has_more` 翻页。有 `voc.results.read` 且能定位 Idea 时，再按 Idea 分别分页列出 native/immutable VOC。缺某项权限就说明该部分不可读，不影响其余可读结果；保留精确 ID，不凭标题猜测或新建同名资源。列表或详情若返回 `idea_detail_url` / `research_detail_url` / `voc_detail_url`，原样给用户，不要自己拼 Admin 路径。若列表记录的 ID 无法用于详情（包括不符合已发布路径形态）、或关联 Idea 读回失败，仍保留该列表记录并明确标记详情不可核验，不把它算成已完成或不存在，也不改写/猜测另一个 ID。只有准备新建或圈人时才读取 Research readiness；只读 key 不需要 `research.prepare`。
+1. 读取 self-context，只使用已认证 Project、实际 `allowed_actions` 与返回的 `research_track`；字段缺席即按既有 `materialized_audience` 路径处理，不改变 Project 或授权。若用户要查看历史或继续既有工作，按已获权限分别分页列出 Project Ideas、Research；Ideas 和 Research 共用 `limit=50`、从 `offset=0` 开始，按返回的 `has_more` 翻页。有 `voc.results.read` 且能定位 Idea 时，再按 Idea 分别分页列出 native/immutable VOC。缺某项权限就说明该部分不可读，不影响其余可读结果；保留精确 ID，不凭标题猜测或新建同名资源。列表或详情若返回 `idea_detail_url` / `research_detail_url` / `voc_detail_url`，原样给用户，不要自己拼 Admin 路径。若列表记录的 ID 无法用于详情（包括不符合已发布路径形态）、或关联 Idea 读回失败，仍保留该列表记录并明确标记详情不可核验，不把它算成已完成或不存在，也不改写/猜测另一个 ID。`materialized_audience` 只有准备新建或圈人时才读取 Research readiness；`questionnaire_only` 不以仓库 readiness 决定问卷流程；只读 key 不需要 `research.prepare`。
 2. 新任务才创建 Idea；已有任务采用用户明确选择的 Idea（同一 Project 内任意 Idea，不限创建该 Idea 的 key），并保留精确 `idea_id`。若历史里已有覆盖同一决策/目标且仍未完成的 Idea、VOC 或 Research，恢复那些精确 ID，不为同一未完成问题再创建 Idea 或再付费启动 VOC。
 3. 可选 VOC 默认走 provider-native 主路径。付费采集前先请用户确认这一步，并提示可补充渠道、关键词、市场/语言、时间范围、是否含评论；用户不补也可以按 brief 启动。按研究主题和渠道需求通用搜索 Actor，比较候选详情、schema、适用性与 API 返回的费用信息，
    再由用户或 Agent 明确选择 `actor_id`、build 和原生 input。不得把 Reddit、Amazon、YouTube 等渠道写成固定白名单，
@@ -38,7 +40,7 @@ Typeform body 使用原生结构和稳定 question/choice `ref`；选择题必�
    若该 Idea 已有旧 compiled configuration 或 `platform_run_id`，按[平台 API](references/platform-api.md#voc-and-idea)继续精确查询和恢复；
    不为新采集优先创建该兼容路径。
 4. 创建 Research，可挂在同 Project 任意已选 Idea 下，保留精确 `idea_id + research_id` 和同一幂等键。创建或读取 Idea / Research / VOC 后，把 API 返回的 `idea_detail_url`、`research_detail_url`、`voc_detail_url` 原样给用户，不要自己拼 Admin 路径。
-5. 创建 Typeform 问卷前先请用户确认这一步，并提示可补充对象与语言；缺这些不拒绝创建。用同一 Project 另一 Research 的 `source_research_id` 附着已有问卷，或把用户贴的 Typeform 展示 URL 交给 `form_url`（都不 POST Typeform）。Agent 不得自行拆 `form_id` 或用本地 Typeform token。回读 `form_id`、`form_edit_url`、`form_url` 和 `definition_fingerprint`。把 `form_edit_url` 给用户编辑，不要把 `form_url` 当成编辑页。创建或附着不会公开问卷。用户要让受访者打开时，再确认后调用 `personal_research_journey_form_publish`；不要说 API 不支持发布。发布成功才报告 `form_public=true`。发布不发送 Campaign。
+5. 创建 Typeform 问卷前先请用户确认这一步，并提示可补充对象与语言；缺这些不拒绝创建。用同一 Project 另一 Research 的 `source_research_id` 附着已有问卷（不 POST Typeform）。仅 `materialized_audience` 可把用户贴的 Typeform 展示 URL 交给 `form_url`；`questionnaire_only` 的共享账号无法仅凭 URL 证明 Project 归属，须新建 `body` 或复用同 Project `source_research_id`。Agent 不得自行拆 `form_id` 或用本地 Typeform token。回读 `form_id`、`form_edit_url`、`form_url` 和 `definition_fingerprint`。把 `form_edit_url` 给用户编辑，不要把 `form_url` 当成编辑页。创建或附着不会公开问卷。用户要让受访者打开时，再确认后调用 `personal_research_journey_form_publish`；不要说 API 不支持发布。发布成功才报告 `form_public=true`。发布不发送 Campaign。
 6. 若需要定向人群，读取在线 query capabilities，按返回字段和操作符准备 selection；请求结构用[平台 API 的 SelectionPrepare 示例](references/platform-api.md#bootstrap-and-project-research)和当前公开 OpenAPI，不猜 `criteria` 的 JSON 形状。需要权威表/列事实（含已有物化表的 source-table 映射）时，按[圈人 DataHub schema](references/datahub-schema-search.md) 发现，不要猜生产表名或自行写 SQL。
 7. 用 selection 的 `approved_selection_id` 请求物化前，先请用户确认这一步，并提示可补充全量或抽样人数；缺这些不拒绝物化。默认以获批的 `expected_count` 全量物化；如需随机抽样，
    仅在 `materialize` 请求中传严格正整数 `sample_size`（不超过获批人数），并把请求的 `expected_count` 设为该抽样数。
@@ -58,10 +60,11 @@ Typeform body 使用原生结构和稳定 question/choice `ref`；选择题必�
 ## 分支
 
 - **Project 协作：**合法 user-research key 可列出并使用同一 Project 内任意 Idea/Research/VOC，包括其他 key 创建的记录；可在任意 Idea 下新建 Research 或 VOC。跨 Project 禁止。Audience Sync 的 owner 边界不在此范围。
-- **复用问卷/文案：**Form 的 `ProviderCreate` 三选一：provider-native `body`、`source_research_id`，或用户贴的 Typeform 展示 `form_url`。Campaign Draft 仍二选一：`body` 或 `source_research_id`，不要传 `form_url`。附着问卷复制 Typeform id，不 POST。贴 URL 时把展示 URL 原样交给 Form 接口，不要自己拆 `form_id` 或调 Typeform。复用文案后 CTA 必须是当前 Research 的 `form_url#uid=...&research_id=current&batch=current`。禁止复制 `campaign_id`、List 或源 href。
+- **复用问卷/文案：**Form 的 `ProviderCreate` 可用 provider-native `body` 或同 Project `source_research_id`；`form_url` 只适用于 `materialized_audience`。Campaign Draft 仍二选一：`body` 或 `source_research_id`，不要传 `form_url`。附着问卷复制 Typeform id，不 POST。允许贴 URL 的 track 把展示 URL 原样交给 Form 接口，不要自己拆 `form_id` 或调 Typeform。复用文案后 CTA 必须是当前 Research 的 `form_url#uid=...&research_id=current&batch=current`。禁止复制 `campaign_id`、List 或源 href。
 - **仅问卷：**创建或附着 Typeform 后把 `form_edit_url` 给用户。需要受访者打开时再调用 `personal_research_journey_form_publish`。不圈人、不物化、不同步 Brevo，也不发送 Campaign。
 - **Project 未入仓：**readiness 明确无数据绑定或零用户时，可以创建通用问卷并通过其他产品渠道分发；
   跳过 selection、物化和 Brevo。答卷保留为 `unmatched`，不得虚构画像关系。
+- **`questionnaire_only`（如 Neopace）：**仅在 self-context 明确返回该 `research_track` 时进入此分支；旧四字段响应不触发。仍可创建 Idea/Research 和走完整 Project native VOC Actor/run/Dataset/报告路径。问卷在共享 Typeform 账号中新建本 Project 表单，或以同 Project `source_research_id` 复用；不要传 `form_url` 或物化 batch。创建、发布、按精确 `form_id` 回读答卷；跳过 selection、物化、个性化链接、Brevo sync 与 Campaign Draft。无邀请身份的答卷是 `unmatched`，不是同步失败。
 - **已有物化表：**selection 可使用 API 公布的 source-table 输入与普通列映射；这不是测试专用路径。列名与表名按[圈人 DataHub schema](references/datahub-schema-search.md) 核验。
 - **结果分析：**先从精确 Research 的 status/binding 取得 `form_id`，调用 responses、aggregate、response-rate 时都把它放在必填 query；不要用空 query 尝试读取。单轮用 responses/aggregate 读取已持久化答卷，并用 response-rate 读去重答卷数与 `sent_count`（已 sent 的 Brevo `globalStats.sent`，否则 binding `operator_sent_count`）；`sent_count` 为 null 时该轮回收率未知，不是 0，也不用物化人数当发信人数。Idea `recovery` 加和时这一轮的 unique/sent 不计入（按 0），只用已有发信数的 Research。跨轮次结论先调 `personal_research_journey_idea_summary`：`members[].audience` 给出各轮人群（名称/条件/`selection_id` 可空；圈选/请求/物化缺数据填 0），`coverage` 按轮加和且不做跨轮 unique 去重；`members[].response_rate` 与 `recovery` 给出各轮及总览回收率；`forms` 按 Typeform `form_id` 合并分布（微调仍合并）。不要伪造一个可物化的全局 `research_id`。画像+答卷用 Idea summary CSV（含 `source_research_id`）或单轮 responses CSV，经宿主附件保存后再分析。写回 Idea 报告时用 `project_get_report_source` / `project_publish_report` / `project_get_current_report`，`parent_kind=idea` 且 `parent_id=<idea_id>`，source 来自该 summary 的 `source_revision_id` / `source_fingerprint`。写回成功后把 API 返回的 `viewer_url` 原样给用户。
   CSV 以答卷为主行，包含历史邀请画像和题目文字列；`matched` 与 `unmatched` 都保留。

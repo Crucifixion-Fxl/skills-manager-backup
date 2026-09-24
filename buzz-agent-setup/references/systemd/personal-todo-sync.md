@@ -164,7 +164,7 @@ systemctl --user list-timers 'gitlab-todo-sync-*'
   - 失败带脱敏 `error`（PAT 与 `BUZZ_PRIVATE_KEY` 的值即使出现在错误文本里也会被替换成 `***`），退出码 1。
 - `status=locked` 退出码 0：另一进程还持有 state 锁，下一轮续上。
 - `mark_as_done` 失败（GitLab 5xx、403、PAT 权限变了）：一条失败不会挡住**后面的标记**（同一轮里其余可信标记照常写），也不会拖停投递；本轮把能标的标完、新待办发完，再以**最后一个错误**退出码 1。失败的那条仍是 `ACKED`，下一轮重试；同一个失败 id 被两位作者各标一次，本轮也只打一次 GitLab。
-- **阶段 0 要核对成员列表**：用 owner 绝对路径 CLI 跑 `"$BUZZ_CLI" channels members --channel <CH>`，确认列出的成员只有 owner、发布者与 `done_authors`。若它还列出 relay Workflow 服务公钥之类的系统成员，成员集合门禁会让每一轮整轮失败关闭（零消息），必须在阶段 0 就发现并决定怎么处理（本仓尚未验证 relay 0.2.1 是否会列出）。
+- **阶段 0 要核对成员列表**：用 owner 绝对路径 CLI 跑 `"$BUZZ_CLI" channels members --channel <CH>`，确认列出的成员只有 owner、发布者、`done_authors` 与 todo 配置里必填的 `desk_pubkey`。Desk 必须是 bot，且不在 `done_authors`；不能用 `done_authors` 给它开权限。若它还列出 relay Workflow 服务公钥之类的系统成员，成员集合门禁会让每一轮整轮失败关闭（零消息），必须在阶段 0 就发现并决定怎么处理（本仓尚未验证 relay 0.2.1 是否会列出）。
 - **失败不会在 Channel 里出现**：PAT 过期、被撤销或个人 Channel 多了第二个真人成员，同步都会停下，唯一记录是 user journal。请在 PAT 到期前一周设日历提醒，或定期看 `systemctl --user list-timers` 与 journal。
 
 ### state 里的状态

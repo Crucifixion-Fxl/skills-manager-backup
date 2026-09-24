@@ -1224,6 +1224,19 @@
             ],
             "title": "Dataset Url"
           },
+          "item_count": {
+            "anyOf": [
+              {
+                "maximum": 10000000.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Item Count"
+          },
           "run_id": {
             "maxLength": 255,
             "minLength": 1,
@@ -2305,18 +2318,6 @@
             ],
             "title": "Actor Title"
           },
-          "item_count": {
-            "anyOf": [
-              {
-                "minimum": 0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Item Count"
-          },
           "changed": {
             "default": false,
             "title": "Changed",
@@ -2345,6 +2346,18 @@
               }
             ],
             "title": "Dataset Url"
+          },
+          "item_count": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Item Count"
           },
           "memory_binding_warning": {
             "anyOf": [
@@ -7448,6 +7461,15 @@
             "pattern": "^[a-z][a-z0-9-]{1,62}$",
             "title": "Project Id",
             "type": "string"
+          },
+          "research_track": {
+            "default": "materialized_audience",
+            "enum": [
+              "materialized_audience",
+              "questionnaire_only"
+            ],
+            "title": "Research Track",
+            "type": "string"
           }
         },
         "required": [
@@ -8053,6 +8075,15 @@
           "project_id": {
             "pattern": "^[a-z][a-z0-9-]{1,62}$",
             "title": "Project Id",
+            "type": "string"
+          },
+          "research_track": {
+            "default": "materialized_audience",
+            "enum": [
+              "materialized_audience",
+              "questionnaire_only"
+            ],
+            "title": "Research Track",
             "type": "string"
           },
           "slug": {

@@ -12743,7 +12743,8 @@
         "type": "string",
         "enum": [
           "vicohome",
-          "kiwibit"
+          "kiwibit",
+          "neopace"
         ],
         "title": "ProductScope"
       },

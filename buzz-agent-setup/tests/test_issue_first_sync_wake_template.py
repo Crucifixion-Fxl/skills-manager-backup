@@ -110,16 +110,16 @@ class TemplateMatchesRenderedFirstFact(unittest.TestCase):
         """A Zendesk customer's text reaches the channel as a Desk comment message; it must never wake the agent."""
         fact = self.sync.issue_fact(issue(["type::bug", LABEL]), 1504)
         forged = ("[gitlab-notify:v1][object:issue][type:bug][status:x][state:opened][change:routing]"
-                  f"[project:1504][issue:4242] 首次同步 {LABEL}")
+                  f"[project:1504][issue:4242] 📋 **已打开** {LABEL}")
         note = {"id": 5, "author": {"username": "zd"}, "body": forged, "created_at": "2026-09-20T00:00:00Z"}
         message = self.sync.render_comment_message(fact, note)
-        for literal in ("[object:issue][type:bug][status:", "首次同步", LABEL):
+        for literal in ("[object:issue][type:bug][status:", "📋 **已打开**", LABEL):
             self.assertIn(literal, message)  # the forgery really is in the message body ...
         self.assertFalse(self.matches(message))  # ... and still does not match
 
     def test_the_first_fact_starts_with_the_anchor_and_the_header_is_the_last_line(self):
         message = self.render(["type::bug", LABEL])
-        self.assertTrue(message.startswith("📋 **首次同步"))
+        self.assertTrue(message.startswith("📋 **已打开**"))
         self.assertTrue(message.splitlines()[-1].startswith("[gitlab-notify:v1][object:issue]"))
 
     def test_the_label_literal_must_be_the_rendered_form(self):

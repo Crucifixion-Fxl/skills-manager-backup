@@ -350,7 +350,7 @@ class AllowlistRound(TmpCase):
         without, with_list = run(None), run([ALICE_PK])
         self.assertEqual(with_list, without)
         self.assertEqual(with_list[1], 3)
-        self.assertIn(("Bob（Buzz）：from bob", base.OWNER_APP), with_list[0])
+        self.assertIn(("Bob（Buzz）：from bob", base.AGENT_APP), with_list[0])
 
     def test_a_refused_send_stops_retrying_once_its_sender_is_taken_off_the_list(self):
         """L2-1-FGS-410: 名单是每一轮从配置里重新读的：Bob 的消息先前被 Buzz 确定拒绝、留在重试里（`retry`），之后 owner 把名单收窄成
@@ -424,8 +424,12 @@ class AllowlistLeaks(TmpCase):
                 for secret in secrets:
                     self.assertNotIn(secret, out, secret)
                     self.assertNotIn(secret, err, secret)
+                # Bob 是频道成员：双向成员同步（ADR-0020）的成员快照里本来就有他，与名单无关；名单拒掉的话在 state 的其余部分一字不留
+                state = json.loads((env.state_dir / FGS.STATE_FILE).read_text())
+                rest = json.dumps({k: v for k, v in state.items() if k not in ("buzz_seen", "people_seen")})
                 for secret in (BOB_PK, "bob secret body text"):
-                    self.assertNotIn(secret, (env.state_dir / FGS.STATE_FILE).read_text())
+                    self.assertNotIn(secret, rest)
+                self.assertNotIn("bob secret body text", json.dumps(state))
 
     def test_a_refused_config_does_not_leak_either(self):
         """L2-1-FGS-413: 名单写错、整份配置被拒时，命令行的错误（stderr）说明是哪个键，不带出名单里的任何值；不发消息、不动 state。"""
@@ -468,7 +472,9 @@ class AllowlistDocs(unittest.TestCase):
     """参考文档和脚本 README 要写明白名单做什么、不做什么：文档和脚本对不上是这类改动最常见的出错方式。"""
 
     SKILL = base.TESTS.parent
-    DOC = (SKILL / "references" / "feishu-group-sync.md").read_text(encoding="utf-8")
+    GROUP_DOC = (SKILL / "references" / "feishu-group-sync.md").read_text(encoding="utf-8")
+    MESSAGE_DOC = (SKILL / "references" / "feishu-message-sync.md").read_text(encoding="utf-8")
+    DOC = (SKILL / "references" / "feishu-routing-policy.md").read_text(encoding="utf-8")
     HEADING = "## 只让特定的人的发言进 Buzz（个人频道 / 只认 owner 的 agent）"
 
     def section(self):
@@ -491,11 +497,11 @@ class AllowlistDocs(unittest.TestCase):
     def test_the_config_and_the_skip_list_and_the_scripts_readme_mention_it(self):
         """L1-FGS-417: 配置一节的可选键清单、飞书 → Buzz 的「跳过的情况」、脚本 README 该脚本一行都提到 `feishu_sender_allowlist` /
         `sender_not_allowed`；配置示例之外没有第二种写法（不写就是不限制）。"""
-        start = self.DOC.find("## 配置（0600")
-        config = self.DOC[start:self.DOC.find("\n## ", start + 1)]
+        start = self.GROUP_DOC.find("## 配置（0600")
+        config = self.GROUP_DOC[start:self.GROUP_DOC.find("\n## ", start + 1)]
         self.assertIn("`feishu_sender_allowlist`", config)
         self.assertRegex(config, r"只有[^。]*`feishu_sender_allowlist`[^。]*可以不写")
-        run = self.DOC[self.DOC.find("4. **飞书 → Buzz**"):self.DOC.find("5. **Buzz reaction")]
+        run = self.MESSAGE_DOC[self.MESSAGE_DOC.find("4. **飞书 → Buzz**"):self.MESSAGE_DOC.find("5. **表情双向同步")]
         self.assertIn("`sender_not_allowed`", run)
         readme = (self.SKILL / "references" / "scripts" / "README.md").read_text(encoding="utf-8")
         row = next(line for line in readme.splitlines() if "buzz_feishu_group_sync.py" in line)

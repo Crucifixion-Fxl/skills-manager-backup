@@ -73,15 +73,15 @@ class WorkItemPlaqueTest(SyncCase):
         replies = [e for e in self.buzz.events if ["e", root, "", "reply"] in e["tags"]]
         self.assertGreaterEqual(len(replies), 1)
 
-    def test_new_plaques_use_the_canonical_issues_url(self):
-        """L1-GIS-WI-005 web_url 是 work_items 形式时，新发的门牌末行仍写规范 /-/issues/N；事实里的链接保持 GitLab 给的。"""
+    def test_new_fact_roots_keep_the_work_items_url(self):
+        """L1-GIS-WI-005 work_items 形式的新 Issue 用一条事实作根，仍能回读身份与 GitLab 链接。"""
         self.gitlab.issue_list[PID] = [make_issue(17, web_url=f"{WEB}/-/work_items/17")]
         self.run_sync()
         roots = [e for e in self.buzz.events if not any(t[0] == "e" for t in e["tags"])]
         self.assertEqual(len(roots), 1)
-        self.assertEqual(SYNC.plaque_url(roots[0]["content"]), f"{WEB}/-/issues/17")
-        facts = [e["content"] for e in self.buzz.events if any(t[0] == "e" for t in e["tags"])]
-        self.assertTrue(any(f"{WEB}/-/work_items/17" in text for text in facts))
+        self.assertEqual(SYNC.parse_header(roots[0]["content"])["issue"], 17)
+        self.assertIn(f"{WEB}/-/work_items/17", roots[0]["content"])
+        self.assertEqual(len(self.buzz.events), 1)
 
     def test_a_new_work_items_issue_syncs_again_without_error(self):
         """L1-GIS-WI-006 复现 #101：第一轮发门牌并绑定，issue 更新后第二轮读回该 root 不再报「bound root is not a readable Desk root」。"""

@@ -2,5 +2,10 @@
   "availability": "canonical_git",
   "origin": "git@gitlab.addx.ai:lli/user-research-skill.git",
   "repository": "lli/user-research-skill",
-  "revision": "14dab06b962a792332da11a839e58ee209f60986"
+  "revision": "9e69106486b81fadf834e38cc2f338678e3a0694",
+  "pending_overlay": {
+    "merge_request": "lli/user-research-skill!144",
+    "revision": "14dab06b962a792332da11a839e58ee209f60986",
+    "status": "open_unmerged"
+  }
 }

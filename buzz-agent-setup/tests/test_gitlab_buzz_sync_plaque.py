@@ -100,7 +100,7 @@ class StyledBodyTest(unittest.TestCase):
     def test_issue_styles_cover_change_kinds(self):
         fact = issue_fact(state="closed")
         first = SYNC.render_message(fact, "routing", first=True)
-        self.assertIn("📋 **首次同步 · 已关闭**", first)
+        self.assertIn("📋 **已关闭**", first)
         transition = SYNC.render_message(fact, "routing", first=False, state_changed=True)
         self.assertIn("🔄 **状态流转 → 已关闭**", transition)
         regrouped = SYNC.render_message(fact, "routing", first=False, state_changed=False)

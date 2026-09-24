@@ -289,6 +289,16 @@ build_intents:
     workflow_file: workflows/manage-victoriametrics-scrape.md
     internal_calls: []
 
+  - intent: 管理业务 VM 告警规则
+    keywords:
+      - vm alert rules
+      - vmalert rules
+      - vm 告警规则
+      - 业务告警规则
+      - pagerduty 告警接入
+    workflow_file: workflows/manage-vmalert-rules.md
+    internal_calls: []
+
   - intent: 给云托管中间件（RDS/Redis/Kafka）接入指标采集
     keywords:
       - 中间件监控

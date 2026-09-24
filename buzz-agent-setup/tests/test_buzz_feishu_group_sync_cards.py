@@ -145,9 +145,9 @@ def link_of(card):
 
 
 def folded(card):
-    """The whole text in the folded panel (the last element), or None when the card has no panel."""
-    last = card["body"]["elements"][-1]
-    return last["elements"][0]["content"] if last["tag"] == "collapsible_panel" else None
+    """The whole text in the folded panel, or None when the card has no panel (a GitLab action may follow it)."""
+    found = [element for element in card["body"]["elements"] if element["tag"] == "collapsible_panel"]
+    return found[0]["elements"][0]["content"] if found else None
 
 
 def markdown(text):
@@ -157,6 +157,11 @@ def markdown(text):
 def panel(text, chars):
     return {"tag": "collapsible_panel", "expanded": False, "header": {"title": plain(f"展开全文（{chars} 字）")},
             "elements": [markdown(text)]}
+
+
+def gitlab_button(url):
+    return {"tag": "button", "text": plain("在 GitLab 中打开"), "type": "default", "size": "medium",
+            "behaviors": [{"type": "open_url", "default_url": url}]}
 
 
 def raw_card(content="hello", speaker="Alice", **kw):
@@ -225,7 +230,7 @@ MR_LINES = [
     "unmapped: bob(profile_not_found),carol(not_channel_member)"]
 MR_FACT = "\n".join([*MR_LINES, "", "🔔 通知 @Alice @Bob", MR_HEADER])
 MR_VISIBLE = "\n".join(MR_LINES)
-MR_TITLE = "👀 可评审 · !1001 fix: 补齐 KBTV f…"
+MR_TITLE = "👀 可评审 · !1001 fix: 补齐 KBTV fatal 通知失败告警并核对观测 P1 剩余…"
 # 2026-09-21, the skill channel: a comment fact on issue #132. The sync escapes `\`, `[` and `]` in a title (gitlab_buzz_sync._md_escape),
 # and the headline is a link, so the link text has `\[` in it.
 COMMENT_HEADLINE = ("💬 **评论** · [#132 \\[buzz-agent-setup\\] 分析 Workflow 模板的 cron 星期字段按 1=周一 写，relay 实为 1=周日，现网提前一天触发]"
@@ -234,7 +239,7 @@ COMMENT_HEADER = ("[gitlab-notify:v1][object:issue][type:unknown][status:in-prog
                   "[project:1021][issue:132][note:630211]")
 COMMENT_FACT = "\n".join([COMMENT_HEADLINE, "labels skill::buzz-agent-setup · assignees jchen", "by: alice", "", "已定位：relay 的 cron 星期是 1=周日。",
                           COMMENT_HEADER])
-COMMENT_TITLE = "💬 评论 · #132 [buzz-agent-setup]…"
+COMMENT_TITLE = "💬 评论 · #132 [buzz-agent-setup] 分析 Workflow 模板的 cron 星期字段按…"
 
 
 class CardLinks(unittest.TestCase):
@@ -277,13 +282,36 @@ class CardLinks(unittest.TestCase):
 
 
 class CardShape(unittest.TestCase):
+    def test_a_pipeline_failure_keeps_its_id_after_the_icon_in_the_feishu_title(self):
+        """L1-FGS-206A GitLab pipeline ID 在 Buzz 和飞书标题里都位于图标之后、事件描述之前。"""
+        sync = sync_module()
+        record = sync.record_from_pipeline(
+            {
+                "id": 224905,
+                "status": "failed",
+                "ref": "main",
+                "sha": "a" * 40,
+                "web_url": "https://gitlab.addx.ai/engineering/skills/-/pipelines/224905",
+                "updated_at": "2026-09-23T10:00:00Z",
+            },
+            1021,
+            "main",
+        )
+        message = sync.render_record(record)
+
+        self.assertEqual(message.splitlines()[0], "❌ **#224905 主分支流水线失败**")
+        self.assertEqual(
+            card_of(message, "skill-desk", agent=True)["header"]["title"],
+            plain("❌ #224905 主分支流水线失败"),
+        )
+
     def test_a_short_message_is_a_titled_card_with_a_byline_and_a_link(self):
         """L1-FGS-206: 卡片 JSON 2.0：header 只有标题（消息的第一行）和颜色（人是 blue），没有副标题；原来副标题的「发言人 · #频道」挪进
         正文第一行（灰色小字的署名行）和 config.summary（「发言人 · #频道：内容」）；署名行旁边是「在 Buzz 中打开」的小号文字链接（https），
         没有底部按钮；正文比标题多出内容时，完整内容在默认收起的「展开全文」面板里，只有标题一行就没有面板。"""
         raw = raw_card("hello\nworld", channel="naturehood", open_url=URL)
         self.assertEqual(json.loads(raw), {
-            "schema": "2.0", "config": {"summary": {"content": "Alice · #naturehood：hello world"}},
+            "schema": "2.0", "config": {"summary": {"content": "Alice · #naturehood：hello world"}, "update_multi": True},
             "header": {"title": plain("hello"), "template": "blue"},
             "body": {"elements": [byline("Alice · #naturehood"), panel("hello\nworld", 11)]}})
         self.assertNotIn('"button"', raw)
@@ -371,19 +399,20 @@ class CardTitle(unittest.TestCase):
         self.assertEqual(card_of("hi")["body"]["elements"], [byline("Alice", None)])  # no link, no mention: the byline alone
 
     def test_a_long_first_line_is_cut_with_an_ellipsis_and_folds_the_whole_line(self):
-        """L1-FGS-246: 首行超过 36 列（手机一行放得下）：中文、全角、emoji 算 2 列，其余算 1 列；恰好 36 列的不动，超出的取前面放得下的部分加「…」（「…」按 2 列留位），
-        总宽不超过 36 列；被截断的标题说不全那一行，所以只有这一行的消息也有折叠全文；链接地址被标题丢掉的、表格行也一样（全文里是原样的整行）。"""
-        exact = "字" * 18
+        """L1-FGS-246: 首行超过 72 列（手机自然显示两行）：中文、全角、emoji 算 2 列，其余算 1 列；恰好 72 列的不动，超出的取前面放得下的部分加「…」（「…」按 2 列留位），
+        总宽不超过 72 列；被截断的标题说不全那一行，所以只有这一行的消息也有折叠全文；链接地址被标题丢掉的、表格行也一样（全文里是原样的整行）。"""
+        exact = "字" * 36
         self.assertEqual(self.head(exact + "\nbody")["title"], plain(exact))
         self.assertEqual(card_of(exact, open_url=URL)["body"]["elements"], [byline()])
-        self.assertEqual(card_of(exact + "\nbody", open_url=URL)["body"]["elements"], [byline(), panel(exact + "\nbody", 23)])
-        long = "字" * 19
-        self.assertEqual(self.head(long + "\nbody")["title"], plain("字" * 17 + "…"))
-        self.assertEqual(card_of(long, open_url=URL)["body"]["elements"], [byline(), panel(long, 19)])
-        self.assertEqual(self.head("a" * 36)["title"], plain("a" * 36))
-        self.assertEqual(self.head("a" * 37)["title"], plain("a" * 34 + "…"))
-        self.assertEqual(self.head("修复 " + "a" * 40)["title"], plain("修复 " + "a" * 29 + "…"))  # 2+2+1 columns, then latin
-        self.assertEqual(self.head("😀" * 19)["title"], plain("😀" * 17 + "…"))
+        self.assertEqual(card_of(exact + "\nbody", open_url=URL)["body"]["elements"],
+                         [byline(), panel(exact + "\nbody", len(exact + "\nbody"))])
+        long = "字" * 37
+        self.assertEqual(self.head(long + "\nbody")["title"], plain("字" * 35 + "…"))
+        self.assertEqual(card_of(long, open_url=URL)["body"]["elements"], [byline(), panel(long, 37)])
+        self.assertEqual(self.head("a" * 72)["title"], plain("a" * 72))
+        self.assertEqual(self.head("a" * 73)["title"], plain("a" * 70 + "…"))
+        self.assertEqual(self.head("修复 " + "a" * 80)["title"], plain("修复 " + "a" * 65 + "…"))  # 2+2+1 columns, then latin
+        self.assertEqual(self.head("😀" * 37)["title"], plain("😀" * 35 + "…"))
         for content in ("字" * 100, "ab " * 50, "汉a" * 40, "😀" * 60):
             width = sum(2 if unicodedata.east_asian_width(ch) in "WF" else 1 for ch in self.head(content)["title"]["content"])
             self.assertLessEqual(width, FGS.CARD_TITLE_COLUMNS, msg=content)
@@ -419,18 +448,19 @@ class CardMachineLines(unittest.TestCase):
                                     mention_targets={}, card=ctx)
 
     def test_a_legacy_key_value_message_is_titled_by_the_value_of_its_title_line(self):
-        """L1-FGS-249: 旧 `key: value` 长格式的话题根（header 首行、第二行 `title: 值`）：标题是 `title:` 的值、没有键名、36 列内加「…」；
-        折叠全文的第一行是完整的标题（同样没有键名），`url:` `labels:` 等其余键值行照旧在后面；header 行不在标题、折叠全文、摘要里。"""
+        """L1-FGS-249: 旧 `key: value` 长格式的话题根（header 首行、第二行 `title: 值`）：标题是 `title:` 的值、没有键名、72 列内加「…」；
+        折叠全文的第一行是完整的标题（同样没有键名），`url:` 移到底部按钮，`labels:` 等其余键值行照旧在后面；header 行不在标题、折叠全文、摘要里。"""
         raw = raw_card(LEGACY_ROOT, "nh-desk", agent=True, channel="naturehood", open_url=URL)
         card = json.loads(raw)
-        self.assertEqual(card["header"], {"title": plain("[监控整改] rec-engine 可观测性闭环…"), "template": "green"})
+        self.assertEqual(card["header"], {"title": plain(ROOT_TITLE), "template": "green"})
         self.assertLessEqual(columns(card["header"]["title"]["content"]), FGS.CARD_TITLE_COLUMNS)
-        full = "\n".join([ROOT_TITLE, *ROOT_FACTS])
-        self.assertEqual(len(full), 308)
-        self.assertEqual(card["body"]["elements"], [byline("nh-desk · #naturehood"), panel(full, 308)])
+        full = "\n".join([ROOT_TITLE, *ROOT_FACTS[1:]])
+        self.assertEqual(len(full), 245)
+        self.assertEqual(card["body"]["elements"], [byline("nh-desk · #naturehood"), panel(full, 245),
+                                                     gitlab_button(ROOT_FACTS[0].removeprefix("url: "))])
         self.assertEqual(card["config"]["summary"]["content"], "nh-desk · #naturehood：" + " ".join(full.split())[:60] + "…")
         self.assertEqual(card["config"]["summary"]["content"],
-                         "nh-desk · #naturehood：[监控整改] rec-engine 可观测性闭环：US 规则未加载及 OTel/日志遗留项 url: https://g…")
+                         "nh-desk · #naturehood：[监控整改] rec-engine 可观测性闭环：US 规则未加载及 OTel/日志遗留项 labels: app/ki…")
         for machine in ("[gitlab-notify", "title:", "[object:", "[project:"):
             self.assertNotIn(machine, raw)
 
@@ -442,13 +472,15 @@ class CardMachineLines(unittest.TestCase):
         card = json.loads(out.card)
         self.assertEqual(card["header"], {"title": plain(MR_TITLE), "template": "green"})
         self.assertEqual(card["body"]["elements"], [byline("nh-desk · #naturehood", open_url(30)),
-                                                    markdown("<at email=alice@a4x.io></at> @Bob"), panel(MR_VISIBLE, len(MR_VISIBLE))])
+                                                    markdown("<at email=alice@a4x.io></at> @Bob"), panel(MR_VISIBLE, len(MR_VISIBLE)),
+                                                    gitlab_button("https://gitlab.addx.ai/applications/naturehood/-/merge_requests/1001")])
         self.assertIn("unmapped: bob(profile_not_found),carol(not_channel_member)", folded(card))
         for machine in ("[gitlab-notify", "🔔", "[desc:", "[mr:1001]"):
             self.assertNotIn(machine, out.card)
         self.assertEqual(out.text, MR_FACT)
         no_tags = json.loads(self.routed(MR_FACT).card)
-        self.assertEqual(no_tags["body"]["elements"], [byline("nh-desk · #naturehood", open_url(30)), panel(MR_VISIBLE, len(MR_VISIBLE))])
+        self.assertEqual(no_tags["body"]["elements"], [byline("nh-desk · #naturehood", open_url(30)), panel(MR_VISIBLE, len(MR_VISIBLE)),
+                                                       gitlab_button("https://gitlab.addx.ai/applications/naturehood/-/merge_requests/1001")])
 
     def test_a_message_of_nothing_but_machine_lines_is_titled_by_the_speaker_and_is_not_an_empty_card(self):
         """L1-FGS-251: 只有 header（前后有空白或空行、或再加一行 `🔔 通知`）的消息：标题退回发言人，正文只有署名行（卡片不空、没有折叠面板），header 不在
@@ -470,9 +502,9 @@ class CardMachineLines(unittest.TestCase):
         body = "\n".join(f"第 {n} 行：" + "字" * 20 for n in range(1, 13))
         new = card_of(f"{body}\n\n🔔 通知 @Alice\n{MR_HEADER}", open_url=URL)
         self.assertEqual(new["body"]["elements"][-1], panel(body, len(body)))
-        legacy = "标题\nurl: https://gitlab.addx.ai/x/-/issues/1\n" + body
+        legacy = "标题\n" + body
         old = card_of(f"{ISSUE_HEADER}\ntitle: 标题\nurl: https://gitlab.addx.ai/x/-/issues/1\n{body}", open_url=URL)
-        self.assertEqual(old["body"]["elements"][-1], panel(legacy, len(legacy)))
+        self.assertEqual(folded(old), legacy)
         self.assertEqual(old["header"]["title"], plain("标题"))
         for content in (f"{ISSUE_HEADER}\ntitle: 标题\nurl: u\n" + "y" * 40000, "y" * 40000 + f"\n\n🔔 通知 @Alice\n{MR_HEADER}"):
             raw = raw_card(content, open_url=URL)
@@ -484,7 +516,7 @@ class CardMachineLines(unittest.TestCase):
     def test_the_summary_never_starts_with_the_header_or_the_key_of_the_title(self):
         """L1-FGS-253: 消息列表里的一行摘要「发言人：内容」不再以 header 开头（旧格式）、也不带 `title:` 键名；新格式的摘要不变。"""
         summary = lambda content: card_of(content, "nh-desk")["config"]["summary"]["content"]
-        self.assertEqual(summary(LEGACY_ROOT), "nh-desk：[监控整改] rec-engine 可观测性闭环：US 规则未加载及 OTel/日志遗留项 url: https://g…")
+        self.assertEqual(summary(LEGACY_ROOT), "nh-desk：[监控整改] rec-engine 可观测性闭环：US 规则未加载及 OTel/日志遗留项 labels: app/ki…")
         self.assertEqual(summary(LEGACY_COMPACT), "nh-desk：!951 feat: REC 告警适配 Grafana 12 并默认暂停 · alice fix/rec-unified…")
         self.assertEqual(summary(MR_FACT), "nh-desk：👀 可评审 · !1001 fix: 补齐 KBTV fatal 通知失败告警并核对观测 P1 剩余范围 · alice…")  # plain text: L1-FGS-263
 
@@ -499,8 +531,9 @@ class CardMachineLines(unittest.TestCase):
         self.assertEqual(folded_of("title: 只是一行普通文字\nbody"), "title: 只是一行普通文字\nbody")
         self.assertEqual(title_of(f"title: 末行是 header\nbody\n{MR_HEADER}"), plain("title: 末行是 header"))
         self.assertEqual(folded_of(f"title: 末行是 header\nbody\n{MR_HEADER}"), "title: 末行是 header\nbody")
-        self.assertEqual(title_of(LEGACY_COMPACT), plain("!951 feat: REC 告警适配 Grafana 12…"))
-        self.assertEqual(folded_of(LEGACY_COMPACT), LEGACY_COMPACT.split("\n", 1)[1])
+        self.assertEqual(title_of(LEGACY_COMPACT), plain("!951 feat: REC 告警适配 Grafana 12 并默认暂停 · alice"))
+        compact_lines = LEGACY_COMPACT.split("\n")[1:]
+        self.assertEqual(folded_of(LEGACY_COMPACT), "\n".join([*compact_lines[:3], *compact_lines[4:]]))
         third = f"{ISSUE_HEADER}\nfirst\ntitle: 第三行\nlast"
         self.assertEqual(folded_of(third), "first\ntitle: 第三行\nlast")
         quoted = "intro\n[gitlab-notify:v1][object:mr]\n看这一行 [gitlab-notify:v1][object:mr] 是给程序读的\noutro"
@@ -522,18 +555,18 @@ class CardMachineLines(unittest.TestCase):
 
     def test_a_legacy_key_value_message_keeps_its_other_lines_and_folds_the_title_without_its_key(self):
         """L1-FGS-255: 旧长格式（issue：header、title、url、labels、assignees、milestone、description；MR：title、url、branches、sha、labels、reviewers、
-        author、unmapped）：标题取 `title:` 的值；折叠全文的第一行也是这个值（没有键名），其余键值行（`url:` 要留着方便点开）和 `unmapped:` 说明照常在后面，
+        author、unmapped）：标题取 `title:` 的值；折叠全文的第一行也是这个值（没有键名），`url:` 移到底部按钮，其余键值行和 `unmapped:` 说明照常在后面，
         键名不动（见 L1-FGS-249）。"""
         issue = "\n".join([ISSUE_HEADER, "title: 修复卡片标题", *ROOT_FACTS[:3]])
         card = card_of(issue, open_url=URL)
         self.assertEqual(card["header"]["title"], plain("修复卡片标题"))
-        self.assertEqual(folded(card), "\n".join(["修复卡片标题", *ROOT_FACTS[:3]]))
+        self.assertEqual(folded(card), "\n".join(["修复卡片标题", *ROOT_FACTS[1:3]]))
         mr = "\n".join(["[gitlab-notify:v1][object:mr][state:opened][draft:no][change:lifecycle][project:1175][mr:951]", "title: fix: 补齐告警",
                         "url: https://gitlab.addx.ai/applications/naturehood/-/merge_requests/951", "branches: fix/a -> staging",
                         "sha: f8e5077aabd4", "labels: -", "reviewers: alice", "author: bob", "unmapped: carol(profile_not_found)"])
         card = card_of(mr, open_url=URL)
         self.assertEqual(card["header"]["title"], plain("fix: 补齐告警"))
-        self.assertEqual(folded(card), "\n".join(["fix: 补齐告警", *mr.split("\n")[2:]]))
+        self.assertEqual(folded(card), "\n".join(["fix: 补齐告警", *mr.split("\n")[3:]]))
         no_value = "\n".join([ISSUE_HEADER, "title:", "url: https://gitlab.addx.ai/x/-/issues/1"])
         self.assertEqual(card_of(no_value, open_url=URL)["header"]["title"], plain("title:"))  # nothing after the key: not a title line
 
@@ -543,10 +576,10 @@ class CardMachineLines(unittest.TestCase):
         legacy = f"{ISSUE_HEADER}\ntitle: 标题\nurl: https://gitlab.addx.ai/x/-/issues/1\n🔔 通知 @Alice @Bob"
         tagged = FGS.build_message_card("nh-desk", legacy, agent=True, open_url=URL,
                                         mentions=(FGS.CardMention("Alice", "alice@a4x.io"), FGS.CardMention("Bob")))
-        readable = "标题\nurl: https://gitlab.addx.ai/x/-/issues/1"
         self.assertEqual(json.loads(tagged)["body"]["elements"], [byline("nh-desk"), markdown("<at email=alice@a4x.io></at> @Bob"),
-                                                                 panel(readable, len(readable))])
-        self.assertEqual(elements(legacy), [byline(), panel(readable, len(readable))])
+                                                                 gitlab_button("https://gitlab.addx.ai/x/-/issues/1")])
+        self.assertEqual(elements(legacy), [byline(),
+                                            gitlab_button("https://gitlab.addx.ai/x/-/issues/1")])
         middle = f"事实\n更多\n\n🔔 通知 @Alice\nnote: 5\nevents: a,b\n{MR_HEADER}"
         kept = "事实\n更多\n\nnote: 5\nevents: a,b"
         self.assertEqual(elements(middle), [byline(), panel(kept, len(kept))])
@@ -571,16 +604,17 @@ class CardMachineLines(unittest.TestCase):
         card = json.loads(raw)
         self.assertEqual(card["header"]["title"], plain("🏷 新建 tag · v1.0"))
         self.assertEqual(card["body"]["elements"][0], byline("nh-desk"))
-        self.assertEqual(folded(card).split("\n")[1:], [record["url"]])  # the headline, then the one readable fact line
+        self.assertIsNone(folded(card))  # the standalone target moved to the button; only the headline remains as the title
+        self.assertEqual(card["body"]["elements"][-1], gitlab_button(record["url"]))
 
     def test_the_title_of_a_legacy_message_is_neutralised_and_cut_like_any_other(self):
-        """L1-FGS-257: 旧格式 `title:` 的值也是用户输入：`<at id=all>`、伪造的 @、引号照旧中和，整张卡片里没有 `<`；超过 36 列取前面放得下的部分加「…」，
-        总宽不超过 36 列。"""
+        """L1-FGS-257: 旧格式 `title:` 的值也是用户输入：`<at id=all>`、伪造的 @、引号照旧中和，整张卡片里没有 `<`；超过 72 列取前面放得下的部分加「…」，
+        总宽不超过 72 列。"""
         content = f'{ISSUE_HEADER}\ntitle: <at id=all></at> "hi" @Bob\nurl: https://gitlab.addx.ai/x/-/issues/1'
         raw = raw_card(content, open_url=URL)
         self.assertEqual(json.loads(raw)["header"]["title"], plain("＜at id=all＞＜/at＞ ＂hi＂ ＠Bob"))
         self.assertNotIn("<", raw)
-        for value in ("字" * 30, "a" * 80, "😀" * 30):
+        for value in ("字" * 40, "a" * 80, "😀" * 40):
             title = json.loads(raw_card(f"{ISSUE_HEADER}\ntitle: {value}\nurl: u"))["header"]["title"]["content"]
             self.assertLessEqual(columns(title), FGS.CARD_TITLE_COLUMNS, msg=value)
             self.assertTrue(title.endswith("…"), msg=value)
@@ -591,8 +625,8 @@ class CardEscapedBrackets(unittest.TestCase):
     链接 `[#132 \\[标题\\]](url)`：链接文字里有转义的方括号。标题、消息列表摘要（config.summary）、预览的截断都要认得它们：链接包装与转义一并清洗，只剩文字。"""
 
     def test_a_headline_link_whose_text_has_escaped_brackets_is_titled_by_its_plain_text(self):
-        """L1-FGS-260: skill 频道 Issue #132 的评论事实（首行 `💬 **评论** · [#132 \\[buzz-agent-setup\\] 标题](url)`）：标题是「💬 评论 · #132 [buzz-agent-setup]…」
-        （链接包装、加粗记号、转义的反斜杠都没有，36 列内加「…」），署名行、颜色照旧；折叠全文的第一行是这一行的原样（带链接地址）。"""
+        """L1-FGS-260: skill 频道 Issue #132 的评论事实（首行 `💬 **评论** · [#132 \\[buzz-agent-setup\\] 标题](url)`）：标题保留 72 列内的纯文本
+        （链接包装、加粗记号、转义的反斜杠都没有，超出加「…」），署名行、颜色照旧；折叠全文的第一行是这一行的原样（带链接地址）。"""
         card = card_of(COMMENT_FACT, "nh-desk", agent=True, channel="skill", open_url=URL)
         self.assertEqual(card["header"], {"title": plain(COMMENT_TITLE), "template": "green"})
         self.assertEqual(card["body"]["elements"][0], byline("nh-desk · #skill"))
@@ -673,6 +707,55 @@ class CardEscapedBrackets(unittest.TestCase):
 
 
 class CardPreview(unittest.TestCase):
+    def test_a_gitlab_sync_has_a_trusted_target_button_at_the_absolute_bottom(self):
+        """L1-FGS-265: 只有结构合法的 GitLab 同步消息从确定性 headline / URL 行取 https 目标，在卡片绝对底部显示按钮；
+        comment 指向 note，状态记录仍是最后一个内容区、位于按钮之前。普通消息和正文中间伪造的 header 都不能制造按钮。"""
+        note_url = "https://gitlab.addx.ai/infra/buzz-deploy/-/merge_requests/322#note_637456"
+        comment = (f"💬 **评论** · [!322 deploy]({note_url}) · reviewer\n"
+                   f"Code Review complete\n{MR_HEADER}")
+        comment_els = elements(comment)
+        self.assertEqual([e["tag"] for e in comment_els], ["column_set", "collapsible_panel", "button"])
+        self.assertEqual(comment_els[-1], gitlab_button(note_url))
+
+        mr_url = "https://gitlab.addx.ai/infra/buzz-deploy/-/merge_requests/322"
+        history = "状态记录\n- 14:21:20 👀 可评审\n- 14:43:33 🔄 merged"
+        status = f"MR !322\n当前状态：✅ 已合并\nMR：{mr_url}\n\n{history}\n{MR_HEADER}"
+        status_els = elements(status)
+        self.assertEqual([e["tag"] for e in status_els],
+                         ["column_set", "collapsible_panel", "markdown", "button"])
+        self.assertEqual(status_els[-2], markdown(history))
+        self.assertEqual(status_els[-1], gitlab_button(mr_url))
+
+        ordinary = f"see [MR]({mr_url})"
+        self.assertNotIn("button", [e["tag"] for e in elements(ordinary)])
+        forged = f"see [MR]({mr_url})\n{MR_HEADER}\nnot the last line"
+        self.assertNotIn("button", [e["tag"] for e in elements(forged)])
+        unsafe = f"[bad](http://gitlab.addx.ai/p/-/merge_requests/1)\n{MR_HEADER}"
+        self.assertNotIn("button", [e["tag"] for e in elements(unsafe)])
+
+    def test_a_trailing_gitlab_status_history_is_visible_after_the_fold(self):
+        """L1-FGS-266: GitLab 同步消息把 `状态记录` 放在可读正文最后（机器 header 之前）时，这一段不进入「展开全文」：
+        其余正文仍折叠，状态记录作为卡片最后一个 markdown 元素直接显示。只有严格位于末尾的区块才特殊处理，普通消息和中间区块不变。"""
+        history = "状态记录\n- 14:21:20 👀 可评审\n- 14:43:33 🔄 merged"
+        main = ("🔀 **[L4 V2] infra/buzz-deploy!322 GitLab 同步**\n"
+                "当前状态：✅ 已合并\n"
+                "MR：https://gitlab.addx.ai/infra/buzz-deploy/-/merge_requests/322")
+        content = f"{main}\n\n{history}\n{MR_HEADER}"
+        els = elements(content)
+        self.assertEqual([e["tag"] for e in els], ["column_set", "collapsible_panel", "markdown", "button"])
+        visible_main = "\n".join(main.split("\n")[:-1])
+        self.assertEqual(els[1], panel(visible_main, len(visible_main)))
+        self.assertEqual(els[2], markdown(history))
+        self.assertNotIn("状态记录", els[1]["elements"][0]["content"])
+        self.assertNotIn(FGS.CARD_NOTIFY_HEADER, json.dumps(els, ensure_ascii=False))
+
+        middle = f"title\n{history}\nmore\n{MR_HEADER}"
+        self.assertEqual([e["tag"] for e in elements(middle)], ["column_set", "collapsible_panel"])
+        self.assertEqual(folded(card_of(middle, open_url=URL)), f"title\n{history}\nmore")
+        ordinary = f"title\n\n{history}"
+        self.assertEqual([e["tag"] for e in elements(ordinary)], ["column_set", "collapsible_panel"])
+        self.assertEqual(folded(card_of(ordinary, open_url=URL)), ordinary)
+
     def test_before_the_fold_there_is_only_the_byline_and_the_mentions(self):
         """L1-FGS-209: 卡片展开前只有标题、署名行（「发言人 · #频道」+「在 Buzz 中打开」链接）和 @ 行：不再有预览（原来 ≤ 300 个字符、≤ 8 行，
         手机上太长）；正文比标题多出任何内容（第二行、被截断的首行）就放一个默认收起的「展开全文（N 字）」面板，里面是完整内容（含标题那一行）；
@@ -686,7 +769,8 @@ class CardPreview(unittest.TestCase):
         self.assertEqual(elements("hello"), [byline()])
         self.assertEqual(elements("hello\n\n"), [byline()])  # the only line is the title
         self.assertEqual(elements(TITLE + "x"), [byline(), panel(TITLE + "x", 3)])
-        self.assertEqual(elements("a" * 37), [byline(), panel("a" * 37, 37)])  # the title had to cut it
+        self.assertEqual(elements("a" * 72), [byline()])
+        self.assertEqual(elements("a" * 73), [byline(), panel("a" * 73, 73)])  # the title had to cut it
 
     def test_a_cut_never_leaves_a_code_fence_open(self):
         """L1-FGS-210: 截断原语（折叠全文超过卡片上限时用的 _markdown_prefix）在代码围栏中间截断时补上收尾的围栏（``` 或 ~~~，同样的符号、
@@ -819,6 +903,23 @@ class CardSize(unittest.TestCase):
         self.assertEqual(self.size("a" * lo), 28 * 1024)  # exactly the trim size still fits, one byte more is cut
         self.assertLessEqual(self.size("a" * hi), 28 * 1024)
 
+    def test_an_oversized_visible_status_history_keeps_recent_records_visible_and_the_card_bounded(self):
+        """L1-FGS-267: 末尾状态记录即使异常地很长也不进折叠面板；卡片仍小于 30 KB，并在可见的最后区块明确说明只保留最近记录。"""
+        records = [f"- 14:{i // 60:02d}:{i % 60:02d} event-{i} " + "字" * 80 for i in range(500)]
+        main = "MR !322\n当前状态：✅ 已合并"
+        content = f"{main}\n\n状态记录\n" + "\n".join(records) + f"\n{MR_HEADER}"
+        raw = raw_card(content, open_url=URL)
+        self.assertLess(len(raw.encode("utf-8")), MAX_CARD)
+        els = json.loads(raw)["body"]["elements"]
+        self.assertEqual(els[-1]["tag"], "markdown")
+        visible = els[-1]["content"]
+        self.assertTrue(visible.startswith("状态记录\n" + FGS.CARD_STATUS_TRUNCATED_NOTE + "\n"))
+        self.assertIn("event-499", visible)
+        self.assertNotIn("event-0 ", visible)
+        panels = [element for element in els if element["tag"] == "collapsible_panel"]
+        self.assertEqual(len(panels), 1)
+        self.assertNotIn("状态记录", panels[0]["elements"][0]["content"])
+
     def test_escapes_cannot_push_a_card_over_the_limit_and_an_open_fence_is_closed_before_the_note(self):
         """L1-FGS-218: 每个字符在 JSON 里占几个字节不一样（引号、换行转义成两个）：按卡片实际的字节数截断，任何内容都 < 30 KB；
         截断处落在代码围栏里时先补收尾的围栏再写那行说明；名字、署名行里的频道名、@ 行都有上限，撑不大卡片。"""
@@ -903,7 +1004,7 @@ class CardRouting(unittest.TestCase):
         self.assertEqual(out.text, self.route(ev, card=None).text)
         self.assertEqual(out.text, "Alice（Buzz）：hello\nworld")
         self.assertEqual(self.card(out), {
-            "schema": "2.0", "config": {"summary": {"content": "Alice · #naturehood：hello world"}},
+            "schema": "2.0", "config": {"summary": {"content": "Alice · #naturehood：hello world"}, "update_multi": True},
             "header": {"title": plain("hello"), "template": "blue"},
             "body": {"elements": [byline("Alice · #naturehood", f"{URL}&t={eid(5)}"), panel("hello\nworld", 11)]}})
         self.assertIsNone(self.route(ev, card=None).card)
@@ -1065,6 +1166,8 @@ class CardRound(TmpCase):
         return w
 
     def env(self, **kw):
+        # RoundIdentity.world 里 AGENT2 的「no bot」在这组用例里是不发的那条：ADR-0019 起缺省代发，这里显式写 "skip"。
+        kw.setdefault("buzz_unmanaged_agents", "skip")
         return Env(self.tmp, message_format="card", **kw)
 
     def at(self, minutes):
@@ -1081,8 +1184,8 @@ class CardRound(TmpCase):
             finally:
                 self.tmp = previous
 
-    def test_every_message_is_said_as_a_card_by_the_same_bot_as_before(self):
-        """L2-1-FGS-203: card 模式：每条被镜像的 Buzz 消息一张卡片（不再有 --text）。人的发言经 owner 应用 bot、标题是他的名字、blue、
+    def test_every_message_is_said_as_a_card_by_the_desk_or_agents_own_bot(self):
+        """L2-1-FGS-203: card 模式：每条被镜像的 Buzz 消息一张卡片（不再有 --text）。人的发言经 Desk bot、标题是他的名字、blue、
         没有「（Buzz）：」；agent 的经它自己的 profile、green；话题回复用 +messages-reply --reply-in-thread 挂到父消息；@ 按
         邮箱 / open_id / 纯文字；幂等键与文字模式同一个规则；账本里是飞书消息 id；cards_sent 计数，不触发 needs_attention。"""
         w = self.world()
@@ -1093,10 +1196,10 @@ class CardRound(TmpCase):
         self.assertEqual(len(cards), 3)
         self.assertTrue(all("--text" not in c["args"] for c in w.lark_sends()))
         human, agent, reply = cards
-        self.assertEqual((human["app"], human["endpoint"], human["key"]), (OWNER_APP, "send", key_of(1)))
-        self.assertNotIn("LARKSUITE_CLI_CONFIG_DIR", human["call"]["env"])
+        self.assertEqual((human["app"], human["endpoint"], human["key"]), (AGENT_APP, "send", key_of(1)))
+        self.assertEqual(human["call"]["env"]["LARKSUITE_CLI_CONFIG_DIR"], str(self.tmp / "agent-cfg"))
         self.assertEqual(human["card"], {
-            "schema": "2.0", "config": {"summary": {"content": "Alice · #naturehood：hello from buzz"}},
+            "schema": "2.0", "config": {"summary": {"content": "Alice · #naturehood：hello from buzz"}, "update_multi": True},
             "header": {"title": plain("hello from buzz"), "template": "blue"},
             "body": {"elements": [byline("Alice · #naturehood", open_url(1))]}})
         self.assertEqual((agent["app"], agent["key"]), (AGENT_APP, key_of(2)))
@@ -1105,11 +1208,11 @@ class CardRound(TmpCase):
         self.assertEqual(agent["card"]["header"]["title"], plain("＠Alice 已完成"))
         self.assertEqual(agent["card"]["body"]["elements"], [byline("helper-agent · #naturehood", open_url(2)), markdown("<at email=alice@a4x.io></at>")])
         root_mid = w.sent_keys[human["key"]]
-        self.assertEqual((reply["app"], reply["endpoint"], reply["key"]), (OWNER_APP, "reply", key_of(3)))
+        self.assertEqual((reply["app"], reply["endpoint"], reply["key"]), (AGENT_APP, "reply", key_of(3)))
         self.assertEqual(reply["call"]["args"][reply["call"]["args"].index("--message-id") + 1], root_mid)
         self.assertIn("--reply-in-thread", reply["call"]["args"])
         self.assertEqual(reply["card"]["header"]["title"], plain("＠helper-agent 看下"))
-        self.assertEqual(reply["card"]["body"]["elements"], [byline("Bob · #naturehood", open_url(3)), markdown(f"<at id={AGENT_BOT_MEMBER}></at>")])
+        self.assertEqual(reply["card"]["body"]["elements"], [byline("Bob · #naturehood", open_url(3)), markdown("@helper-agent")])
         state = env.state()
         self.assertEqual(state["b2f"][eid(1)], root_mid)
         self.assertEqual(state["threads"].get(root_mid), ts(NOW))
@@ -1126,9 +1229,10 @@ class CardRound(TmpCase):
         report = self.env().round(w)
         legacy, fact = w.card_sends()
         self.assertEqual((legacy["key"], fact["key"]), (key_of(1), key_of(2)))
-        self.assertEqual(legacy["card"]["header"]["title"], plain("[监控整改] rec-engine 可观测性闭环…"))
+        self.assertEqual(legacy["card"]["header"]["title"], plain(ROOT_TITLE))
         self.assertEqual(fact["card"]["header"]["title"], plain(MR_TITLE))
-        self.assertEqual(fact["card"]["body"]["elements"][1:], [markdown("<at email=alice@a4x.io></at>"), panel(MR_VISIBLE, len(MR_VISIBLE))])
+        self.assertEqual(fact["card"]["body"]["elements"][1:], [markdown("<at email=alice@a4x.io></at>"), panel(MR_VISIBLE, len(MR_VISIBLE)),
+                                                                  gitlab_button("https://gitlab.addx.ai/applications/naturehood/-/merge_requests/1001")])
         for sent in (legacy, fact):
             raw = json.dumps(sent["card"], ensure_ascii=False)
             self.assertNotIn("gitlab-notify", raw)
@@ -1139,11 +1243,11 @@ class CardRound(TmpCase):
         """L2-1-FGS-204: message_format "text" 发的和以前逐字节一样（--text、同一个幂等键、不取频道名、cards_sent 为 0）；配置里不写这个键
         就是 card。"""
         w = self.world()
-        report = Env(self.tmp, message_format="text").round(w)
+        report = Env(self.tmp, message_format="text", buzz_unmanaged_agents="skip").round(w)
         sends = w.lark_sends()
         self.assertEqual([base.text_of(c) for c in sends],
                          ["Alice（Buzz）：hello from buzz", "@Alice 已完成",
-                          f'Bob（Buzz）：@helper-agent 看下 <at user_id="{AGENT_BOT_MEMBER}">helper-agent</at>'])
+                          "Bob（Buzz）：@helper-agent 看下"])
         self.assertEqual([c["args"][c["args"].index("--idempotency-key") + 1] for c in sends], [key_of(1), key_of(2), key_of(3)])
         self.assertEqual(w.channel_gets(), [])
         self.assertEqual((report["cards_sent"], report["cards_fallback_text"]), (0, 0))
@@ -1200,7 +1304,7 @@ class CardRound(TmpCase):
                 self.assertEqual(len(w.card_sends()), 1)
                 self.assertEqual(w.card_sends()[0]["key"], key_of(1))
                 text = calls[1]
-                self.assertEqual((text["app"], base.text_of(text)), (OWNER_APP, "Alice（Buzz）：hello"))
+                self.assertEqual((text["app"], base.text_of(text)), (AGENT_APP, "Alice（Buzz）：hello"))
                 self.assertEqual(text["args"][text["args"].index("--idempotency-key") + 1], key_of(1) + "-text")
                 self.assertEqual(len(w.messages), 1)
                 self.assertEqual(env.state()["b2f"][eid(1)], w.messages[0]["message_id"])
@@ -1282,7 +1386,7 @@ class CardRound(TmpCase):
                          ("+messages-reply", root_mid))
         self.assertIn("--reply-in-thread", reply_text["args"])
         self.assertEqual([m["content"] for m in w.threads[root_mid]], ["Bob（Buzz）：re"])
-        agent_calls = [c for c in sends if c["app"] == AGENT_APP]
+        agent_calls = [c for c in sends if c["args"][c["args"].index("--idempotency-key") + 1].startswith(key_of(3))]
         self.assertEqual(len(agent_calls), 2)  # the card, then the text
         self.assertEqual((agent_calls[1]["app"], base.text_of(agent_calls[1])), (AGENT_APP, "done"))
         self.assertEqual(agent_calls[1]["env"]["LARKSUITE_CLI_CONFIG_DIR"], str(self.tmp / "agent-cfg"))
@@ -1304,9 +1408,8 @@ class CardRound(TmpCase):
         self.assertEqual((report["thread_roots_backfilled"], report["cards_sent"], report["cards_fallback_text"]), (1, 4, 0))
         self.assertEqual(cards[3]["call"]["args"][cards[3]["call"]["args"].index("--message-id") + 1], w.sent_keys[key_of(50)])
 
-    def test_mentions_use_an_open_id_the_owners_app_knows_and_never_a_union_id(self):
-        """L2-1-FGS-213: bridge 没给邮箱时：Feishu 里发过言的人（缓存里有他在 owner 应用的 open_id）用 `<at id=ou_…>`，agent 的 bot 用群里的
-        成员 id，还没配对的人和映射不到的人是不通知的 @名字；所有卡片里都没有 union_id。"""
+    def test_mentions_without_verified_email_do_not_use_owner_app_ids(self):
+        """L2-1-FGS-213: Desk 卡片没有验证邮箱时不使用 owner 应用的 open_id 或 union_id。"""
         w = self.world()
         w.bridge_omit = {"emails"}
         env = self.env()
@@ -1316,7 +1419,7 @@ class CardRound(TmpCase):
                               tags=[("p", ALICE_PK), ("p", CAROL_PK), ("p", AGENT_PK), ("p", OWNER_PK)]))
         env.round(w, now=self.at(1))
         card = w.card_sends()[-1]["card"]
-        self.assertEqual(card["body"]["elements"][1], markdown(f"<at id={ALICE_OPEN}></at> @Carol <at id={AGENT_BOT_MEMBER}></at> @Owner"))
+        self.assertEqual(card["body"]["elements"][1], markdown("@Alice @Carol @helper-agent @Owner"))
         self.assertEqual(w.card_sends()[1]["card"]["body"]["elements"][1], markdown("@Alice"))  # her message came before she was paired
         for c in w.card_sends():
             dumped = json.dumps(c["card"])
@@ -1660,18 +1763,19 @@ class CardDocs(unittest.TestCase):
             self.assertIn(term, section, msg=term)
 
     def test_the_card_section_says_what_the_title_and_subtitle_are(self):
-        """L1-FGS-248: 「消息卡片」一节写明标题是消息的第一行（去哪些记号、`[gitlab-notify:v1]` 行跳过、36 列加「…」、没有可用的行退回发言人、
-        手机一行放得下的宽度没有真机实测）；没有副标题、预览和底部按钮：「发言人 · #频道名」是正文第一行的灰字、旁边是「在 Buzz 中打开」链接，
+        """L1-FGS-248: 「消息卡片」一节写明标题是消息的第一行（去哪些记号、`[gitlab-notify:v1]` 行跳过、72 列加「…」、没有可用的行退回发言人、
+        手机自然显示两行，约 36 个中文字符）；没有副标题和预览，普通消息没有底部按钮、GitLab 同步有可信目标按钮：「发言人 · #频道名」是正文第一行的灰字、旁边是「在 Buzz 中打开」链接，
         消息比标题多出内容（含标题被截断、是表格行）才有折叠全文（2026-09-23，skills#145）。"""
         start, end = self.DOC.find("## 消息卡片"), self.DOC.find("## 配置（0600")
         section = self.DOC[start:end]
-        for term in ("消息的第一行", "`[gitlab-notify:v1]`", "36 列", "手机一行", "取前面放得下的部分加「…」", "退回发言人", "没有真机实测", "`CARD_TITLE_COLUMNS`",
-                     "发言人 · #频道名", "正文第一行", "没有副标题、没有预览、没有底部按钮", "比标题多出内容", "表格行"):
+        for term in ("消息的第一行", "`[gitlab-notify:v1]`", "72 列", "手机两行", "约 36 个汉字", "取前面放得下的部分加「…」", "退回发言人", "`CARD_TITLE_COLUMNS`",
+                     "发言人 · #频道名", "正文第一行", "普通消息没有底部按钮", "在 GitLab 中打开", "最后一个内容区", "Comment 仍是消息", "#note_<id>",
+                     "比标题多出内容", "表格行"):
             self.assertIn(term, section, msg=term)
         self.assertNotIn("发言人：人是 Buzz 显示名", section)
         self.assertNotIn("去掉标题那一行之后", section)
         self.assertNotIn("primary", section)
-        self.assertEqual(FGS.CARD_TITLE_COLUMNS, 36)
+        self.assertEqual(FGS.CARD_TITLE_COLUMNS, 72)
 
     def test_the_card_section_says_which_machine_lines_never_reach_the_card(self):
         """L1-FGS-258: 「消息卡片」一节写明同步消息的机器行不进卡片（skills#134）：header 行（整行以 `[gitlab-notify:v1]` 开头，只认最后一个非空行与第一行，

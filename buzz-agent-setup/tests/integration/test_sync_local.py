@@ -370,9 +370,7 @@ class Stack:
                       key=lambda e: (e["created_at"], e["id"]))
 
     def roots(self, kind: str, iid: int, since_unix: int) -> list[dict]:
-        """Desk top-level roots of one object: a legacy header fact, or (since #78) a header-less plaque
-        whose last line is the object URL. Issue plaques carry /-/issues/N, or /-/work_items/N when GitLab
-        handed the sync that form (#101); both are the same issue."""
+        """Desk top-level roots of one object: a fact header or a legacy header-less plaque."""
 
         suffix = f"[project:{self.project_id}][{kind}:{iid}]"
         found = []
@@ -556,9 +554,10 @@ class SyncLocalTest(unittest.TestCase):
         return roots[0]
 
     def facts(self, root: dict) -> list[dict]:
-        """Desk messages below the plaque root, oldest first (the root is a header-less plaque since #78)."""
+        """Desk facts in a Thread, including a new Issue's first fact when it is the root."""
 
-        return [e for e in self.stack.publisher_thread(root["id"]) if e["id"] != root["id"]]
+        return [e for e in self.stack.publisher_thread(root["id"])
+                if e["id"] != root["id"] or header(e).startswith("[gitlab-notify:v1][object:issue]")]
 
     def only_binding(self, kind: str, iid: int, root: dict) -> dict:
         bindings = self.stack.bindings(kind, iid)
@@ -592,7 +591,7 @@ class SyncLocalTest(unittest.TestCase):
     # ── L2-2-GIS-001..010, 013: Issues ──────────────────────────────────────
 
     def test_001_new_issue_root_and_binding(self):
-        """L2-2-GIS-001 新 Issue → 频道恰好 1 条 Desk 门牌 root（无 header、无 p tag）+ 首条 routing 事实 reply 门牌 + Issue 恰好 1 条 bot binding note。"""
+        """L2-2-GIS-001 新 Issue → 首条 routing 事实即 root，Issue 恰好 1 条 bot binding note。"""
         issue = self.stack.create_issue(f"L2 {self.stamp} new issue @localstack-owner", "type::feature,status::ready")
         run = self.sync()
         self.assertGreaterEqual(run.result["created"], 1)
@@ -600,13 +599,14 @@ class SyncLocalTest(unittest.TestCase):
         self.assertEqual(root["kind"], 9)
         self.assertEqual([t[:2] for t in tag_values(root, "h")], [["h", self.stack.channel]])
         self.assertEqual(p_tags(root), set(), "Issue messages must not mention anyone")
-        plaque = lines(root)
-        self.assertEqual(plaque[0], f"📋 **#{issue['iid']} L2 {self.stamp} new issue ＠localstack-owner**")
-        self.assertRegex(plaque[-1], rf"/-/(issues|work_items)/{issue['iid']}$")
+        self.assertTrue(lines(root)[0].startswith("📋 **已打开** · "))
+        self.assertIn(f"[#{issue['iid']} L2 {self.stamp} new issue ＠localstack-owner](", root["content"])
+        self.assertRegex(root["content"], rf"/-/(issues|work_items)/{issue['iid']}")
         fact = self.facts(root)
         self.assertEqual([header(e) for e in fact],
                          [issue_header(self.stack.project_id, issue["iid"], "feature", "ready", "routing")])
-        self.assert_reply(fact[0], root)
+        self.assertEqual(fact[0]["id"], root["id"])
+        self.assertEqual(tag_values(fact[0], "e"), [])
         self.assertEqual(p_tags(fact[0]), set(), "Issue messages must not mention anyone")
         self.assertIn(f"[#{issue['iid']} L2 {self.stamp} new issue ＠localstack-owner](", lines(fact[0])[0])
         self.only_binding("issue", issue["iid"], root)
@@ -1019,7 +1019,7 @@ class SyncLocalTest(unittest.TestCase):
         self.assert_no_agent_mentions(desk)
 
     def test_nl2_messages_without_a_mention_get_no_line(self):
-        """L2-2-GIS-NL-002 没有 p tag 的消息（门牌、没有映射 reviewer 的可评审事实、Issue 门牌）都不加「🔔 通知」行。"""
+        """L2-2-GIS-NL-002 没有 p tag 的消息（MR 门牌、没有映射 reviewer 的可评审事实、Issue 状态卡）都不加「🔔 通知」行。"""
         mr = self.ready_mr({f"src/l2nl2_{self.stamp}.py": "print(2)\n"}, f"L2 {self.stamp} no-mention")
         config = self.stack.config(self.since, people={})
         self.sync(config)

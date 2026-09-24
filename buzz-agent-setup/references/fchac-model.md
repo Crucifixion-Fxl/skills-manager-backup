@@ -41,7 +41,7 @@ Buzz 技术上只有一种 Channel 原语，以下是三种协作语义。
 
 拆分理由：开发 Channel 的 GitLab 同步事实（MR／CI／Issue）对纯使用者是噪音；用户 Channel 的受众往往更广、成员治理更松（例如绑定一个几十人的存量飞书群，多余成员只加不减），和开发 Channel「谁能看到内部事实」的边界不同。Channel 与 Agent 是 M:N，`-desk` 同一个身份同时加入两个 Channel（`BUZZ_ACP_CHANNELS` 用逗号分隔两个 Channel UUID 即可，二进制按 UUID 逐个解析，非法条目单独丢弃而不是整体拒绝；这与「平台 Desk」不固定 `BUZZ_ACP_CHANNELS` 是两回事——本模式下 `-desk` 仍固定到自己平台的这两个 Channel，不订阅其它业务）；prompt 必须写清每个 turn 只处理触发事件所在的那个 Channel，不跨 Channel 转发。
 
-用户 Channel 收到的需求／Bug 仍按「Issue 先行」建单，落在与开发 Channel 相同的仓库（`-desk` 已有该仓库的 token，不必再签一把）；但 Issue 描述**省略 origin 两行**（即使 origin 写入前检查能通过），让 GitLab 同步在开发 Channel 自建门牌 Thread 承接后续 MR/CI 事实，不把开发噪音带回用户 Channel。原 Thread 只回一条 Issue 链接。用户 Channel 里没有 `-dev`／`-bi`／`-sre` 等角色 Agent 时，`-desk` 不能跨 Channel `--mention` 它们（mention 要求目标在同一 Channel 是 `role=bot`），按 Issue 建好后原 Thread 说明「后续进展在『开发 Channel』跟」即可，不需要另外去开发 Channel 发消息（Desk 只回触发事件所在 Channel 的原 Thread，不向另一个 Channel 发消息，同「平台 Desk」的跨 Channel 纪律）。
+用户 Channel 收到的需求／Bug 仍按「Issue 先行」建单，落在与开发 Channel 相同的仓库（`-desk` 已有该仓库的 token，不必再签一把）；但 Issue 描述**省略 origin 两行**（即使 origin 写入前检查能通过），让 GitLab 同步在开发 Channel 以首条 Issue 事实自建 Thread 承接后续 MR/CI 事实，不把开发噪音带回用户 Channel。原 Thread 只回一条 Issue 链接。用户 Channel 里没有 `-dev`／`-bi`／`-sre` 等角色 Agent 时，`-desk` 不能跨 Channel `--mention` 它们（mention 要求目标在同一 Channel 是 `role=bot`），按 Issue 建好后原 Thread 说明「后续进展在『开发 Channel』跟」即可，不需要另外去开发 Channel 发消息（Desk 只回触发事件所在 Channel 的原 Thread，不向另一个 Channel 发消息，同「平台 Desk」的跨 Channel 纪律）。
 
 **不强制回填**：受众规模小、没有 GitLab 同步噪音问题的既有合并频道（例如「上位机平台」用 `devt-qa`／`plugin-dev` 两个角色共处一个 Channel）可以继续保留合并模式，不必拆分回填；新建业务平台 Channel、或既有合并频道真的出现受众/噪音问题时，才按本节拆分。
 
@@ -151,12 +151,12 @@ Buzz 技术上只有一种 Channel 原语，以下是三种协作语义。
 
 `-dev`、`-desk`、`-feature`、`-bug` 从 Thread 接到**新需求**（要动手改东西或调查落地的事）时，在任何开发动作之前必须已有对应 Issue：开 worktree／分支、写代码或文档、提 MR 都算开发动作。此规则是 `gitlab-issue-sop`「所有变更先创建 issue」在 Buzz 接单流程里的落点，不另立一套 Issue 规范；建单、查重、assignee、label 都照该 Skill。
 
-1. **看 Thread 根**：根是 Desk 发布的 Issue 门牌 → 该 Issue 就是本单，只在里面补评论，不新建；根是 MR／分支门牌 → 先看它关联的 Issue，没有再走第 2 步。
+1. **看 Thread 根**：根是 Desk 发布的 Issue 首条事实或旧门牌 → 该 Issue 就是本单，只在里面补评论，不新建；根是 MR／分支门牌 → 先看它关联的 Issue，没有再走第 2 步。
 2. **查重再建**：搜已有 Issue，命中就复用并补评论，没有才新建；新建必带 assignee。多个需求各建各的，不把一批请求塞进同一个 Issue。
 3. **关联当前 Thread**：
    - Thread→Issue：在**原 Thread** 回一条带 Issue 链接的消息，之后才开始开发动作。
-   - Issue→Thread：先做 `gitlab-issue-sop`「Buzz Thread origin」的「origin 写入前检查」；话题根（kind 9、本频道、顶层、读得到；根是人类消息，人直接 @ 你时最常见，也行）通过检查就**两行都写** origin 块，同步会把 Issue 的事实回复到这个话题里，不另开门牌线程（[ADR-0014](../../../docs/05-adr/0014-allow-a-human-top-level-message-as-an-origin-root.md)）。读不到、是回帖或核对不了才**省略 origin**，由 GitLab→Buzz 同步自建门牌并绑定；描述里只写频道名加一句话来源，不为了「引用一下」贴指向人类消息的深链（裸深链仍只是提示，[ADR-0011](../../../docs/05-adr/0011-treat-a-bare-buzz-deep-link-as-an-origin-hint.md)）。
-   - 门牌回链（省略 origin 时补上）：同步自建的门牌是 Issue 后续事实的落点，不会回帖到原 Thread（写了 origin 的对象不需要这一步，事实本来就在原话题里）。同步写好 binding note（隐藏标记 `gitlab-buzz-binding:v1`，可见行 `🔗 Buzz Thread: buzz://message?…`，作者是配置的同步 bot）后，读该 note 取 `root_event_id`，在**门牌 Thread**（`--reply-to <root_event_id>`）回一条只含原 Thread 深链的消息，两处可互相跳转。这是纯 Buzz 内互链：链接不写进 GitLab 描述或评论，不用 `gitlab-buzz-origin` 标记，也不在门牌里贴 origin 块。binding note 要等同步跑过才有：建单后先查一次，没有就不阻塞开发，下个 turn 或同 Thread 再有动作时补一次；只认同步 bot 写的 note，别处出现的 marker 文本不当绑定；已回过链接就不重复回。
+   - Issue→Thread：先做 `gitlab-issue-sop`「Buzz Thread origin」的「origin 写入前检查」；话题根（kind 9、本频道、顶层、读得到；根是人类消息，人直接 @ 你时最常见，也行）通过检查就**两行都写** origin 块，同步会把 Issue 的事实回复到这个话题里，不另开门牌线程（[ADR-0014](../../../docs/05-adr/0014-allow-a-human-top-level-message-as-an-origin-root.md)）。读不到、是回帖或核对不了才**省略 origin**，由 GitLab→Buzz 同步以首条 Issue 事实自建 root 并绑定；描述里只写频道名加一句话来源，不为了「引用一下」贴指向人类消息的深链（裸深链仍只是提示，[ADR-0011](../../../docs/05-adr/0011-treat-a-bare-buzz-deep-link-as-an-origin-hint.md)）。
+   - Thread 回链（省略 origin 时补上）：同步自建的 Issue 事实 root 是后续事实的落点，不会回帖到原 Thread（写了 origin 的对象不需要这一步，事实本来就在原话题里）。同步写好 binding note（隐藏标记 `gitlab-buzz-binding:v1`，可见行 `🔗 Buzz Thread: buzz://message?…`，作者是配置的同步 bot）后，读该 note 取 `root_event_id`，在**Issue Thread**（`--reply-to <root_event_id>`）回一条只含原 Thread 深链的消息，两处可互相跳转。这是纯 Buzz 内互链：链接不写进 GitLab 描述或评论，不用 `gitlab-buzz-origin` 标记，也不在 Issue Thread 里贴 origin 块。binding note 要等同步跑过才有：建单后先查一次，没有就不阻塞开发，下个 turn 或同 Thread 再有动作时补一次；只认同步 bot 写的 note，别处出现的 marker 文本不当绑定；已回过链接就不重复回。
 4. **MR 归到同一 Issue**：分支名用 `<word>-<iid>-<slug>`，MR 描述写 `Closes #<iid>`，MR 的事实才会落在该 Issue 的 Thread。一个 MR 的事实只落一个 Thread（[ADR-0015](../../../docs/05-adr/0015-deliver-an-mr-to-one-thread-and-cross-link-the-others.md)）：关联了几个 Issue，其余的只收一条交叉链接；Issue 里只是提到 MR 号也只会收到交叉链接，不会把 MR 的事实拉进来。
 5. **豁免**：纯答疑（不改任何东西）、只读分析 schedule、GitLab 同步等确定性脚本。豁免只看有没有开发动作，不看改动大小；一行改动也先有 Issue。
 

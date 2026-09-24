@@ -48,6 +48,7 @@ OWNER = "a" * 64
 PUBLISHER = "b" * 64
 ASSISTANT = "c" * 64
 STRANGER = "d" * 64
+DESK = "e" * 64
 CHANNEL = "11111111-2222-3333-4444-555555555555"
 PAT = "glpat-SECRET-owner-token"
 ODD_PAT = 'glpat-A"B\\C-é'  # JSON-escaping changes how this token looks in serialised output
@@ -64,6 +65,7 @@ def make_config(**over) -> dict:
         "channel_id": CHANNEL,
         "publisher_pubkey": PUBLISHER,
         "owner_pubkey": OWNER,
+        "desk_pubkey": DESK,
         "done_authors": [OWNER, ASSISTANT],
         "buzz": {"cli_path": "/opt/buzz-0.5.23/usr/bin/buzz", "cli_sha256": "e" * 64},
         "gitlab": {"base_url": "https://gitlab.example", "username": "jchen",
@@ -154,7 +156,7 @@ class FakeBuzz:
     def __init__(self, members=None, log=None, publisher=PUBLISHER):
         self.publisher = publisher
         self.members = members if members is not None else {
-            OWNER: "owner", publisher: "bot", ASSISTANT: "bot"}
+            OWNER: "owner", publisher: "bot", ASSISTANT: "bot", DESK: "bot"}
         self.sent: list[dict] = []
         self.events: list[dict] = []
         self.send_error: Exception | None = None
@@ -270,6 +272,15 @@ class ConfigTest(Harness):
         """L1-PTS-002 发布者不能是 done 标记的可信作者，否则 GitLab 原文里的 todo:done 行能自我确认。"""
         with self.assertRaises(sync.SyncError):
             self.mod.validate_config(make_config(done_authors=[OWNER, PUBLISHER]))
+
+    def test_desk_must_be_a_distinct_pubkey(self):
+        for desk in (None, "bad", OWNER, PUBLISHER, ASSISTANT):
+            with self.subTest(desk=desk), self.assertRaises(sync.SyncError):
+                self.mod.validate_config(make_config(desk_pubkey=desk))
+        missing = make_config()
+        missing.pop("desk_pubkey")
+        with self.assertRaises(sync.SyncError):
+            self.mod.validate_config(missing)
 
     def test_token_env_is_fixed_and_distinct_from_agent_token(self):
         """L1-PTS-003 人的 PAT 只走 GITLAB_TODO_TOKEN，不与 Agent 的 GITLAB_TOKEN 混用。"""
@@ -726,6 +737,20 @@ class GitLabClientTest(Harness):
 
 
 class GateTest(Harness):
+    def test_explicit_desk_bot_is_allowed_but_cannot_be_a_human(self):
+        config = make_config(desk_pubkey=STRANGER)
+        buzz = FakeBuzz({OWNER: "owner", PUBLISHER: "bot", ASSISTANT: "bot", STRANGER: "bot"})
+        self.assertEqual(self.run_sync(FakeGitLab([make_todo(1)]), buzz, config)["delivered"], 1)
+        for role in ("member", "admin"):
+            with self.subTest(role=role), self.assertRaises(sync.SyncError):
+                self.run_sync(FakeGitLab([make_todo(1)]),
+                              FakeBuzz({OWNER: "owner", PUBLISHER: "bot", STRANGER: role}), config)
+
+    def test_missing_explicit_desk_fails_closed(self):
+        with self.assertRaises(sync.SyncError):
+            self.run_sync(FakeGitLab([make_todo(1)]),
+                          FakeBuzz({OWNER: "owner", PUBLISHER: "bot", ASSISTANT: "bot"}))
+
     def test_wrong_gitlab_identity_fails_closed(self):
         """L1-PTS-020 PAT 属于别人时整轮失败：不取 todo、不发消息。"""
         gitlab, buzz = FakeGitLab([make_todo(1)], username="mallory"), FakeBuzz()
@@ -751,14 +776,14 @@ class GateTest(Harness):
         """L1-PTS-023 成员集合必须 ⊆ {owner, publisher} ∪ done_authors：多出来的 bot 也能读到待办，整轮失败关闭。"""
         for role in ("bot", "member", "admin"):
             gitlab = FakeGitLab([make_todo(1)])
-            buzz = FakeBuzz({OWNER: "owner", PUBLISHER: "bot", ASSISTANT: "bot", STRANGER: role})
+            buzz = FakeBuzz({OWNER: "owner", PUBLISHER: "bot", ASSISTANT: "bot", DESK: "bot", STRANGER: role})
             with self.subTest(role), self.assertRaises(sync.SyncError):
                 self.run_sync(gitlab, buzz)
             self.assertEqual((gitlab.fetches, buzz.sent), (0, []))
 
     def test_member_set_may_be_smaller_than_the_allowed_set(self):
         """L1-PTS-024 done_authors 里的助手还没入频道时不算违规：门禁是「子集」而非「相等」。"""
-        buzz = FakeBuzz({OWNER: "owner", PUBLISHER: "bot"})
+        buzz = FakeBuzz({OWNER: "owner", PUBLISHER: "bot", DESK: "bot"})
         result = self.run_sync(FakeGitLab([make_todo(1)]), buzz)
         self.assertEqual(result["delivered"], 1)
 
@@ -766,14 +791,14 @@ class GateTest(Harness):
         """L1-PTS-026 done_authors 里的第二个成员是真人（role 不是 bot）：即使在允许集合里，单真人门禁也整轮失败，不取 todo、不发。"""
         for role in ("member", "admin"):
             gitlab = FakeGitLab([make_todo(1)])
-            buzz = FakeBuzz({OWNER: "owner", PUBLISHER: "bot", ASSISTANT: role})
+            buzz = FakeBuzz({OWNER: "owner", PUBLISHER: "bot", DESK: "bot", ASSISTANT: role})
             with self.subTest(role), self.assertRaises(sync.SyncError):
                 self.run_sync(gitlab, buzz)
             self.assertEqual((gitlab.fetches, buzz.sent), (0, []))
 
     def test_a_done_author_bot_outside_done_authors_is_not_waved_through(self):
         """L1-PTS-025 done_authors 只有 owner 时，助手 bot 不在允许集合里，整轮失败。"""
-        buzz = FakeBuzz({OWNER: "owner", PUBLISHER: "bot", ASSISTANT: "bot"})
+        buzz = FakeBuzz({OWNER: "owner", PUBLISHER: "bot", DESK: "bot", ASSISTANT: "bot"})
         with self.assertRaises(sync.SyncError):
             self.run_sync(FakeGitLab([make_todo(1)]), buzz, make_config(done_authors=[OWNER]))
 

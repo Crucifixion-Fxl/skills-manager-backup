@@ -357,7 +357,7 @@ class MrSnapshotTest(SyncCase):
                     if reply_to and "流水线通过" in content]
         self.assertEqual(len(activity), 1)
         self.assertIn("[draft:no]", activity[0].split("\n")[-1])
-        self.assertTrue(activity[0].split("\n")[0].startswith("✅ **流水线通过** · [!31 MR 31]("))
+        self.assertTrue(activity[0].split("\n")[0].startswith("✅ **#90 流水线通过** · [!31 MR 31]("))
 
 
 class NeutralizeTest(unittest.TestCase):

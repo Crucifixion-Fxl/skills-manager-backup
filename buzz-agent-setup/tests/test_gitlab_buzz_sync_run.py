@@ -207,17 +207,15 @@ class SyncRunTest(unittest.TestCase):
         self.assertEqual(summary["status"], "ok")
         self.assertEqual(summary["created"], 1)
         sends = self.sends()
-        self.assertEqual(len(sends), 2)  # plaque root + first fact (issue #78)
-        _, plaque_reply, plaque_content = sends[0]
-        self.assertIsNone(plaque_reply)
-        self.assertEqual(SYNC.plaque_url(plaque_content), make_issue(182)["web_url"])
+        self.assertEqual(len(sends), 1)
+        _, fact_reply, fact_content = sends[0]
+        self.assertIsNone(fact_reply)
         root = self.buzz.events[0]["id"]
-        fact_reply, fact_content = sends[1][1], sends[1][2]
-        self.assertEqual(fact_reply, root)
         header = SYNC.parse_header(fact_content)
         self.assertEqual((header["object"], header["change"], header["project"], header["issue"]),
                          ("issue", "routing", PID, 182))
-        self.assertIn("首次同步", fact_content)
+        self.assertTrue(fact_content.startswith("📋 **已打开**"))
+        self.assertNotIn("首次同步", fact_content)
         notes = self.gitlab.note_list[(PID, 182)]
         self.assertEqual(len(notes), 1)
         self.assertEqual(SYNC.parse_binding(notes, BOT_ID, PID, "issue", 182, CHANNEL), root)
@@ -302,8 +300,8 @@ class SyncRunTest(unittest.TestCase):
         root = self.buzz.events[0]["id"]
         self.gitlab.fail_note_for = set()
         summary = self.run_sync()
-        # the plaque survived the crash; the first fact still has to be sent once
-        self.assertEqual(len(self.sends()), 2)
+        # The fact root survived; recovery writes only the binding note.
+        self.assertEqual(len(self.sends()), 1)
         self.assertEqual(summary["recovered"], 1)
         notes = self.gitlab.note_list[(PID, 182)]
         self.assertEqual(SYNC.parse_binding(notes, BOT_ID, PID, "issue", 182, CHANNEL), root)

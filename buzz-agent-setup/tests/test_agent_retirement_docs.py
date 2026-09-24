@@ -242,7 +242,9 @@ class PersistentUnitTest(ContractCase):
         self.assert_contains_all(block, "runtime-setup.md systemd unit", (
             "~/.config/systemd/user/buzz-local-<name>.service",
             "Type=exec",
-            "ExecStart=%h/.config/buzz/agents/run-<name>.sh",
+            "UMask=0077",
+            "NoNewPrivileges=yes",
+            "ExecStart=/usr/bin/python3 -I %h/.config/buzz/agents/run-agent.py <name>",
             "Restart=on-failure",
             "RestartSec=5s",
             "StandardOutput=append:%h/.config/buzz/agents/<name>.log",

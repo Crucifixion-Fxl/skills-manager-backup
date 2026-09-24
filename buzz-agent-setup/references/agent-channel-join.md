@@ -19,24 +19,25 @@
 5. owner 不同意，或者过期（默认 7 天）没有答复：agent 在 Thread 里说明，然后退群。
 6. 几种特殊情况：
    - **owner 自己拉的**：邀请本身就是 owner 签名的动作，不再等审批：agent 先在频道发一条「正在开通」，然后直接开通。
+   - **在飞书群里加的**：双向群同步用可信镜像签一条 `kind 9000` 把 agent 加进 Buzz。可信镜像只证明这条变更来自频道 owner/admin 管理的飞书桥，认不出具体是哪位飞书成员操作，所以仍须 owner 审批，不会静默开通；申请和 owner 的答复都会同步回飞书。已验证不可信镜像仍按普通成员邀请处理，agent 会说明原因和正确做法后退群；镜像目录超时、非 200、格式异常或签名资料暂缺则是“暂时无法验证”，agent 留在群里但不开通，说明原因并在下一轮重试，不能谎报成不可信。
    - **普通成员拉的**：agent 说明「只有本群管理员邀请才会转给 owner」，然后退群。open 频道里任何成员都能拉人，这是为了不让 owner 收到谁都能发起的申请。
-   - **解释不了的成员身份**（找不到加人记录、agent 自助加入、加人不带 `role=bot`、最新的事件是移除）：只记为 `NO_INVITE`，不发言、不退群；之后有人重新邀请就按新申请处理。
-   - **DM**：私信 agent 时 relay 会建一个 DM 频道，它也会出现在 agent 的成员频道列表里；脚本用 `dms list`（最多 200 个）把它们排除。列不全或 `dms list` 失败时，漏掉的 DM 没有加人记录，只会记成 `NO_INVITE`，同样不碰。
+   - **解释不了的成员身份**（找不到加人记录、agent 自助加入、加人不带 `role=bot`、最新的事件是移除）：记为 `NO_INVITE`，不猜测、不退群，但会在原群说明**无法确认邀请来源**、尚未开通，并请频道管理员移出后以 bot 身份重新邀请；同一情况只提示一次，之后出现新邀请就按新申请处理。
+   - **DM**：私信 agent 时 relay 会建一个 DM 频道，它也会出现在 agent 的成员频道列表里；脚本先用 `dms list`（最多 200 个）排除，再要求候选频道的当前成员里能读到 owner/admin，才把它当作可通知的群。线上 `dms list` 可能漏掉已有私聊，而二人私聊只有 member 角色，这层证明避免把群管理提示发进私聊。`dms list` 失败时本轮整体 fail-closed，不发现新频道、不发任何未确认目标；已知群的待通知状态先持久化，下一轮能安全区分群聊和私聊后再补发，私聊永远不收群管理提示。
    - **owner 手工把频道加进了清单**：待审批或待退群（还没发退出消息）的记录直接记为已开通（outcome `manual`），不再过期退群。
    - **原本就在清单里、后来被 owner 手工移出的频道**：首轮已记为基线，脚本不会把它加回。
 
-**邀请人怎么认**：读该频道 30 天内的成员事件——9000 加人、9001 移除（成员写在第一个 `p`）、9021 自助加入、9022 退出（成员本人签名），只看关于这个 agent 的，**以最新的一条为准**，更早的邀请不能顶替更新的默认角色加人、移除或自助加入。事件的 `created_at` 是客户端写的，relay 允许和服务器时间相差 900 秒，所以和最新一条相差 900 秒以内的事件一起算：窗口里有自助加入、或最新的不是加人，记 `NO_INVITE`；有一个加人者既不是 owner 也不是频道 owner/admin，就按普通成员处理；加人不带 `role=bot` 记 `NO_INVITE`；加人者全是 owner 才自动开通，否则发申请。一个申请结束（退群、撤回）或记为 `NO_INVITE` 后，只有比上次看到的最新事件更新的事件才会重开，旧事件滚出 30 天扫描窗口不会让结论翻转；重开退群的记录时忽略 agent 自己签的退群（9022），它不能挡住管理员稍后的重新邀请。已知的保守之处：15 分钟内被移除过的旧邀请仍在窗口里，owner 在 15 分钟内重新拉人，可能因为那条旧的普通成员邀请被判为拒绝而退群，稍后再拉即可。
+**邀请人怎么认**：读该频道 30 天内的成员事件——9000 加人、9001 移除（成员写在第一个 `p`）、9021 自助加入、9022 退出（成员本人签名），只看关于这个 agent 的，**以最新的一条为准**，更早的邀请不能顶替更新的默认角色加人、移除或自助加入。事件的 `created_at` 是客户端写的，relay 允许和服务器时间相差 900 秒，所以和最新一条相差 900 秒以内的事件一起算；同一个群同步 stream 发出的 9000/9001 带随机持久的 `feishu-member-stream` 和递增的 `feishu-member-seq`，在这个模糊窗口内按序号而不是随机 event id 排先后，因此同一秒的 add → remove → add 仍认最后一次，owner/admin key 合法轮换也不会断序；不同同步进程的随机 stream 不会串线。窗口里有自助加入、或最新的不是加人，记 `NO_INVITE`；有一个加人者既不是 owner、频道 owner/admin，也不是由频道 owner/admin 持有的可信镜像，就按普通成员处理；加人不带 `role=bot` 记 `NO_INVITE`；加人者全是 owner 才自动开通，频道 owner/admin 或可信镜像发起的则发申请。一个申请结束（退群、撤回）或记为 `NO_INVITE` 后，只有比上次看到的最新事件更新的事件才会重开；游标同时记事件 id，同一 stream 的更大序号即使客户端时间更早也算更新，同一 stream 的较小序号不会因客户端时间较大而重放。旧事件滚出 30 天扫描窗口不会让结论翻转；重开退群的记录时忽略 agent 自己签的退群（9022），它不能挡住管理员稍后的重新邀请。已知的保守之处：15 分钟内被移除过的旧邀请仍在窗口里，owner 在 15 分钟内重新拉人，可能因为那条旧的普通成员邀请被判为拒绝而退群，稍后再拉即可。
 
-每条消息的最后一行是机器可读的 `buzz-join:v1 JOIN-<id>`（后面可能跟 `notify`／`active`／`closed`），脚本靠它在崩溃后找回已经发出的消息，不会重复发。
+每条业务消息的最后一行是机器可读的 `buzz-join:v1 JOIN-<id>`（后面可能跟 `notify`／`active`／`closed`）。故障与恢复消息使用带唯一 incident id 的 `buzz-join-failure:v1` 标记：同一次故障的重试会认领同一条消息，恢复后再次发生的同类故障会得到新标记，不会误认旧消息。脚本靠这些标记在崩溃后找回已经发出的消息，不会重复发。
 
-### 审批只认 owner 本人在 Buzz 里的签名
+### 审批只认 owner 本人：在 Buzz 里签名，或在飞书里经可信镜像转来
 
 - 脚本不假定 relay 已经验过签名：owner 的审批 reaction 与回复、关于 agent 的成员事件、崩溃找回时认领的消息，都在本地重算事件 id 并验签，验不过的一律不计。
 - 其他成员点 ✅ 不算，频道 admin 也不能代 owner 同意。
 - 打在别的消息上不算；撤回的 reaction 不算；早于申请或晚于过期时间的信号不算；同时有同意和不同意时，以时间最早的为准。✅ 带不带 U+FE0F 变体选择符都视为同一个。
 - 回复必须在申请的 Thread 里，首行整行等于 `/approve JOIN-<id>` 或 `/deny JOIN-<id>`；后面加字、引用或 id 不对都不算。
 - 申请消息被删、读不到信号时，过了期限就按过期处理（退群是安全的一侧）。
-- **飞书里点或回复都不算**：飞书群同步把飞书里的发言交给镜像身份代发（带「[飞书] 张三：」署名），签名不是 owner；飞书上的表情也不会同步回 Buzz。主要用飞书的 owner 要打开 Buzz Desktop 点一下。
+- **飞书里的回答**（ADR-0020，配置 `accept_feishu_approvals`，缺省 `true`）：owner 在飞书里对申请打的 ✅/❌，由群同步的镜像身份在 Buzz 的申请消息上打成 ✅/❌，带 `["feishu-author", <这个人的 pubkey>]`；owner 在申请话题里回复的一整行 `/approve JOIN-<id>` / `/deny JOIN-<id>`，由镜像签成话题回复（「[飞书] 名字：…」署名），带 `feishu-author` 与 `["join", "JOIN-<id>"]`。脚本另外认这两种信号，条件是：`feishu-author` 等于 agent 的 owner；作者是本频道的**可信镜像**——频道的 bot 成员，它的 kind:30177 由它的 NIP-OA owner 签名并声明 `"feishu": {"mirror": true}`，这个 owner 是本频道的 owner 或 admin（脚本用 agent 自己的身份向 relay 查一次）；回复必须带 `join` 且等于这个申请、去掉署名后首行整行是命令；表情打在申请消息上、带 `join` 时也要等于这个申请；在期限内、本地验签通过。relay 对同一身份、同一目标、同一表情只留一个 reaction：别人先在飞书里点了 ✅，owner 再点会被合并掉，这时请 owner 用 `/approve` 回复。镜像转来的普通发言本身不算。关掉 `accept_feishu_approvals` 就只认 owner 在 Buzz Desktop 或 CLI 里自己签的。已接受的风险：跑同步的那台机器（频道 owner/admin 的）技术上能替 owner 伪造一条同意，见 ADR-0020 与 [feishu-two-way-sync.md](feishu-two-way-sync.md)「飞书里同意 agent 入群」。
 
 ## 开通时改了什么
 
@@ -93,6 +94,7 @@ Owner 已授权你把脱敏结论和受控链接回复到触发事件所在 Chan
 | `buzz.cli_path`／`buzz.cli_sha256` | 固定的 `buzz-0.5.23` 原始 ELF 与它的 SHA-256，不能是 `~/.local/bin/buzz` wrapper |
 | `state_dir` | 0700 状态目录，建议 `~/.local/state/buzz-join` |
 | `request_ttl_seconds` | 可选，申请过期时间，默认 604800（7 天），范围 3600–2592000 |
+| `accept_feishu_approvals` | 可选，布尔值，缺省 `true`：也认可信镜像转来的、owner 在飞书里的 ✅/❌ 与 `/approve`（ADR-0020，见上文「审批」） |
 | `agents[].name` | agent 名，出现在频道消息里 |
 | `agents[].env_file` | agent 自己的 0600 env 文件；prompt 路径和责任人配置路径从它的 `BUZZ_ACP_SYSTEM_PROMPT_FILE`、`BUZZ_RESPONSIBLE_CONFIG` 读 |
 | `agents[].unit` | 托管它的 systemd 用户单元，如 `buzz-local-nh-dev.service` |
@@ -113,6 +115,8 @@ Description=Buzz agent join requests (ADR-0018)
 
 [Service]
 Type=oneshot
+UMask=0077
+NoNewPrivileges=yes
 TimeoutStartSec=10min
 Environment=BUZZ_JOIN_CONFIG=%h/.config/buzz/join/config.json
 ExecStart=/usr/bin/python3 <immutable-release>/scripts/buzz_agent_join_requests.py
@@ -128,6 +132,7 @@ OnActiveSec=1min
 OnBootSec=2min
 OnUnitActiveSec=120
 Persistent=true
+Unit=buzz-agent-join.service
 
 [Install]
 WantedBy=timers.target
@@ -144,7 +149,9 @@ systemctl --user enable --now buzz-agent-join.timer
 systemctl --user disable --now buzz-agent-join.timer
 ```
 
-每轮输出一行 JSON：`status` 是 `ok`、`error` 或 `locked`（上一轮还没跑完，退出码 0），按 agent 给出本轮的 `baseline`／`requested`／`approved`／`manual`／`active`／`left`／`deferred`／`withdrawn`／`drift` 计数、各状态的积压数 `states`，以及 `error`（带频道 ID 前缀）和可能的 `warning`（例如 `dms list` 失败）。`drift` 表示一个已开通的频道后来被人从清单里删掉了，脚本不处理，留给 owner；`withdrawn` 表示进行中的申请因为 agent 被移出频道而作废。失败只进 user journal，频道保持安静；一个频道出错不影响同一个 agent 的其他频道，一个 agent 出错也不影响其他 agent，本轮以非零退出。
+每轮输出一行 JSON：`status` 是 `ok`、`error` 或 `locked`（上一轮还没跑完，退出码 0），按 agent 给出本轮的 `baseline`／`requested`／`approved`／`manual`／`active`／`left`／`deferred`／`withdrawn`／`drift` 计数、各状态的积压数 `states`，以及脱敏的 `error`（带频道 ID 前缀）。`dms list` 或成员频道列表失败会令该 agent 本轮为 `error`，不会降级成继续猜测。`drift` 表示一个已开通的频道后来被人从清单里删掉了，脚本不处理，留给 owner；`withdrawn` 表示进行中的申请因为 agent 被移出频道而作废。
+
+群内流程失败不能静默：脚本用 agent 身份在发生问题的**原群**或申请 Thread 发一条不含路径、server answer、成员输入或 secret 的状态，明确写出**失败原因**、当前没有开通或不能响应、下一轮是否自动重试，以及联系 Agent owner 的**恢复方法**。同一种持续故障只发一次；发送结果不确定时先持久化，再用同一机器标记读回或重试，避免既丢提醒又刷屏。故障恢复后会回复恢复状态，最终仍以「已开通」为准。只有连群消息通道本身也不可用时当下无法提醒；待发送状态会保留，通道恢复后补发。一个频道出错不影响同一个 agent 的其他频道，一个 agent 出错也不影响其他 agent，本轮仍以非零退出并保留 journal 证据。
 
 ## 上线前核对
 

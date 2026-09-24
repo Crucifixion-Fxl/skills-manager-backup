@@ -84,7 +84,9 @@ def test_too_soon_guard():
 # ───────── running env / launchers ─────────
 def test_running_env_matches_claude_profile():
     p = BY["claude-buzz"]
-    env = {"BUZZ_ACP_AGENT_COMMAND": p.command, "BUZZ_ACP_MODEL": "sonnet", "CLAUDE_CODE_EXECUTABLE": p.wrapper}
+    env = {"BUZZ_ACP_AGENT_COMMAND": p.command, "BUZZ_ACP_MODEL": "sonnet",
+           "BUZZ_ACP_MEDIA_MODE": "stock_text_only", "CLAUDE_CODE_EXECUTABLE": p.wrapper,
+           "CLAUDE_CONFIG_DIR": p.home}
     assert W.running_env_matches(env, p)
     assert not W.running_env_matches({**env, "BUZZ_ACP_MODEL": "opus[1m]"}, p)
     assert not W.running_env_matches({**env, "CLAUDE_CODE_EXECUTABLE": "/w/claude-glm"}, p)
@@ -92,9 +94,32 @@ def test_running_env_matches_claude_profile():
 
 def test_running_env_matches_codex_needs_codex_home():
     p = BY["codex-buzz"]
-    env = {"BUZZ_ACP_AGENT_COMMAND": p.command, "BUZZ_ACP_MODEL": "gpt-5.6-sol", "CODEX_HOME": p.home}
+    env = {"BUZZ_ACP_AGENT_COMMAND": p.command, "BUZZ_ACP_MODEL": "gpt-5.6-sol",
+           "BUZZ_ACP_MEDIA_MODE": "stock_text_only", "CODEX_HOME": p.home}
     assert W.running_env_matches(env, p)
     assert not W.running_env_matches({k: v for k, v in env.items() if k != "CODEX_HOME"}, p)
+
+
+def test_running_env_matches_media_proxy_profile_needs_proxy_adapter_and_cli(tmp_path):
+    profile_file = tmp_path / "profiles.json"
+    profile_file.write_text('{"profiles":[{"id":"codex-buzz",'
+                            '"command":"~/.local/share/buzz-agent-setup/adapters/codex-acp",'
+                            '"media_proxy":"~/.local/share/buzz-agent-setup/proxy/abc/codex-acp",'
+                            '"media_buzz_cli":"~/.local/opt/buzz-0.5.23/usr/bin/buzz"}]}')
+    p = {x.id: x for x in P.load_profiles(HOME, user_file=str(profile_file))}["codex-buzz"]
+    env = {k: v for k, v in p.env_updates().items() if v is not None}
+    assert W.running_env_matches(env, p)
+    assert not W.running_env_matches({k: v for k, v in env.items() if k != "BUZZ_ACP_MEDIA_ADAPTER_COMMAND"}, p)
+    assert not W.running_env_matches({**env, "BUZZ_ACP_MEDIA_BUZZ_CLI": "/wrong/buzz"}, p)
+    assert not W.running_env_matches({**env, "BUZZ_ACP_MEDIA_MODE": "stock_text_only"}, p)
+
+
+def test_running_env_direct_profile_requires_stock_mode_and_no_proxy_fields():
+    p = BY["codex-buzz"]
+    env = {k: v for k, v in p.env_updates().items() if v is not None}
+    assert W.running_env_matches(env, p)
+    assert not W.running_env_matches({k: v for k, v in env.items() if k != "BUZZ_ACP_MEDIA_MODE"}, p)
+    assert not W.running_env_matches({**env, "BUZZ_ACP_MEDIA_ADAPTER_COMMAND": "/stale/codex-acp"}, p)
 
 
 def test_check_launchers_requires_wrapper_support_for_claude_profiles(tmp_path):
@@ -137,7 +162,10 @@ class Fake:
         p = self.profile
         if not self.env_ok:
             return {}
-        return {"BUZZ_ACP_AGENT_COMMAND": p.command, "BUZZ_ACP_MODEL": p.model, "CLAUDE_CODE_EXECUTABLE": p.wrapper}
+        env = {k: v for k, v in p.env_updates().items() if v is not None}
+        if p.wrapper:
+            env["CLAUDE_CODE_EXECUTABLE"] = p.wrapper
+        return env
 
     def run(self, profile=None):
         return W.apply_switch(profile or self.profile, self.agents, launchers=[str(self.launcher)], ts="t",
@@ -154,6 +182,24 @@ def test_apply_switch_rewrites_all_envs_and_restarts_each_unit_once_in_order(tmp
         text = open(a["env"]).read()
         assert "BUZZ_ACP_MODEL=sonnet" in text and "BUZZ_PRIVATE_KEY=nsec1fake" in text
         assert f"HARNESS_CLAUDE_WRAPPER={f.profile.wrapper}" in text
+
+
+def test_apply_switch_preserves_media_proxy_contract_atomically(tmp_path):
+    profile_file = tmp_path / "profiles.json"
+    profile_file.write_text('{"profiles":[{"id":"claude-buzz",'
+                            '"command":"~/.local/share/buzz-agent-setup/adapters/claude-agent-acp",'
+                            '"media_proxy":"~/.local/share/buzz-agent-setup/proxy/abc/claude-agent-acp",'
+                            '"media_buzz_cli":"~/.local/opt/buzz-0.5.23/usr/bin/buzz"}]}')
+    p = {x.id: x for x in P.load_profiles(HOME, user_file=str(profile_file))}["claude-buzz"]
+    f = Fake(tmp_path / "fleet", n=1)
+    f.profile = p
+    res = f.run(profile=p)
+    assert res.bad == []
+    text = open(f.agents[0]["env"]).read()
+    assert f"BUZZ_ACP_AGENT_COMMAND={p.media_proxy}" in text
+    assert f"BUZZ_ACP_MEDIA_ADAPTER_COMMAND={p.command}" in text
+    assert f"BUZZ_ACP_MEDIA_BUZZ_CLI={p.media_buzz_cli}" in text
+    assert f"CLAUDE_CONFIG_DIR={p.home}" in text
 
 
 def test_apply_switch_reports_inactive_agents(tmp_path):
@@ -243,6 +289,61 @@ def test_drifted_finds_agents_whose_running_process_disagrees_with_their_env_fil
         {"name": "unreadable", "unit": "u3", "vars": {**{k: v for k, v in p.env_updates().items() if v}}},
     ]
     good = {"BUZZ_ACP_AGENT_COMMAND": p.command, "BUZZ_ACP_MODEL": "sonnet", "BUZZ_ACP_EFFORT_LEVEL": "medium",
-            "CLAUDE_CODE_EXECUTABLE": p.wrapper}
+            "BUZZ_ACP_MEDIA_MODE": "stock_text_only", "CLAUDE_CODE_EXECUTABLE": p.wrapper,
+            "CLAUDE_CONFIG_DIR": p.home}
     running = {"u1": good, "u2": {**good, "BUZZ_ACP_MODEL": "grok-4.6", "CLAUDE_CODE_EXECUTABLE": ""}, "u3": {}}
     assert W.drifted(agents, lambda unit: running[unit]) == ["old"]  # {} = cannot tell, not drift
+
+
+def test_drifted_checks_media_proxy_runtime_fields(tmp_path):
+    profile_file = tmp_path / "profiles.json"
+    profile_file.write_text('{"profiles":[{"id":"codex-buzz",'
+                            '"command":"~/.local/share/buzz-agent-setup/adapters/codex-acp",'
+                            '"media_proxy":"~/.local/share/buzz-agent-setup/proxy/abc/codex-acp",'
+                            '"media_buzz_cli":"~/.local/opt/buzz-0.5.23/usr/bin/buzz"}]}')
+    p = {x.id: x for x in P.load_profiles(HOME, user_file=str(profile_file))}["codex-buzz"]
+    vars_ = {k: v for k, v in p.env_updates().items() if v is not None}
+    agents = [{"name": "a", "unit": "u", "vars": vars_}]
+    assert W.drifted(agents, lambda _: vars_) == []
+    stale = {**vars_, "BUZZ_ACP_MEDIA_ADAPTER_COMMAND": "/old/codex-acp"}
+    assert W.drifted(agents, lambda _: stale) == ["a"]
+    stale_mode = {**vars_, "BUZZ_ACP_MEDIA_MODE": "stock_text_only"}
+    assert W.drifted(agents, lambda _: stale_mode) == ["a"]
+
+
+def test_drifted_direct_mode_rejects_missing_mode_and_stale_proxy_fields():
+    p = BY["codex-buzz"]
+    vars_ = {k: v for k, v in p.env_updates().items() if v is not None}
+    agents = [{"name": "a", "unit": "u", "vars": vars_}]
+    assert W.drifted(agents, lambda _: vars_) == []
+    missing_mode = {k: v for k, v in vars_.items() if k != "BUZZ_ACP_MEDIA_MODE"}
+    assert W.drifted(agents, lambda _: missing_mode) == ["a"]
+    legacy_agents = [{"name": "legacy", "unit": "u", "vars": missing_mode}]
+    assert W.drifted(legacy_agents, lambda _: missing_mode) == ["legacy"]
+    stale_proxy = {**vars_, "BUZZ_ACP_MEDIA_ADAPTER_COMMAND": "/stale/codex-acp"}
+    assert W.drifted(agents, lambda _: stale_proxy) == ["a"]
+
+
+@pytest.mark.parametrize("invalid_media", [
+    {"BUZZ_ACP_MEDIA_ADAPTER_COMMAND": "/proxy/codex-acp"},
+    {"BUZZ_ACP_MEDIA_BUZZ_CLI": "/usr/bin/buzz"},
+    {"BUZZ_ACP_MEDIA_MODE": "proxy"},
+    {
+        "BUZZ_ACP_MEDIA_ADAPTER_COMMAND": "/proxy/codex-acp",
+        "BUZZ_ACP_MEDIA_BUZZ_CLI": "/usr/bin/buzz",
+        "BUZZ_ACP_MEDIA_MODE": "stock_text_only",
+    },
+])
+def test_drifted_rejects_incomplete_or_conflicting_media_tuple(invalid_media):
+    p = BY["codex-buzz"]
+    base = {
+        k: v for k, v in p.env_updates().items()
+        if v is not None and k not in {
+            "BUZZ_ACP_MEDIA_ADAPTER_COMMAND",
+            "BUZZ_ACP_MEDIA_BUZZ_CLI",
+            "BUZZ_ACP_MEDIA_MODE",
+        }
+    }
+    vars_ = {**base, **invalid_media}
+    agents = [{"name": "invalid", "unit": "u", "vars": vars_}]
+    assert W.drifted(agents, lambda _: vars_) == ["invalid"]

@@ -124,9 +124,9 @@ class ReferenceStatesThePreWriteCheckTest(unittest.TestCase):
         self.assertNotRegex(text, r"根是人类消息[^\n]{0,60}两行都省略")
 
     def test_reference_documents_the_fallback_report_and_the_failure_modes(self):
-        """L1-GIS-OP-105 参考文档写清新失败模式：不可用的合法标记回退成自开门牌并记 origin_fallbacks（不停摆），格式非法仍停摆，CLI 退出码 2+ 仍整轮失败；报告字段表有 origin_fallbacks。"""
+        """L1-GIS-OP-105 不可用的合法标记自开 root 并记 origin_fallbacks，格式非法仍停摆。"""
         text = REFERENCE.read_text(encoding="utf-8")
-        for needle in ("origin_fallbacks", "自开门牌", "顶层", "ADR-0014", "回帖", "格式非法", "退出码 2+"):
+        for needle in ("origin_fallbacks", "自开 root", "顶层", "ADR-0014", "回帖", "格式非法", "退出码 2+"):
             with self.subTest(needle=needle):
                 self.assertIn(needle, text)
         self.assertRegex(text, r"\| `origin_fallbacks` \|")
@@ -137,7 +137,7 @@ class ReferenceStatesThePreWriteCheckTest(unittest.TestCase):
         """L1-GIS-OP-106 fchac-model「Issue 先行」第 3 步和 scripts/README 跟上新规则：ADR-0014、人的顶层消息也写两行；省略只在核对不了时。"""
         model = (SKILL / "references" / "fchac-model.md").read_text(encoding="utf-8")
         block = model.split("## Issue 先行", 1)[1].split("\n## ", 1)[0]
-        for needle in ("ADR-0014", "两行都写", "顶层", "省略 origin", "门牌回链"):
+        for needle in ("ADR-0014", "两行都写", "顶层", "省略 origin", "Thread 回链"):
             with self.subTest(needle=needle):
                 self.assertIn(needle, block)
         self.assertNotIn("只在根是本频道 Desk 门牌／事实时", block)

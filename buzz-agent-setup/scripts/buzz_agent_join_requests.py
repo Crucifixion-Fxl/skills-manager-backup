@@ -40,6 +40,7 @@ import json
 import os
 from pathlib import Path
 import re
+import secrets
 import stat
 import subprocess
 import sys
@@ -52,17 +53,20 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 import gitlab_buzz_sync as sync  # noqa: E402
 import gitlab_buzz_route_reply as route  # noqa: E402 -- reviewed NIP-01 id + BIP-340 signature check
+import buzz_feishu_group_sync as fgs  # noqa: E402 -- the relay query and the trusted-mirror rule (ADR-0020)
 
 
 CONFIG_ENV = "BUZZ_JOIN_CONFIG"
 STATE_FILE = "join-state.json"
 HEADER = "buzz-join:v1"
+FAILURE_HEADER = "buzz-join-failure:v1"
 # Shared with provision_gitlab_agent_token.py so the two tools that rewrite agent env files serialise.
 ENV_LOCK_NAME = ".gitlab-agent-token-provision.lock"
 PROMPT_BEGIN = "<!-- buzz-agent-channels:v1 -->"
 PROMPT_END = "<!-- /buzz-agent-channels:v1 -->"
 
-CONFIG_KEYS = frozenset({"version", "owner_pubkey", "buzz", "state_dir", "request_ttl_seconds", "agents"})
+CONFIG_KEYS = frozenset({"version", "owner_pubkey", "buzz", "state_dir", "request_ttl_seconds", "agents",
+                         "accept_feishu_approvals"})
 AGENT_KEYS = frozenset({"name", "env_file", "unit", "capabilities"})
 AGENT_OPTIONAL_KEYS = frozenset({"log_file"})  # absent: the unit logs to the journal
 CAPABILITY_KEYS = frozenset({"summary", "repos"})
@@ -156,6 +160,8 @@ def validate_config(config: Any) -> None:
     ttl = config.get("request_ttl_seconds", DEFAULT_TTL_SECONDS)
     if isinstance(ttl, bool) or not isinstance(ttl, int) or not TTL_MIN_SECONDS <= ttl <= TTL_MAX_SECONDS:
         raise sync.SyncError(f"config.request_ttl_seconds must be {TTL_MIN_SECONDS}..{TTL_MAX_SECONDS}")
+    if not isinstance(config.get("accept_feishu_approvals", True), bool):
+        raise sync.SyncError("config.accept_feishu_approvals must be true or false")
     agents = config.get("agents")
     if not isinstance(agents, list) or not agents:
         raise sync.SyncError("config.agents must be a non-empty list")
@@ -296,6 +302,28 @@ def load_agent(agent_config: dict[str, Any], owner_pubkey: str) -> Agent:
                  capabilities=agent_config["capabilities"],
                  responsible_config=optional_path("BUZZ_RESPONSIBLE_CONFIG"),
                  prompt_file=optional_path("BUZZ_ACP_SYSTEM_PROMPT_FILE"))
+
+
+def load_agent_for_notice(agent_config: dict[str, Any]) -> Agent:
+    """Recover only enough signed identity to publish a fixed configuration alert.
+
+    This does not make the invalid configuration runnable: the returned object is used only for safe group notices.
+    """
+
+    env_file = Path(agent_config["env_file"])
+    env_text = _read_owner_only(env_file, "agent env file")
+    env = parse_env(env_text)
+    pubkey = sync.publisher_pubkey_from_private_key(env.get("BUZZ_PRIVATE_KEY"))
+    try:
+        allowlist = _allowlist(env.get("BUZZ_ACP_CHANNELS", ""))
+    except sync.SyncError:
+        allowlist = []
+    return Agent(
+        name=agent_config["name"], pubkey=pubkey, env_file=env_file, env_text=env_text, env=env,
+        allowlist=allowlist, unit=agent_config["unit"],
+        log_file=Path(agent_config["log_file"]) if agent_config.get("log_file") else None,
+        capabilities=agent_config["capabilities"], responsible_config=None, prompt_file=None,
+    )
 
 
 # ── file edits (all idempotent, compare-before-write, atomic) ─────────────────
@@ -541,10 +569,28 @@ def load_state(state_dir: Path) -> dict[str, Any]:
     if not isinstance(state, dict) or state.get("version") != 1 or not isinstance(agents, dict):
         raise sync.SyncError("join state has an unexpected shape")
     for pubkey, entry in agents.items():
+        notices = entry.get("failure_notices", {}) if isinstance(entry, dict) else None
+        notices_good = isinstance(notices, dict) and all(
+            UUID_RE.fullmatch(str(ch))
+            and isinstance(notice, dict)
+            and isinstance(notice.get("code"), str)
+            and notice.get("code") in {"unexplained", "discovery", "directory", "mirror", "processing",
+                                       "activation", "configuration"}
+            and _is_int(notice.get("at"))
+            and (notice.get("incident_id") is None
+                 or bool(re.fullmatch(r"[0-9a-f]{16}", str(notice.get("incident_id")))))
+            and all(notice.get(key) is None or _is_int(notice.get(key))
+                    for key in ("pending_at", "recovery_pending_at"))
+            and all(notice.get(key) is None or bool(sync.HEX64_RE.fullmatch(str(notice.get(key))))
+                    for key in ("event", "recovery_event"))
+            and isinstance(notice.get("recovering", False), bool)
+            for ch, notice in notices.items()
+        )
         if (not sync.HEX64_RE.fullmatch(str(pubkey)) or not isinstance(entry, dict)
                 or not isinstance(entry.get("channels"), dict)
                 or any(not UUID_RE.fullmatch(str(ch)) or not isinstance(rec, dict) or rec.get("state") not in STATES
-                       for ch, rec in entry["channels"].items())):
+                       for ch, rec in entry["channels"].items())
+                or not notices_good):
             raise sync.SyncError("join state has an invalid record")
     return state
 
@@ -560,6 +606,13 @@ def new_record(state_name: str, channel_name: str, now: float) -> dict[str, Any]
             "followups": [], "restart_deferred_since": None, "restarted_at": None, "log_offset": None,
             "closed_event": None, "active_event": None, "invite_at": None, "absent_since": None,
             "withdrawn_from": None, "reapplied": 0, "journal_cursor": None}
+
+
+def failure_header(agent_pubkey: str, channel: str, code: str, incident_id: str, phase: str = "failed") -> str:
+    identity = hashlib.sha256(
+        f"{agent_pubkey}|{channel}|{code}|{incident_id}|{phase}".encode("utf-8")
+    ).hexdigest()[:16]
+    return f"{FAILURE_HEADER} {identity} {code} {phase}"
 
 
 # ── adapters ─────────────────────────────────────────────────────────────────
@@ -591,7 +644,7 @@ class AgentBuzz(sync.BuzzCli):
     """The pinned Buzz CLI acting as one agent.  The CLI path is validated by `make_agent_buzz`, not here."""
 
     def __init__(self, cli: str, env: dict[str, str], *, base_env: dict[str, str] | None = None,
-                 runner: Any = subprocess.run, sleeper: Any = time.sleep, channel: str | None = None):
+                 runner: Any = subprocess.run, sleeper: Any = time.sleep, channel: str | None = None, http: Any = None):
         # HOME, PATH, locale, CA and proxy settings come only from the timer; BUZZ_* identity keys only from the agent.
         merged = {key: value for key, value in (base_env or {}).items() if not key.startswith("BUZZ_")}
         merged.update({key: value for key, value in env.items() if key.startswith("BUZZ_")})
@@ -602,6 +655,7 @@ class AgentBuzz(sync.BuzzCli):
         self.channel = channel
         self.runner = runner
         self.sleeper = sleeper
+        self.http = http or fgs._http_get  # the relay's POST /query, signed in this process (trusted_mirrors)
 
     def for_channel(self, channel: str) -> "AgentBuzz":
         if not UUID_RE.fullmatch(channel):
@@ -681,6 +735,30 @@ class AgentBuzz(sync.BuzzCli):
 
     def leave(self) -> None:
         self._raw(["channels", "leave", "--channel", self.channel])
+
+    def trusted_mirrors(self, candidates: set[str], roles: dict[str, str]) -> set[str] | None:
+        """The candidates whose word about a Feishu person counts in this channel (ADR-0020, fgs.parse_trusted_mirrors): one
+        POST /query as this agent (its NIP-OA auth tag with it) for their profiles and policies. ``None`` means the
+        directory could not be verified; that is not evidence that a mirror is untrusted."""
+        bots = {pubkey for pubkey in candidates if roles.get(pubkey) == "bot"}
+        if not bots:
+            return set()
+        try:
+            key = fgs.secret_hex(self.env.get("BUZZ_PRIVATE_KEY", ""), "agent env")
+            url = fgs.relay_query_url(self.env.get("BUZZ_RELAY_URL", ""))
+            body = json.dumps(fgs.directory_filters(bots), separators=(",", ":")).encode()
+            headers = {"Authorization": fgs.nip98_header(key, "POST", url, dt.datetime.now(dt.timezone.utc), body=body),
+                       "Content-Type": "application/json", "Accept": "application/json"}
+            if self.env.get("BUZZ_AUTH_TAG"):
+                headers["x-auth-tag"] = self.env["BUZZ_AUTH_TAG"]
+            status, answer = self.http(url, headers, fgs.DIRECTORY_TIMEOUT, body=body)
+            events = json.loads(answer) if status == 200 else None
+        except (OSError, ValueError, fgs.GroupSyncError):
+            return None
+        if not isinstance(events, list):
+            return None
+        verified = [event for event in events if fgs._nip01_event_verified(event)]
+        return fgs.parse_trusted_mirrors(verified, bots, roles)
 
 
 def make_agent_buzz_factory(config: dict[str, Any]) -> Callable[[Agent], AgentBuzz]:
@@ -801,8 +879,16 @@ class AgentRun:
         self.buzz = buzz
         self.entry = entry
         self.channels: dict[str, dict[str, Any]] = entry["channels"]
+        self.notices: dict[str, dict[str, Any]] = entry.setdefault("failure_notices", {})
+        for notice in self.notices.values():
+            if isinstance(notice, dict):
+                notice.setdefault("incident_id", secrets.token_hex(8))
+                notice.setdefault("recovering", False)
+                notice.setdefault("recovery_pending_at", None)
+                notice.setdefault("recovery_event", None)
         self.owner = config["owner_pubkey"]
         self.ttl = config.get("request_ttl_seconds", DEFAULT_TTL_SECONDS)
+        self.accept_feishu = config.get("accept_feishu_approvals", True)  # ADR-0020: answers given in Feishu, via a trusted mirror
         self.system = system
         self.clock = clock
         self.sleeper = sleeper
@@ -810,6 +896,7 @@ class AgentRun:
         self.counts: dict[str, Any] = {"baseline": 0, "requested": 0, "approved": 0, "manual": 0, "active": 0,
                                        "left": 0, "deferred": 0, "withdrawn": 0, "drift": 0, "error": None}
         self.errors: list[str] = []
+        self.failed_this_round: set[tuple[str, str]] = set()
         self._owner_name: str | None = None
 
     def state_counts(self) -> dict[str, int]:
@@ -818,15 +905,19 @@ class AgentRun:
             counts[rec["state"]] = counts.get(rec["state"], 0) + 1
         return counts
 
-    def _isolated(self, ch: str, step: Callable[[], None]) -> None:
+    def _isolated(self, ch: str, step: Callable[[], None], failure: str) -> None:
         """One channel's failure is recorded against that channel and does not stop the others."""
 
         try:
             step()
         except sync.SyncError as exc:
             self.errors.append(f"{ch[:8]}: {exc}")
-        except (OSError, ValueError) as exc:
+            self._report_failure(ch, failure)
+        except Exception as exc:  # noqa: BLE001 - fixed group text is safe; exception text remains local only
             self.errors.append(f"{ch[:8]}: {type(exc).__name__}")  # the message may carry paths or peer text
+            self._report_failure(ch, failure)
+        else:
+            self._recover_failure(ch, failure)
 
     # messages
 
@@ -844,6 +935,172 @@ class AgentRun:
                     and authentic(event)):
                 return event
         return None
+
+    def _failure_text(self, code: str) -> str:
+        if code == "unexplained":
+            return (f"{self.agent.name} 暂时不能处理这次入群：无法确认这次入群是谁发起的，因此没有开通，也没有扩大权限。\n"
+                    "失败原因：缺少有效的 bot 邀请记录，或最新记录是自助加入、移除、无 bot 角色。\n"
+                    "恢复方法：请频道管理员重新邀请（先把我移出，再以 bot 身份加入）；新邀请出现后我会重新处理。")
+        if code in {"discovery", "directory"}:
+            return (f"{self.agent.name} 的入群检查失败：本轮无法确认邀请来源，因此没有开通，也没有扩大权限。\n"
+                    "失败原因：Buzz 频道成员或邀请记录暂时读取失败。\n"
+                    "恢复方法：下一轮自动重试；若持续出现，请频道管理员联系 Agent owner 检查 Relay 和频道权限。")
+        if code == "mirror":
+            return (f"{self.agent.name} 暂时无法验证飞书镜像身份，因此没有开通，也不会退出本群。\n"
+                    "失败原因：镜像身份目录或签名资料暂时不可用；这不代表邀请者不可信。\n"
+                    "恢复方法：下一轮自动重试；若持续出现，请频道管理员联系 Agent owner 检查 Relay 目录读取。")
+        if code == "activation":
+            return (f"{self.agent.name} 的 Agent 开通失败：现在还不能在本群响应。\n"
+                    "失败原因：Agent 服务没有正常运行，或重启后的频道订阅尚未确认。\n"
+                    "恢复方法：下一轮自动重试；若持续出现，请联系 Agent owner 检查本机服务和订阅日志。")
+        if code == "configuration":
+            return (f"{self.agent.name} 的入群审批本机配置不可用：当前不能可靠处理新申请，也不会扩大权限。\n"
+                    "失败原因：Agent 身份配置、频道清单或审批消息适配器没有通过本机校验。\n"
+                    "恢复方法：下一轮自动重试；请联系 Agent owner 修复本机配置和服务，恢复后本群会收到通知。")
+        return (f"{self.agent.name} 的入群审批处理失败：本轮没有完成开通，也没有扩大权限。\n"
+                "失败原因：Agent 本机配置或 Buzz 操作暂不可用。\n"
+                "恢复方法：下一轮自动重试；若持续出现，请联系 Agent owner 检查配置和服务状态。")
+
+    def _send_failure(self, ch: str, notice: dict[str, Any]) -> None:
+        """Publish one safe status with crash/unknown-outcome recovery; raw exceptions never enter the channel."""
+
+        header = failure_header(self.agent.pubkey, ch, notice["code"], notice["incident_id"])
+        if notice.get("pending_at") is not None:
+            found = self._find_sent(self.buzz.for_channel(ch), header,
+                                    int(notice["pending_at"]) - CLOCK_SLACK_SECONDS)
+            if found is not None:
+                notice.update(event=found["id"], pending_at=None)
+                self.save()
+                return
+            notice["pending_at"] = None
+            self.save()
+        notice["pending_at"] = int(self.clock())
+        self.save()
+        channel = self.channels.get(ch, {})
+        reply_to = channel.get("request_event") if isinstance(channel, dict) else None
+        event_id = self.buzz.for_channel(ch).send(
+            f"{self._failure_text(notice['code'])}\n{header}", reply_to=reply_to)
+        notice.update(event=event_id, pending_at=None)
+        self.save()
+
+    def _report_failure(self, ch: str, code: str, *, send: bool = True) -> None:
+        self.failed_this_round.add((ch, code))
+        notice = self.notices.get(ch)
+        if (not isinstance(notice, dict) or notice.get("code") != code
+                or notice.get("recovering") is True):
+            notice = {"code": code, "at": int(self.clock()), "incident_id": secrets.token_hex(8),
+                      "pending_at": None, "event": None, "recovering": False,
+                      "recovery_pending_at": None, "recovery_event": None}
+            self.notices[ch] = notice
+            self.save()
+        if notice.get("event") is not None or not send:
+            return
+        try:
+            self._send_failure(ch, notice)
+        except Exception:  # noqa: BLE001 - pending state is durable; raw details never enter the group
+            pass  # pending_at remains durable; a later round retries the same deterministic status
+
+    def _send_recovery(self, ch: str, notice: dict[str, Any]) -> None:
+        if notice.get("recovery_event") is not None:
+            return
+        header = failure_header(self.agent.pubkey, ch, notice["code"], notice["incident_id"], "recovered")
+        if notice.get("recovery_pending_at") is not None:
+            found = self._find_sent(self.buzz.for_channel(ch), header,
+                                    int(notice["recovery_pending_at"]) - CLOCK_SLACK_SECONDS)
+            if found is not None:
+                notice.update(recovery_event=found["id"], recovery_pending_at=None)
+                self.save()
+                return
+            notice["recovery_pending_at"] = None
+            self.save()
+        notice["recovery_pending_at"] = int(self.clock())
+        self.save()
+        event_id = self.buzz.for_channel(ch).send(
+            "刚才提示的入群故障已恢复，流程会继续；最终以本群里的“已开通”消息为准。\n" + header,
+            reply_to=notice["event"],
+        )
+        notice.update(recovery_event=event_id, recovery_pending_at=None)
+        self.save()
+
+    def _recover_failure(self, ch: str, code: str) -> None:
+        notice = self.notices.get(ch)
+        if not isinstance(notice, dict) or notice.get("code") != code:
+            return
+        if notice.get("event") is None:
+            del self.notices[ch]  # the failure was never visible, so do not announce a stale recovery
+            self.save()
+            return
+        notice["recovering"] = True
+        self.save()
+        try:
+            self._send_recovery(ch, notice)
+        except Exception:  # noqa: BLE001 - recovery remains pending without leaking raw details
+            return  # keep the active notice; recovery is attempted again next round
+        del self.notices[ch]
+        self.save()
+
+    def _retry_failure_notices(self, members: dict[str, str]) -> None:
+        for ch, notice in list(self.notices.items()):
+            if ch not in members or not isinstance(notice, dict):
+                continue
+            try:
+                if notice.get("recovering"):
+                    self._send_recovery(ch, notice)
+                    if notice.get("recovery_event") is not None:
+                        del self.notices[ch]
+                        self.save()
+                elif notice.get("event") is None:
+                    self._send_failure(ch, notice)
+            except Exception:  # noqa: BLE001 - retry later with the same incident marker
+                continue
+
+    def report_configuration_failure(self) -> None:
+        """Best-effort alert for a bad agent env; never guess whether a target is a group."""
+
+        try:
+            dms = self.buzz.dm_channels()
+            members = self.buzz.member_channels()
+        except Exception:  # noqa: BLE001 - the outer run persists a pending retry
+            self.entry["configuration_pending"] = True
+            self.save()
+            return
+        if not members:
+            # The agent has at least its previously configured channels. An empty answer is an unreadable directory,
+            # not proof that there is nowhere to notify.
+            self.entry["configuration_pending"] = True
+            self.save()
+            return
+        for ch in members:
+            if ch in dms:
+                continue
+            try:
+                roles = self.buzz.for_channel(ch).channel_members()
+            except Exception:  # noqa: BLE001 - without roles this target is not proven to be a group
+                self.entry["configuration_pending"] = True
+                self.save()
+                continue
+            if any(role in ADMIN_ROLES for role in roles.values()):
+                self._report_failure(ch, "configuration")
+
+    def _verified_groups(self, members: dict[str, str], dms: set[str]) -> dict[str, str]:
+        """Return only targets proved to be administered groups.
+
+        Live Buzz can omit an existing DM from ``dms list``. A real group has a current owner/admin; a two-member DM
+        has only member roles. Unknown or unreadable role sets are therefore never safe notification targets.
+        """
+
+        groups: dict[str, str] = {}
+        for ch, name in members.items():
+            if ch in dms:
+                continue
+            try:
+                roles = self.buzz.for_channel(ch).channel_members()
+            except Exception as exc:  # noqa: BLE001 - fixed local error only; no unverified-target message
+                self.errors.append(f"{ch[:8]}: group role check failed: {type(exc).__name__}")
+                continue
+            if any(role in ADMIN_ROLES for role in roles.values()):
+                groups[ch] = name
+        return groups
 
     def send_once(self, ch: str, rec: dict[str, Any], kind: str, text: str, *, reply_to: str | None,
                   mentions: tuple[str, ...] = ()) -> dict[str, Any]:
@@ -897,13 +1154,44 @@ class AgentRun:
         return event.get("kind") in (9021, 9022) and event.get("pubkey") == self.agent.pubkey
 
     def membership_about_agent(self, events: list[dict[str, Any]], after: int | None = None,
-                               ignore_own_leave: bool = False) -> list[dict[str, Any]]:
-        """The membership events about this agent, newer than `after` (events an earlier decision already saw)."""
+                               after_event: str | None = None, ignore_own_leave: bool = False) -> list[dict[str, Any]]:
+        """The membership events about this agent that a previous decision has not seen.
 
-        return [event for event in events if self._about_agent(event) and _is_int(event.get("created_at"))
-                and (after is None or event["created_at"] > after)
-                and not (ignore_own_leave and event.get("kind") == 9022)
-                and authentic(event)]
+        Seconds alone are not a sufficient cursor. Group sync therefore signs a persistent stream and sequence into its
+        member events: a later position in the same stream is new even after a legitimate signer rotation or when it has
+        an earlier client timestamp. Events without that proof retain the old strict-time rule.
+        """
+
+        mine = [event for event in events if self._about_agent(event) and _is_int(event.get("created_at"))
+                and not (ignore_own_leave and event.get("kind") == 9022) and authentic(event)]
+        if after is None:
+            return mine
+        cursor = next((event for event in mine if event.get("id") == after_event), None)
+        cursor_position = fgs.member_event_position(cursor)
+
+        def unseen(event: dict[str, Any]) -> bool:
+            position = fgs.member_event_position(event)
+            if cursor_position is not None and position is not None and position[0] == cursor_position[0]:
+                # A stream is the producer's durable clock. Never replay an older position merely because its
+                # client-created timestamp is newer, and do not lose a newer position when the signing key rotates.
+                return position[1] > cursor_position[1]
+            return event["created_at"] > after
+
+        return [event for event in mine if unseen(event)]
+
+    @staticmethod
+    def newest_membership(mine: list[dict[str, Any]]) -> dict[str, Any] | None:
+        """Order one persistent stream's writes inside the relay's ambiguous client-clock window."""
+        if not mine:
+            return None
+        max_time = max(event["created_at"] for event in mine)
+        window = [event for event in mine if event["created_at"] >= max_time - INVITE_SKEW_SECONDS]
+        positions = [fgs.member_event_position(event) for event in window]
+        if (all(position is not None for position in positions)
+                and len({position[0] for position in positions}) == 1
+                and len({position[1] for position in positions}) == len(positions)):
+            return max(window, key=lambda event: fgs.member_event_position(event)[1])
+        return max(mine, key=lambda event: (event["created_at"], str(event.get("id"))))
 
     def classify_membership(self, mine: list[dict[str, Any]], roles: dict[str, str]) -> tuple[dict | None, str]:
         """What explains the agent's current membership: `auto`, `request`, `declined` or `none`.
@@ -912,18 +1200,27 @@ class AgentRun:
         add, removal or self-join.  Events within INVITE_SKEW_SECONDS of the newest cannot be ordered by their
         client-set timestamps, so they are judged together: a removal/leave as the newest or a self-join among them
         means nothing explains the membership; then an adder who is neither the owner nor a channel owner/admin means
-        declined; then an add without `role=bot` means nothing explains it; only owner adds mean auto.
+        declined, except for a trusted Feishu mirror owned by a channel owner/admin; then an add without `role=bot`
+        means nothing explains it; only owner adds mean auto.  A trusted mirror starts an approval request rather than
+        auto-approving because it proves the administrative bridge, not which Feishu person initiated the change.
         """
 
         if not mine:
             return None, "none"
-        newest = max(mine, key=lambda event: (event["created_at"], str(event.get("id"))))
-        window = [event for event in mine if event["created_at"] >= newest["created_at"] - INVITE_SKEW_SECONDS]
+        newest = self.newest_membership(mine)
+        assert newest is not None
+        max_time = max(event["created_at"] for event in mine)
+        window = [event for event in mine if event["created_at"] >= max_time - INVITE_SKEW_SECONDS]
         if newest.get("kind") != 9000 or any(event.get("kind") == 9021 for event in window):
             return None, "none"
         adds = [event for event in window if event.get("kind") == 9000]
         adders = {event.get("pubkey") for event in adds}
-        if any(adder != self.owner and roles.get(adder) not in ADMIN_ROLES for adder in adders):
+        bot_adders = {str(adder) for adder in adders if isinstance(adder, str) and roles.get(adder) == "bot"}
+        trusted_mirrors = self.buzz.trusted_mirrors(bot_adders, roles) if bot_adders else set()
+        if trusted_mirrors is None:
+            return newest, "unavailable"
+        if any(adder != self.owner and roles.get(adder) not in ADMIN_ROLES and adder not in trusted_mirrors
+               for adder in adders):
             return newest, "declined"
         if any(["role", "bot"] not in [tag[:2] for tag in sync._tag_values(event, "role")] for event in adds):
             return None, "none"
@@ -946,6 +1243,7 @@ class AgentRun:
         events = scoped.membership_events(int(now - INVITE_SCAN_SECONDS))
         # Only events newer than what an earlier decision saw reopen it; our own leave is ours, not news.
         mine = self.membership_about_agent(events, after=rec.get("invite_at") if rec is not None else None,
+                                           after_event=rec.get("invite_event") if rec is not None else None,
                                            ignore_own_leave=rec is not None and rec["state"] == "LEFT")
         invite, verdict = self.classify_membership(mine, roles)
         if rec is not None:
@@ -961,15 +1259,29 @@ class AgentRun:
             else:
                 return
         rec = new_record("REQUESTED", name, now)
-        if invite is None:
-            # Nothing explains the membership (no add, a self-join, a non-bot add, a DM the list missed): say nothing.
-            # Remember the newest event seen, so only something newer can reopen it; an old event scrolling out of the
-            # 30-day scan must not change the verdict.
-            rec.update(state="NO_INVITE",
-                       invite_at=max((event["created_at"] for event in mine), default=int(now) - INVITE_SKEW_SECONDS))
+        if verdict == "unavailable":
+            # Keep the invite eligible for the next round: a directory outage is neither a rejection nor a reason to
+            # consume the membership cursor. The agent remains present but unavailable until trust can be verified.
+            rec.update(state="NO_INVITE", outcome="mirror_unavailable")
             self.channels[ch] = rec
             self.save()
+            self.errors.append(f"{ch[:8]}: mirror directory unavailable")
+            self._report_failure(ch, "mirror")
             return
+        if invite is None:
+            # Nothing explains the membership (no add, a self-join, a non-bot add, a DM the list missed): do not guess
+            # or leave, but tell this group exactly why the agent remains unavailable and how an admin can recover.
+            # Remember the newest event seen, so only something newer can reopen it; an old event scrolling out of the
+            # 30-day scan must not change the verdict.
+            cursor = self.newest_membership(mine)
+            rec.update(state="NO_INVITE", invite_event=cursor.get("id") if cursor is not None else None,
+                       invite_at=cursor["created_at"] if cursor is not None else int(now) - INVITE_SKEW_SECONDS)
+            self.channels[ch] = rec
+            self.save()
+            self._report_failure(ch, "unexplained")
+            return
+        self._recover_failure(ch, "unexplained")
+        self._recover_failure(ch, "mirror")
         rec.update(join_id=make_join_id(self.agent.pubkey, ch, invite["id"]), inviter=invite.get("pubkey"),
                    invite_event=invite["id"], invite_at=invite["created_at"],
                    capability=capability(self.agent.capabilities, scoped.canvas()))
@@ -999,7 +1311,7 @@ class AgentRun:
             lines = [f"我是 {me}，owner {owner} 把我拉进了「{room}」，正在开通：我空闲时会重启一次，开通后在这里回复。"]
             lines += capability_lines(self.agent, rec["capability"])
         else:
-            lines = [f"我是 {me}（owner：{owner}），收到了加入「{room}」的邀请。{owner} 同意之前，我不会回应本群的 @。"]
+            lines = [f"我是 {me}（owner：{owner}），收到了加入「{room}」的邀请。这次加入需要 owner 同意；{owner} 同意之前，我不会回应本群的 @。"]
             lines += capability_lines(self.agent, rec["capability"])
             ask = (f"同意请在这条消息上点 ✅，或在本 Thread 回复 /approve {rec['join_id']}；"
                    f"不同意点 ❌ 或回复 /deny {rec['join_id']}。{_ttl_text(self.ttl)}内没有答复，我会自动退出本群。")
@@ -1029,7 +1341,7 @@ class AgentRun:
             rec["owner_notified"] = True
             self.save()
         try:
-            signals = self._signals(scoped, rec, deadline)
+            signals = self._signals(scoped, rec, deadline, roles)
         except sync.SyncError:
             if now < deadline:
                 raise
@@ -1045,22 +1357,59 @@ class AgentRun:
             rec.update(state="CLOSING", outcome="expired", decided_at=int(now))
             self.save()
 
-    def _signals(self, scoped: Any, rec: dict[str, Any], deadline: float) -> list[tuple[int, str, str]]:
+    def _signals(self, scoped: Any, rec: dict[str, Any], deadline: float,
+                 roles: dict[str, str] | None = None) -> list[tuple[int, str, str]]:
         since = int(rec["requested_at"] - CLOCK_SLACK_SECONDS)
         root, join_id = rec["request_event"], rec["join_id"]
 
+        def in_time(event: dict[str, Any]) -> bool:
+            return _is_int(event.get("created_at")) and since <= event["created_at"] <= deadline
+
         def in_window(event: dict[str, Any]) -> bool:
-            return (event.get("pubkey") == self.owner and _is_int(event.get("created_at"))
-                    and since <= event["created_at"] <= deadline)
+            return event.get("pubkey") == self.owner and in_time(event)
+
+        def verdict_of(event: dict[str, Any]) -> str | None:
+            emoji = str(event.get("content") or "").replace(VARIATION_SELECTOR, "").strip()
+            return "approve" if emoji in APPROVE_EMOJIS else "deny" if emoji in DENY_EMOJIS else None
 
         signals: list[tuple[int, str, str]] = []
+        relayed: list[tuple[dict[str, Any], str]] = []
         for event in scoped.channel_reactions(since):
-            if not in_window(event) or _e_targets(event) != {root}:
+            if _e_targets(event) != {root} or not in_time(event):
                 continue
-            emoji = str(event.get("content") or "").replace(VARIATION_SELECTOR, "").strip()
-            verdict = "approve" if emoji in APPROVE_EMOJIS else "deny" if emoji in DENY_EMOJIS else None
-            if verdict and authentic(event):
-                signals.append((event["created_at"], str(event["id"]), verdict))
+            verdict = verdict_of(event)
+            if verdict is None:
+                continue
+            if event.get("pubkey") == self.owner:
+                if authentic(event):
+                    signals.append((event["created_at"], str(event["id"]), verdict))
+                continue
+            # ADR-0020: the owner's answer given in Feishu, put on the request by the group sync's mirror.
+            authors = [tag[1] for tag in sync._tag_values(event, fgs.FEISHU_AUTHOR_TAG) if len(tag) > 1]
+            joins = [tag[1] for tag in sync._tag_values(event, "join") if len(tag) > 1]
+            if self.accept_feishu and authors == [self.owner] and joins in ([], [join_id]):
+                relayed.append((event, verdict))
+        for event in scoped.thread(root) if self.accept_feishu else []:
+            # ADR-0020: the owner's `/approve JOIN-<id>` written in Feishu, signed by the mirror with the person and the request.
+            if (event.get("pubkey") == self.owner or not in_time(event) or event.get("kind", 9) != 9
+                    or root not in _e_targets(event)):
+                continue
+            authors = [tag[1] for tag in sync._tag_values(event, fgs.FEISHU_AUTHOR_TAG) if len(tag) > 1]
+            joins = [tag[1] for tag in sync._tag_values(event, "join") if len(tag) > 1]
+            head, sep, body = str(event.get("content") or "").strip().split("\n", 1)[0].partition("：")
+            if authors != [self.owner] or joins != [join_id] or not sep or not head.startswith("[飞书] "):
+                continue
+            for pattern, verdict in ((APPROVE_RE, "approve"), (DENY_RE, "deny")):
+                match = pattern.fullmatch(body.strip())
+                if match and match.group(1) == join_id:
+                    relayed.append((event, verdict))
+        if relayed:
+            trusted = scoped.trusted_mirrors({str(event.get("pubkey")) for event, _ in relayed}, roles or {})
+            if trusted is None:
+                raise sync.SyncError("trusted mirror directory is temporarily unavailable")
+            for event, verdict in relayed:
+                if event.get("pubkey") in trusted and authentic(event):
+                    signals.append((event["created_at"], str(event["id"]), verdict))
         for event in scoped.thread(root):
             if not in_window(event) or event.get("kind", 9) != 9 or root not in _e_targets(event):
                 continue
@@ -1113,10 +1462,11 @@ class AgentRun:
         rec.update(state="APPLIED", followups=followups)
         self.save()
 
-    def restart_when_idle(self) -> bool:
+    def restart_when_idle(self, eligible_groups: set[str]) -> bool:
         """Restart only a running unit whose cgroup holds nothing but the harness; a busy agent waits, however long."""
 
-        applied = [rec for rec in self.channels.values() if rec["state"] == "APPLIED"]
+        applied = [rec for ch, rec in self.channels.items()
+                   if ch in eligible_groups and rec["state"] == "APPLIED"]
         if not applied:
             return False
         load, active = self.system.unit_status(self.agent.unit)
@@ -1142,8 +1492,9 @@ class AgentRun:
             return self.system.log_since(self.agent.log_file, rec["log_offset"] or 0)
         return self.system.journal_after(self.agent.unit, rec.get("journal_cursor"))
 
-    def verify(self, *, just_restarted: bool) -> None:
-        restarted = {ch: rec for ch, rec in self.channels.items() if rec["state"] == "RESTARTED"}
+    def verify(self, eligible_groups: set[str], *, just_restarted: bool) -> None:
+        restarted = {ch: rec for ch, rec in self.channels.items()
+                     if ch in eligible_groups and rec["state"] == "RESTARTED"}
         if not restarted:
             return
         deadline = self.clock() + (VERIFY_TIMEOUT_SECONDS if just_restarted else 0)
@@ -1157,7 +1508,7 @@ class AgentRun:
                 break
             self.sleeper(VERIFY_POLL_SECONDS)
         for ch in sorted(verified):
-            self._isolated(ch, lambda ch=ch: self.announce(ch, restarted[ch]))
+            self._isolated(ch, lambda ch=ch: self.announce(ch, restarted[ch]), "activation")
         missing = sorted(set(restarted) - verified)
         if not missing:
             return
@@ -1173,6 +1524,7 @@ class AgentRun:
             else:
                 self.errors.append(f"{ch[:8]}: the env keeps losing this channel; not restarting again "
                                    "(check the tool that rewrites agent env files, e.g. harness-failover)")
+            self._report_failure(ch, "activation")
         self.save()
 
     def announce(self, ch: str, rec: dict[str, Any]) -> None:
@@ -1198,6 +1550,25 @@ class AgentRun:
             self.save()
             return False
         return now - rec["absent_since"] >= ABSENCE_GRACE_SECONDS
+
+    def progress_absent(self, ch: str, rec: dict[str, Any]) -> None:
+        """Advance only absence bookkeeping; never read or write an unverified target."""
+
+        state_name = rec["state"]
+        if state_name == "BASELINE":
+            if self._absent_long_enough(rec, self.clock()):
+                del self.channels[ch]
+                self.save()
+            return
+        if state_name in TERMINAL:
+            return
+        if state_name == "CLOSING":
+            rec["state"] = "LEFT"
+            self.save()
+        elif self._absent_long_enough(rec, self.clock()):
+            rec.update(state="WITHDRAWN", withdrawn_from=state_name)
+            self.counts["withdrawn"] += 1
+            self.save()
 
     def progress(self, ch: str, rec: dict[str, Any], members: dict[str, str]) -> None:
         self.settle_pending(ch, rec)
@@ -1242,18 +1613,36 @@ class AgentRun:
             self.apply(ch, rec)
 
     def run(self) -> None:
-        members = self.buzz.member_channels()
-        if not members:
-            # The agent is always in at least its allowlisted channels: an empty list is a bad read, not a fact.
-            raise sync.SyncError(f"{self.agent.name}: Buzz returned no member channels; skipping this round")
         try:
             dms = self.buzz.dm_channels()
-        except sync.SyncError:
-            dms = set()  # DMs have no kind 9000, so a missed one is only ever recorded as NO_INVITE
-            self.counts["warning"] = "dms list failed; DM exclusion skipped this round"
+        except Exception as exc:  # noqa: BLE001 - do not risk treating a private DM as a group
+            for ch in self.channels:
+                self._report_failure(ch, "directory", send=False)
+            raise sync.SyncError(f"{self.agent.name}: DM exclusion unavailable: {type(exc).__name__}") from None
+        try:
+            members = self.buzz.member_channels()
+        except Exception as exc:  # noqa: BLE001 - a successful DM list is not complete proof that a target is a group
+            for ch in self.channels:
+                self._report_failure(ch, "directory", send=False)
+            raise sync.SyncError(f"{self.agent.name}: member channels unavailable: {type(exc).__name__}") from None
+        if not members:
+            # The agent is always in at least its allowlisted channels: an empty list is a bad read, not a fact.
+            for ch in self.channels:
+                self._report_failure(ch, "directory", send=False)
+            raise sync.SyncError(f"{self.agent.name}: Buzz returned no member channels; skipping this round")
+        group_members = self._verified_groups(members, dms)
+        self._retry_failure_notices(group_members)
+        if self.entry.pop("configuration_pending", False):
+            for ch in group_members:
+                self._report_failure(ch, "configuration")
+            self.save()
+        for ch in group_members:
+            self._recover_failure(ch, "configuration")
+        for ch in group_members:
+            self._recover_failure(ch, "directory")
         first_round = "initialized_at" not in self.entry
-        for ch, name in members.items():
-            if ch in dms or ch in self.channels:
+        for ch, name in group_members.items():
+            if ch in self.channels:
                 continue
             if first_round or ch in self.agent.allowlist:
                 # Whatever is there before this script, or put in the allowlist by hand, is the owner's business.
@@ -1264,22 +1653,35 @@ class AgentRun:
             self.save()
             return
         self.save()
-        for ch, name in sorted(members.items()):
-            if ch not in self.agent.allowlist and ch not in dms:
-                self._isolated(ch, lambda ch=ch, name=name: self.detect(ch, name))
+        for ch, name in sorted(group_members.items()):
+            if ch not in self.agent.allowlist:
+                self._isolated(ch, lambda ch=ch, name=name: self.detect(ch, name), "discovery")
         for ch in sorted(self.channels):
             rec = self.channels.get(ch)
-            if rec is not None:
-                self._isolated(ch, lambda ch=ch, rec=rec: self.progress(ch, rec, members))
+            if rec is None:
+                continue
+            if ch in group_members:
+                self._isolated(ch, lambda ch=ch, rec=rec: self.progress(ch, rec, group_members), "processing")
+            elif ch not in members:
+                self.progress_absent(ch, rec)
         try:
-            just_restarted = self.restart_when_idle()
+            just_restarted = self.restart_when_idle(set(group_members))
         except sync.SyncError as exc:
             self.errors.append(str(exc))
+            for ch, rec in self.channels.items():
+                if rec.get("state") in {"APPLIED", "RESTARTED"} and ch in group_members:
+                    self._report_failure(ch, "activation")
             just_restarted = False
-        except OSError as exc:
+        except Exception as exc:  # noqa: BLE001 - fixed activation text prevents exception leakage
             self.errors.append(f"{self.agent.name}: restart step failed: {type(exc).__name__}")
+            for ch, rec in self.channels.items():
+                if rec.get("state") in {"APPLIED", "RESTARTED"} and ch in group_members:
+                    self._report_failure(ch, "activation")
             just_restarted = False
-        self.verify(just_restarted=just_restarted)
+        self.verify(set(group_members), just_restarted=just_restarted)
+        for ch, rec in self.channels.items():
+            if ch in group_members and rec.get("state") == "ACTIVE":
+                self._recover_failure(ch, "activation")
         if self.errors:
             raise sync.SyncError("; ".join(self.errors)[:1000])
 
@@ -1306,15 +1708,38 @@ def run(config: dict[str, Any], *, state_dir: Path, make_buzz: Any = None, syste
                 job: AgentRun | None = None
                 try:
                     agent = load_agent(agent_config, config["owner_pubkey"])
-                    entry = state["agents"].setdefault(agent.pubkey, {"name": name, "channels": {}})
-                    entry["name"] = name
-                    job = AgentRun(agent, make_buzz(agent), entry, config, system, clock, sleeper, save)
-                    counts = job.counts
-                    job.run()
                 except sync.SyncError as exc:
                     counts["error"] = str(exc)
-                except Exception as exc:  # noqa: BLE001 - one agent's bug must not stop the others; no message: it may carry secrets
+                    try:
+                        notice_agent = load_agent_for_notice(agent_config)
+                        entry = state["agents"].setdefault(
+                            notice_agent.pubkey, {"name": name, "channels": {}}
+                        )
+                        entry["name"] = name
+                        job = AgentRun(notice_agent, make_buzz(notice_agent), entry, config, system,
+                                       clock, sleeper, save)
+                        job.report_configuration_failure()
+                    except Exception:  # noqa: BLE001 - no safe message adapter; retain a retry marker only
+                        for entry in state["agents"].values():
+                            if isinstance(entry, dict) and entry.get("name") == name:
+                                entry["configuration_pending"] = True
+                except Exception as exc:  # noqa: BLE001 - one agent's bug must not stop the others
                     counts["error"] = f"{name}: {type(exc).__name__}"
+                    for entry in state["agents"].values():
+                        if isinstance(entry, dict) and entry.get("name") == name:
+                            entry["configuration_pending"] = True
+                else:
+                    entry = state["agents"].setdefault(agent.pubkey, {"name": name, "channels": {}})
+                    entry["name"] = name
+                    try:
+                        job = AgentRun(agent, make_buzz(agent), entry, config, system, clock, sleeper, save)
+                        counts = job.counts
+                        job.run()
+                    except sync.SyncError as exc:
+                        counts["error"] = str(exc)
+                    except Exception as exc:  # noqa: BLE001 - persist and report safely on the next healthy round
+                        entry["configuration_pending"] = True
+                        counts["error"] = f"{name}: {type(exc).__name__}"
                 finally:
                     if job is not None:
                         counts["states"] = job.state_counts()

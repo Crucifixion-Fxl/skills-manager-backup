@@ -15,7 +15,7 @@ description: 检测本机 Buzz agent 当前使用的 harness（grok / claude / c
 
 1. **只在「当前 harness 已判定耗尽」时才切换。** `unknown` 不切、`unavailable` 不选；不自动回切（回切会白白重启全部 agent）。恢复时刻已知的 profile，到点后才会重新被当成可用。
 2. **要切就全部 agent 一起切。** 账号是共享的，只切一部分没有意义。切换是原子的：先改全部 env（每个先在临时文件里用 bash 验证），任何一个失败就整体回滚、不重启任何 unit。**唯一例外是被钉住的 agent**（env 里 `HARNESS_FAILOVER_PINNED=1`）：它代表一个手动配的、不在任何 profile 里的一次性组合（例如某个 agent 单独用某个 profile 没有的模型），`switch --apply` 会跳过它——不改它的 env、不重启它，也不计入它判断「当前 harness 是谁」的多数票。drift 修复（进程配置和自己 env 不一致时的自愈重启）仍然覆盖它，因为那是它跟自己的 env 对齐，不是跟机队对齐。
-3. **env 文件只动 6 个 harness 变量**（`BUZZ_ACP_AGENT_COMMAND/ARGS/MODEL/EFFORT_LEVEL`、`HARNESS_CLAUDE_WRAPPER`、`CODEX_HOME`），其余行（含私钥）逐字保留；文件保持 `0600`，备份 `<env>.bak.<ts>-failover` 也是 `0600`。脚本从不打印、不复制任何密钥。
+3. **env 文件只动 harness runtime 变量**（`BUZZ_ACP_AGENT_COMMAND/ARGS/MODEL/EFFORT_LEVEL`、三个 `BUZZ_ACP_MEDIA_*`、`HARNESS_CLAUDE_WRAPPER`、`CLAUDE_CODE_EXECUTABLE`、`CLAUDE_CONFIG_DIR`、`CODEX_HOME`），其余行（含私钥）逐字保留；文件保持 `0600`，备份 `<env>.bak.<ts>-failover` 也是 `0600`。启用 media proxy 的 profile 会把 proxy、真实 adapter 与固定 Buzz CLI 作为一个不可拆分的 runtime tuple 一起切换和回读；脚本从不打印、不复制任何密钥。
 4. **切完必须证明「进程真的加载了新配置」**：读 `MainPID` 的 `/proc/<pid>/environ`（只取非密钥的 harness 变量）核对，不是只看 env 文件。有任何一个不对，返回码 3，且**不发 retry**。
 5. **一个 profile = adapter + wrapper + 账号 home + model + effort**（见下表）。同一 harness 可以有多个账号；候选里**跳过与已耗尽 profile 同账号**的项。
 6. **retry 只发固定模板，永远不引用原消息内容**（频道文本是不可信输入）；默认 dry-run，`--apply` 才发送；同一事件只提醒一次；每次最多 10 条；超过 24h 的不提醒。

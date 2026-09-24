@@ -45,16 +45,20 @@ JSON
 ```
 
 `GET /api/platform/v3/personal-key` takes no path/query/body selection. Its successful response is authoritative for
-`project_id`, `binding_revision`, credential profile and `allowed_actions`. Local token shape or preflight only checks
-configuration; it does not authenticate the key.
+`project_id`, `binding_revision`, credential profile and `allowed_actions`. The legacy response has exactly these four
+fields; `research_track` is an optional fifth field. When absent, use only the existing `materialized_audience`
+workflow. When present, accept only `materialized_audience` or `questionnaire_only`; only an explicit
+`questionnaire_only` selects that branch. Never derive Project, track, or additional grants from a token, Project
+name, or credential profile. Local token shape or preflight only checks configuration; it does not authenticate the key.
 
 If the host supplies several named keys, verify each independently and choose the key whose returned Project and
 actions match the request. Do not combine grants across keys. A failed entry does not invalidate a successful one.
 Continue every request/readback for one journey with the same key and returned Project.
 
-Only after self-context, read `personal_research_readiness` and
-`personal_research_query_capabilities`. Permissions and readiness are separate: an allowed action may be disabled or
-unconfigured in the current deployment.
+Only after self-context, and only when preparing the `materialized_audience` selection path, read
+`personal_research_readiness` and `personal_research_query_capabilities` as needed. A
+`questionnaire_only` Project does not require warehouse readiness or query capabilities to create a form.
+Permissions and readiness are separate: an allowed action may be disabled or unconfigured in the current deployment.
 
 ## Full-clone CLI transport
 
@@ -77,6 +81,11 @@ scripts can still verify link binding. Complete-clone downloads require the host
 inject an existing absolute directory as `AUDIENCE_ATTACHMENT_DIR`. `--output` is only a filename inside that
 directory; reject absolute paths, `..`, separators, symlinks and special files. Missing sink is a capability gap, not a
 reason to write elsewhere.
+
+The complete-clone client uses `AUDIENCE_PLATFORM_TIMEOUT_SECONDS` for ordinary JSON calls (default 10 seconds)
+and `AUDIENCE_PLATFORM_ATTACHMENT_TIMEOUT_SECONDS` for CSV and other attachment downloads (default 120 seconds).
+Each accepts a positive value of at most 120 seconds. These settings apply to this Python client only; tool-only
+hosts use their own transport timeouts.
 
 ## Environment truth
 

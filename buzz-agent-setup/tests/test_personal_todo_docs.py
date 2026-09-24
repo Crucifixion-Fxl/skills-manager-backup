@@ -79,9 +79,9 @@ def actual_result_keys() -> set[str]:
 
     import gitlab_todo_sync as todo
 
-    owner, publisher = "a" * 64, "b" * 64
+    owner, publisher, desk = "a" * 64, "b" * 64, "d" * 64
     config = {"version": 1, "channel_id": "11111111-2222-3333-4444-555555555555", "publisher_pubkey": publisher,
-              "owner_pubkey": owner, "done_authors": [owner],
+              "owner_pubkey": owner, "desk_pubkey": desk, "done_authors": [owner],
               "buzz": {"cli_path": "/opt/buzz/usr/bin/buzz", "cli_sha256": "e" * 64},
               "gitlab": {"base_url": "https://gitlab.example", "username": "jchen", "token_env": "GITLAB_TODO_TOKEN"},
               "todo": {"since": "2026-09-19T00:00:00Z"}}
@@ -97,7 +97,7 @@ def actual_result_keys() -> set[str]:
 
     class Buzz:
         def channel_members(self):
-            return {owner: "owner", publisher: "bot"}
+            return {owner: "owner", publisher: "bot", desk: "bot"}
 
         def channel_messages(self, since):
             return []
@@ -596,6 +596,7 @@ class LauncherTest(unittest.TestCase):
 
 class ExampleAndDocsTest(unittest.TestCase):
     FILL = {"<owner-hex-pubkey>": "a" * 64, "<todo-publisher-hex-pubkey>": "b" * 64,
+            "<personal-channel-desk-hex-pubkey>": "d" * 64,
             "<assistant-hex-pubkey>": "c" * 64, "<channel-uuid>": "11111111-2222-3333-4444-555555555555",
             "<buzz-cli-sha256>": "e" * 64, "<user>": "jchen", "<name>": "me",
             "<gitlab-username>": "jchen", "<now-utc>": "2026-09-19T00:00:00Z"}

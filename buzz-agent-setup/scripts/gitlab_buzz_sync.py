@@ -142,9 +142,15 @@ HEADER_TRAILER_PAT = (
     r"(?:\[desc:([0-9a-f]{12}|-)\])?"
     r"(?:\[note:([1-9][0-9]*)\])?"
     rf"(?:\[events:({EVENT_KEYS_PAT})\])?"
+    r"(?:\[reaction:(review|success|failure|neutral|open|draft|approved)\])?"
+    r"(?:\[rev:([1-9][0-9]{0,8})\])?"
+    r"(?:\[route:(skip)\])?"
 )
 HEADER_TRAILER_STRIP = re.compile(
-    r"(?:\[desc:[^\]]*\])?(?:\[note:[^\]]*\])?(?:\[events:[^\]]*\])?$"
+    r"(?:\[desc:[^\]]*\])?(?:\[note:[^\]]*\])?(?:\[events:[^\]]*\])?"
+    r"(?:\[reaction:[^\]]*\])?"
+    r"(?:\[rev:[^\]]*\])?"
+    r"(?:\[route:[^\]]*\])?$"
 )
 ISSUE_HEADER_RE = re.compile(
     rf"\[gitlab-notify:v1\]\[object:issue\]\[type:({FACT_VALUE})\]\[status:({FACT_VALUE})\]"
@@ -183,6 +189,7 @@ ORIGIN_LINE_RE = re.compile(r"<!-- gitlab-buzz-origin:v1 (\{[^{}]*\}) -->")
 BUZZ_LINK_RE = re.compile(r"buzz://message\?([^\s<>\"'`]+)")
 NOTE_LINE_RE = re.compile(r"note: ([1-9][0-9]*)")
 HEX64_RE = re.compile(r"[0-9a-f]{64}")
+SIG128_RE = re.compile(r"[0-9a-f]{128}")
 UUID_RE = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 USERNAME_RE = re.compile(r"[A-Za-z0-9_.][A-Za-z0-9_.-]{0,254}")
 TIMESTAMP_RE = re.compile(
@@ -217,7 +224,8 @@ DAILY_WINDOW_SKEW = dt.timedelta(minutes=15)  # Desk and GitLab clocks may disag
 NOSTR_URI_RE = re.compile(r"(?i)(nostr):")
 DAILY_OBJECTS = frozenset({"access_token", "sync"})
 CONFIG_KEYS = frozenset({"channel_id", "publisher_pubkey", "since", "include_confidential", "exclude", "diff", "audience",
-                         "agent_pubkeys", "people", "people_file", "gitlab", "buzz", "mute_events"})
+                         "agent_pubkeys", "people", "people_file", "gitlab", "buzz", "mute_events",
+                         "compact_status_updates"})
 # `mute_events` entries are `<object>:<event>` or `<object>:*`. Only top-level instant notices can be
 # muted, and only with the event names the script really emits, so a typo fails loud instead of muting
 # nothing. Thread records (issue/mr/note/milestone, MR pipeline results) and `sync` are never mutable.
@@ -368,18 +376,29 @@ def _valid_url(value: Any, subject: str) -> str:
 
 def _trailer_from_groups(groups: tuple[str | None, ...]) -> dict[str, Any]:
     extra: dict[str, Any] = {}
-    desc, note, events = groups[-3], groups[-2], groups[-1]
+    desc, note, events, reaction, revision, route = (
+        groups[-6], groups[-5], groups[-4], groups[-3], groups[-2], groups[-1]
+    )
     if desc:
         extra["desc"] = desc
     if note:
         extra["note"] = int(note)
     if events:
         extra["events"] = [token for token in events.split(",") if EVENT_KEY_RE.fullmatch(token)]
+    if reaction:
+        extra["reaction"] = reaction
+    if revision:
+        extra["rev"] = int(revision)
+    if route:
+        extra["route"] = route
     return extra
 
 
 def _header_trailer(*, desc: str | None = None, note: int | None = None,
-                    events: list[str] | tuple[str, ...] | None = None) -> str:
+                    events: list[str] | tuple[str, ...] | None = None,
+                    reaction: str | None = None,
+                    revision: int | None = None,
+                    route: str | None = None) -> str:
     parts: list[str] = []
     if desc not in (None, ""):
         parts.append(f"[desc:{desc}]")
@@ -387,11 +406,28 @@ def _header_trailer(*, desc: str | None = None, note: int | None = None,
         parts.append(f"[note:{note}]")
     if events:
         parts.append("[events:" + ",".join(events) + "]")
+    if reaction is not None:
+        if reaction not in {"", "review", "success", "failure", "neutral", "open", "draft", "approved"}:
+            raise SyncError("header reaction trailer is invalid")
+        if reaction:
+            parts.append(f"[reaction:{reaction}]")
+    if revision is not None:
+        if not _positive_int(revision) or revision > 999_999_999:
+            raise SyncError("header revision trailer is invalid")
+        parts.append(f"[rev:{revision}]")
+    if route is not None:
+        if route not in {"", "skip"}:
+            raise SyncError("header route trailer is invalid")
+        if route:
+            parts.append("[route:skip]")
     return "".join(parts)
 
 
 def _with_trailer(header: str, *, desc: str | None = None, note: int | None = None,
-                  events: list[str] | tuple[str, ...] | None = None) -> str:
+                  events: list[str] | tuple[str, ...] | None = None,
+                  reaction: str | None = None,
+                  revision: int | None = None,
+                  route: str | None = None) -> str:
     parsed = _parse_header_line(header)
     if parsed is None:
         raise SyncError("header is invalid")
@@ -400,6 +436,9 @@ def _with_trailer(header: str, *, desc: str | None = None, note: int | None = No
         desc=parsed.get("desc") if desc is None else desc,
         note=parsed.get("note") if note is None else note,
         events=parsed.get("events") if events is None else list(events),
+        reaction=parsed.get("reaction") if reaction is None else reaction,
+        revision=parsed.get("rev") if revision is None else revision,
+        route=parsed.get("route") if route is None else route,
     )
     if _parse_header_line(merged) is None:
         raise SyncError("rendered header trailer is invalid")
@@ -475,7 +514,11 @@ def parse_header(content: Any) -> dict[str, Any] | None:
 
 def matches_trigger_prefix(content: Any, prefix: str) -> bool:
     line = header_line(content)
-    return isinstance(prefix, str) and bool(line) and line.startswith(prefix)
+    parsed = None if line is None else _parse_header_line(line)
+    return (
+        isinstance(prefix, str) and bool(line) and line.startswith(prefix)
+        and isinstance(parsed, dict) and parsed.get("route") != "skip"
+    )
 
 
 def _legacy_header_first(content: str) -> bool:
@@ -819,7 +862,7 @@ def render_milestone_plaque(title: str, url: str, project_path: str) -> str:
 def _issue_style(fact: dict[str, Any], change: str, first: bool,
                  state_changed: bool | None) -> tuple[str, str]:
     if first:
-        return OBJECT_ICON["issue"], f"首次同步 · {STATE_WORDS[fact['state']]}"
+        return OBJECT_ICON["issue"], STATE_WORDS[fact["state"]]
     if change == "routing":
         if state_changed:
             return "🔄", f"状态流转 → {STATE_WORDS[fact['state']]}"
@@ -876,8 +919,26 @@ INSTANT_STYLE = {
 }
 
 
+def _style_with_pipeline_id(
+    record: dict[str, Any], style: tuple[str, str]
+) -> tuple[str, str]:
+    """Put a pipeline's user-facing id immediately after its icon.
+
+    The Feishu mirror uses the Buzz headline as its card title, so keeping the
+    id inside the styled phrase gives both surfaces the same ``icon #id event``
+    order. Other GitLab records retain their existing headline shape.
+    """
+
+    icon, phrase = style
+    source_id = record.get("source_id")
+    if record.get("object") == "pipeline" and _positive_int(source_id):
+        phrase = f"#{source_id} {phrase}"
+    return icon, phrase
+
+
 def _activity_style(record: dict[str, Any]) -> tuple[str, str]:
-    return ACTIVITY_STYLE.get((record.get("object"), record.get("event")), ("💬", "活动"))
+    style = ACTIVITY_STYLE.get((record.get("object"), record.get("event")), ("💬", "活动"))
+    return _style_with_pipeline_id(record, style)
 
 
 _ISSUE_HEADLINE_RE = re.compile(r".+ \*\*.+\*\* · \[#([1-9][0-9]*)(?: (.*))?\]\((https?://[^)\s]+)\)")
@@ -1175,6 +1236,250 @@ def render_mr_activity(fact: dict[str, Any], record: dict[str, Any], jobs: list[
         render_mr_message(fact, "activity", style=_activity_style(record)),
         extra,
     )
+
+
+STATUS_HISTORY_TITLE = "状态记录"
+STATUS_HISTORY_LIMIT = 100
+STATUS_REACTION_EMOJIS = frozenset({"👀", "✅", "❌", "⚪", "🟢", "📝", "✔"})
+REACTION_TOKEN = {
+    "👀": "review", "✅": "success", "❌": "failure", "⚪": "neutral",
+    "🟢": "open", "📝": "draft", "✔": "approved",
+}
+TOKEN_REACTION = {token: emoji for emoji, token in REACTION_TOKEN.items()}
+_STATUS_HEADLINE_RE = re.compile(r"^(\S+) \*\*([^*\n]+)\*\*")
+
+
+def edit_target(event: Any) -> str | None:
+    """The sole bare ``e`` target of one same-channel kind-40003 edit."""
+
+    if not isinstance(event, dict) or event.get("kind") != 40003:
+        return None
+    targets = [
+        tag[1] for tag in _tag_values(event, "e")
+        if len(tag) == 2 and isinstance(tag[1], str) and HEX64_RE.fullmatch(tag[1])
+    ]
+    return targets[0] if len(targets) == 1 and len(_tag_values(event, "e")) == 1 else None
+
+
+def verify_nostr_event_signature(event: Any, *, label: str) -> None:
+    """Recompute one raw NIP-01 event id and verify its BIP-340 signature."""
+
+    if (
+        not isinstance(event, dict)
+        or not isinstance(event.get("id"), str) or not HEX64_RE.fullmatch(event["id"])
+        or not isinstance(event.get("pubkey"), str) or not HEX64_RE.fullmatch(event["pubkey"])
+        or not _positive_int(event.get("created_at"))
+        or not isinstance(event.get("kind"), int) or isinstance(event.get("kind"), bool)
+        or not isinstance(event.get("tags"), list)
+        or not isinstance(event.get("content"), str)
+        or not isinstance(event.get("sig"), str) or not SIG128_RE.fullmatch(event["sig"])
+    ):
+        raise SyncError(f"{label} event id or signature is invalid")
+    canonical = json.dumps(
+        [0, event["pubkey"], event["created_at"], event["kind"], event["tags"], event["content"]],
+        ensure_ascii=False, separators=(",", ":"),
+    ).encode("utf-8")
+    digest = hashlib.sha256(canonical).digest()
+    if (
+        event["id"] != digest.hex()
+        or not nk.schnorr_verify(digest, bytes.fromhex(event["pubkey"]), bytes.fromhex(event["sig"]))
+    ):
+        raise SyncError(f"{label} event id or signature is invalid")
+
+
+def status_card_from_thread(
+    events: list[dict[str, Any]], publisher_pubkey: str, project_id: int, object_kind: str, iid: int,
+) -> tuple[str, dict[str, Any]] | None:
+    """Return ``(original message id, latest effective status event)`` for one Issue/MR.
+
+    Comments remain ordinary replies and therefore never become the editable card.  A later
+    kind-40003 overlay wins by time while its target stays the original kind-9 fact, which lets
+    restarts recover the card directly from the relay without a second local binding ledger.
+    """
+
+    originals = {
+        str(event.get("id")): event for event in events
+        if event.get("kind") == 9 and event.get("pubkey") == publisher_pubkey
+        and isinstance(event.get("id"), str) and HEX64_RE.fullmatch(event["id"])
+    }
+    found: list[tuple[int, tuple[Any, Any], str, dict[str, Any]]] = []
+    for event in events:
+        if event.get("pubkey") != publisher_pubkey or event.get("kind") not in (9, 40003):
+            continue
+        header = parse_header(event.get("content"))
+        if (
+            not header or header.get("object") != object_kind or header.get("project") != project_id
+            or header.get(object_kind) != iid or header.get("note") is not None
+            or header.get("change") == MR_XREF
+        ):
+            continue
+        target = str(event.get("id")) if event.get("kind") == 9 else edit_target(event)
+        original = originals.get(str(target or ""))
+        if original is None:
+            continue
+        revision = header.get("rev") if event.get("kind") == 40003 else 0
+        found.append((int(revision or 0), (event.get("created_at", 0), event.get("id", "")), str(target), event))
+    if not found:
+        return None
+    highest_revision = max(item[0] for item in found)
+    if highest_revision:
+        revised = [item for item in found if item[0] == highest_revision]
+        if len(revised) != 1:
+            # A lost acknowledgement can leave two separately signed events with
+            # the exact same target, revision and replacement payload.  Collapse
+            # each equivalent group before judging any remaining state conflict.
+            equivalent: dict[tuple[str, str], tuple[int, tuple[Any, Any], str, dict[str, Any]]] = {}
+            for item in revised:
+                key = (item[2], str(item[3].get("content") or ""))
+                equivalent[key] = max(equivalent.get(key, item), item, key=lambda value: value[1])
+            revised = list(equivalent.values())
+            # Releases before R4 did not explicitly read root-targeted overlays.  Two
+            # independent runs could therefore both publish rev=1: the real current
+            # card and a later history-only route:skip overlay.  Both still have to be
+            # signed by the publisher at the adapter boundary; only this unambiguous
+            # current-vs-history shape is recoverable.  Every other collision stays
+            # fail-closed.
+            if len(revised) != 1:
+                current = [
+                    item for item in revised
+                    if (parse_header(item[3].get("content")) or {}).get("route") != "skip"
+                ]
+                if len(current) != 1:
+                    raise SyncError("compact status card has conflicting overlay revisions")
+                revised = current
+        _, _, target, effective = revised[0]
+    else:
+        _, _, target, effective = max(found, key=lambda item: item[1])
+    return target, effective
+
+
+def _status_time(value: Any) -> str:
+    if _positive_int(value):
+        moment = dt.datetime.fromtimestamp(int(value), tz=dt.timezone.utc)
+    else:
+        moment = parse_timestamp(value, "status changed_at").astimezone(dt.timezone.utc)
+    return moment.strftime("%Y-%m-%d %H:%M:%S UTC")
+
+
+def _status_record(content: str, changed_at: Any) -> str:
+    lines = notice_body_lines(content)
+    headline = next((line for line in lines if line), "")
+    match = _STATUS_HEADLINE_RE.match(headline)
+    if match is None:
+        # Legacy GitLab facts predate the styled headline contract.  Preserve a
+        # bounded, single-line snapshot instead of making one old message stall the
+        # whole channel's migration to compact cards.
+        legacy = _single_line(headline)[:TITLE_LIMIT] or "旧格式状态"
+        return f"- {_status_time(changed_at)} {legacy}"
+    return f"- {_status_time(changed_at)} {match.group(1)} {match.group(2)}"
+
+
+def _status_history(content: str) -> list[str]:
+    lines = notice_body_lines(content)
+    indexes = [index for index, line in enumerate(lines) if line == STATUS_HISTORY_TITLE]
+    if not indexes:
+        return []
+    index = indexes[-1]
+    records = lines[index + 1:]
+    return records if records and all(line.startswith("- ") for line in records) else []
+
+
+def _without_status_history(content: str) -> list[str]:
+    lines = notice_body_lines(content)
+    indexes = [index for index, line in enumerate(lines) if line == STATUS_HISTORY_TITLE]
+    if indexes and lines[indexes[-1] + 1:] and all(
+        line.startswith("- ") for line in lines[indexes[-1] + 1:]
+    ):
+        return lines[:indexes[-1]]
+    return lines
+
+
+def render_compact_status(
+    previous: dict[str, Any], current: str, changed_at: Any, *, preserve_current: bool = False,
+    desired_reaction: str | None = None,
+) -> str:
+    """Render a replacement with a chronological UTC history and newest applicable headline."""
+
+    previous_header = parse_header(previous.get("content"))
+    revision = int((previous_header or {}).get("rev") or 0) + 1
+    prior_reaction = status_reaction(str(previous.get("content") or ""))
+    incoming_reaction = status_reaction(current)
+    reaction = desired_reaction or (prior_reaction if preserve_current else incoming_reaction or prior_reaction)
+    reaction_token = REACTION_TOKEN.get(str(reaction or ""), "")
+    header = header_line(str(previous.get("content") or "")) if preserve_current else header_line(current)
+    if header is None:
+        raise SyncError("compact status replacement has no machine header")
+    if preserve_current:
+        incoming = parse_header(current)
+        existing = parse_header(previous.get("content"))
+        if not incoming or not existing:
+            raise SyncError("compact historical status has no machine header")
+        keys = list(dict.fromkeys([*(existing.get("events") or []), *(incoming.get("events") or [])]))
+        # This overlay records an observed historical fact but deliberately keeps
+        # the current routable headline.  Marking it prevents the new edit id from
+        # waking the Role for that older current state a second time.
+        header = _with_trailer(
+            header, events=keys, reaction=reaction_token, revision=revision, route="skip",
+        )
+    else:
+        # A current update clears a prior history-only route suppression marker.
+        header = _with_trailer(
+            header, reaction=reaction_token, revision=revision, route="",
+        )
+    records = _status_history(str(previous.get("content") or ""))
+    if not records:
+        records.append(_status_record(str(previous.get("content") or ""), previous.get("created_at")))
+    record = _status_record(current, changed_at)
+    # Reaching this renderer already means the sync observed a distinct Git fact.
+    # Do not deduplicate by display text: two same-kind changes may share a timestamp.
+    records.append(record)
+    records.sort(key=lambda line: line[2:25])
+    records = records[-STATUS_HISTORY_LIMIT:]
+    visible = str(previous.get("content") or "") if preserve_current else current
+    body = [*_without_status_history(visible), "", STATUS_HISTORY_TITLE, *records]
+    rendered = _notice(body, header)
+    while len(rendered.encode("utf-8")) > CONTENT_BYTE_LIMIT and len(records) > 1:
+        records.pop(0)
+        rendered = _notice([*_without_status_history(visible), "", STATUS_HISTORY_TITLE, *records], header)
+    if len(rendered.encode("utf-8")) > CONTENT_BYTE_LIMIT:
+        raise SyncError("compact status replacement exceeds the Buzz content limit")
+    return rendered
+
+
+def status_reaction(content: str) -> str | None:
+    """The current Git status reaction; field/content edits deliberately keep the prior status."""
+
+    header = parse_header(content)
+    lines = notice_body_lines(content)
+    match = _STATUS_HEADLINE_RE.match(next((line for line in lines if line), ""))
+    icon = match.group(1) if match is not None else None
+    if not header:
+        return None
+    if header.get("reaction") in TOKEN_REACTION:
+        return TOKEN_REACTION[header["reaction"]]
+    if header.get("object") == "mr":
+        if header.get("events"):
+            return "✅" if icon == "✔" else icon if icon in STATUS_REACTION_EMOJIS else None
+        if header.get("change") == "update" and icon == "📦":
+            # A green pipeline belongs to the previous SHA. A new commit makes
+            # that result stale until the replacement SHA reaches a terminal pipeline.
+            if header.get("state") in {"closed", "locked"}:
+                return "⚪"
+            if header.get("draft") == "yes":
+                return "📝"
+            return "👀" if header.get("state") == "opened" else None
+        if header.get("change") not in {"routing", "lifecycle"}:
+            return None
+        if header.get("state") == "merged":
+            return "✅"
+        if header.get("state") in {"closed", "locked"}:
+            return "⚪"
+        if header.get("draft") == "yes":
+            return "📝"
+        return "👀" if header.get("state") == "opened" else None
+    if header.get("object") == "issue" and header.get("change") == "routing":
+        return "✅" if header.get("state") == "closed" else "🟢"
+    return None
 
 
 XREF_STYLE = ("🔗", "MR 关联 · 事实在别处")
@@ -1797,8 +2102,14 @@ def render_record(record: dict[str, Any]) -> str:
     header = _with_trailer(header, events=[record["key"]])
     # Styled body (issue #78): icon + phrase headline, bare URL; ref/by/commits stay visible.
     # events lives in the header trailer (script-only dedup key).
-    icon, phrase = INSTANT_STYLE.get((record["object"], record["event"]), ("🔔", "通知"))
-    body = [f"{icon} **{phrase}** · {_md_escape(str(record.get('title') or record['object']))}"]
+    style = INSTANT_STYLE.get((record["object"], record["event"]), ("🔔", "通知"))
+    icon, phrase = _style_with_pipeline_id(record, style)
+    title = _md_escape(str(record.get("title") or record["object"]))
+    pipeline_id = f"#{record['source_id']}" if (
+        record.get("object") == "pipeline" and _positive_int(record.get("source_id"))
+    ) else ""
+    suffix = "" if title == pipeline_id else f" · {title}"
+    body = [f"{icon} **{phrase}**{suffix}"]
     body.append(record["url"])
     if record.get("ref"):
         body.append(f"ref: {record['ref']}")
@@ -2439,6 +2750,8 @@ def validate_config(config: Any) -> None:
     parse_timestamp(config.get("since"), "since")
     if not isinstance(config.get("include_confidential", False), bool):
         raise SyncError("include_confidential must be a boolean")
+    if not isinstance(config.get("compact_status_updates", False), bool):
+        raise SyncError("compact_status_updates must be a boolean")
     if config.get("audience") is not None:
         # ADR-0006: channel membership itself is the audience consent. The
         # retired block must be deleted so nobody mistakes it for a live gate.
@@ -2825,7 +3138,8 @@ def _webhook_pipeline(payload: dict[str, Any], project_id: int, project: dict[st
     return _record(_webhook_key("pipeline", project_id, pipeline_id, status), "pipeline", status, placement,
                    project_id, created_at=attrs.get("finished_at") or attrs.get("created_at"),
                    ref=neutralize(_single_line(ref)), title=f"#{pipeline_id}", url=str(attrs.get("url") or ""),
-                   mr_iid=mr_iid, source_id=pipeline_id)
+                   mr_iid=mr_iid, source_id=pipeline_id,
+                   sha=attrs.get("sha") if isinstance(attrs.get("sha"), str) else "")
 
 
 def _webhook_deployment(payload: dict[str, Any], project_id: int, project: dict[str, Any],
@@ -3296,7 +3610,22 @@ class BuzzCli:
         args = ["messages", "thread", "--channel", self.channel, "--event", event_id, "--limit", "500"]
         for attempt in range(READBACK_ATTEMPTS):
             try:
-                return _collect_events(self.command(args))
+                events = _collect_events(self.command(args))
+                for event in events:
+                    is_edit = event.get("kind") == 40003
+                    is_publisher_fact = (
+                        event.get("kind") == 9 and event.get("pubkey") == self.publisher
+                        and parse_header(event.get("content")) is not None
+                    )
+                    if not is_edit and not is_publisher_fact:
+                        continue
+                    if (
+                        [tag[:2] for tag in _tag_values(event, "h")] != [["h", self.channel]]
+                        or (is_edit and edit_target(event) is None)
+                    ):
+                        raise SyncError("Buzz thread returned an invalid publisher fact envelope")
+                    verify_nostr_event_signature(event, label="Buzz thread publisher fact")
+                return events
             except BuzzCliError:
                 if attempt >= READBACK_ATTEMPTS - 1:
                     raise
@@ -3304,6 +3633,64 @@ class BuzzCli:
                 # thread index. This is a read-only retry; never repeat send.
                 self.sleeper(0.5)
         raise AssertionError("unreachable")
+
+    def compact_edits(self, events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Read signed kind-40003 overlays targeting GitLab facts in one thread.
+
+        Buzz 0.5.23's ``messages thread --event <root>`` does not include edits
+        targeting a reply below that root, so compact card recovery needs an
+        explicit channel scan rather than assuming those overlays are thread
+        members.
+        """
+
+        originals = {
+            str(event.get("id")): event for event in events
+            if event.get("kind") == 9 and event.get("pubkey") == self.publisher
+            and isinstance(event.get("id"), str) and HEX64_RE.fullmatch(event["id"])
+            and parse_header(event.get("content")) is not None
+            and [tag[:2] for tag in _tag_values(event, "h")] == [["h", self.channel]]
+        }
+        if not originals:
+            return []
+        created = [event.get("created_at") for event in originals.values()]
+        if not all(_positive_int(value) for value in created):
+            raise SyncError("Buzz compact status originals have no created_at")
+
+        seen_ids = {
+            str(event.get("id")) for event in events if isinstance(event.get("id"), str)
+        }
+        found: dict[str, dict[str, Any]] = {}
+        before: int | None = None
+        since = min(int(value) for value in created)
+        for _ in range(CHANNEL_PAGE_MAX):
+            args = [
+                "messages", "get", "--channel", self.channel, "--kinds", "40003",
+                "--since", str(since), "--limit", str(CHANNEL_PAGE_LIMIT),
+            ]
+            if before is not None:
+                args += ["--before", str(before)]
+            page = _collect_events(self.command(args))
+            fresh = [event for event in page if str(event.get("id")) not in seen_ids]
+            for event in fresh:
+                seen_ids.add(str(event.get("id")))
+                target = edit_target(event)
+                if event.get("pubkey") != self.publisher or target not in originals:
+                    continue
+                if [tag[:2] for tag in _tag_values(event, "h")] != [["h", self.channel]]:
+                    raise SyncError("Buzz compact status overlay has an invalid envelope")
+                verify_nostr_event_signature(event, label="Buzz compact status overlay")
+                found[str(event["id"])] = event
+            if len(page) < CHANNEL_PAGE_LIMIT:
+                break
+            if not fresh:
+                raise SyncError("Buzz compact status scan found more same-second edits than one page holds")
+            times = [event.get("created_at") for event in page]
+            if not all(_positive_int(value) for value in times):
+                raise SyncError("Buzz compact status overlays have no created_at to page by")
+            before = min(int(value) for value in times)
+        else:
+            raise SyncError("Buzz compact status scan exceeded its page limit")
+        return sorted(found.values(), key=lambda event: (event.get("created_at", 0), event.get("id", "")))
 
     def search_roots(self, query: str, object_kind: str, iid: int, since_unix: int) -> list[dict[str, Any]]:
         # The query is the object URL (issue #78): plaque roots carry no header words, but every root form —
@@ -3457,6 +3844,78 @@ class BuzzCli:
             raise SyncError("Buzz message readback does not match author, channel, thread or mentions")
         return event_id
 
+    def edit(self, event_id: str, content: str) -> str:
+        """Publish and read back one same-author kind-40003 full replacement."""
+
+        if not HEX64_RE.fullmatch(event_id):
+            raise SyncError("Buzz edit target must be one event id")
+        try:
+            value = self.command(["messages", "edit", "--event", event_id, "--content", content])
+        except BuzzCliError as exc:
+            if exc.returncode == 1:
+                raise BuzzSendRejected(f"Buzz CLI rejected the edit locally ({exc.returncode})") from None
+            raise
+        edit_id = value.get("event_id") if isinstance(value, dict) else None
+        if isinstance(value, dict) and value.get("accepted") is False:
+            raise BuzzSendRejected("Buzz relay rejected the edit")
+        if not isinstance(edit_id, str) or not HEX64_RE.fullmatch(edit_id):
+            raise SyncError("Buzz edit outcome is unknown: no event id")
+        for attempt in range(READBACK_ATTEMPTS):
+            event = next((item for item in self.thread(edit_id) if item.get("id") == edit_id), None)
+            if event is not None:
+                break
+            if attempt < READBACK_ATTEMPTS - 1:
+                self.sleeper(0.5)
+        else:
+            raise SyncError("Buzz edit write could not be read back")
+        if (
+            event.get("kind") != 40003 or event.get("pubkey") != self.publisher
+            or event.get("content") != content or edit_target(event) != event_id
+            or [tag[:2] for tag in _tag_values(event, "h")] != [["h", self.channel]]
+        ):
+            raise SyncError("Buzz edit readback does not match author, channel, target or content")
+        return edit_id
+
+    def _reactions(self, event_id: str) -> dict[str, set[str]]:
+        value = self.command(["reactions", "get", "--event", event_id])
+        rows = value.get("reactions") if isinstance(value, dict) else None
+        if not isinstance(rows, list):
+            raise SyncError("Buzz reactions returned an invalid response")
+        result: dict[str, set[str]] = {}
+        for row in rows:
+            if not isinstance(row, dict) or not isinstance(row.get("emoji"), str) \
+                    or not isinstance(row.get("pubkeys"), list):
+                raise SyncError("Buzz reactions returned an invalid row")
+            result[row["emoji"]] = {
+                key for key in row["pubkeys"] if isinstance(key, str) and HEX64_RE.fullmatch(key)
+            }
+        return result
+
+    def set_status_reaction(self, event_id: str, emoji: str) -> None:
+        """Keep exactly one Desk-authored Git status reaction on the editable card."""
+
+        if emoji not in STATUS_REACTION_EMOJIS:
+            raise SyncError("unsupported Git status reaction")
+        current = self._reactions(event_id)
+        for old in sorted(STATUS_REACTION_EMOJIS - {emoji}):
+            if self.publisher in current.get(old, set()):
+                self.command(["reactions", "remove", "--event", event_id, "--emoji", old])
+        if self.publisher not in current.get(emoji, set()):
+            self.command(["reactions", "add", "--event", event_id, "--emoji", emoji])
+        verified = self._reactions(event_id)
+        mine = {item for item in STATUS_REACTION_EMOJIS if self.publisher in verified.get(item, set())}
+        if mine != {emoji}:
+            raise SyncError("Buzz status reaction readback does not match the requested state")
+
+    def status_reaction_matches(self, event_id: str, emoji: str) -> bool:
+        """Whether the Desk currently owns exactly the requested Git status reaction."""
+
+        if not HEX64_RE.fullmatch(event_id) or emoji not in STATUS_REACTION_EMOJIS:
+            raise SyncError("Buzz status reaction readback request is invalid")
+        current = self._reactions(event_id)
+        mine = {item for item in STATUS_REACTION_EMOJIS if self.publisher in current.get(item, set())}
+        return mine == {emoji}
+
 
 class Syncer:
     def __init__(self, config: dict[str, Any], gitlab: Any, buzz: Any, *, state_dir: Path):
@@ -3546,18 +4005,72 @@ class Syncer:
         atomic_write_json(self.outbox_path(), value)
 
     def _queue_delivery(self, kind: str, payload: dict[str, Any]) -> str:
-        change_id = delivery_change_id(self.channel, kind, payload)
+        return self._queue_deliveries([(kind, payload)])[0]
+
+    def _queue_deliveries(self, deliveries: list[tuple[str, dict[str, Any]]]) -> list[str]:
+        """Persist one logical operation's external continuations in one atomic write."""
+
+        change_ids = [delivery_change_id(self.channel, kind, payload) for kind, payload in deliveries]
         ledger = self._read_outbox()
-        if not any(item.get("change_id") == change_id for item in ledger["pending"]):
-            ledger["pending"].append({
-                "status": "PENDING",
-                "change_id": change_id,
-                "kind": kind,
-                "payload": payload,
-                "queued_at": format_timestamp(dt.datetime.now(dt.timezone.utc)),
-            })
+        changed = False
+        queued_at = format_timestamp(dt.datetime.now(dt.timezone.utc))
+        group_id = change_ids[0] if len(change_ids) > 1 else None
+        for index, ((kind, payload), change_id) in enumerate(zip(deliveries, change_ids)):
+            if any(item.get("change_id") == change_id for item in ledger["pending"]):
+                continue
+            entry: dict[str, Any] = {
+                "status": "PENDING", "change_id": change_id, "kind": kind,
+                "payload": payload, "queued_at": queued_at, "attempted": False,
+            }
+            if group_id is not None:
+                entry.update({"group_id": group_id, "group_index": index})
+            ledger["pending"].append(entry)
+            changed = True
+        if changed:
             self._write_outbox(ledger)
-        return change_id
+        return change_ids
+
+    def _discard_delivery_group(self, change_ids: list[str]) -> None:
+        """Atomically cancel one logical delivery after its first write was definitely rejected."""
+
+        wanted = set(change_ids)
+        ledger = self._read_outbox()
+        if any(
+            sum(item.get("change_id") == change_id for item in ledger["pending"]) > 1
+            for change_id in wanted
+        ):
+            raise SyncError("durable outbox delivery group contains duplicate pending operations")
+        ledger["pending"] = [
+            item for item in ledger["pending"] if item.get("change_id") not in wanted
+        ]
+        self._write_outbox(ledger)
+
+    def _discard_persisted_group(self, item: dict[str, Any]) -> None:
+        """Cancel an unstarted durable group when its first operation proves zero-write."""
+
+        group_id = item.get("group_id")
+        if not isinstance(group_id, str) or not HEX64_RE.fullmatch(group_id):
+            self._discard_rejected_delivery(str(item.get("change_id") or ""))
+            return
+        ledger = self._read_outbox()
+        grouped = [entry for entry in ledger["pending"] if entry.get("group_id") == group_id]
+        if not grouped or any(
+            entry.get("group_index") != index
+            for index, entry in enumerate(sorted(grouped, key=lambda entry: entry.get("group_index", -1)))
+        ):
+            raise SyncError("durable outbox delivery group is invalid")
+        ledger["pending"] = [
+            entry for entry in ledger["pending"] if entry.get("group_id") != group_id
+        ]
+        self._write_outbox(ledger)
+
+    def _mark_delivery_attempted(self, change_id: str) -> None:
+        ledger = self._read_outbox()
+        pending = [item for item in ledger["pending"] if item.get("change_id") == change_id]
+        if len(pending) != 1:
+            raise SyncError("durable outbox delivery was not queued exactly once")
+        pending[0]["attempted"] = True
+        self._write_outbox(ledger)
 
     def _ack_delivery(self, change_id: str, *, recovered: bool = False, result: Any = None) -> None:
         ledger = self._read_outbox()
@@ -3593,12 +4106,34 @@ class Syncer:
         ][-(OUTBOX_ACK_LIMIT - 1):] + [record]
         self._write_outbox(ledger)
 
-    def _deliver(self, kind: str, payload: dict[str, Any], action: Any) -> Any:
+    def _discard_rejected_delivery(self, change_id: str) -> None:
+        """Remove a queued operation only when the adapter proves that no write occurred."""
+
+        ledger = self._read_outbox()
+        pending = [item for item in ledger["pending"] if item.get("change_id") == change_id]
+        if len(pending) != 1:
+            raise SyncError("rejected durable outbox delivery was not pending exactly once")
+        ledger["pending"] = [
+            item for item in ledger["pending"] if item.get("change_id") != change_id
+        ]
+        self._write_outbox(ledger)
+
+    def _deliver(
+        self, kind: str, payload: dict[str, Any], action: Any, *, discard_rejected: bool = True,
+    ) -> Any:
         self._check_run_budget()
-        if kind in {"buzz_message", "buzz_diff", "gitlab_note"}:
+        if kind in {"buzz_message", "buzz_edit", "buzz_reaction", "buzz_diff", "gitlab_note"}:
             self._check_delivery_gates(kind, payload)
         change_id = self._queue_delivery(kind, payload)
-        result = action()
+        self._mark_delivery_attempted(change_id)
+        try:
+            result = action()
+        except BuzzSendRejected:
+            # Exit 1 / accepted:false is the adapter's explicit zero-write result.
+            # Unknown transport/readback outcomes intentionally keep PENDING.
+            if discard_rejected:
+                self._discard_rejected_delivery(change_id)
+            raise
         self._check_run_budget()
         self._ack_delivery(change_id, result=result)
         return result
@@ -3621,6 +4156,21 @@ class Syncer:
             return diff_already_posted(
                 events, self.publisher, str(payload.get("commit") or ""), str(payload.get("file_path") or "")
             )
+        if kind == "buzz_edit":
+            target = payload.get("event_id")
+            if not isinstance(target, str) or not HEX64_RE.fullmatch(target):
+                raise SyncError("durable Buzz edit target is invalid")
+            return any(
+                event.get("kind") == 40003 and event.get("pubkey") == self.publisher
+                and event.get("content") == payload.get("content") and edit_target(event) == target
+                for event in self.buzz.thread(target)
+            )
+        if kind == "buzz_reaction":
+            target, emoji = payload.get("event_id"), payload.get("emoji")
+            if not isinstance(target, str) or not HEX64_RE.fullmatch(target) \
+                    or emoji not in STATUS_REACTION_EMOJIS:
+                raise SyncError("durable Buzz reaction target is invalid")
+            return self.buzz.status_reaction_matches(target, emoji)
         if kind != "buzz_message":
             raise SyncError("durable outbox pending operation kind is invalid")
         reply_to = payload.get("reply_to")
@@ -3635,6 +4185,13 @@ class Syncer:
                     self._object_url(header["project"], object_kind, header[object_kind]),
                     object_kind, header[object_kind], 0,
                 )
+                if object_kind == "issue":
+                    aliases = self.buzz.search_roots(
+                        self._object_url(header["project"], object_kind, header[object_kind])
+                        .replace("/-/issues/", "/-/work_items/"),
+                        object_kind, header[object_kind], 0,
+                    )
+                    events.extend(event for event in aliases if event.get("id") not in {item.get("id") for item in events})
             elif plaque is not None:
                 # Plaque roots (issue #78): search by the URL line; kind/iid are not
                 # derivable here and only decorate error messages.
@@ -3681,6 +4238,56 @@ class Syncer:
         else:
             self.gitlab.add_note(project_id, iid, body)
 
+    def _retry_pending_reaction(self, item: dict[str, Any]) -> None:
+        payload = item.get("payload")
+        if not isinstance(payload, dict):
+            raise SyncError("durable outbox pending reaction payload is invalid")
+        target, emoji = payload.get("event_id"), payload.get("emoji")
+        if (
+            not isinstance(target, str) or not HEX64_RE.fullmatch(target)
+            or emoji not in STATUS_REACTION_EMOJIS
+        ):
+            raise SyncError("durable outbox pending reaction is outside the configured scope")
+        self._check_delivery_gates("buzz_reaction", payload)
+        self.buzz.set_status_reaction(target, emoji)
+
+    def _execute_queued_delivery(self, item: dict[str, Any]) -> Any:
+        """Start an operation durably known not to have been attempted before a crash."""
+
+        kind, payload = item.get("kind"), item.get("payload")
+        if not isinstance(payload, dict):
+            raise SyncError("durable outbox queued payload is invalid")
+        self._check_run_budget()
+        self._check_delivery_gates(str(kind), payload)
+        change_id = str(item.get("change_id") or "")
+        self._mark_delivery_attempted(change_id)
+        if kind == "buzz_message":
+            result = self.buzz.send(
+                str(payload.get("content") or ""), reply_to=payload.get("reply_to"),
+                mentions=list(payload.get("mentions") or []),
+            )
+        elif kind == "buzz_edit":
+            result = self.buzz.edit(str(payload.get("event_id") or ""), str(payload.get("content") or ""))
+        elif kind == "buzz_reaction":
+            result = self.buzz.set_status_reaction(
+                str(payload.get("event_id") or ""), str(payload.get("emoji") or ""),
+            )
+        elif kind == "buzz_diff":
+            result = self.buzz.send_diff(
+                str(payload.get("diff") or ""), repo=str(payload.get("repo") or ""),
+                commit=str(payload.get("commit") or ""), file_path=str(payload.get("file_path") or ""),
+                reply_to=str(payload.get("reply_to") or ""),
+                source_branch=str(payload.get("source_branch") or ""),
+                target_branch=str(payload.get("target_branch") or ""), pr=payload.get("pr"),
+            )
+        elif kind == "gitlab_note":
+            self._retry_pending_binding(item)
+            result = None
+        else:
+            raise SyncError("durable outbox queued operation kind is invalid")
+        self._check_run_budget()
+        return result
+
     def _reconcile_pending(self) -> int:
         recovered = 0
         for item in list(self._read_outbox()["pending"]):
@@ -3691,14 +4298,28 @@ class Syncer:
                 # Desk and the restricted publisher own this semantic phase.
                 # Sync must neither publish machine prose nor ACK it on their behalf.
                 continue
+            if item.get("attempted") is False:
+                try:
+                    result = self._execute_queued_delivery(item)
+                except BuzzSendRejected:
+                    if item.get("group_index") == 0:
+                        self._discard_persisted_group(item)
+                    else:
+                        self._discard_rejected_delivery(change_id)
+                    raise
+                self._ack_delivery(change_id, recovered=True, result=result)
+                continue
             if not self._pending_satisfied(item):
-                # A binding note has deterministic content and duplicate copies bind
-                # the same root, so it is safe to retry after a negative readback.
+                # Binding notes and status reactions are idempotent at their targets,
+                # so they are safe to retry after a negative readback.
                 # Buzz messages and diffs cannot be retried without risking a second
                 # externally visible event; those remain fail-closed.
-                if item.get("kind") != "gitlab_note":
+                if item.get("kind") not in {"gitlab_note", "buzz_reaction"}:
                     raise SyncError(f"durable outbox delivery {change_id[:12]} is still pending")
-                self._retry_pending_binding(item)
+                if item.get("kind") == "gitlab_note":
+                    self._retry_pending_binding(item)
+                else:
+                    self._retry_pending_reaction(item)
                 if not self._pending_satisfied(item):
                     raise SyncError(f"durable outbox delivery {change_id[:12]} retry was not readable")
             self._ack_delivery(change_id, recovered=True)
@@ -4053,6 +4674,93 @@ class Syncer:
             lambda: self.buzz.send(content, reply_to=reply_to, mentions=mentions),
         )
 
+    def _edit_status(
+        self, events: list[dict[str, Any]], content: str, *, project_id: int, object_kind: str,
+        iid: int, changed_at: Any, mentions: tuple[str, ...] | list[str] = (),
+        preserve_current: bool = False, reaction_content: str | None = None,
+    ) -> str:
+        card = status_card_from_thread(events, self.publisher, project_id, object_kind, iid)
+        if card is None:
+            raise ObjectError(f"{object_kind} {iid}: compact status card is missing")
+        target, previous = card
+        replacement = render_compact_status(
+            previous, content, changed_at, preserve_current=preserve_current,
+            desired_reaction=status_reaction(reaction_content) if reaction_content is not None else None,
+        )
+        payload = {"event_id": target, "content": replacement, "project_id": project_id}
+        deliveries: list[tuple[str, dict[str, Any]]] = [("buzz_edit", payload)]
+        reaction_payload: dict[str, Any] | None = None
+        if not preserve_current or reaction_content is not None:
+            emoji = status_reaction(reaction_content or replacement)
+            if emoji is not None:
+                reaction_payload = {"event_id": target, "emoji": emoji, "project_id": project_id}
+                deliveries.append(("buzz_reaction", reaction_payload))
+        attention_payload: dict[str, Any] | None = None
+        if mentions:
+            # kind-40003 cannot carry new p tags in the pinned Buzz CLI. Keep the
+            # status compact, but preserve a real push notification as a tiny reply.
+            marker = hashlib.sha256(replacement.encode("utf-8")).hexdigest()[:12]
+            alert = with_notified_line(
+                f"🔔 **Git 状态需要你关注** · {_status_time(changed_at)}\n\n"
+                f"变更标识 `{marker}`",
+                notified_tokens(list(mentions), self.people, self._member_display_names()),
+            )
+            attention_payload = {
+                "content": alert, "reply_to": target, "mentions": list(mentions),
+                "project_id": project_id,
+            }
+            deliveries.append(("buzz_message", attention_payload))
+
+        # Persist the edit and every required continuation together. If the process
+        # dies after the edit reaches Buzz, restart can still recover its reaction
+        # and will fail closed (rather than silently lose) an unproven p-tag notice.
+        change_ids = self._queue_deliveries(deliveries)
+        try:
+            edit_id = self._deliver(
+                "buzz_edit", payload, lambda: self.buzz.edit(target, replacement),
+                discard_rejected=False,
+            )
+        except BuzzSendRejected:
+            # A definite zero-write edit makes its not-yet-attempted continuations invalid.
+            self._discard_delivery_group(change_ids)
+            raise
+        if reaction_payload is not None:
+            self._deliver(
+                "buzz_reaction", reaction_payload,
+                lambda: self.buzz.set_status_reaction(target, str(reaction_payload["emoji"])),
+            )
+        if attention_payload is not None:
+            self._deliver(
+                "buzz_message", attention_payload,
+                lambda: self.buzz.send(
+                    str(attention_payload["content"]), reply_to=target, mentions=mentions,
+                ),
+            )
+        return edit_id
+
+    def _set_status_reaction(self, target: str, content: str, project_id: int) -> None:
+        emoji = status_reaction(content)
+        if emoji is not None:
+            reaction = {"event_id": target, "emoji": emoji, "project_id": project_id}
+            self._deliver(
+                "buzz_reaction", reaction,
+                lambda: self.buzz.set_status_reaction(target, emoji),
+            )
+
+    def _reconcile_status_reaction(
+        self, events: list[dict[str, Any]], project_id: int, object_kind: str, iid: int,
+    ) -> None:
+        """Self-heal the card reaction after a crash between its first message and continuation."""
+
+        card = status_card_from_thread(events, self.publisher, project_id, object_kind, iid)
+        if card is None:
+            return
+        target, effective = card
+        content = str(effective.get("content") or "")
+        emoji = status_reaction(content)
+        if emoji is not None and not self.buzz.status_reaction_matches(target, emoji):
+            self._set_status_reaction(target, content, project_id)
+
     def _send_diff(self, diff: str, *, repo: str, commit: str, file_path: str, reply_to: str,
                    source_branch: str, target_branch: str, pr: int, project_id: int) -> str:
         payload = {
@@ -4103,23 +4811,28 @@ class Syncer:
         return branch_plaque_url(web_url, ref)
 
     def _bound_root(self, project_id: int, object_kind: str, iid: int, item: dict[str, Any],
-                    notes: list[dict[str, Any]], summary: dict[str, Any], dry_run: bool) -> tuple[str | None, bool]:
+                    notes: list[dict[str, Any]], summary: dict[str, Any], dry_run: bool,
+                    *, allow_backfill: bool = False) -> tuple[str | None, bool]:
         """Return (root, is_new). A None root with is_new=True means a new root must be created."""
 
         root = _object_data(parse_binding, notes, self.bot_user_id, project_id, object_kind, iid, self.channel)
         if root is not None:
             return root, False
-        if _object_data(is_backfill, item, self.config["since"], has_binding=False):
+        if not allow_backfill and _object_data(is_backfill, item, self.config["since"], has_binding=False):
             summary["skipped"]["backfill"] += 1
             return None, False
         created = _object_data(parse_timestamp, item.get("created_at"), "created_at")
         url = self._object_url(project_id, object_kind, iid)
         since_unix = int((created - ROOT_SEARCH_SKEW).timestamp())
         candidates = self.buzz.search_roots(url, object_kind, iid, since_unix)
-        if object_kind == "issue" and not candidates:
-            # A plaque an older run published from a work_items web_url carries that form on its URL line.
-            candidates = self.buzz.search_roots(
+        if object_kind == "issue":
+            # Both forms must be searched even when the canonical search found
+            # a root in another channel for this same project and Issue.
+            aliases = self.buzz.search_roots(
                 url.replace("/-/issues/", "/-/work_items/"), object_kind, iid, since_unix)
+            candidates.extend(
+                event for event in aliases if event.get("id") not in {item.get("id") for item in candidates}
+            )
         root = _object_data(select_root, candidates, self.publisher, self.channel, project_id, object_kind, iid, url)
         if root is None:
             return None, True
@@ -4203,6 +4916,13 @@ class Syncer:
             raise ObjectError(f"{object_kind} {iid}: bound root is not a readable Desk root for this object")
         if sum(1 for event in events if event.get("id") != root) >= THREAD_REPLY_LIMIT:
             raise ObjectError(f"{object_kind} {iid}: thread reached {THREAD_REPLY_LIMIT} replies; older history is unreadable")
+        compact_reader = getattr(self.buzz, "compact_edits", None)
+        if self.config.get("compact_status_updates") and callable(compact_reader):
+            known = {str(event.get("id")) for event in events}
+            events.extend(
+                event for event in compact_reader(events)
+                if str(event.get("id")) not in known
+            )
         return events
 
     def _sync_issue(self, project_id: int, issue: dict[str, Any], summary: dict[str, Any], dry_run: bool) -> None:
@@ -4232,17 +4952,23 @@ class Syncer:
                 if origin_roots:
                     self._write_binding(project_id, "issue", iid, origin_roots[0])
                     for dest in origin_roots:
-                        self._send_message(render_message(fact, "routing", first=True), reply_to=dest,
-                                           mentions=mentions if dest == origin_roots[0] else ())
+                        content = render_message(fact, "routing", first=True)
+                        event_id = self._send_message(
+                            content, reply_to=dest,
+                            mentions=mentions if dest == origin_roots[0] else (),
+                        )
+                        if self.config.get("compact_status_updates"):
+                            self._set_status_reaction(event_id, content, project_id)
                         self._link(summary, dest)
                     return
-                # Plaque root first (issue #78), binding before the first fact: a crash in
-                # either window reruns through recovery (search by URL) or the update path.
-                root = self._send_message(render_issue_plaque(fact, self._project_path(project_id)),
-                                          project_id=project_id)
+                # The first fact is also the root. Its header and URL recover the
+                # binding after a crash, while later facts and comments stay in
+                # this thread. Existing plaque roots remain readable.
+                content = render_message(fact, "routing", first=True)
+                root = self._send_message(content, mentions=mentions, project_id=project_id)
                 self._write_binding(project_id, "issue", iid, root)
-                self._send_message(render_message(fact, "routing", first=True), reply_to=root,
-                                   mentions=mentions)
+                if self.config.get("compact_status_updates"):
+                    self._set_status_reaction(root, content, project_id)
                 self._link(summary, root)
             return
         if root is None:
@@ -4252,13 +4978,16 @@ class Syncer:
             if extra not in destinations:
                 destinations.append(extra)
         author = (issue.get("author") or {}).get("username")
-        if not self._post_issue_to_roots(project_id, fact, notes, destinations, summary, dry_run,
-                                         author=author if isinstance(author, str) else ""):
+        if not self._post_issue_to_roots(
+            project_id, fact, notes, destinations, summary, dry_run,
+            author=author if isinstance(author, str) else "", changed_at=issue.get("updated_at"),
+        ):
             summary["unchanged"] += 1
 
     def _post_issue_to_roots(
         self, project_id: int, fact: dict[str, Any], notes: list[dict[str, Any]],
         destinations: list[str], summary: dict[str, Any], dry_run: bool, author: str = "",
+        changed_at: Any = None,
     ) -> bool:
         iid = fact["issue"]
         posted = False
@@ -4266,6 +4995,8 @@ class Syncer:
             # people are tagged in the bound (first) thread only, like the MR rules
             attend = dest == destinations[0] and not dry_run
             events = self._thread(dest, project_id, "issue", iid)
+            if self.config.get("compact_status_updates") and not dry_run:
+                self._reconcile_status_reaction(events, project_id, "issue", iid)
             previous = previous_fact_from_thread(events, self.publisher, project_id, iid)
             change = classify_change(previous, fact)
             if change is not None:
@@ -4274,15 +5005,21 @@ class Syncer:
                         [name for name in fact["assignees"] if name not in previous["assignees"]]
                         if previous is not None and attend and fact["state"] == "opened" else []
                     )
-                    self._send_message(
-                        render_message(
-                            fact, change, first=previous is None,
-                            state_changed=previous is not None and previous.get("state") != fact["state"],
-                        ),
-                        reply_to=dest,
-                        mentions=self._attention(
-                            project_id, attention_candidates("gitlab.assignees", added))[0],
+                    content = render_message(
+                        fact, change, first=previous is None,
+                        state_changed=previous is not None and previous.get("state") != fact["state"],
                     )
+                    mentions = self._attention(
+                        project_id, attention_candidates("gitlab.assignees", added))[0]
+                    if self.config.get("compact_status_updates") and previous is not None:
+                        self._edit_status(
+                            events, content, project_id=project_id, object_kind="issue", iid=iid,
+                            changed_at=changed_at, mentions=mentions,
+                        )
+                    else:
+                        event_id = self._send_message(content, reply_to=dest, mentions=mentions)
+                        if self.config.get("compact_status_updates"):
+                            self._set_status_reaction(event_id, content, project_id)
                 summary["updated" if change != "activity" else "activity"] += 1
                 self._link(summary, dest)
                 posted = True
@@ -4465,12 +5202,17 @@ class Syncer:
                     # a discussion thread takes one review assignment (ADR-0014); an Issue thread has no such rule
                     fired = not placed and self._thread_fired_reviewable(events)
                     fire = reviewable and not fired
-                    self._send_message(
-                        render_mr_message(fact, "lifecycle", unmapped if fire else [], links,
-                                          became_reviewable=fire, first=True),
+                    content = render_mr_message(
+                        fact, "lifecycle", unmapped if fire else [], links,
+                        became_reviewable=fire, first=True,
+                    )
+                    event_id = self._send_message(
+                        content,
                         reply_to=self._mr_chain_parent(events, primary, project_id, iid),
                         mentions=mentions if fire else (),
                     )
+                    if self.config.get("compact_status_updates"):
+                        self._set_status_reaction(event_id, content, project_id)
                 self._link(summary, primary)
                 self._post_diffs(project_id, project, mr, fact, primary,
                                  self._thread(primary, project_id, "mr", iid), summary, dry_run)
@@ -4493,12 +5235,17 @@ class Syncer:
                     # path, never a second root.
                     self._write_binding(project_id, "mr", iid, group_root)
                     if previous_mr_fact_from_thread(group_events, self.publisher, project_id, iid) is None:
-                        self._send_message(
-                            render_mr_message(fact, "lifecycle", unmapped if fire else [], links,
-                                              became_reviewable=fire, first=True),
+                        content = render_mr_message(
+                            fact, "lifecycle", unmapped if fire else [], links,
+                            became_reviewable=fire, first=True,
+                        )
+                        event_id = self._send_message(
+                            content,
                             reply_to=self._mr_chain_parent(group_events, group_root, project_id, iid),
                             mentions=mentions if fire else (),
                         )
+                        if self.config.get("compact_status_updates"):
+                            self._set_status_reaction(event_id, content, project_id)
                     self._link(summary, group_root)
                     self._post_diffs(project_id, project, mr, fact, group_root, group_events, summary, dry_run)
                     return
@@ -4510,18 +5257,24 @@ class Syncer:
             self._post_mr_xrefs(project_id, fact, root, related_roots, summary)
             self._write_binding(project_id, "mr", iid, root)
             self._register_mr_group_keys(project_id, fact, root, dry_run)
-            self._send_message(
-                render_mr_message(fact, "lifecycle", unmapped, links,
-                                  became_reviewable=reviewable, first=True),
+            content = render_mr_message(
+                fact, "lifecycle", unmapped, links, became_reviewable=reviewable, first=True,
+            )
+            event_id = self._send_message(
+                content,
                 reply_to=root,
                 mentions=mentions,
             )
+            if self.config.get("compact_status_updates"):
+                self._set_status_reaction(event_id, content, project_id)
             self._link(summary, root)
             self._post_diffs(project_id, project, mr, fact, root, [], summary, dry_run)
             return
         if root is None:
             return
         events = self._thread(root, project_id, "mr", iid)
+        if self.config.get("compact_status_updates") and not dry_run:
+            self._reconcile_status_reaction(events, project_id, "mr", iid)
         root_event = next((event for event in events if event.get("id") == root), None)
         # Only a Desk message is a plaque or a fact; the text of a person's root is never read as one (ADR-0014).
         desk_root = root_event is not None and root_event.get("pubkey") == self.publisher
@@ -4578,16 +5331,21 @@ class Syncer:
                     project_id, attention_candidates("gitlab.author", [fact["author"]], exclude=[actor]))
                 mentions = list(dict.fromkeys([*told, *mentions]))[:3]
             if not dry_run:
-                self._send_message(
-                    render_mr_message(
-                        fact, change, unmapped, became_reviewable=reviewable,
-                        first=previous is None,
-                        sha_changed=previous is not None
-                        and _short_sha(previous.get("sha")) != _short_sha(fact["sha"]),
-                    ),
-                    reply_to=reply_parent,
-                    mentions=mentions,
+                content = render_mr_message(
+                    fact, change, unmapped, became_reviewable=reviewable,
+                    first=previous is None,
+                    sha_changed=previous is not None
+                    and _short_sha(previous.get("sha")) != _short_sha(fact["sha"]),
                 )
+                if self.config.get("compact_status_updates") and previous is not None:
+                    self._edit_status(
+                        events, content, project_id=project_id, object_kind="mr", iid=iid,
+                        changed_at=mr.get("updated_at"), mentions=mentions,
+                    )
+                else:
+                    event_id = self._send_message(content, reply_to=reply_parent, mentions=mentions)
+                    if self.config.get("compact_status_updates"):
+                        self._set_status_reaction(event_id, content, project_id)
             summary["mr_updated"] += 1
             self._link(summary, root)
         self._post_diffs(project_id, project, mr, fact, root, events, summary, dry_run)
@@ -4784,13 +5542,22 @@ class Syncer:
             raise ObjectError(f"issue {issue_iid}: associated with an MR but excluded ({reason})")
         fact = _object_data(issue_fact, issue, project_id)
         notes = self.gitlab.notes(project_id, issue_iid)
-        root = _object_data(parse_binding, notes, self.bot_user_id, project_id, "issue", issue_iid, self.channel)
-        if root is not None or dry_run:
+        root, _is_new = self._bound_root(
+            project_id, "issue", issue_iid, issue, notes, summary, dry_run, allow_backfill=True,
+        )
+        if root is not None:
+            if self.config.get("compact_status_updates") and not dry_run:
+                self._reconcile_status_reaction(
+                    self._thread(root, project_id, "issue", issue_iid), project_id, "issue", issue_iid,
+                )
             return root
-        root = self._send_message(render_issue_plaque(fact, self._project_path(project_id)),
-                                  project_id=project_id)
+        if dry_run:
+            return root
+        content = render_message(fact, "routing", first=True)
+        root = self._send_message(content, project_id=project_id)
         self._write_binding(project_id, "issue", issue_iid, root)
-        self._send_message(render_message(fact, "routing", first=True), reply_to=root)
+        if self.config.get("compact_status_updates"):
+            self._set_status_reaction(root, content, project_id)
         summary["created"] += 1
         self._link(summary, root)
         return root
@@ -4799,7 +5566,10 @@ class Syncer:
         """Inside a merged Issue thread, an MR's next fact replies to its previous fact."""
 
         latest = _latest_publisher_message(events, self.publisher, project_id, "mr", mr_iid, skip_change=MR_XREF)
-        return latest[0]["id"] if latest is not None else root
+        if latest is None:
+            return root
+        event = latest[0]
+        return edit_target(event) or event["id"]
 
     def _post_diffs(self, project_id: int, project: dict[str, Any], mr: dict[str, Any], fact: dict[str, Any],
                     root: str, events: list[dict[str, Any]], summary: dict[str, Any], dry_run: bool) -> None:
@@ -4871,6 +5641,8 @@ class Syncer:
                 return
             self._write_binding(project_id, "mr", mr_iid, root)
         events = self._thread(root, project_id, "mr", mr_iid)
+        if self.config.get("compact_status_updates") and not dry_run:
+            self._reconcile_status_reaction(events, project_id, "mr", mr_iid)
         root_event = next((event for event in events if event.get("id") == root), None)
         desk_root = root_event is not None and root_event.get("pubkey") == self.publisher
         root_header = parse_header(root_event.get("content")) if desk_root else None
@@ -4878,7 +5650,12 @@ class Syncer:
         if root_header is not None and root_header["object"] == "issue":
             reply_parent = self._mr_chain_parent(events, root, project_id, mr_iid)
         posted = posted_keys(events, self.publisher)
-        fresh = [record for record in group if record["key"] not in posted]
+        fresh = sorted(
+            (record for record in group if record["key"] not in posted),
+            key=lambda record: (
+                parse_timestamp(record.get("created_at"), "MR activity created_at"), record["key"],
+            ),
+        )
         if not fresh:
             return
         fact = _object_data(mr_fact, mr, project_id)
@@ -4893,8 +5670,36 @@ class Syncer:
                         "gitlab.author", [fact["author"]], exclude=[record.get("actor")])
                 else:
                     candidates = self._pipeline_trigger(project_id, record)
-                self._send_message(render_mr_activity(fact, record, jobs), reply_to=reply_parent,
-                                   mentions=self._attention(project_id, candidates)[0])
+                content = render_mr_activity(fact, record, jobs)
+                mentions = self._attention(project_id, candidates)[0]
+                if self.config.get("compact_status_updates") and status_card_from_thread(
+                    events, self.publisher, project_id, "mr", mr_iid,
+                ) is not None:
+                    record_time = parse_timestamp(record.get("created_at"), "MR activity created_at")
+                    snapshot_time = parse_timestamp(mr.get("updated_at"), "merge request updated_at")
+                    sha_matches = (
+                        record.get("object") != "pipeline"
+                        or record.get("sha") == fact.get("sha")
+                    )
+                    current_headline = record_time >= snapshot_time and sha_matches
+                    lifecycle_allows_activity = fact["state"] == "opened" and fact["draft"] == "no"
+                    current_reaction = lifecycle_allows_activity and (
+                        (record.get("object") == "pipeline" and sha_matches)
+                        or (record.get("object") == "mr" and record_time >= snapshot_time)
+                    )
+                    self._edit_status(
+                        events, content, project_id=project_id, object_kind="mr", iid=mr_iid,
+                        changed_at=record.get("created_at"), mentions=mentions,
+                        preserve_current=not current_headline,
+                        reaction_content=content if current_reaction else None,
+                    )
+                    # The next record in this same GitLab group must see the overlay just published.
+                    events = self._thread(root, project_id, "mr", mr_iid)
+                else:
+                    event_id = self._send_message(content, reply_to=reply_parent, mentions=mentions)
+                    if self.config.get("compact_status_updates"):
+                        self._set_status_reaction(event_id, content, project_id)
+                        events = self._thread(root, project_id, "mr", mr_iid)
             summary["activity"] += 1
             self._link(summary, root)
 

@@ -77,7 +77,7 @@ bwrap --ro-bind / / --dev /dev --proc /proc --unshare-user true; echo $?   # 必
 
 - cwd 不是代码仓（普通 agent 工作目录）：项目级 `<cwd>/.claude/settings.json`。
 - cwd 本身是一个被 Git 跟踪的代码仓（如 cwd 是业务仓 checkout）：用**本地级** `<cwd>/.claude/settings.local.json`，并把它加进 `.git/info/exclude`，避免和仓内可能已有／已跟踪的 `.claude/settings.json` 冲突，也避免被提交。
-- 先确认启动器真正的 cwd：启动脚本可能把 cwd 换到子目录（本机 `run-agent.sh`：`AGENT_WORKDIR` 未设且 `$WORKDIR/<repo>/.git` 存在时，cwd 是该子目录），配置要放在**那个子目录**里，放在外层不会被读到。
+- 先确认启动器真正的 cwd：canonical `run-agent.py` 在 `AGENT_WORKDIR` 未设且默认 workdir 下的 `naturehood/.git` 存在时，会把 cwd 切到该子目录；配置要放在**那个子目录**里，放在外层不会被读到。
 
 下面以项目级为例：
 

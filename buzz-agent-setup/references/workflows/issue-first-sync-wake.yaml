@@ -8,7 +8,8 @@
 #   不需要限定就删掉那一行）、<channel-uuid>、<role-agent>。
 # 匹配串必须和 gitlab_buzz_sync.py 渲染的首条事实一致；tests/test_issue_first_sync_wake_template.py 用真实渲染回归它，
 #   并把整条过滤串当表达式求值（不只是检查字面量在不在）。
-# 「首次同步」锚在消息**第一行开头**（str_starts_with）：评论镜像消息以 💬 开头，评论正文里的任何文字都进不了消息开头，
+# 「📋 **已打开**」锚在消息**第一行开头**（str_starts_with）：后续状态变化用 🔄，评论镜像消息以 💬 开头，
+# 评论正文里的任何文字都进不了消息开头，
 #   所以评论不能伪造出首条事实。标签条件是整条消息的子串匹配（标题里写了同样的字也会命中），不是安全边界，
 #   Agent 处理前要回 GitLab 核对标签。
 # 已知限制（relay 0.2.1）：Workflow 的 send_message 是顶层消息，没有 reply_in_thread；所以唤醒文本和 Agent prompt 都要写明
@@ -22,7 +23,7 @@ trigger:
     trigger_author == "<desk-hex-pubkey>"
     && str_contains(trigger_text, "[object:issue][type:<type>][status:")
     && str_contains(trigger_text, "[state:opened][change:routing][project:<project-id>][issue:")
-    && str_starts_with(trigger_text, "📋 **首次同步")
+    && str_starts_with(trigger_text, "📋 **已打开**")
     && str_contains(trigger_text, "<required-label>")
 steps:
   - id: wake

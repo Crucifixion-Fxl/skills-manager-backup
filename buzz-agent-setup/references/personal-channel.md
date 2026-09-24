@@ -22,7 +22,7 @@
 
 如果本机已经有这个人的个人 agent 和私有个人 Channel（例如本机的 `jchen-ubuntu-192-168-20-24` 与 `jchen_personal`），直接复用，不必另建 `<name>-assistant` 与 `<name>-me`：
 
-- **Channel 仍要满足门禁**：private、只有 owner 一个真人、成员集合 ⊆ {owner、todo 发布者、`done_authors`}（见「安全与已知缺口」）。已有 Channel 里若还有别的 bot，先移出；把它加进 `done_authors` 等于承认它能确认待办完成，不要图省事。
+- **Channel 仍要满足门禁**：private、只有 owner 一个真人、成员集合 ⊆ {owner、todo 发布者、`done_authors`、必填的 `desk_pubkey`}（见「安全与已知缺口」）。本频道 Desk 必须是 bot，不能属于 `done_authors`，因此不能确认待办完成。已有 Channel 里若还有别的 bot，先移出；不要把它加进 `done_authors` 图省事。
 - **`done_authors` 里的助手公钥就是那个已有 agent 的公钥**，不必另铸身份。todo 发布者 `<name>-todo` 仍要单独铸，并且**不能**出现在 `done_authors` 里。
 - **prompt 是关键。** 这类 agent 的 prompt 往往只授权 owner 直接对话，外加若干写死的 Workflow 例外。todo 唤醒 Workflow 是新的发送者、新的消息形态，**必须作为新的写死例外加进它的 prompt**，否则会被当成未授权而拒绝：Workflow 唤醒了它，它也不会干活。例外要写明**三项必需**加**一项可选**：必需的是发送者公钥（relay Workflow service 的公钥，不是 todo 发布者的公钥，Workflow 的 @ 由 relay 签名）、内容的匹配规则（见下）、只在该个人 Channel 里生效；可选的是 tag，前提是 relay 的 `send_message` 能给唤醒消息带 tag。其余消息仍按它原有的规则处理。本仓模板目前没有给唤醒消息设置 tag：确认 relay 支持带 tag 之前，只靠必需的三项，不要在例外里要求 tag，否则 Workflow 的唤醒会被拒。
   - 内容的匹配规则是**模式匹配**，不是逐字精确匹配：[Workflow 模板](workflows/personal-todo-wake.yaml)的唤醒文本里含 `{{trigger.message_id}}`，每条待办都不一样，所以例外只能按「固定前缀＋固定句式」匹配（前缀是 `@<助手名> 有一条新的 GitLab 待办（消息 `，后接消息 ID 与模板里固定的句子），不能拿整段文字逐字比较。
@@ -33,7 +33,7 @@
 ```text
 GitLab（本人的 pending todo）
   └─ 每 600 秒：systemd --user timer → 白名单 launcher → gitlab_todo_sync.py（无 LLM）
-       ├─ 门禁：PAT 属于该用户；Channel 只有本人一个真人、发布者是 bot 成员、成员集合不超出 owner＋发布者＋done_authors
+       ├─ 门禁：PAT 属于该用户；Channel 只有本人一个真人、发布者及 Desk 是 bot 成员、成员集合不超出 owner＋发布者＋Desk＋done_authors
        ├─ 每条新 todo 一条消息，@ 本人；同一 Issue/MR 的后续 todo 回原 Thread
        ├─ 读到可信作者的完成信号（晚于该 todo 的投递时间）→ 才对本脚本投递过的 todo 调 mark_as_done；信号有两种并存：
        │    ① todo:done:<id>，必须是对该待办 Thread 的回复；② 对该待办消息本身点 ✅ reaction（表情取 todo.done_emojis，缺省 ✅）
@@ -95,7 +95,7 @@ https://gitlab.addx.ai/group/project/-/merge_requests/45
 - 写配置（从 [gitlab-todo-sync.example.json](scripts/gitlab-todo-sync.example.json) 复制填值：`done_authors` = 本人＋助手，**不含发布者**）、state 目录、launcher、unit、timer（[runbook](systemd/personal-todo-sync.md)）。
 - 写 `todo` 专用 env 的**非 secret 部分**（Buzz 私钥与 NIP-OA tag、配置路径），`GITLAB_TODO_TOKEN` 留给「三」里的 PAT 步骤（本人自己填，或用户明确授权后由 AI 按那一步的约束写入）。
 - **relay 地址**：`BUZZ_RELAY_URL` 写 relay origin，`https://` 与 `wss://` 都接受（`sync.validate_relay_url` 允许；`ws`／`http` 仅限回环地址），沿用本机 Agent 已在用的那个写法即可；文档与示例里写 `wss://` 只是举例。
-- **阶段 0 先核对成员，多余的 agent 先移出**：全公司共用、`respond_to=anyone` 的 agent（本机的 `skill-dev` 就是）会**自动订阅**每个它被加为 bot 成员的频道；它一进个人频道，就读得到所有待办（含 private 项目的标题），同步的成员集合门禁（成员 ⊆ {owner、发布者、`done_authors`}）会整轮失败关闭。先以 owner 身份跑 `"$BUZZ_CLI" channels members --channel <CH>` 核对，把多余的 agent 用 `"$BUZZ_CLI" channels remove-member --channel <CH> --pubkey <hex>` 移出。**不要为了放行把它加进 `done_authors`**：那会同时给它完成权限（能确认待办完成）。
+- **阶段 0 先核对成员，多余的 agent 先移出**：全公司共用、`respond_to=anyone` 的 agent（本机的 `skill-dev` 就是）会**自动订阅**每个它被加为 bot 成员的频道；它一进个人频道，就读得到所有待办（含 private 项目的标题），同步的成员集合门禁（成员 ⊆ {owner、发布者、`desk_pubkey`、`done_authors`}）会整轮失败关闭。先以 owner 身份跑 `"$BUZZ_CLI" channels members --channel <CH>` 核对，把多余的 agent 用 `"$BUZZ_CLI" channels remove-member --channel <CH> --pubkey <hex>` 移出。**不要为了放行把它加进 `done_authors`**：那会同时给它完成权限（能确认待办完成）。
 - 阶段 0：手动 `systemctl --user start` 一轮，核对 Channel 里只出现预期 todo、只 @ 本人，再 `enable --now`。
 
 ## 三、必须人来做
@@ -157,7 +157,7 @@ merge、approve、部署一律只提 ACT，不自行执行。
 ## 安全与已知缺口
 
 - **PAT 与 Rule 1／Rule 11 的例外**：本人的 `api` PAT 放在同 UID 的 0600 文件里，本机任何 Agent 理论上可读；读到就等于以本人身份读写 GitLab。ADR-0013 明示接受，补偿控制是 ≤ 30 天有效期、代码端点白名单、只对本脚本投递过的 todo 回写、单真人门禁。**助手的 prompt 必须禁止它读 todo env**，但这只是行为预算，不是隔离。
-- **受众门禁的成员集合**：每轮先要求 Channel 的真人成员恰好是 `owner_pubkey`、`publisher_pubkey` 是 bot 成员，并且**所有成员**是 {`owner_pubkey`, `publisher_pubkey`} ∪ `done_authors` 的子集（不要求全部在场）。多出来的 bot 也读得到你的待办，所以同样整轮失败关闭。
+- **受众门禁的成员集合**：每轮先要求 Channel 的真人成员恰好是 `owner_pubkey`、`publisher_pubkey` 是 bot 成员；必填的 `desk_pubkey` 必须是另一名 bot 成员且不在 `done_authors`。**所有成员**必须是 {`owner_pubkey`, `publisher_pubkey`} ∪ `done_authors` ∪ {`desk_pubkey`} 的子集。多出来的 bot 也读得到你的待办，所以同样整轮失败关闭。
 - **@ 洪泛是已知缺口**：GitLab 里任何能 @ 你、指派你或请你评审的人都能制造 todo。每轮最多投递 `max_per_run` 条、每小时约 6 轮，即每小时最多约 `max_per_run` × 6 条 @ 你的飞书卡片，**没有按作者限速**。建议 `actions` 不要用 `*`，用推荐的六项，并把 `max_per_run` 保持在默认或更小。pending 超过 3000 条时本轮只处理前 3000 条（输出 `truncated:true`）。
 - **`REJECTED` 需要人工处理**：只有**逐条被拒**（有后续成功可证明）才记 `REJECTED`——某一条被 Buzz 明确拒收（回复被拒则清掉 Thread 记录改发顶层，仍被拒），而**同一轮之后有一次发送成功**，证明频道本身接收发送，拒收只针对这一条（消息不合规等）。此时该条置为终态 `REJECTED`：不重试、不 prune、后面的待办照常发。**系统性拒收**（频道被归档、发布者权限变了……）不会记 `REJECTED`：连续 2 条被拒、或被拒后本轮再没有成功的发送，就整轮响亮失败（退出码 1，journal 里是 `Buzz rejected …`），被拒的待办保持未记录、下一轮重试，恢复后自动补发，不会静默丢掉。看到输出里 `rejected` 大于 0，去 journal 与 `state_dir/todo-state.json` 找原因；原因排除后手动删掉那条记录才会重发（做法同 runbook 的「重放」）。
 - **待真机验证：文字归一化。** 去活用的是不可归一化的连字符 U+2011，前提是 relay Workflow 与下游不会对文字做 NFKC 归一化（NFKC 会把 U+2011 折回 ASCII `-`）。这只是缓解，**尚未验证**；验收时用一条标题含 `gitlab-todo` 的待办核对唤醒 Workflow 没有被它触发。

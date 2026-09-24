@@ -104,12 +104,14 @@ class FakeRelay:
         self.sent: list[dict] = []
         self.left: list[tuple[str, str]] = []
         self.fail_send = False
+        self.fail_send_contains: str | None = None
         self.dms: set[str] = set()
         self.ignore_since = False  # a relay that over-returns: the script must filter by time itself
         self.leave_noop = False  # a leave the relay accepts but does not apply
         self.hidden_members: set[str] = set()  # channels a flaky members list forgets for a round
         self.broken_threads: set[str] = set()  # thread roots whose read fails (e.g. a deleted request)
         self.fail_dms = False
+        self.fail_members = False
 
     def channel(self, ch: str, name: str, members: dict[str, str], canvas: str | None = CANVAS) -> None:
         self.channels[ch] = {"name": name, "members": dict(members), "canvas": canvas, "events": []}
@@ -161,6 +163,8 @@ class FakeBuzz:
         return FakeBuzz(self.relay, self.me, ch)
 
     def member_channels(self) -> dict[str, str]:
+        if self.relay.fail_members:
+            raise sync.SyncError("member list contains sensitive peer detail")
         return {ch: c["name"] for ch, c in self.relay.channels.items()
                 if self.me in c["members"] and ch not in self.relay.hidden_members}
 
@@ -201,7 +205,7 @@ class FakeBuzz:
         return {key: self.relay.names[key] for key in pubkeys if key in self.relay.names}
 
     def send(self, content: str, reply_to: str | None = None, mentions=()) -> str:
-        if self.relay.fail_send:
+        if self.relay.fail_send or (self.relay.fail_send_contains and self.relay.fail_send_contains in content):
             raise sync.SyncError("relay down")
         tags = [["h", self.channel]]
         if reply_to:
@@ -431,6 +435,16 @@ class ConfigTest(JoinTestCase):
         os.chmod(path, 0o600)
         self.assertEqual(join.load_config(path)["owner_pubkey"], OWNER)
 
+    def test_persisted_failure_notices_are_validated_before_any_message_is_sent(self) -> None:
+        join.save_state(self.state_dir, {
+            "version": 1,
+            "agents": {AGENT: {"name": "nh-dev", "channels": {},
+                                "failure_notices": {NEW_CH: {"code": ["not-a-string"]}}}},
+        })
+
+        with self.assertRaisesRegex(sync.SyncError, "invalid record"):
+            join.load_state(self.state_dir)
+
 
 class AgentEnvTest(JoinTestCase):
     def test_reads_identity_allowlist_and_optional_paths(self) -> None:
@@ -578,22 +592,25 @@ class DiscoveryTest(JoinTestCase):
         self.assertEqual(self.relay.left, [(AGENT, NEW_CH)])
         self.assertEqual(self.env_channels(), [HOME_CH])
 
-    def test_no_invite_record_is_only_recorded_and_a_later_admin_invite_is_a_request(self) -> None:
+    def test_no_invite_record_explains_the_block_and_a_later_admin_invite_is_a_request(self) -> None:
         """Without the kind 9000 nobody knows who added the agent or how: posting and leaving could be wrong."""
         self.baseline()
         self.relay.channel(NEW_CH, "神秘群", {ADMIN: "owner", AGENT: "bot", OWNER: "member"})
         result = self.run_once()
         self.assertEqual(result["status"], "ok", result)
         self.assertEqual(self.record()["state"], "NO_INVITE")
-        self.assertEqual(self.relay.sent, [])
+        self.assertEqual(len(self.relay.sent), 1)
+        for needle in ("无法确认这次入群是谁发起的", "没有开通", "请频道管理员重新邀请"):
+            self.assertIn(needle, self.relay.sent[0]["content"])
         self.assertEqual(self.relay.left, [])
         self.run_once()
-        self.assertEqual(self.relay.sent, [])
+        self.assertEqual(len(self.relay.sent), 1, "the same unresolved membership is announced once")
         self.clock.sleep(60)
         self.relay.invite(NEW_CH, ADMIN, AGENT)
         self.run_once()
         self.assertEqual(self.record()["state"], "REQUESTED")
-        self.assertEqual(len(self.relay.sent), 1)
+        self.assertTrue(any(event["content"].splitlines()[-1] == join.join_header(self.record()["join_id"])
+                            for event in self.relay.sent))
 
     def test_an_invite_without_the_bot_role_does_not_count(self) -> None:
         self.baseline()
@@ -602,7 +619,8 @@ class DiscoveryTest(JoinTestCase):
         self.relay.invite(NEW_CH, ADMIN, AGENT, role=None)
         self.run_once()
         self.assertEqual(self.record()["state"], "NO_INVITE")
-        self.assertEqual(self.relay.sent, [])
+        self.assertEqual(len([event for event in self.relay.sent
+                              if "无法确认这次入群是谁发起的" in event["content"]]), 1)
 
     def test_a_direct_message_channel_is_never_touched(self) -> None:
         self.baseline()
@@ -991,11 +1009,13 @@ class ReviewFindingsTest(JoinTestCase):
         self.relay.channels[NEW_CH]["members"].pop(OWNER)
         self.relay.fail_send = False
         self.run_once()
-        self.assertEqual(self.relay.sent[0]["mentions"], [])
+        request = next(event for event in self.relay.sent
+                       if event["content"].splitlines()[-1] == join.join_header(self.record()["join_id"]))
+        self.assertEqual(request["mentions"], [])
         self.relay.channels[NEW_CH]["members"][OWNER] = "member"
         self.run_once()
-        self.assertEqual(len(self.relay.sent), 2)
-        self.assertEqual(self.relay.sent[1]["mentions"], [OWNER])
+        mentions = [event for event in self.relay.sent if event["mentions"] == [OWNER]]
+        self.assertEqual(len(mentions), 1)
 
     # tests that passed for the wrong reason
 
@@ -1092,9 +1112,10 @@ class ReviewFindingsTest(JoinTestCase):
         forged = self.relay.top(NEW_CH, MEMBER, f"假的申请\n{header}")
         self.relay.fail_send = False
         self.run_once()
-        self.assertEqual(len(self.relay.sent), 1)
+        requests = [event for event in self.relay.sent if event["content"].splitlines()[-1] == header]
+        self.assertEqual(len(requests), 1)
         self.assertNotEqual(self.record()["request_event"], forged["id"])
-        self.assertEqual(self.record()["request_event"], self.relay.sent[0]["id"])
+        self.assertEqual(self.record()["request_event"], requests[0]["id"])
 
     def test_a_leave_that_did_not_take_is_retried_without_a_second_notice(self) -> None:
         self.baseline()
@@ -1175,7 +1196,8 @@ class SecondReviewTest(JoinTestCase):
         self.relay.invite(NEW_CH, ADMIN, AGENT, role=None)
         self.run_once()
         self.assertEqual(self.record()["state"], "NO_INVITE")
-        self.assertEqual(self.relay.sent, [])
+        self.assertEqual(len([event for event in self.relay.sent
+                              if "无法确认这次入群是谁发起的" in event["content"]]), 1)
         self.assertEqual(self.env_channels(), [HOME_CH])
 
     def test_a_self_join_after_a_removal_is_not_explained_by_an_old_owner_invite(self) -> None:
@@ -1253,6 +1275,13 @@ class SecondReviewTest(JoinTestCase):
         result = self.run_once()
         self.assertEqual(result["status"], "error")
         self.assertEqual(self.state()["agents"][AGENT]["channels"], before["agents"][AGENT]["channels"])
+        self.assertEqual(self.relay.sent, [])
+
+        self.relay.hidden_members = set()
+        self.run_once()
+        notice = next(event for event in self.relay.sent if event["channel"] == HOME_CH)
+        self.assertIn("入群检查失败", notice["content"])
+        self.assertIn("下一轮自动重试", notice["content"])
 
     def test_one_unreadable_thread_does_not_stall_the_other_channels(self) -> None:
         self.baseline()
@@ -1270,13 +1299,124 @@ class SecondReviewTest(JoinTestCase):
         self.assertEqual(self.record(NEW_CH)["outcome"], "expired")
         self.assertEqual(self.record(NEW_CH)["state"], "LEFT")
 
-    def test_a_failing_dm_list_does_not_block_the_round(self) -> None:
+    def test_a_failing_dm_list_fails_closed_without_writing_to_a_private_dm(self) -> None:
         self.baseline()
+        self.relay.channel(NEW_CH, "private", {AGENT: "bot", MEMBER: "member"})
+        self.relay.dms.add(NEW_CH)
         self.relay.fail_dms = True
-        self.invite_by_admin()
         result = self.run_once()
+        self.assertEqual(result["status"], "error", result)
+        self.assertEqual(self.relay.sent, [])
+        self.assertNotIn(NEW_CH, self.state()["agents"][AGENT]["channels"])
+
+        self.relay.fail_dms = False
+        self.run_once()
+        self.assertFalse(any(event["channel"] == NEW_CH for event in self.relay.sent))
+        self.assertNotIn(NEW_CH, self.state()["agents"][AGENT]["channels"])
+
+    def test_a_dm_omitted_by_the_dm_api_is_not_treated_as_a_group(self) -> None:
+        self.baseline()
+        self.relay.channel(NEW_CH, "private", {AGENT: "member", MEMBER: "member"})
+        # Characterisation from live Buzz: dms list can be empty while channels list --member still contains the DM.
+        self.assertNotIn(NEW_CH, self.relay.dms)
+
+        result = self.run_once()
+
+        self.assertEqual(result["status"], "ok", result)
+        self.assertEqual(self.relay.sent, [])
+        self.assertNotIn(NEW_CH, self.state()["agents"][AGENT]["channels"])
+
+    def test_a_member_list_failure_is_announced_to_known_groups_and_retried(self) -> None:
+        self.baseline()
+        self.invite_by_admin()
+        self.run_once()
+        self.relay.sent.clear()
+        self.relay.fail_members = True
+
+        result = self.run_once()
+
+        self.assertEqual(result["status"], "error", result)
+        self.assertEqual(self.relay.sent, [], "without current role proof no persisted target is safe to write")
+
+        self.relay.fail_members = False
+        self.run_once()
+        notices = [event for event in self.relay.sent if "入群检查失败" in event["content"]]
+        self.assertEqual({event["channel"] for event in notices}, {HOME_CH, NEW_CH})
+        self.assertNotIn("sensitive peer detail", "\n".join(event["content"] for event in notices))
+
+    def test_a_member_list_failure_never_writes_to_a_dm_omitted_by_the_dm_api(self) -> None:
+        self.baseline()
+        self.relay.channel(NEW_CH, "private", {AGENT: "member", MEMBER: "member"})
+        # Simulate a persisted channel from an older run. Live Buzz can omit this DM from `dms list`, so the
+        # persisted UUID is not proof that it is safe to receive a group-management failure notice.
+        state = self.state()
+        state["agents"][AGENT]["channels"][NEW_CH] = join.new_record("BASELINE", "private", self.clock())
+        join.save_state(self.state_dir, state)
+        self.assertNotIn(NEW_CH, self.relay.dms)
+        self.relay.fail_members = True
+
+        result = self.run_once()
+
+        self.assertEqual(result["status"], "error", result)
+        self.assertEqual(self.relay.sent, [])
+        self.assertEqual(set(self.state()["agents"][AGENT]["failure_notices"]), {HOME_CH, NEW_CH})
+
+        self.relay.fail_members = False
+        self.run_once()
+        self.assertTrue(any(event["channel"] == HOME_CH and "入群检查失败" in event["content"]
+                            for event in self.relay.sent))
+        self.assertFalse(any(event["channel"] == NEW_CH for event in self.relay.sent))
+
+    def test_a_persisted_request_does_not_progress_after_the_channel_is_only_an_omitted_dm(self) -> None:
+        self.baseline()
+        self.requested()
+        self.relay.sent.clear()
+        self.relay.channels[NEW_CH]["members"] = {AGENT: "member", MEMBER: "member"}
+        self.assertNotIn(NEW_CH, self.relay.dms)
+        self.clock.sleep(self.config.get("request_ttl_seconds", join.DEFAULT_TTL_SECONDS) + 1)
+
+        result = self.run_once()
+
         self.assertEqual(result["status"], "ok", result)
         self.assertEqual(self.record()["state"], "REQUESTED")
+        self.assertEqual(self.relay.sent, [])
+        self.assertEqual(self.relay.left, [])
+
+    def test_an_unverified_persisted_channel_gets_no_restart_failure_notice(self) -> None:
+        self.baseline()
+        self.relay.channel(NEW_CH, "private", {AGENT: "member", MEMBER: "member"})
+        state = self.state()
+        record = join.new_record("APPLIED", "private", self.clock())
+        record.update(join_id="JOIN-PRIVATE000001", capability={"matched": [], "missing": []})
+        state["agents"][AGENT]["channels"][NEW_CH] = record
+        join.save_state(self.state_dir, state)
+        self.system.active = False
+        self.assertNotIn(NEW_CH, self.relay.dms)
+
+        result = self.run_once()
+
+        self.assertEqual(result["status"], "ok", result)
+        self.assertEqual(self.record()["state"], "APPLIED")
+        self.assertEqual(self.system.restarts, [])
+        self.assertEqual(self.relay.sent, [])
+
+    def test_an_unexpected_channel_bug_is_visible_without_leaking_the_exception(self) -> None:
+        self.baseline()
+        self.invite_by_admin()
+        real = FakeBuzz.membership_events
+
+        def broken(_fake, _since):
+            raise KeyError("secret internal value")
+
+        FakeBuzz.membership_events = broken
+        self.addCleanup(lambda: setattr(FakeBuzz, "membership_events", real))
+
+        result = self.run_once()
+
+        self.assertEqual(result["status"], "error", result)
+        notice = next(event for event in self.relay.sent if event["channel"] == NEW_CH)
+        self.assertIn("入群检查失败", notice["content"])
+        self.assertNotIn("secret internal value", notice["content"])
 
     # restarting
 
@@ -1289,6 +1429,9 @@ class SecondReviewTest(JoinTestCase):
         self.assertEqual(result["status"], "error")
         self.assertEqual(self.system.restarts, [])
         self.assertEqual(self.record()["state"], "APPLIED")
+        notice = next(event for event in self.relay.sent if "Agent 开通失败" in event["content"])
+        self.assertIn("服务没有正常运行", notice["content"])
+        self.assertIn("联系 Agent owner", notice["content"])
 
     def test_a_journal_logging_agent_is_verified_from_the_journal(self) -> None:
         self.config["agents"][0] = self.agent_config("nh-dev", self.env_file, None)
@@ -1480,7 +1623,8 @@ class VerificationRoundTest(JoinTestCase):
         self.relay.channels[NEW_CH]["members"][AGENT] = "bot"  # still listed: a stale members read
         self.run_once()
         self.assertEqual(self.record()["state"], "NO_INVITE")
-        self.assertEqual(self.relay.sent, [])
+        self.assertEqual(len([event for event in self.relay.sent
+                              if "无法确认这次入群是谁发起的" in event["content"]]), 1)
 
     def test_an_os_error_in_one_channel_is_isolated(self) -> None:
         self.baseline()
@@ -1499,6 +1643,84 @@ class VerificationRoundTest(JoinTestCase):
         self.assertEqual(result["status"], "error")
         self.assertIn(NEW_CH[:8], result["agents"]["nh-dev"]["error"])
         self.assertEqual(self.record(THIRD_CH)["state"], "REQUESTED")
+        notices = [event for event in self.relay.sent
+                   if event["channel"] == NEW_CH and "入群审批处理失败" in event["content"]]
+        self.assertEqual(len(notices), 1)
+        for needle in ("本轮没有完成开通", "下一轮自动重试", "联系 Agent owner"):
+            self.assertIn(needle, notices[0]["content"])
+        self.assertNotIn("env file", notices[0]["content"])
+
+        self.run_once()
+        notices = [event for event in self.relay.sent
+                   if event["channel"] == NEW_CH and "入群审批处理失败" in event["content"]]
+        self.assertEqual(len(notices), 1, "the same continuing failure is announced once")
+
+    def test_a_failure_notice_that_could_not_be_sent_is_retried(self) -> None:
+        self.baseline()
+        request = self.requested()
+        self.relay.react(NEW_CH, OWNER, request["id"], "✅")
+        real = join.add_channel_to_env
+
+        def refuse(*args, **kwargs):
+            raise PermissionError("secret path must not reach the channel")
+
+        join.add_channel_to_env = refuse
+        self.addCleanup(lambda: setattr(join, "add_channel_to_env", real))
+        self.relay.fail_send = True
+        self.assertEqual(self.run_once()["status"], "error")
+        self.assertFalse(any("入群审批处理失败" in event["content"] for event in self.relay.sent))
+
+        self.relay.fail_send = False
+        self.assertEqual(self.run_once()["status"], "error")
+        notices = [event for event in self.relay.sent if "入群审批处理失败" in event["content"]]
+        self.assertEqual(len(notices), 1)
+        self.assertNotIn("secret path", notices[0]["content"])
+
+    def test_a_new_occurrence_never_adopts_an_old_failure_message(self) -> None:
+        self.baseline()
+        request = self.requested()
+        self.relay.react(NEW_CH, OWNER, request["id"], "✅")
+        real = join.add_channel_to_env
+
+        def refuse(*args, **kwargs):
+            raise PermissionError("failure")
+
+        join.add_channel_to_env = refuse
+        self.addCleanup(lambda: setattr(join, "add_channel_to_env", real))
+        self.assertEqual(self.run_once()["status"], "error")
+        join.add_channel_to_env = real
+        self.assertEqual(self.run_once()["status"], "ok")
+        self.assertTrue(any("故障已恢复" in event["content"] for event in self.relay.sent))
+
+        # A second occurrence within the relay scan window is a distinct incident.
+        join.add_channel_to_env = refuse
+        state = self.state()
+        state["agents"][AGENT]["channels"][NEW_CH]["state"] = "APPROVED"
+        state["agents"][AGENT]["channels"][NEW_CH]["active_event"] = None
+        join.save_state(self.state_dir, state)
+        self.relay.fail_send = True
+        self.assertEqual(self.run_once()["status"], "error")
+        self.relay.fail_send = False
+        self.assertEqual(self.run_once()["status"], "error")
+        failures = [event for event in self.relay.sent if "入群审批处理失败" in event["content"]]
+        self.assertEqual(len(failures), 2)
+        self.assertNotEqual(failures[0]["content"].splitlines()[-1], failures[1]["content"].splitlines()[-1])
+
+    def test_a_failed_recovery_message_is_retried_after_the_channel_is_active(self) -> None:
+        self.system.subscribe = False
+        self.baseline()
+        self.approve()
+        self.assertEqual(self.run_once()["status"], "error")
+        self.system.write_log(self.log_file, f"INFO buzz_acp: subscribed to channel {NEW_CH}\n")
+        self.relay.fail_send_contains = "故障已恢复"
+        self.assertEqual(self.run_once()["status"], "ok")
+        self.assertEqual(self.record()["state"], "ACTIVE")
+
+        self.relay.fail_send_contains = None
+        self.run_once()
+
+        recoveries = [event for event in self.relay.sent if "故障已恢复" in event["content"]]
+        self.assertEqual(len(recoveries), 1)
 
     def test_an_unexpected_exception_in_one_agent_does_not_stop_the_next(self) -> None:
         second_env = self.write_env("bi-dev", SECOND_KEY, [HOME_CH])
@@ -1514,24 +1736,85 @@ class VerificationRoundTest(JoinTestCase):
         self.assertEqual(result["agents"]["bi-dev"]["error"], "bi-dev: KeyError")
         self.assertIsNone(result["agents"]["nh-dev"]["error"])
 
+    def test_an_invalid_agent_env_is_explained_in_its_known_group(self) -> None:
+        self.baseline()
+        text = self.env_file.read_text(encoding="utf-8")
+        self.env_file.write_text("\n".join(line for line in text.splitlines()
+                                            if not line.startswith("BUZZ_ACP_CHANNELS=")) + "\n",
+                                 encoding="utf-8")
+
+        result = self.run_once()
+
+        self.assertEqual(result["status"], "error", result)
+        notice = next(event for event in self.relay.sent if event["channel"] == HOME_CH)
+        self.assertIn("本机配置不可用", notice["content"])
+        self.assertIn("联系 Agent owner", notice["content"])
+        self.assertNotIn(str(self.env_file), notice["content"])
+
+    def test_a_factory_failure_is_reported_after_the_message_adapter_recovers(self) -> None:
+        self.baseline()
+
+        def broken(_agent):
+            raise KeyError("secret adapter detail")
+
+        first = join.run(self.config, state_dir=self.state_dir, make_buzz=broken, system=self.system,
+                         clock=self.clock, sleeper=self.clock.sleep)
+        self.assertEqual(first["status"], "error", first)
+        self.assertEqual(self.relay.sent, [])
+
+        second = self.run_once()
+
+        self.assertEqual(second["status"], "ok", second)
+        notice = next(event for event in self.relay.sent if event["channel"] == HOME_CH
+                      and "本机配置不可用" in event["content"])
+        self.assertNotIn("secret adapter detail", notice["content"])
+        self.assertTrue(any("故障已恢复" in event["content"] for event in self.relay.sent))
+
+    def test_an_empty_member_read_persists_the_bootstrap_notice_for_the_next_round(self) -> None:
+        self.baseline()
+        text = self.env_file.read_text(encoding="utf-8")
+        self.env_file.write_text("\n".join(line for line in text.splitlines()
+                                            if not line.startswith("BUZZ_ACP_CHANNELS=")) + "\n",
+                                 encoding="utf-8")
+        self.relay.hidden_members = {HOME_CH}
+
+        first = self.run_once()
+
+        self.assertEqual(first["status"], "error", first)
+        self.assertEqual(self.relay.sent, [])
+        self.assertTrue(self.state()["agents"][AGENT]["configuration_pending"])
+
+        self.env_file.write_text(text, encoding="utf-8")
+        self.relay.hidden_members = set()
+        second = self.run_once()
+
+        self.assertEqual(second["status"], "ok", second)
+        self.assertTrue(any("本机配置不可用" in event["content"] for event in self.relay.sent))
+        self.assertTrue(any("故障已恢复" in event["content"] for event in self.relay.sent))
+
     def test_a_failing_detection_is_isolated_to_its_channel(self) -> None:
         self.baseline()
         self.relay.channel(NEW_CH, "坏群", {ADMIN: "owner", OWNER: "member", AGENT: "bot"})
         self.relay.channels[NEW_CH]["canvas"] = None
         self.relay.invite(NEW_CH, ADMIN, AGENT)
         self.invite_by_admin(THIRD_CH, "好群")
-        real = FakeBuzz.channel_members
+        real = FakeBuzz.membership_events
 
-        def members(fake):
+        def members(fake, since):
             if fake.channel == NEW_CH:
                 raise sync.SyncError("members read failed")
-            return real(fake)
+            return real(fake, since)
 
-        FakeBuzz.channel_members = members
-        self.addCleanup(lambda: setattr(FakeBuzz, "channel_members", real))
+        FakeBuzz.membership_events = members
+        self.addCleanup(lambda: setattr(FakeBuzz, "membership_events", real))
         result = self.run_once()
         self.assertIn(NEW_CH[:8], result["agents"]["nh-dev"]["error"])
         self.assertEqual(self.record(THIRD_CH)["state"], "REQUESTED")
+        notice = next(event for event in self.relay.sent
+                      if event["channel"] == NEW_CH and "入群检查失败" in event["content"])
+        self.assertIn("没有开通", notice["content"])
+        self.assertIn("下一轮自动重试", notice["content"])
+        self.assertNotIn("members read failed", notice["content"])
 
     def test_a_restart_error_still_lets_earlier_restarts_be_verified(self) -> None:
         self.system.subscribe = False
@@ -1684,7 +1967,8 @@ class ForgedEventTest(JoinTestCase):
         self.relay.fail_send = False
         self.run_once()
         self.assertNotEqual(self.record()["request_event"], forged["id"])
-        self.assertEqual(len(self.relay.sent), 1)
+        requests = [event for event in self.relay.sent if event["content"].splitlines()[-1] == header]
+        self.assertEqual(len(requests), 1)
 
 
 class SignatureTest(unittest.TestCase):
@@ -1752,7 +2036,9 @@ class RecoveryTest(JoinTestCase):
         self.assertEqual(self.relay.sent, [])
         self.relay.fail_send = False
         self.run_once()
-        self.assertEqual(len(self.relay.sent), 1)
+        header = join.join_header(self.record()["join_id"])
+        requests = [event for event in self.relay.sent if event["content"].splitlines()[-1] == header]
+        self.assertEqual(len(requests), 1)
         self.assertEqual(self.record()["state"], "REQUESTED")
 
     def test_one_broken_agent_does_not_stop_the_others(self) -> None:

@@ -45,6 +45,11 @@ def test_env_updates_for_claude_profile():
         "BUZZ_ACP_EFFORT_LEVEL": "medium",
         "HARNESS_CLAUDE_WRAPPER": "/home/u/.local/bin/claude-buzz",
         "CODEX_HOME": None,
+        "CLAUDE_CODE_EXECUTABLE": "/home/u/.local/bin/claude-buzz",
+        "CLAUDE_CONFIG_DIR": "/home/u/.claude-buzz",
+        "BUZZ_ACP_MEDIA_ADAPTER_COMMAND": None,
+        "BUZZ_ACP_MEDIA_BUZZ_CLI": None,
+        "BUZZ_ACP_MEDIA_MODE": "stock_text_only",
     }
 
 
@@ -60,6 +65,7 @@ def test_env_updates_for_codex_sets_codex_home_and_removes_claude_wrapper():
     assert env["BUZZ_ACP_AGENT_COMMAND"] == "/home/u/.local/lib/buzz-agents/node_modules/.bin/codex-acp"
     assert env["CODEX_HOME"] == "/home/u/.codex-buzz"
     assert env["HARNESS_CLAUDE_WRAPPER"] is None
+    assert env["CLAUDE_CONFIG_DIR"] is None and env["CLAUDE_CODE_EXECUTABLE"] is None
     assert env["BUZZ_ACP_MODEL"] == "gpt-5.6-sol" and env["BUZZ_ACP_EFFORT_LEVEL"] == "medium"
 
 
@@ -120,7 +126,10 @@ def test_duplicate_ids_in_user_file_are_rejected(tmp_path):
 def test_identify_from_env_vars():
     ps = P.load_profiles(HOME)
     grok = by_id(ps)["grok"].env_updates()
-    assert P.identify({"BUZZ_ACP_AGENT_COMMAND": grok["BUZZ_ACP_AGENT_COMMAND"]}, ps) == "grok"
+    assert P.identify({
+        "BUZZ_ACP_AGENT_COMMAND": grok["BUZZ_ACP_AGENT_COMMAND"],
+        "BUZZ_ACP_MEDIA_MODE": "stock_text_only",
+    }, ps) == "grok"
 
 
 def test_identify_distinguishes_claude_accounts_by_wrapper(tmp_path):
@@ -142,6 +151,48 @@ def test_identify_codex_by_codex_home():
 def test_identify_unknown_returns_none():
     assert P.identify({"BUZZ_ACP_AGENT_COMMAND": "/opt/goose"}, P.load_profiles(HOME)) is None
     assert P.identify({}, P.load_profiles(HOME)) is None
+
+
+def test_media_proxy_profile_updates_and_identifies_the_full_runtime_tuple(tmp_path):
+    f = write_user(tmp_path, [{
+        "id": "codex-buzz",
+        "command": "~/.local/share/buzz-agent-setup/adapters/codex-acp",
+        "media_proxy": "~/.local/share/buzz-agent-setup/acp-media-proxy/abc/codex-acp",
+        "media_buzz_cli": "~/.local/opt/buzz-0.5.23/usr/bin/buzz",
+    }])
+    ps = P.load_profiles(HOME, user_file=f)
+    p = by_id(ps)["codex-buzz"]
+    env = p.env_updates()
+    assert p.command == "/home/u/.local/share/buzz-agent-setup/adapters/codex-acp"
+    assert env["BUZZ_ACP_AGENT_COMMAND"] == "/home/u/.local/share/buzz-agent-setup/acp-media-proxy/abc/codex-acp"
+    assert env["BUZZ_ACP_MEDIA_ADAPTER_COMMAND"] == p.command
+    assert env["BUZZ_ACP_MEDIA_BUZZ_CLI"] == "/home/u/.local/opt/buzz-0.5.23/usr/bin/buzz"
+    assert P.identify({k: v for k, v in env.items() if v is not None}, ps) == "codex-buzz"
+    assert P.identify({**env, "BUZZ_ACP_MEDIA_ADAPTER_COMMAND": "/wrong/codex-acp"}, ps) is None
+    assert P.identify({**env, "BUZZ_ACP_MEDIA_BUZZ_CLI": "/wrong/buzz"}, ps) is None
+    assert P.identify({**env, "BUZZ_ACP_MEDIA_MODE": "stock_text_only"}, ps) is None
+
+
+def test_direct_profile_rejects_conflicting_proxy_fields():
+    ps = P.load_profiles(HOME)
+    env = by_id(ps)["codex-buzz"].env_updates()
+    assert P.identify({k: v for k, v in env.items() if v is not None}, ps) == "codex-buzz"
+    missing_mode = {k: v for k, v in env.items() if v is not None and k != "BUZZ_ACP_MEDIA_MODE"}
+    assert P.identify(missing_mode, ps) is None
+    assert P.identify({**missing_mode, "BUZZ_ACP_MEDIA_MODE": ""}, ps) is None
+    assert P.identify({**env, "BUZZ_ACP_MEDIA_ADAPTER_COMMAND": "/proxy/codex-acp"}, ps) is None
+
+
+@pytest.mark.parametrize("override", [
+    {"media_proxy": "~/proxy/codex-acp"},
+    {"media_buzz_cli": "~/bin/buzz"},
+    {"media_proxy": "~/proxy/claude-agent-acp", "media_buzz_cli": "~/bin/buzz"},
+    {"command": "relative/codex-acp"},
+])
+def test_media_proxy_profile_rejects_incomplete_or_mismatched_paths(tmp_path, override):
+    profile = {"id": "codex-buzz", **override}
+    with pytest.raises(P.ProfileError):
+        P.load_profiles(HOME, user_file=write_user(tmp_path, [profile]))
 
 
 @pytest.mark.parametrize("field,value", [

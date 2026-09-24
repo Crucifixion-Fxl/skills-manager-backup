@@ -19,6 +19,7 @@ MODEL = SKILL_DIR / "references" / "fchac-model.md"
 ACT = SKILL_DIR / "references" / "act-authorization.md"
 ROUTING = SKILL_DIR / "references" / "issue-thread-routing.md"
 RUNTIME = SKILL_DIR / "references" / "runtime-setup.md"
+RUN_AGENT = SKILL_DIR / "references" / "scripts" / "run-agent.py"
 EXAMPLE = SKILL_DIR / "references" / "scripts" / "issue-thread-router.example.json"
 SYNC_REFERENCE = SKILL_DIR / "references" / "gitlab-buzz-sync.md"
 SYNC_EXAMPLE = SKILL_DIR / "references" / "scripts" / "gitlab-buzz-sync.example.json"
@@ -117,7 +118,7 @@ class FchacSkillContractTest(unittest.TestCase):
             "在**原 Thread** 回一条带 Issue 链接的消息",
             "根是人类消息",
             "省略 origin",
-            "门牌回链",
+            "Thread 回链",
             "gitlab-buzz-binding:v1",
             "--reply-to <root_event_id>",
             "链接不写进 GitLab 描述或评论",
@@ -1038,23 +1039,24 @@ class FchacSkillContractTest(unittest.TestCase):
         self.assertIn("evidence 默认保留", text)
 
     def test_runtime_really_changes_to_the_validated_repository(self) -> None:
-        text = RUNTIME.read_text(encoding="utf-8")
-        self.assertIn('WORKDIR_REAL="$(realpath -e -- "$WORKDIR")"', text)
-        self.assertIn('test -e "$WORKDIR_REAL/.git"', text)
-        self.assertIn('cd -- "$WORKDIR_REAL"', text)
-        self.assertIn("只设置 `PWD` 不会改变内核工作目录", text)
+        text = RUN_AGENT.read_text(encoding="utf-8")
+        self.assertIn("workdir = _trusted_path(raw_workdir, uid, directory=True)", text)
+        self.assertIn("if not workdir.is_relative_to(work_root):", text)
+        self.assertIn('if not (workdir / ".git").exists():', text)
+        self.assertIn("os.chdir(workdir)", text)
 
-    def test_runtime_validates_env_file_before_sourcing_it(self) -> None:
-        text = RUNTIME.read_text(encoding="utf-8")
+    def test_runtime_validates_and_literal_parses_env_without_sourcing_it(self) -> None:
+        text = RUN_AGENT.read_text(encoding="utf-8")
         for guard in (
-            'test ! -L "$ENVFILE"',
-            'ENVFILE_REAL="$(realpath -e -- "$ENVFILE")"',
-            'test -f "$ENVFILE_REAL"',
-            'stat -c %u -- "$ENVFILE_REAL"',
-            'stat -c %a -- "$ENVFILE_REAL")" = 600',
-            'source "$ENVFILE_REAL"',
+            "getattr(os, \"O_NOFOLLOW\", 0)",
+            "before.st_uid != uid",
+            "stat.S_IMODE(before.st_mode) != 0o600",
+            "before.st_dev != after.st_dev",
+            "values[key] = _literal(raw)",
+            "launch_env = dict(env)",
         ):
             self.assertIn(guard, text)
+        self.assertNotIn("source ", text)
 
     def test_desk_is_the_only_issue_routing_identity(self) -> None:
         paths = (

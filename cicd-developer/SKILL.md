@@ -1,6 +1,6 @@
 ---
 name: cicd-developer
-description: A4x GitOps deployment workflow skill. Use for (1) building, tracking, or executing an application deployment, CI, K8s/ArgoCD/Crossplane configuration; (2) querying previous deployed images, planning fast business rollback, or preparing rollback pin/release MRs; (3) managing Grafana Dashboard-as-Code sources or VictoriaMetrics scrape resources; (4) coordinating or receiving a deployment-related operations handoff, or diagnosing deployment-stack failures; or (5) read-only review/scan of existing k8s, ArgoCD Application/AppProject, or Crossplane manifests against A4x deployment rules.
+description: A4x GitOps deployment workflow skill. Use for (1) building, tracking, or executing an application deployment, CI, K8s/ArgoCD/Crossplane configuration; (2) querying previous deployed images, planning fast business rollback, or preparing rollback pin/release MRs; (3) managing Grafana Dashboard-as-Code sources or VictoriaMetrics scrape resources or registered application alert rules; (4) coordinating or receiving a deployment-related operations handoff, or diagnosing deployment-stack failures; or (5) read-only review/scan of existing k8s, ArgoCD Application/AppProject, or Crossplane manifests against A4x deployment rules.
 ---
 
 # cicd-developer
@@ -99,6 +99,13 @@ Ops Todo, then explicitly switch to Troubleshoot. Do not invent a third hybrid m
     overlay per release batch, preserves region-specific lists and credential references, and uses
     the repository's exact Kustomize and validation gates. It never creates a target, uploads a
     JAR, submits a job, changes a database, merges an MR, or mutates a live cluster.
+
+For application alerting rules, route to `workflows/manage-vmalert-rules.md`.
+This adds app-owned VMRules to the existing application overlay after Argo
+permissions, evaluator discovery and notification routing are verified. It does
+not require a standalone alert Application or central rule registration. It uses
+vmalert -> Alertmanager -> PagerDuty directly, without Grafana.
+It must not use the scrape or managed-service recording-rule workflow as a substitute.
 
 ## Validation and stop rules
 

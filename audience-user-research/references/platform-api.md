@@ -15,7 +15,7 @@ credential.
 | `personal_research_journey_list` | `GET /api/platform/v3/projects/{project_id}/research` | Page Project Research bindings with `limit`/`offset`; continue until `has_more=false` |
 | `personal_research_journey_create` | `POST /api/platform/v3/projects/{project_id}/research` | Create/replay one Research |
 | `personal_research_journey_status` | `GET /api/platform/v3/projects/{project_id}/research/{research_id}/journey` | Read exact bindings, requests and receipts |
-| `personal_research_journey_form` | `POST /api/platform/v3/projects/{project_id}/research/{research_id}/journey/form` | Create a Typeform, attach a same-Project Research form, or bind a pasted Typeform display URL. Returns `form_edit_url` for editing; `form_url` stays the private respondent page |
+| `personal_research_journey_form` | `POST /api/platform/v3/projects/{project_id}/research/{research_id}/journey/form` | Create a Typeform or attach a same-Project Research form; pasted Typeform display URLs are supported only for `materialized_audience`. Returns `form_edit_url` for editing; `form_url` stays the private respondent page |
 | `personal_research_journey_form_publish` | `POST /api/platform/v3/projects/{project_id}/research/{research_id}/journey/form/publish` | Publish the bound Typeform so respondents can open `form_url`. Idempotent. Does not send a campaign |
 | `personal_research_prepare_selection` | `POST /api/platform/v3/projects/{project_id}/research/{research_id}/selections` | Compile, preview and persist an immutable selection |
 | `personal_research_journey_operation` | `POST /api/platform/v3/projects/{project_id}/research/{research_id}/journey/operations` | Request `materialize` or `sync_brevo` |
@@ -33,10 +33,11 @@ The bundled OpenAPI is the field authority. Common write bodies are:
 - Research create: stable `idempotency_key` plus the selected `idea_id` when required by the deployed schema.
 - Form: stable `idempotency_key`, `revision`, and exact
   `source_materialization_run_id` where required. Send exactly one of provider-native
-  `body`, same-Project `source_research_id`, or a Typeform display `form_url`.
+  `body`, same-Project `source_research_id`, or (for `materialized_audience` only) a Typeform display `form_url`.
   Attach copies the source Typeform id. A pasted URL is
   proven with the platform Typeform account and must not be resolved by the
-  Agent calling Typeform. Campaign Draft still sends exactly one of `body` or
+  Agent calling Typeform. On `questionnaire_only`, account ownership is not Project ownership: use a new form
+  `body` or same-Project `source_research_id`, not a bare URL or materialization batch. Campaign Draft still sends exactly one of `body` or
   `source_research_id` and rejects `form_url`; campaign reuse recovers source
   copy then substitutes the current Research invitation
   URL (`form_url#uid=...&research_id=current&batch=current`). Never copy `campaign_id`,

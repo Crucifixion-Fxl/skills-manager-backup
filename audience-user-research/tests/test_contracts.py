@@ -238,6 +238,20 @@ class ContractTests(unittest.TestCase):
         self.assertIn("Campaign reuse leftover source URL", errors)
         self.assertIn("exactly one of", errors)
 
+    def test_questionnaire_only_guidance_keeps_native_voc_and_project_form_boundary(self) -> None:
+        skill = (ROOT / "SKILL.md").read_text(encoding="utf-8")
+        journey = (ROOT / "references/typeform-research.md").read_text(encoding="utf-8")
+        platform = (ROOT / "references/platform-api.md").read_text(encoding="utf-8")
+        prompt = (ROOT / "agents/openai.yaml").read_text(encoding="utf-8")
+        for content in (skill, journey, platform, prompt):
+            self.assertIn("questionnaire_only", content)
+            self.assertIn("source_research_id", content)
+        self.assertIn("native VOC", skill)
+        self.assertIn("`form_url` 只适用于 `materialized_audience`", skill)
+        self.assertIn("never bare", journey)
+        self.assertIn("not a bare URL", platform)
+        self.assertIn("without selection, materialization, Brevo or Campaign Draft", prompt)
+
     def test_idea_summary_includes_audience_coverage_and_idea_report(self) -> None:
         skill = (ROOT / "SKILL.md").read_text(encoding="utf-8")
         platform = (ROOT / "references/platform-api.md").read_text(encoding="utf-8")
@@ -547,11 +561,18 @@ class ContractTests(unittest.TestCase):
         owner = json.loads((ROOT / "contracts/semantic-owner.json").read_text())
         self.assertEqual(source["semantic_owner_file"], owner)
         self.assertEqual(owner["repository"], "lli/user-research-skill")
-        self.assertEqual(owner["revision"], "14dab06b962a792332da11a839e58ee209f60986")
+        self.assertEqual(owner["revision"], "9e69106486b81fadf834e38cc2f338678e3a0694")
+        self.assertEqual(
+            owner["pending_overlay"]["revision"],
+            "14dab06b962a792332da11a839e58ee209f60986",
+        )
+        self.assertEqual(owner["pending_overlay"]["merge_request"], "lli/user-research-skill!144")
+        self.assertEqual(owner["pending_overlay"]["status"], "open_unmerged")
         publication = (
             ROOT.parents[1] / "docs/04-user-stories/audience-user-research-publication.md"
         ).read_text(encoding="utf-8")
         self.assertIn(owner["revision"], publication)
+        self.assertIn(owner["pending_overlay"]["revision"], publication)
         self.assertNotIn("contracts/source.json", source["files"])
         self.assertFalse(any(".egg-info/" in relative for relative in source["files"]))
         self.assertIn("references/datahub-schema-search.md", source["files"])

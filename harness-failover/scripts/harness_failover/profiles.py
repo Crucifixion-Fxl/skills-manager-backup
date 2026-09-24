@@ -9,6 +9,7 @@ import json
 import os
 import re
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from . import asset_path
 
@@ -32,9 +33,14 @@ class Profile:
     provider: str | None = None  # e.g. "glm" — picks the error-signature family
     enabled: bool = True
     user_home: str = field(default="", compare=False)  # $HOME the paths were expanded against
+    command_override: str | None = None
+    media_proxy: str | None = None
+    media_buzz_cli: str | None = None
 
     @property
     def command(self) -> str:
+        if self.command_override:
+            return self.command_override
         agents = os.path.join(self.user_home, ".local/lib/buzz-agents/node_modules/.bin")
         return {
             "grok": os.path.join(self.user_home, ".config/buzz/agents/grok-buzz-acp.sh"),
@@ -42,15 +48,24 @@ class Profile:
             "codex": os.path.join(agents, "codex-acp"),
         }[self.harness]
 
+    @property
+    def launch_command(self) -> str:
+        return self.media_proxy or self.command
+
     def env_updates(self) -> dict[str, str | None]:
         """Variables to write into an agent env file. None = remove the variable."""
         return {
-            "BUZZ_ACP_AGENT_COMMAND": self.command,
+            "BUZZ_ACP_AGENT_COMMAND": self.launch_command,
             "BUZZ_ACP_AGENT_ARGS": "",
             "BUZZ_ACP_MODEL": self.model,
             "BUZZ_ACP_EFFORT_LEVEL": self.effort,
             "HARNESS_CLAUDE_WRAPPER": self.wrapper if self.harness == "claude" else None,
             "CODEX_HOME": self.home if self.harness == "codex" else None,
+            "CLAUDE_CODE_EXECUTABLE": self.wrapper if self.harness == "claude" else None,
+            "CLAUDE_CONFIG_DIR": self.home if self.harness == "claude" else None,
+            "BUZZ_ACP_MEDIA_ADAPTER_COMMAND": self.command if self.media_proxy else None,
+            "BUZZ_ACP_MEDIA_BUZZ_CLI": self.media_buzz_cli if self.media_proxy else None,
+            "BUZZ_ACP_MEDIA_MODE": None if self.media_proxy else "stock_text_only",
         }
 
 
@@ -76,7 +91,8 @@ def _text(raw: dict, key: str, required: bool = False):
 
 
 def _build(raw: dict, home: str) -> Profile:
-    for key in ("id", "harness", "model", "effort", "wrapper", "home", "provider"):
+    for key in ("id", "harness", "model", "effort", "wrapper", "home", "provider", "command",
+                "media_proxy", "media_buzz_cli"):
         _text(raw, key)
     pid = str(raw.get("id") or "").strip()
     if not pid:
@@ -87,11 +103,27 @@ def _build(raw: dict, home: str) -> Profile:
         raise ProfileError(f"{pid}: model is required")
     if raw.get("effort") not in EFFORTS:
         raise ProfileError(f"{pid}: effort must be one of {EFFORTS}")
+    command = _expand(raw.get("command"), home)
+    media_proxy = _expand(raw.get("media_proxy"), home)
+    media_buzz_cli = _expand(raw.get("media_buzz_cli"), home)
+    for key, value in (("command", command), ("media_proxy", media_proxy), ("media_buzz_cli", media_buzz_cli)):
+        if value is not None and not os.path.isabs(value):
+            raise ProfileError(f"{pid}: {key} must be an absolute path (or start with ~)")
+    if bool(media_proxy) != bool(media_buzz_cli):
+        raise ProfileError(f"{pid}: media_proxy and media_buzz_cli must be configured together")
+    default_command = command or {
+        "grok": os.path.join(home, ".config/buzz/agents/grok-buzz-acp.sh"),
+        "claude": os.path.join(home, ".local/lib/buzz-agents/node_modules/.bin/claude-agent-acp"),
+        "codex": os.path.join(home, ".local/lib/buzz-agents/node_modules/.bin/codex-acp"),
+    }[raw["harness"]]
+    if media_proxy and Path(media_proxy).name != Path(default_command).name:
+        raise ProfileError(f"{pid}: media_proxy basename must match the adapter command basename")
     return Profile(
         id=pid, harness=raw["harness"], model=raw["model"], effort=raw["effort"],
         priority=int(raw.get("priority", 100)), wrapper=_expand(raw.get("wrapper"), home),
         home=_expand(raw.get("home"), home), provider=raw.get("provider"),
-        enabled=bool(raw.get("enabled", True)), user_home=home,
+        enabled=bool(raw.get("enabled", True)), user_home=home, command_override=command,
+        media_proxy=media_proxy, media_buzz_cli=media_buzz_cli,
     )
 
 
@@ -118,9 +150,23 @@ def identify(env_vars: dict, profiles: list[Profile]) -> str | None:
     """Reverse lookup: which profile do an env file's harness variables describe?"""
     cmd = env_vars.get("BUZZ_ACP_AGENT_COMMAND")
     for p in profiles:
-        if cmd != p.command:
+        if cmd != p.launch_command:
+            continue
+        if p.media_proxy and (
+            env_vars.get("BUZZ_ACP_MEDIA_ADAPTER_COMMAND") != p.command
+            or env_vars.get("BUZZ_ACP_MEDIA_BUZZ_CLI") != p.media_buzz_cli
+            or env_vars.get("BUZZ_ACP_MEDIA_MODE") not in (None, "")
+        ):
+            continue
+        if not p.media_proxy and (
+            env_vars.get("BUZZ_ACP_MEDIA_ADAPTER_COMMAND") not in (None, "")
+            or env_vars.get("BUZZ_ACP_MEDIA_BUZZ_CLI") not in (None, "")
+            or env_vars.get("BUZZ_ACP_MEDIA_MODE") != "stock_text_only"
+        ):
             continue
         if p.harness == "claude" and env_vars.get("HARNESS_CLAUDE_WRAPPER") != p.wrapper:
+            continue
+        if p.harness == "claude" and env_vars.get("CLAUDE_CONFIG_DIR") not in (None, p.home):
             continue
         if p.harness == "codex" and env_vars.get("CODEX_HOME") != p.home:
             continue

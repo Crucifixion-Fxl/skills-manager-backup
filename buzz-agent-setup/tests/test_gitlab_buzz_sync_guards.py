@@ -5,6 +5,7 @@ import json
 import tempfile
 import unittest
 import urllib.request
+from unittest import mock
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -95,6 +96,9 @@ class CliPathGuardTest(unittest.TestCase):
 
 class RootSendReadbackTest(unittest.TestCase):
     def setUp(self):
+        verifier = mock.patch.object(SYNC, "verify_nostr_event_signature")
+        verifier.start()
+        self.addCleanup(verifier.stop)
         self.release = ReleaseDir()
         self.addCleanup(self.release.close)
         cli = self.release.binary()

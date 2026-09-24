@@ -150,6 +150,17 @@ class EventClassificationTest(unittest.TestCase):
 
 
 class RenderTest(unittest.TestCase):
+    def test_pipeline_id_follows_the_icon_before_the_event_phrase(self):
+        """L1-GIS-033A pipeline 标题先显示可定位的 ID，再说明发生了什么。"""
+        record = SYNC.record_from_pipeline(
+            pipeline(224905, "failed", ref="main"), PID, "main"
+        )
+
+        self.assertEqual(
+            SYNC.render_record(record).splitlines()[0],
+            "❌ **#224905 主分支流水线失败**",
+        )
+
     def test_render_instant_record(self):
         """L1-GIS-033 即时消息 header 与 events 行；@ 转义。"""
         record = SYNC._record(

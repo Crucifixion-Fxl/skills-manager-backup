@@ -433,6 +433,32 @@ class MrIssueMergeTest(unittest.TestCase):
         self.run_sync()
         self.assertEqual(self.roots("mr", 31), [], "rerun must not open a per-MR root")
 
+    def test_mr_created_issue_root_recovers_after_crash_before_issue_binding(self):
+        """An associated Issue outside the scan window keeps one root across a binding crash."""
+        self.gitlab.issue_list = [make_issue(182)]
+        self.gitlab.mr_list = [make_mr(iid=31)]
+        self.gitlab.closes = {31: [make_issue(182)]}
+        original_binding = SYNC.Syncer._write_binding
+
+        def crash_on_issue_binding(syncer, project_id, object_kind, iid, root):
+            if object_kind == "issue":
+                raise KeyboardInterrupt("simulated crash before Issue binding")
+            return original_binding(syncer, project_id, object_kind, iid, root)
+
+        with mock.patch.object(self.gitlab, "issues", return_value=[]):
+            with mock.patch.object(SYNC.Syncer, "_write_binding", crash_on_issue_binding):
+                with self.assertRaisesRegex(KeyboardInterrupt, "Issue binding"):
+                    self.run_sync()
+            roots_before = self.roots("issue", 182)
+            self.assertEqual(len(roots_before), 1)
+            self.assertEqual(self.gitlab.issue_note_list.get(182, []), [])
+            result = self.run_sync()
+
+        self.assertEqual(len(self.roots("issue", 182)), 1)
+        self.assertEqual(result["recovered"], 1)
+        self.assertEqual(len(self.gitlab.issue_note_list[182]), 1)
+        self.assertEqual(self.roots("mr", 31), [])
+
     def test_mr_comment_reaches_only_the_binding_thread_once(self):
         """L1-GIS-200（ADR-0015 改）an MR comment reaches the binding Issue thread only, and is not duplicated on rerun."""
         self.gitlab.issue_list = [make_issue(182), make_issue(183)]

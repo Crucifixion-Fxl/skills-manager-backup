@@ -23,7 +23,7 @@ Recipe 是可渲染的产物模板：workflow 提供 slot，recipe 决定输出�
 | `sentry/` | Sentry onboarding 资源 |
 | `db-migration/` | PreSync migration Job |
 | `grafana/` | Grafana Dashboard JSON source template |
-| `victoriametrics/` | 应用仓 VMServiceScrape / VMPodScrape template |
+| `victoriametrics/` | 应用仓 VMServiceScrape / VMPodScrape 与已注册业务 VMRule template |
 | `ci/` | GitLab CI 和 Dockerfile |
 | `docs/` | cd-requirements、summary 和 Ops Todo 输出 |
 

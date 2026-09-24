@@ -330,7 +330,7 @@ class RecordedTopLevelTest(unittest.TestCase):
         jobs = [job["name"] for job in body("pipeline_jobs_failed_mr")]
         self.assertEqual(jobs, ["test:unit"])
         rendered = SYNC.render_mr_activity(SYNC.mr_fact(body("merge_request_opened"), PID), record, jobs).split("\n")
-        self.assertTrue(rendered[0].startswith("❌ **流水线失败**"))
+        self.assertTrue(rendered[0].startswith(f"❌ **#{mr_pipeline['id']} 流水线失败**"))
         self.assertIn("jobs: test:unit", rendered)
         main = SYNC.record_from_pipeline(by_ref["main"], PID, PROJECT["default_branch"])
         self.assertEqual((main["placement"], main["event"]), ("instant", "failed"))

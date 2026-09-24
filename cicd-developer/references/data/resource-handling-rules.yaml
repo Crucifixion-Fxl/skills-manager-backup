@@ -69,6 +69,10 @@ crossplane_decision_tree:
 # 平台前置已就绪时，workflow 自动产出 / 声明
 # =============================================================================
 auto_handled:
+  - resource: 业务仓库 VM 告警规则
+    workflow: workflows/manage-vmalert-rules.md
+    recipes: [vm-alert-rule]
+    note: VMRule 放现有应用 overlay；核实 Argo 权限、VM 规则发现和通知路由，不创建独立 Application。
 
   - resource: RDS Instance
     via: Crossplane CR + A1 password chain + PushSecret → Vault + ExternalSecret

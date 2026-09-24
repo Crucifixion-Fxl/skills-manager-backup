@@ -116,9 +116,14 @@ class JoinRequestReferenceTest(unittest.TestCase):
             "<immutable-release>",
             "buzz-join:v1",
             "set-add-policy",
+            "原群",
+            "失败原因",
+            "恢复方法",
+            "无法确认邀请来源",
         ):
             with self.subTest(requirement=needle):
                 self.assertIn(needle, text)
+        self.assertNotIn("失败只进 user journal，频道保持安静", text)
 
     def test_reference_units_carry_no_secret(self) -> None:
         text = _read(JOIN_REFERENCE)

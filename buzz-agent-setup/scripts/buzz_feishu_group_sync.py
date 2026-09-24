@@ -12,10 +12,10 @@ checked at the start of every round:
 - Feishu -> Buzz is sent with the channel's mirror identity only (its 0600 env
   file, whose key must resolve to the configured mirror pubkey); the parent's
   Buzz key and tokens never reach a child process.
-- A human's Buzz message goes to Feishu through the owner's app bot, an agent's
-  message only through that agent's own verified lark-cli profile. Anyone else —
-  an agent without a bot, a removed member — is not delivered, never proxied by
-  the owner's bot. By default (config message_format "card") a message is a card:
+- A human's Buzz message goes to Feishu through the Channel's configured Desk bot;
+  a configured agent's message uses that agent's own verified bot. The Desk also
+  relays permitted context authors and remote agents. By default (config
+  message_format "card") a message is a card:
   the speaker as the title, markdown, a folded full text, a button back to Buzz;
   "text" is the plain message signed "<name>（Buzz）：". A card Feishu refuses for
   its content is said as text instead (never when the outcome is unknown: that
@@ -31,11 +31,11 @@ selected mention of one of the channel's bots becomes a real one, the same as a 
 never a person: typed @ and nostr:, and any mention of a human, are neutralised or dropped.
 
 Mentions: Feishu -> Buzz only honours selected mention entities that resolve to
-current channel members; Buzz -> Feishu turns p tags into <at> only when the
-owner's bot sends, because open_ids are per app. In a card a p tag is an <at
-email=…> when the address is known, else an <at id=ou_…> of the owner's app, else a
-plain @name; a union_id is refused by Feishu in a card, so it is never used there. Bodies and user-set names are
-neutralised so text alone can neither notify nor forge a signed line.
+current channel members; Buzz -> Feishu can mention a human by verified email
+in a Desk-sent card. The owner's open_ids cannot be used by the Desk because
+open_ids are per app. Unknown mention targets become plain @name; a union_id is
+refused by Feishu in a card, so it is never used there. Bodies and user-set
+names are neutralised so text alone can neither notify nor forge a signed line.
 
 People: who a Buzz key is in Feishu is read every round from the bridge's signed
 endpoint (infra/buzz-deploy ADR-0015), because bindings change. The owner's key
@@ -75,7 +75,7 @@ from collections import deque
 from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Collection, Mapping
+from typing import Any, Callable, Collection, Iterable, Mapping
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
@@ -95,15 +95,18 @@ CREATE_INTENT_SUFFIX = ".create-intent"  # next to the config while create-chat 
 MAX_BOTS_PER_CHAT = 15
 USERS_PER_REQUEST = 50
 BOTS_PER_REQUEST = 5
-MIRROR_KINDS = "9,45001,45003"
+EDIT_KIND = 40003
+MESSAGE_KINDS = "9,45001,45003"
+MIRROR_KINDS = MESSAGE_KINDS + ",40003"
 REACTION_KINDS = "7,5"  # a reaction and its withdrawal (NIP-09 deletion)
 REACTIONS_PER_ROUND = 50  # Feishu calls per round; the rest waits for the next one
 REMOVED = "removed"  # r2f: the Feishu reaction is gone (or was never made) and stays that way
+LEGACY_OWNER_REACTION = "owner"  # read-only marker: old reactions cannot be withdrawn through a new sender
 # What an agent's Buzz reaction becomes in Feishu. Every value is an emoji_type from lark-cli's list
 # (lark-im-reactions.md). Anything else is skipped and counted; config `reaction_map` extends or overrides.
 DEFAULT_REACTION_MAP: dict[str, str] = {
     "👀": "GLANCE", "💬": "Typing", "✅": "DONE", "👍": "THUMBSUP", "+": "THUMBSUP", "👌": "OK", "🙏": "THANKS",
-    "💪": "MUSCLE",
+    "💪": "MUSCLE", "❌": "CrossMark",  # ✅ / ❌ are also how an agent's join request is answered (ADR-0018 / ADR-0020)
 }
 # Images. Feishu takes at most 10 MB per image, in these formats; Buzz's relay refuses media that carries metadata, so only
 # the formats whose metadata this script can strip go the other way.
@@ -212,8 +215,9 @@ MAX_CARD_BYTES = 30 * 1024
 CARD_TRIM_BYTES = 28 * 1024
 CARD_SUMMARY_CHARS = 60
 CARD_NAME_CHARS = 60
-CARD_TITLE_COLUMNS = 36  # the title is the message's first line and must fit one line on a phone: a wide (CJK, emoji) character counts 2, any other 1 - about 18 Chinese characters; not measured on a device
+CARD_TITLE_COLUMNS = 72  # let the title wrap naturally to about two phone lines: a wide (CJK, emoji) character counts 2, any other 1 - about 36 Chinese characters
 CARD_NOTIFY_HEADER = "[gitlab-notify:v1]"  # a GitLab -> Buzz sync message's machine header (a whole line): it never reaches a card
+COMPACT_EDIT_REV_RE = re.compile(r"\[rev:([1-9][0-9]{0,8})\](?:\[route:skip\])?$")
 CARD_NOTIFIED_PREFIX = "🔔 通知 "  # the line naming who a sync message notified (gitlab_buzz_sync.NOTIFIED_PREFIX, ADR-0012): a card has its own @ line
 CARD_LEGACY_TITLE_RE = re.compile(r"title: (?=\S)(.*)")  # the second line of a legacy `key: value` sync message (header first): its title
 CARD_MENTIONS_MAX = 20
@@ -221,6 +225,9 @@ CARD_OPEN_PATH = "/bind/open"
 CARD_OPEN_TEXT = "在 Buzz 中打开"
 CARD_EXPAND = "展开全文（{n} 字）"
 CARD_TRUNCATED_NOTE = "（内容过长已截断，完整内容请在 Buzz 中打开）"
+CARD_STATUS_HISTORY_TITLE = "状态记录"
+CARD_STATUS_TRUNCATED_NOTE = "（记录过长，仅显示最近部分；完整内容请在 Buzz 中打开）"
+CARD_GITLAB_OPEN_TEXT = "在 GitLab 中打开"
 CARD_FENCE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
 CARD_CONTROL_RE = re.compile("[\x00-\x08\x0e-\x1b\x1f\x7f]")  # what is left once every line break became \n (tab stays)
 CARD_LINK_TEXT_OPEN_RE = re.compile(r"!?\[[^\[\]]*$")  # [text ...            (the link text is still open)
@@ -236,9 +243,9 @@ CARD_TITLE_EMPHASIS_RE = re.compile(r"(?<![\w*])([*_])(?=\S)(.+?)(?<=\S)\1(?![\w
 BUZZ_SCHEME_RE = re.compile(r"buzz://", re.IGNORECASE)
 
 CONFIG_KEYS = {"channel_id", "chat_id", "owner_open_id", "owner_app_id", "mirror_pubkey", "mirror_env_file",
-               "people_api", "remove_extras", "agents", "buzz_cli", "buzz_cli_sha256", "lark_cli"}
+               "people_api", "remove_extras", "agents", "buzz_cli", "buzz_cli_sha256", "lark_cli", "desk_pubkey"}
 OPTIONAL_CONFIG_KEYS = {"reaction_map", "identity", "message_format", "feishu_sender_allowlist", "feishu_unmapped_senders",
-                       "buzz_unmapped_senders", "buzz_unmanaged_agents"}
+                       "buzz_unmapped_senders", "buzz_unmanaged_agents", "membership_sync", "reaction_sync", "people_cache_file"}
 # Config feishu_sender_allowlist: only these Buzz pubkeys' Feishu messages are mirrored into Buzz (absent = everyone
 # who is mapped and in the channel, as before). At most this many distinct pubkeys.
 MAX_SENDER_ALLOWLIST = 50
@@ -264,13 +271,13 @@ BUZZ_CONTEXT_LABEL = "非成员"  # inserted into the existing "（Buzz）" / pl
 # Config buzz_unmanaged_agents: what to do with a channel agent this host has no configuration for at all. An agent
 # belongs to as many channels as its owner is pulled into, but each channel's group sync runs on a different person's
 # machine, and an agent's Feishu app credentials may only live with its own owner (SKILL.md Rule 11) — so any other
-# operator is permanently unable to speak as it. "skip" (the default) keeps today's behaviour: the message is dropped
-# (agent_bot_unavailable) and the group never sees that agent answer. "relay" mirrors it through the owner's app bot
-# like a human's, signed distinctly so nobody takes it for the agent's own bot (skills#143). This is only ever about
+# operator is permanently unable to speak as it. "relay" (the default since ADR-0019) mirrors it through the owner's app
+# bot like a human's, signed distinctly so nobody takes it for the agent's own bot (skills#143). "skip" keeps the old
+# behaviour: the message is dropped (agent_bot_unavailable) and the group never sees that agent answer. This is only ever about
 # an agent absent from `agents`: one that is configured but has no live bot this round is a transient, self-healing
 # state, and relaying it would make the same agent speak for itself one round and be quoted the next.
 BUZZ_UNMANAGED_AGENT_MODES = ("skip", "relay")
-DEFAULT_BUZZ_UNMANAGED_AGENTS = "skip"
+DEFAULT_BUZZ_UNMANAGED_AGENTS = "relay"
 BUZZ_AGENT_RELAY_LABEL = "助手"  # inserted the same way as BUZZ_CONTEXT_LABEL
 # How a channel's people are told apart from everyone else in the group. Feishu's open_id belongs to one app, so the
 # bridge's open_ids are useless here: union_id (the same for every app of the tenant) or the email are what is shared.
@@ -343,13 +350,13 @@ class ImageSkip(Exception):
 @dataclass(frozen=True)
 class Outbound:
     event_id: str
-    via_app_id: str | None  # None: the owner's app bot
+    via_app_id: str | None  # None: the configured Desk bot
     text: str
     parent_event_id: str | None
     card: str | None = None  # the card's JSON when the message is said as a card; `text` then stands ready as its fallback
     images: tuple[ImageRef | str, ...] = ()  # in imeta order; a str is a skip reason for that attachment
     images_over: int = 0  # attachments beyond IMAGES_PER_EVENT
-    relayed: bool = False  # an agent this host cannot speak as, said through the owner's bot (buzz_unmanaged_agents)
+    relayed: bool = False  # an agent this host cannot speak as, said through this Channel's Desk (buzz_unmanaged_agents)
 
 
 @dataclass(frozen=True)
@@ -382,6 +389,10 @@ class State:
     buzz_floor: int = 0  # set when the owner drops a Buzz backlog: nothing older is read again
     feishu_floor: int = 0  # the same for a Feishu backlog
     b2f: dict[str, str] = field(default_factory=dict)  # Buzz event id -> Feishu message id | pending:<t> | failed
+    b2f_modes: dict[str, str] = field(default_factory=dict)  # mirrored Buzz event id -> card | text
+    b2f_senders: dict[str, str] = field(default_factory=dict)  # app that first attempted this Buzz event; stable across retries/edits/images
+    e2f: dict[str, str] = field(default_factory=dict)  # Buzz edit id -> Feishu message id | pending:<t>:<target>|<message>|<mode> | failed
+    edit_unresolved: dict[str, int] = field(default_factory=dict)  # edit id while pending or retry -> created_at
     f2b: dict[str, str] = field(default_factory=dict)  # Feishu message id -> Buzz event id | pending:<t> | failed
     attempts: dict[str, int] = field(default_factory=dict)  # refused sends per id
     threads: dict[str, int] = field(default_factory=dict)  # Feishu root message id -> last activity
@@ -395,6 +406,31 @@ class State:
     emailmap: dict[str, str] = field(default_factory=dict)  # email mode: sha256(app id, email) -> open_id | miss:<time>
     images: dict[str, str] = field(default_factory=dict)  # "<Buzz event id>:<n>" -> Feishu message id | pending:<t>:<parent> | retry:<t>:<parent> | failed | unknown | skipped
     img_unresolved: dict[str, int] = field(default_factory=dict)  # the same keys while pending or retry -> the event's created_at
+    # Two-way members (ADR-0020). A Feishu key is "u:<union_id>" (union mode), "o:<owner app id>:<open_id>" (email mode) or
+    # "b:<app id>" (a bot).
+    members_synced: int = 0  # when the two-way snapshots were first taken; 0: never, and the next round only records them
+    feishu_seen: dict[str, str] = field(default_factory=dict)  # the group's members at the round's end: Feishu key -> "" (a set)
+    buzz_seen: dict[str, str] = field(default_factory=dict)  # channel member pubkey -> its Feishu key ("" unknown), at the round's end
+    member_notes: dict[str, int] = field(default_factory=dict)  # "<what>:<who>" -> when: a group notice given, or a refusal remembered
+    # pending 9000/9001 operation -> the exact signed NIP-01 event; retries reuse its id, signature and body
+    member_events: dict[str, dict[str, Any]] = field(default_factory=dict)
+    member_event_stream: str = ""  # random persistent producer id; survives a legitimate signer rotation
+    member_event_seq: int = 0  # persisted high-water mark; orders this stream's operations inside one relay clock window
+    member_event_blocks: dict[str, str] = field(default_factory=dict)  # pending operation -> persistent retry stop reason
+    member_notice_event: str = ""  # canonical Buzz kind 9; later membership-status rounds edit this event
+    member_notice_feishu: str = ""  # direct-Feishu fallback, later attached to member_notice_event in b2f
+    member_notice_sender: str = ""  # sender app of the direct fallback; empty in old state means owner app
+    member_notice_content: str = ""  # latest text, retained until a fallback can be backfilled to Buzz
+    member_notice_active: bool = False  # last status was a failure; the first healthy round publishes recovery
+    people_seen: dict[str, str] = field(default_factory=dict)  # Feishu user key -> "<pubkey>|<last seen>": this channel's members, past and present
+    # One introduction per binding and agent. Existing agents are recorded as "baseline" on the first round after upgrade;
+    # a new join is pending/retried with one stable Feishu idempotency key, then stores the message id.
+    agent_intros_initialized: bool = False
+    agent_intros: dict[str, str] = field(default_factory=dict)  # agent pubkey -> baseline | pending/retry marker | message id | terminal
+    agent_intro_senders: dict[str, str] = field(default_factory=dict)  # app that first attempted a proxied introduction
+    # Two-way reactions (ADR-0020).
+    rwatch: dict[str, str] = field(default_factory=dict)  # Feishu message id -> "<Buzz event id>|<watched until>"
+    f2r: dict[str, str] = field(default_factory=dict)  # "<message>|<operator>|<emoji_type>" -> the mirror's kind 7 id | pending:<t> | failed | skipped
 
 
 # ---------------------------------------------------------------- files
@@ -465,9 +501,13 @@ def _signer_pubkey(secret_key_hex: str) -> str:
     return sync.nk.pubkey_xonly(bytes.fromhex(secret_key_hex)).hex()
 
 
-def nip98_header(secret_key_hex: str, method: str, url: str, now: datetime, aux: bytes | None = None) -> str:
+def nip98_header(secret_key_hex: str, method: str, url: str, now: datetime, aux: bytes | None = None,
+                 body: bytes | None = None) -> str:
     """The Authorization header of one request: "Nostr " + padded base64 of a kind 27235 event that names this
-    URL and method. `aux` is BIP-340's nonce randomness (fresh random bytes unless a test pins it)."""
+    URL and method. `aux` is BIP-340's nonce randomness (fresh random bytes unless a test pins it). With a `body`
+    (a POST to the relay) the event also names it (`payload`, its sha256, which the relay checks) and carries a
+    random `nonce`, so two identical requests in the same second are two events and the relay's replay check lets
+    both through; without one the tags are exactly u and method, all the bridge's strict verifier accepts."""
     if not isinstance(secret_key_hex, str) or not HEX64_RE.fullmatch(secret_key_hex):
         raise GroupSyncError("the signing key is not 64 lower-case hex digits")
     try:
@@ -477,8 +517,10 @@ def nip98_header(secret_key_hex: str, method: str, url: str, now: datetime, aux:
         raise GroupSyncError("the signing key is not a valid secp256k1 key") from None
     created = int(now.timestamp())
     tags = [["u", url], ["method", method.upper()]]
-    body = json.dumps([0, pubkey, created, NIP98_KIND, tags, ""], separators=(",", ":"), ensure_ascii=False)
-    event_id = hashlib.sha256(body.encode()).hexdigest()
+    if body is not None:
+        tags += [["payload", hashlib.sha256(body).hexdigest()], ["nonce", secrets.token_hex(16)]]
+    serial = json.dumps([0, pubkey, created, NIP98_KIND, tags, ""], separators=(",", ":"), ensure_ascii=False)
+    event_id = hashlib.sha256(serial.encode()).hexdigest()
     sig = sync.nk.schnorr_sign(bytes.fromhex(event_id), secret, secrets.token_bytes(32) if aux is None else aux).hex()
     event = {"id": event_id, "pubkey": pubkey, "created_at": created, "kind": NIP98_KIND, "tags": tags, "content": "",
              "sig": sig}
@@ -529,9 +571,9 @@ def buzz_unmapped_sender_mode(cfg: Mapping[str, Any]) -> str:
 
 
 def buzz_unmanaged_agent_mode(cfg: Mapping[str, Any]) -> str:
-    """What to do with a channel agent this host has no configuration for: "skip" (the default, and what an absent key
-    means) drops it (agent_bot_unavailable, as before); "relay" mirrors it through the owner's app bot (see
-    route_buzz_event)."""
+    """What to do with a channel agent this host has no configuration for: "relay" (the default, and what an absent key
+    means, ADR-0019) mirrors it through the owner's app bot (see route_buzz_event); "skip" drops it
+    (agent_bot_unavailable, the old default)."""
     return cfg.get("buzz_unmanaged_agents", DEFAULT_BUZZ_UNMANAGED_AGENTS)
 
 
@@ -622,12 +664,13 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
-def _http_get(url: str, headers: Mapping[str, str], timeout: float) -> tuple[int, bytes]:
-    """One GET: (status, body) for any HTTP answer, 3xx included and not followed. A transport failure is an
-    OSError; a body over the cap or a URL that is not http(s) is a GroupSyncError. No proxy is used."""
+def _http_get(url: str, headers: Mapping[str, str], timeout: float, body: bytes | None = None) -> tuple[int, bytes]:
+    """One GET (a POST of `body` when there is one): (status, body) for any HTTP answer, 3xx included and not
+    followed. A transport failure is an OSError; an answer over the cap or a URL that is not http(s) is a
+    GroupSyncError. No proxy is used."""
     if urllib.parse.urlsplit(url).scheme not in ("http", "https"):
         raise GroupSyncError("the people API address must be http(s)")
-    request = urllib.request.Request(url, headers=dict(headers), method="GET")
+    request = urllib.request.Request(url, data=body, headers=dict(headers), method="GET" if body is None else "POST")
     try:
         try:
             with urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect).open(request, timeout=timeout) as response:
@@ -655,13 +698,18 @@ def load_signer_key(path: Path) -> str:
             value = rest.strip()
             if len(value) >= 2 and value[0] == value[-1] and value[0] in "'\"":
                 value = value[1:-1]
+    return secret_hex(value, "signer env file")
+
+
+def secret_hex(value: str, what: str) -> str:
+    """A BUZZ_PRIVATE_KEY value (hex or nsec) as 64 lower-case hex digits; no error quotes it."""
     if value.startswith("nsec1"):
         try:
             value = sync.nk.bech32_decode(value, "nsec").hex()
         except Exception:  # a malformed nsec: whatever the decoder raised, do not echo the key
-            raise GroupSyncError("the signer env file's BUZZ_PRIVATE_KEY is not a valid nsec") from None
+            raise GroupSyncError(f"the {what}'s BUZZ_PRIVATE_KEY is not a valid nsec") from None
     if not HEX64_RE.fullmatch(value):
-        raise GroupSyncError("the signer env file has no BUZZ_PRIVATE_KEY as hex or nsec")
+        raise GroupSyncError(f"the {what} has no BUZZ_PRIVATE_KEY as hex or nsec")
     return value
 
 
@@ -694,6 +742,559 @@ def fetch_people(cfg: Mapping[str, Any], roles: Mapping[str, str], http: Any, no
         raise GroupSyncError("the people API answer has no emails: the bridge has not turned on "
                              "CHANNEL_PEOPLE_EMAILS_ENABLED (or use identity union_id)")
     return answer
+
+
+# ---------------------------------------------------------------- the agent directory (ADR-0019)
+
+
+# An agent's owner publishes its Feishu app id in the agent's kind:30177 ("feishu": {"app_id": ...}): world-readable on
+# the relay and signed by the owner. Every round in which the channel has bot members this host has no configuration for,
+# their profiles and policies are read with one signed POST /query, so the operator can pull their bots into the group and
+# turn a mention of one into a real one both ways. The checks are deliberately light (the PO's call, ADR-0019): the policy
+# must be signed by the owner the agent's latest profile declares (the rule Buzz Desktop applies), and a claim that is
+# malformed, contested or on an app this host already uses is dropped. A failed lookup only costs the directory this round.
+KIND_MANAGED_AGENT = 30177
+DIRECTORY_TIMEOUT = 15.0
+
+
+@dataclass(frozen=True)
+class AgentIntroduction:
+    """The deliberately public subset used in a group introduction.
+
+    `description` is the agent-signed kind:0 `about`; `respond_to` is the owner-signed kind:30177 policy. Internal prompts,
+    instructions and local configuration are not represented, so callers cannot accidentally publish them.
+    """
+    name: str
+    description: str
+    respond_to: str
+
+
+@dataclass(frozen=True)
+class DirectoryAnswer:
+    apps: dict[str, str]  # agent pubkey -> its Feishu app id
+    conflicts: int = 0  # app ids claimed by two agents, or colliding with one this host configures: used by nobody
+    # Identities whose owner declares them another host's Feishu mirror ("feishu": {"mirror": true}, ADR-0020): not agents at
+    # all — what they say is a Feishu group's words said once already, never relayed again.
+    mirrors: frozenset[str] = frozenset()
+    introductions: dict[str, AgentIntroduction] = field(default_factory=dict, compare=False)
+
+
+def relay_query_url(relay_url: str) -> str:
+    """The relay's POST /query, from the mirror env's BUZZ_RELAY_URL (the address the Buzz CLI uses for the same call)."""
+    base = str(relay_url or "").rstrip("/")
+    parts = urllib.parse.urlsplit(base)
+    if parts.scheme not in ("http", "https") or not parts.netloc:
+        raise GroupSyncError("BUZZ_RELAY_URL must be an http(s) address")
+    return f"{base}/query"
+
+
+def directory_filters(agents: Collection[str]) -> list[dict[str, Any]]:
+    ordered = sorted(set(agents))
+    return [{"kinds": [0], "authors": ordered}, {"kinds": [KIND_MANAGED_AGENT], "#d": ordered}]
+
+
+def _newest(candidate: Mapping[str, Any], current: Mapping[str, Any] | None) -> bool:
+    """NIP-01 replaceable order: the later created_at wins, a tie goes to the lowest id."""
+    if current is None:
+        return True
+    if candidate["created_at"] != current["created_at"]:
+        return candidate["created_at"] > current["created_at"]
+    return candidate["id"] < current["id"]
+
+
+def _event_shape_ok(event: Any) -> bool:
+    return (isinstance(event, dict) and isinstance(event.get("id"), str) and isinstance(event.get("pubkey"), str)
+            and isinstance(event.get("created_at"), int) and not isinstance(event.get("created_at"), bool)
+            and isinstance(event.get("tags"), list) and isinstance(event.get("content"), str))
+
+
+def _nip01_event_verified(event: Any) -> bool:
+    """True only for a complete NIP-01 event whose canonical id and BIP-340 signature both verify.
+
+    A relay normally checks these before storing an event, but its HTTP response is still untrusted input.  In particular,
+    kind:30177 decides which Feishu application is invited into a group, so transport success must not become an implicit
+    signature bypass.
+    """
+    if (not _event_shape_ok(event) or not isinstance(event.get("kind"), int) or isinstance(event.get("kind"), bool)
+            or not HEX64_RE.fullmatch(event["id"]) or not HEX64_RE.fullmatch(event["pubkey"])
+            or not isinstance(event.get("sig"), str) or re.fullmatch(r"[0-9a-f]{128}", event["sig"]) is None):
+        return False
+    try:
+        serial = json.dumps([0, event["pubkey"], event["created_at"], event["kind"], event["tags"], event["content"]],
+                            separators=(",", ":"), ensure_ascii=False)
+        event_id = hashlib.sha256(serial.encode()).hexdigest()
+        return secrets.compare_digest(event_id, event["id"]) and sync.nk.schnorr_verify(
+            bytes.fromhex(event["id"]), bytes.fromhex(event["pubkey"]), bytes.fromhex(event["sig"]))
+    except (TypeError, ValueError, OverflowError):
+        return False
+
+
+def _first_tag(event: Mapping[str, Any], name: str) -> list[Any] | None:
+    return next((t for t in event["tags"] if isinstance(t, list) and len(t) >= 2 and t[0] == name), None)
+
+
+def _feishu_block(content: str) -> dict[str, Any]:
+    try:
+        body = json.loads(content)
+    except ValueError:
+        return {}
+    feishu = body.get("feishu") if isinstance(body, dict) else None
+    return feishu if isinstance(feishu, dict) else {}
+
+
+def _claimed_app_id(content: str) -> str | None:
+    app_id = _feishu_block(content).get("app_id")
+    return app_id if isinstance(app_id, str) and APP_ID_RE.fullmatch(app_id) else None
+
+
+def declares_mirror(content: str) -> bool:
+    """The policy's owner says this identity is a Feishu group sync's mirror (ADR-0020): exactly `"mirror": true`."""
+    return _feishu_block(content).get("mirror") is True
+
+
+INTRO_NAME_MAX = 80
+INTRO_DESCRIPTION_MAX = 1200
+RESPOND_TO_MODES = frozenset({"anyone", "allowlist", "owner-only", "nobody"})
+
+
+def _public_intro_text(value: Any, limit: int) -> str:
+    """A short public profile field suitable for a chat message; control characters cannot shape the message."""
+    if not isinstance(value, str):
+        return ""
+    cleaned = "".join(ch for ch in value if ch in "\n\t" or ord(ch) >= 32).strip()
+    if len(cleaned) <= limit:
+        return cleaned
+    return cleaned[: max(limit - 1, 0)].rstrip() + "…"
+
+
+def _intro_from_events(profile_event: Mapping[str, Any], policy_event: Mapping[str, Any]) -> AgentIntroduction:
+    try:
+        profile = json.loads(profile_event["content"])
+    except (KeyError, TypeError, ValueError):
+        profile = {}
+    try:
+        policy = json.loads(policy_event["content"])
+    except (KeyError, TypeError, ValueError):
+        policy = {}
+    profile = profile if isinstance(profile, dict) else {}
+    policy = policy if isinstance(policy, dict) else {}
+    name = _public_intro_text(profile.get("display_name") or profile.get("name") or policy.get("name"), INTRO_NAME_MAX)
+    description = _public_intro_text(profile.get("about"), INTRO_DESCRIPTION_MAX)
+    mode = policy.get("respond_to")
+    return AgentIntroduction(name=name or "Agent", description=description,
+                             respond_to=mode if isinstance(mode, str) and mode in RESPOND_TO_MODES else "")
+
+
+def render_agent_introduction(intro: AgentIntroduction, *, relayed: bool = False) -> str:
+    """Render public metadata in user language. Never accepts an instruction/prompt field."""
+    if intro.respond_to == "anyone":
+        reach = "我可以回应群里的任何成员。在群里 @我并说明要做什么即可。"
+    elif intro.respond_to == "allowlist":
+        reach = ("我目前只回应已授权成员。其他人 @我时会收到未响应的原因；如需使用，请联系 Agent 所有者申请授权，"
+                 "或请已授权成员代为发起。")
+    elif intro.respond_to == "owner-only":
+        reach = ("我目前只回应我的所有者。其他人 @我时会收到未响应的原因；如需使用，请联系 Agent 所有者申请授权。")
+    elif intro.respond_to == "nobody":
+        reach = "我目前不接受群内 @，只执行已配置的自动任务。如需调整，请联系 Agent 所有者。"
+    else:
+        reach = "我的响应范围暂时无法确认。如需使用，请先联系 Agent 所有者。"
+    prefix = "以下自我介绍由群助手根据 Agent 的公开资料代发：\n" if relayed else ""
+    description = f"\n{intro.description}" if intro.description else ""
+    return f"{prefix}大家好，我是 {intro.name}。{description}\n回应方式：{reach}"
+
+
+def owner_signed_policies(events: Iterable[Any], agents: Collection[str]) -> tuple[dict[str, str], dict[str, Mapping[str, Any]]]:
+    """({identity: owner}, {identity: its latest kind:30177}) for `agents`: the owner is the one the identity's latest profile
+    declares (NIP-OA auth tag), and only a policy that owner signed counts — the rule Buzz Desktop applies. Malformed events are
+    skipped, never fatal."""
+    wanted = set(agents)
+    profiles: dict[str, Mapping[str, Any]] = {}
+    policies: list[Mapping[str, Any]] = []
+    for event in events:
+        if not _event_shape_ok(event):
+            continue
+        if event.get("kind") == 0 and event["pubkey"] in wanted and _newest(event, profiles.get(event["pubkey"])):
+            profiles[event["pubkey"]] = event
+        elif event.get("kind") == KIND_MANAGED_AGENT:
+            policies.append(event)
+    owners = {}
+    for agent, prof in profiles.items():
+        auth = _first_tag(prof, "auth")
+        if auth is not None and isinstance(auth[1], str) and HEX64_RE.fullmatch(auth[1]):
+            owners[agent] = auth[1]
+    latest: dict[str, Mapping[str, Any]] = {}
+    for event in policies:
+        d = _first_tag(event, "d")
+        agent = d[1] if d is not None else None
+        if agent in owners and event["pubkey"] == owners[agent] and _newest(event, latest.get(agent)):
+            latest[agent] = event
+    return owners, latest
+
+
+def parse_trusted_mirrors(events: Iterable[Any], candidates: Collection[str], roles: Mapping[str, str]) -> set[str]:
+    """The `candidates` whose word about a Feishu person counts in this channel (ADR-0020): a bot member here, its owner-signed
+    policy declares it a mirror, and that owner is an owner or admin of the channel (the one whose host runs the sync)."""
+    owners, latest = owner_signed_policies(events, candidates)
+    return {mirror for mirror, event in latest.items()
+            if roles.get(mirror) == "bot" and declares_mirror(event["content"]) and roles.get(owners[mirror]) in ("owner", "admin")}
+
+
+def parse_agent_directory(events: Iterable[Any], agents: Collection[str], reserved: Collection[str]) -> DirectoryAnswer:
+    """{agent: app id} for the `agents` whose owner published one, and which of them are declared mirrors instead (never
+    agents, whatever else their policy says). Malformed events are skipped, not fatal."""
+    events = list(events)
+    _, latest = owner_signed_policies(events, agents)
+    profiles: dict[str, Mapping[str, Any]] = {}
+    wanted = set(agents)
+    for event in events:
+        if (_event_shape_ok(event) and event.get("kind") == 0 and event["pubkey"] in wanted
+                and _newest(event, profiles.get(event["pubkey"]))):
+            profiles[event["pubkey"]] = event
+    mirrors = frozenset(agent for agent, event in latest.items() if declares_mirror(event["content"]))
+    claims = {agent: app for agent, event in latest.items()
+              if agent not in mirrors and (app := _claimed_app_id(event["content"]))}
+    counts: dict[str, int] = {}
+    for app in claims.values():
+        counts[app] = counts.get(app, 0) + 1
+    bad = {app for app, n in counts.items() if n > 1 or app in reserved}
+    introductions = {agent: _intro_from_events(profiles[agent], event) for agent, event in latest.items()
+                     if agent not in mirrors and agent in profiles}
+    return DirectoryAnswer(apps={agent: app for agent, app in claims.items() if app not in bad}, conflicts=len(bad),
+                           mirrors=mirrors, introductions=introductions)
+
+
+def fetch_agent_directory(cfg: Mapping[str, Any], relay_url: str, agents: Collection[str], reserved: Collection[str],
+                          http: Any, now: datetime) -> DirectoryAnswer:
+    """One signed POST /query (the people API's signer key: a member of the relay, never handed to a child) for the
+    profiles and policies of `agents`; with more than PROFILE_QUERY_BATCH of them the profiles are read a few at a time (an
+    answer must stay under the transport's cap). Any failure is a GroupSyncError that says nothing about the answer."""
+    if len(set(agents)) <= PROFILE_QUERY_BATCH:
+        return parse_agent_directory(_relay_query(cfg, relay_url, directory_filters(agents), http, now), agents, reserved)
+    policies = _relay_query(cfg, relay_url, [{"kinds": [KIND_MANAGED_AGENT], "#d": sorted(set(agents))}], http, now)
+    return parse_agent_directory([*policies, *_profiles(cfg, relay_url, agents, http, now)], agents, reserved)
+
+
+# ---------------------------------------------------------------- two-way membership and reactions (ADR-0020)
+
+
+# Config membership_sync: "two_way" (the default) compares the channel's members, the group's members and what both were at the
+# end of the last round, and carries a change on either side to the other; "buzz_to_feishu" is the old one-way reconcile.
+MEMBERSHIP_SYNC_MODES = ("two_way", "buzz_to_feishu")
+DEFAULT_MEMBERSHIP_SYNC = "two_way"
+# Config reaction_sync: "two_way" (the default) also carries people's reactions both ways; "agents_only" is the old behaviour
+# (only an agent's Buzz reaction, from its own bot).
+REACTION_SYNC_MODES = ("two_way", "agents_only")
+DEFAULT_REACTION_SYNC = "two_way"
+# Who a reaction or an approval the mirror carries into Buzz really came from: the Feishu person's Buzz pubkey. Only a
+# message's reactions and approvals carry it: `buzz messages send` cannot add a tag to a message.
+FEISHU_AUTHOR_TAG = "feishu-author"
+FEISHU_SYNC_STATUS_TAG = "feishu-sync-status"
+RELAY_WRITE_TIMEOUT = 15.0
+# What relay-v0.2.1 answers when the added agent's channel_add_policy does not allow the adder (side_effects.rs).
+POLICY_REFUSALS = ("policy:owner_only", "policy:nobody")
+PEOPLE_KEEP = 5000  # people_seen: Feishu user key -> pubkey, the most recently seen kept
+PEOPLE_CACHE_TTL = 30 * 86400  # a person another channel has not seen for this long drops out of the shared cache
+PEOPLE_CACHE_MAX = 20000
+MEMBER_NOTE_TTL = 30 * 86400
+PROFILE_QUERY_BATCH = 5  # authors per kind 0 query: some profiles carry a ~190 KB inline avatar, an answer must stay < 1 MiB
+REACTION_WATCH_SECONDS = 24 * 3600  # a message's Feishu reactions are read this long after it has a copy on both sides
+JOIN_REQUEST_WATCH_SECONDS = 7 * 86400  # an agent's join request (ADR-0018) for as long as it can be answered
+REACTION_WATCH_MAX = 200
+REACTION_QUERY_BATCH = 20  # messages per `im reactions batch_query`
+REACTION_PAGES_MAX = 3  # extra pages read for a message with more than 10 reactions; beyond that it is not judged this round
+RELAY_CLOCK_SKEW_SECONDS = 900  # the relay takes a client created_at this far from its clock, no further
+MEMBER_EVENTS_MAX = 256  # unknown outcomes are never evicted; reaching this cap applies fail-closed backpressure
+MEMBER_EVENT_NONCE_TAG = "feishu-member-op"  # distinct logical operations in the same second must have distinct event ids
+MEMBER_EVENT_STREAM_TAG = "feishu-member-stream"  # stable random producer id, independent of the current signer
+MEMBER_EVENT_SEQUENCE_TAG = "feishu-member-seq"  # monotonic per stream, so random event ids are never used as order
+MEMBER_EVENT_SEQUENCE_MAX = (1 << 63) - 1
+MEMBER_EVENT_BLOCK_REASONS = frozenset({"retry_refused"})
+JOIN_HEADER_RE = re.compile(r"^buzz-join:v1 JOIN-[0-9a-f]{8}\b", re.MULTILINE)
+APPROVAL_COMMAND_RE = re.compile(r"/(approve|deny) (JOIN-[0-9a-f]{8})")
+
+
+class RelayRefused(GroupSyncError):
+    """The relay said no to an event: nothing was stored. `reason` is what it said (it can name a policy)."""
+
+    def __init__(self, reason: str):
+        super().__init__("the relay refused the event")
+        self.reason = str(reason or "")[:300]
+
+
+class MemberEventBlocked(GroupSyncError):
+    """A pending member write cannot be retried without risking a second side effect."""
+
+    def __init__(self, reason: str):
+        super().__init__("a member event retry was blocked")
+        self.reason = reason
+
+
+def membership_sync_mode(cfg: Mapping[str, Any]) -> str:
+    return cfg.get("membership_sync", DEFAULT_MEMBERSHIP_SYNC)
+
+
+def reaction_sync_mode(cfg: Mapping[str, Any]) -> str:
+    return cfg.get("reaction_sync", DEFAULT_REACTION_SYNC)
+
+
+def refused_by_policy(exc: Exception) -> bool:
+    """The added agent does not let this adder put it into a channel (its channel_add_policy): asking again changes nothing."""
+    return isinstance(exc, RelayRefused) and exc.reason.startswith(POLICY_REFUSALS)
+
+
+def relay_events_url(relay_url: str) -> str:
+    return relay_query_url(relay_url)[: -len("/query")] + "/events"
+
+
+def sign_event(secret_key_hex: str, kind: int, tags: list[list[str]], content: str, created_at: int) -> dict[str, Any]:
+    """A NIP-01 event signed in this process (the key never reaches a child)."""
+    pubkey = _signer_pubkey(secret_key_hex)
+    serial = json.dumps([0, pubkey, created_at, kind, tags, content], separators=(",", ":"), ensure_ascii=False)
+    event_id = hashlib.sha256(serial.encode()).hexdigest()
+    sig = sync.nk.schnorr_sign(bytes.fromhex(event_id), bytes.fromhex(secret_key_hex), secrets.token_bytes(32)).hex()
+    return {"id": event_id, "pubkey": pubkey, "created_at": created_at, "kind": kind, "tags": tags, "content": content,
+            "sig": sig}
+
+
+def publish_signed_event(relay_url: str, secret_key_hex: str, event: Mapping[str, Any], http: Any,
+                         now: datetime, *, auth_tag: str | None = None) -> str:
+    """POST an already signed event with a NIP-98 request from that same identity."""
+    if not _nip01_event_verified(event) or event["pubkey"] != _signer_pubkey(secret_key_hex):
+        raise GroupSyncError("the signed event does not belong to the request signer")
+    url = relay_events_url(relay_url)
+    body = json.dumps(event, separators=(",", ":"), ensure_ascii=False).encode()
+    headers = {"Authorization": nip98_header(secret_key_hex, "POST", url, now, body=body), "Content-Type": "application/json",
+               "Accept": "application/json"}
+    if auth_tag:
+        headers["x-auth-tag"] = auth_tag
+    try:
+        status, answer = http(url, headers, RELAY_WRITE_TIMEOUT, body=body)
+    except (OSError, GroupSyncError):
+        raise GroupSyncError("the relay could not be reached to publish an event") from None
+    try:
+        doc = json.loads(answer)
+    except ValueError:
+        doc = None
+    if status == 200 and isinstance(doc, dict):
+        if doc.get("accepted") is True and doc.get("event_id") == event["id"]:
+            return event["id"]
+        if doc.get("accepted") is False:
+            raise RelayRefused(str(doc.get("message") or ""))
+    if 400 <= status < 500 and isinstance(doc, dict) and isinstance(doc.get("error"), str):
+        raise RelayRefused(doc["error"])
+    raise GroupSyncError(f"the relay answered an event with HTTP {status}")
+
+
+def publish_event(relay_url: str, secret_key_hex: str, kind: int, tags: list[list[str]], content: str, http: Any,
+                  now: datetime, *, auth_tag: str | None = None, created_at: int | None = None) -> str:
+    """Sign one event and POST it to the relay's /events (the call `buzz` makes), the request signed (NIP-98) with the same key.
+    An agent identity (the mirror) also sends its NIP-OA auth tag, or the relay does not take it for a member. Returns the event
+    id once the relay accepted it (or already had this very event: "duplicate:"); RelayRefused when it said no; any other
+    GroupSyncError is an unknown outcome. Callers that must retry the byte-for-byte event use `publish_signed_event`."""
+    event = sign_event(secret_key_hex, kind, tags, content, int(now.timestamp()) if created_at is None else created_at)
+    return publish_signed_event(relay_url, secret_key_hex, event, http, now, auth_tag=auth_tag)
+
+
+def _relay_query(cfg: Mapping[str, Any], relay_url: str, filters: list[dict[str, Any]], http: Any, now: datetime) -> list[Any]:
+    """One signed POST /query with the people API's signer key (a member of the relay, never handed to a child)."""
+    key = load_signer_key(Path(cfg["people_api"]["signer_env_file"]))
+    url = relay_query_url(relay_url)
+    body = json.dumps(filters, separators=(",", ":")).encode()
+    headers = {"Authorization": nip98_header(key, "POST", url, now, body=body), "Content-Type": "application/json",
+               "Accept": "application/json"}
+    try:
+        status, answer = http(url, headers, DIRECTORY_TIMEOUT, body=body)
+    except (OSError, GroupSyncError):
+        raise GroupSyncError("the relay could not be asked for the agent directory") from None
+    if status != 200:
+        raise GroupSyncError(f"the relay answered the agent directory query with HTTP {status}")
+    try:
+        events = json.loads(answer)
+    except ValueError:
+        raise GroupSyncError("the relay's agent directory answer is not JSON") from None
+    if not isinstance(events, list):
+        raise GroupSyncError("the relay's agent directory answer is not a list of events")
+    return [event for event in events if _nip01_event_verified(event)]
+
+
+def _profiles(cfg: Mapping[str, Any], relay_url: str, authors: Collection[str], http: Any, now: datetime) -> list[Any]:
+    """The kind 0 of `authors`, a few per query: a profile can carry an inline avatar of ~190 KB (seen live), and one answer
+    must stay under the transport's cap."""
+    events: list[Any] = []
+    for group in batches(sorted(set(authors)), PROFILE_QUERY_BATCH):
+        events += _relay_query(cfg, relay_url, [{"kinds": [0], "authors": group}], http, now)
+    return events
+
+
+def fetch_agent_index(cfg: Mapping[str, Any], relay_url: str, reserved: Collection[str], http: Any, now: datetime, *,
+                      wanted: Collection[str]) -> dict[str, str]:
+    """{Feishu app id: agent pubkey} for the `wanted` app ids that an agent's owner published: every kind:30177 on the relay
+    (small), then only the profiles of the agents whose policy claims one of them, checked the same way as the directory
+    (ADR-0019). Read only in a round in which a bot nobody here knows has joined the group."""
+    wanted = set(wanted)
+    policies = [e for e in _relay_query(cfg, relay_url, [{"kinds": [KIND_MANAGED_AGENT]}], http, now)
+                if _event_shape_ok(e) and e.get("kind") == KIND_MANAGED_AGENT]
+    claimants = {d[1] for e in policies if (d := _first_tag(e, "d")) is not None and isinstance(d[1], str)
+                 and HEX64_RE.fullmatch(d[1]) and _claimed_app_id(e["content"]) in wanted}
+    if not claimants:
+        return {}
+    answer = parse_agent_directory([*policies, *_profiles(cfg, relay_url, claimants, http, now)], claimants, reserved)
+    return {app: agent for agent, app in answer.apps.items() if app in wanted}
+
+
+def _check_cache_entry(key: Any, entry: Any) -> bool:
+    return (isinstance(key, str) and isinstance(entry, dict) and isinstance(entry.get("pubkey"), str)
+            and bool(HEX64_RE.fullmatch(entry["pubkey"])) and isinstance(entry.get("seen"), int)
+            and not isinstance(entry.get("seen"), bool))
+
+
+def merge_people_cache(path: Path, fresh: Mapping[str, str], now: int) -> dict[str, str]:
+    """The host-wide people cache (config people_cache_file, shared by every group sync on this host): this channel's people are
+    written in, everybody seen by any channel in the last PEOPLE_CACHE_TTL comes back as {Feishu user key: pubkey}. A 0600
+    regular file, locked while it is rewritten in place; an unreadable content is started over (it is only a cache)."""
+    fd = os.open(path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0), 0o600)
+    with os.fdopen(fd, "r+", encoding="utf-8") as fh:
+        meta = os.fstat(fh.fileno())
+        if not stat.S_ISREG(meta.st_mode) or not _owner_only(meta):
+            raise GroupSyncError("people_cache_file must be an owner-only (0600) regular file")
+        fcntl.flock(fh, fcntl.LOCK_EX)
+        try:
+            doc = json.loads(fh.read() or "{}")
+        except ValueError:
+            doc = {}
+        people = doc.get("people") if isinstance(doc, dict) and isinstance(doc.get("people"), dict) else {}
+        people = {k: v for k, v in people.items() if _check_cache_entry(k, v) and now - v["seen"] <= PEOPLE_CACHE_TTL}
+        for key, pubkey in fresh.items():
+            people.pop(key, None)
+            people[key] = {"pubkey": pubkey, "seen": now}
+        people = dict(list(people.items())[-PEOPLE_CACHE_MAX:])
+        fh.seek(0)
+        fh.truncate()
+        fh.write(json.dumps({"version": 1, "people": people}, ensure_ascii=False, separators=(",", ":")))
+    return {key: entry["pubkey"] for key, entry in people.items()}
+
+
+@dataclass(frozen=True)
+class MemberListing:
+    users: dict[str, str]  # member id (in the chosen identity space) -> Feishu display name
+    bots: dict[str, str]  # app id -> the bot's member id
+    complete: bool  # every page was read: only then can somebody be missing from it for a reason
+
+
+@dataclass
+class MemberDelta:
+    """What the two-way comparison did to the channel this round, and what that means for the group."""
+    adopted: list[str] = field(default_factory=list)  # pubkeys added to the channel because they joined the group
+    dropped: list[str] = field(default_factory=list)  # pubkeys removed from the channel because they left the group
+    keep_users: set[str] = field(default_factory=set)  # group members (ids) that are channel members now
+    keep_bots: set[str] = field(default_factory=set)  # app ids of bots whose agent is a channel member now
+    drop_users: set[str] = field(default_factory=set)  # ids of people who left both
+    drop_bots: set[str] = field(default_factory=set)
+    remove_users: set[str] = field(default_factory=set)  # left the channel: out of the group too (ids)
+    remove_bots: set[str] = field(default_factory=set)
+    # Gone from the group (or maybe gone: the list was not read whole) while the channel removal waits — withheld, failed —
+    # or cannot be judged yet: not put back into the group, so the next round still sees them gone.
+    hold_users: set[str] = field(default_factory=set)
+    hold_bots: set[str] = field(default_factory=set)
+    leaving: dict[str, str] = field(default_factory=dict)  # pubkey -> Feishu key of members taken out of the group for leaving
+    keys: dict[str, str] = field(default_factory=dict)  # adopted pubkey -> its Feishu key
+
+
+def _key_member_id(key: str) -> str:
+    """The id part of a Feishu key: "u:<id>", "o:<app>:<id>" or "b:<app id>"."""
+    return key.rsplit(":", 1)[-1]
+
+
+def _member_source_key_ok(key: str) -> bool:
+    """A persisted Feishu member key: bot app id, union id, or owner-app/open-id pair."""
+    if key.startswith("b:"):
+        return APP_ID_RE.fullmatch(key[2:]) is not None
+    if key.startswith("u:"):
+        return UNION_ID_RE.fullmatch(key[2:]) is not None
+    if key.startswith("o:"):
+        parts = key.split(":", 2)
+        return (len(parts) == 3 and APP_ID_RE.fullmatch(parts[1]) is not None
+                and OPEN_ID_RE.fullmatch(parts[2]) is not None)
+    return False
+
+
+def _member_event_key(kind: int, pubkey: str, role: str | None, source_key: str) -> str:
+    return f"{kind}|{pubkey}|{role or ''}|{source_key}"
+
+
+def _new_member_event_nonce() -> str:
+    return secrets.token_hex(32)
+
+
+def _new_member_event_stream() -> str:
+    return secrets.token_hex(32)
+
+
+def member_event_stream(event: Any) -> str | None:
+    """The canonical group-sync stream carried by a signed membership event, if any."""
+    if not isinstance(event, dict):
+        return None
+    tags = sync._tag_values(event, MEMBER_EVENT_STREAM_TAG)
+    if len(tags) != 1 or len(tags[0]) != 2 or not isinstance(tags[0][1], str):
+        return None
+    value = tags[0][1]
+    return value if HEX64_RE.fullmatch(value) is not None else None
+
+
+def member_event_sequence(event: Any) -> int | None:
+    """The canonical group-sync operation sequence carried by a signed membership event, if any."""
+    if not isinstance(event, dict):
+        return None
+    tags = sync._tag_values(event, MEMBER_EVENT_SEQUENCE_TAG)
+    if len(tags) != 1 or len(tags[0]) != 2 or not isinstance(tags[0][1], str):
+        return None
+    value = tags[0][1]
+    if not re.fullmatch(r"[1-9][0-9]{0,18}", value):
+        return None
+    sequence = int(value)
+    return sequence if sequence <= MEMBER_EVENT_SEQUENCE_MAX else None
+
+
+def member_event_position(event: Any) -> tuple[str, int] | None:
+    """A membership event's comparable persistent position, independent of its signer and client clock."""
+    stream, sequence = member_event_stream(event), member_event_sequence(event)
+    return (stream, sequence) if stream is not None and sequence is not None else None
+
+
+def _parse_member_event_key(value: str) -> tuple[int, str, str | None, str] | None:
+    parts = value.split("|", 3)
+    if len(parts) != 4 or parts[0] not in ("9000", "9001") or HEX64_RE.fullmatch(parts[1]) is None:
+        return None
+    kind, pubkey, role, source_key = int(parts[0]), parts[1], parts[2] or None, parts[3]
+    if not _member_source_key_ok(source_key):
+        return None
+    expected_role = "bot" if source_key.startswith("b:") else "member"
+    if (kind == 9000 and role != expected_role) or (kind == 9001 and role is not None):
+        return None
+    return kind, pubkey, role, source_key
+
+
+def _member_event_record_ok(operation: str, event: Any, binding: str) -> bool:
+    """A pending operation must contain exactly the event that can safely be retried."""
+    parsed = _parse_member_event_key(operation)
+    channel, separator, _ = binding.partition("|")
+    if (parsed is None or not separator or UUID_RE.fullmatch(channel) is None or not _nip01_event_verified(event)
+            or set(event) != {"id", "pubkey", "created_at", "kind", "tags", "content", "sig"}):
+        return False
+    kind, target, role, _ = parsed
+    tags = [["h", channel], ["p", target]] + ([["role", role]] if role else [])
+    if not (isinstance(event["created_at"], int) and not isinstance(event["created_at"], bool)
+            and event["created_at"] > 0 and event["kind"] == kind and event["content"] == ""
+            and isinstance(event["tags"], list) and len(event["tags"]) == len(tags) + 3
+            and event["tags"][:-3] == tags):
+        return False
+    nonce, stream, sequence = event["tags"][-3:]
+    return (isinstance(nonce, list) and len(nonce) == 2 and nonce[0] == MEMBER_EVENT_NONCE_TAG
+            and isinstance(nonce[1], str) and HEX64_RE.fullmatch(nonce[1]) is not None
+            and isinstance(stream, list) and len(stream) == 2 and stream[0] == MEMBER_EVENT_STREAM_TAG
+            and member_event_stream(event) is not None
+            and isinstance(sequence, list) and len(sequence) == 2 and sequence[0] == MEMBER_EVENT_SEQUENCE_TAG
+            and member_event_sequence(event) is not None)
 
 
 # ---------------------------------------------------------------- preflight and membership
@@ -1182,6 +1783,83 @@ def _card_readable(text: str) -> str:
     return "\n".join(kept).rstrip()
 
 
+def _card_status_history(source: str, readable: str) -> tuple[str, str | None]:
+    """Split a GitLab sync's trailing human-readable status history from the text that stays in the folded panel.
+
+    The producer owns this small display contract: the exact ``状态记录`` heading and one or more ``- `` records must be
+    the final readable block, immediately before the sync's first/last machine header.  A similarly named block in an
+    ordinary message or in the middle of a sync remains ordinary folded content.  Keeping the recognition this narrow
+    prevents arbitrary prose from unexpectedly changing the card layout.
+    """
+    source_lines = source.split("\n")
+    if not (source_lines[0].startswith(CARD_NOTIFY_HEADER) or source_lines[-1].startswith(CARD_NOTIFY_HEADER)):
+        return readable, None
+    lines = readable.split("\n")
+    try:
+        start = max(index for index, line in enumerate(lines) if line.strip() == CARD_STATUS_HISTORY_TITLE)
+    except ValueError:
+        return readable, None
+    records = lines[start + 1:]
+    if start == 0 or not records or any(not line.startswith("- ") for line in records):
+        return readable, None
+    main = "\n".join(lines[:start]).rstrip()
+    if not main:
+        return readable, None
+    return main, "\n".join(lines[start:])
+
+
+def _card_gitlab_url(source: str, readable: str) -> str | None:
+    """The deterministic GitLab object URL of a real sync message, never an arbitrary message link.
+
+    A sync machine header must be at the same trusted edge `_card_readable` recognises.  Current messages wrap their
+    generated headline in a markdown link; legacy/V2 messages may instead carry a labelled or standalone GitLab object
+    URL.  Every accepted target is a credential-free HTTPS URL with GitLab's ``/-/`` object path.
+    """
+    source_lines = source.split("\n")
+    if not (source_lines[0].startswith(CARD_NOTIFY_HEADER) or source_lines[-1].startswith(CARD_NOTIFY_HEADER)):
+        return None
+
+    def accepted(value: str) -> str | None:
+        parts = urllib.parse.urlsplit(value)
+        if (parts.scheme != "https" or not parts.netloc or parts.username is not None or parts.password is not None
+                or "/-/" not in parts.path or any(char.isspace() for char in value)):
+            return None
+        return value
+
+    lines = readable.split("\n")
+    first = next((line for line in lines if line.strip()), "")
+    headline = re.search(r"\]\((https://[^)\s]+)\)", first)
+    if headline:
+        return accepted(headline.group(1))
+    for line in lines:
+        labelled = re.fullmatch(r"(?:url|MR|Issue|Pipeline|Comment|GitLab)[：:]\s*(https://\S+)", line.strip(), re.IGNORECASE)
+        if labelled and (url := accepted(labelled.group(1))):
+            return url
+        if re.fullmatch(r"https://\S+", line.strip()) and (url := accepted(line.strip())):
+            return url
+    return None
+
+
+def _card_without_gitlab_url_line(readable: str, target: str | None) -> str:
+    """Move a standalone/labelled GitLab target from readable body text to its button without duplicating it.
+
+    A generated headline markdown link stays: it carries the human title as well as the target.  Only a line whose whole
+    purpose is the exact selected URL is removed; the Buzz event and text-mode fallback remain untouched.
+    """
+    if target is None:
+        return readable
+    kept: list[str] = []
+    removed = False
+    for line in readable.split("\n"):
+        stripped = line.strip()
+        labelled = re.fullmatch(r"(?:url|MR|Issue|Pipeline|Comment|GitLab)[：:]\s*(https://\S+)", stripped, re.IGNORECASE)
+        if not removed and ((labelled and labelled.group(1) == target) or stripped == target):
+            removed = True
+            continue
+        kept.append(line)
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(kept)).rstrip()
+
+
 def _card_name(name: str) -> str:
     """A name, channel name or label of a card: one clean line, never long."""
     return BUZZ_SCHEME_RE.sub("buzz：//", _safe_name(name))[:CARD_NAME_CHARS].strip()
@@ -1341,17 +2019,29 @@ def _card_byline(byline: str, open_url: str | None) -> dict[str, Any]:
                         {"tag": "column", "width": "auto", "vertical_align": "center", "elements": [link]}]}
 
 
+def _card_gitlab_button(url: str) -> dict[str, Any]:
+    """A fixed navigation action. `url` has already passed `_card_gitlab_url`'s structural HTTPS checks."""
+    return {"tag": "button", "text": _plain(CARD_GITLAB_OPEN_TEXT), "type": "default", "size": "medium",
+            "behaviors": [{"type": "open_url", "default_url": url}]}
+
+
 def build_message_card(speaker: str, content: str, *, agent: bool = False, channel: str = "",
                        mentions: tuple[CardMention, ...] = (), open_url: str | None = None) -> str:
     """A Buzz message as a short Feishu card (JSON 2.0): the message's first line as the title (the speaker when there is
     none; blue for a person, green for an agent), no subtitle; the message list's one-line summary "speaker · #channel：text";
     a body of one grey line "speaker · #channel" with a small link that opens the message in Buzz (no button), the mentions
-    on a line of their own, and the whole text in a panel that starts folded whenever it says more than the title. Everything
-    a user wrote is neutralised (card_markdown, _card_title, _card_name); the lines a GitLab -> Buzz sync message has for
-    programs are in none of those places (_card_readable). The card is under MAX_CARD_BYTES whatever the input: past
-    CARD_TRIM_BYTES the folded text is cut."""
+    on a line of their own, and the whole text in a panel that starts folded whenever it says more than the title. A GitLab
+    sync's trailing ``状态记录`` block is the exception: it is removed from that panel and rendered visibly as the final content
+    element. A structurally verified GitLab target becomes the absolute-last navigation button. Everything a user wrote is
+    neutralised (card_markdown, _card_title, _card_name); the lines a GitLab -> Buzz sync
+    message has for programs are in none of those places (_card_readable). The card is under MAX_CARD_BYTES whatever the
+    input: past CARD_TRIM_BYTES the folded text, then an exceptionally long visible history, is cut."""
     name = _card_name(speaker) or "?"
-    text = _card_readable(card_markdown(content))
+    source = card_markdown(content)
+    readable = _card_readable(source)
+    gitlab_url = _card_gitlab_url(source, readable)
+    readable = _card_without_gitlab_url_line(readable, gitlab_url)
+    text, status_history = _card_status_history(source, readable)
     title, duplicate = _card_title(text)
     lines = text.split("\n")
     rest = "\n".join(lines[:duplicate] + lines[duplicate + 1:]) if duplicate is not None else text
@@ -1364,19 +2054,46 @@ def build_message_card(speaker: str, content: str, *, agent: bool = False, chann
     if mentions:
         body.append(_markdown(" ".join(_mention_token(m) for m in mentions[:CARD_MENTIONS_MAX])))
 
-    def encode(full: str | None) -> str:
+    def encode(full: str | None, visible_status: str | None) -> str:
         rows = list(body)
         if full is not None:
             rows.append({"tag": "collapsible_panel", "expanded": False,
                          "header": {"title": _plain(CARD_EXPAND.format(n=len(text)))}, "elements": [_markdown(full)]})
-        doc = {"schema": CARD_SCHEMA, "config": {"summary": {"content": summary}}, "header": header, "body": {"elements": rows}}
+        if visible_status is not None:
+            rows.append(_markdown(visible_status))
+        if gitlab_url is not None:
+            rows.append(_card_gitlab_button(gitlab_url))
+        # Feishu only permits later PATCH updates when both the old and replacement cards explicitly opt into a
+        # shared update. Every mirrored card is therefore born updateable; this changes no visible content.
+        doc = {"schema": CARD_SCHEMA, "config": {"summary": {"content": summary}, "update_multi": True},
+               "header": header, "body": {"elements": rows}}
         return json.dumps(doc, ensure_ascii=False, separators=(",", ":"))
 
-    if not rest.strip():
-        return encode(None)
-    raw = encode(text)
+    folded_text = text if rest.strip() else None
+    raw = encode(folded_text, status_history)
     if len(raw.encode("utf-8")) <= CARD_TRIM_BYTES:
         return raw
+
+    # A normal history is tiny.  Keep the most recent records visible if an abnormal one alone would exceed the card
+    # budget; current status still remains near the top of the main text.  This is a visible truncation, never a fold.
+    if status_history is not None and len(encode(None, status_history).encode("utf-8")) > CARD_TRIM_BYTES:
+        records = status_history.split("\n")[1:]
+
+        def recent(count: int) -> str:
+            tail = records[-count:] if count else []
+            return "\n".join([CARD_STATUS_HISTORY_TITLE, CARD_STATUS_TRUNCATED_NOTE, *tail])
+
+        lo, hi = 0, len(records) + 1
+        while lo + 1 < hi:
+            mid = (lo + hi) // 2
+            lo, hi = (mid, hi) if len(encode(None, recent(mid)).encode("utf-8")) <= CARD_TRIM_BYTES else (lo, mid)
+        status_history = recent(lo)
+        raw = encode(folded_text, status_history)
+        if len(raw.encode("utf-8")) <= CARD_TRIM_BYTES:
+            return raw
+
+    if folded_text is None:
+        return encode(None, status_history)
 
     def cut(n: int) -> str:
         kept, _ = _markdown_prefix(text, n)
@@ -1384,11 +2101,11 @@ def build_message_card(speaker: str, content: str, *, agent: bool = False, chann
     lo, hi = 0, len(text)  # the most characters whose card still fits: lo fits, hi (the whole text) does not
     while lo + 1 < hi:
         mid = (lo + hi) // 2
-        lo, hi = (mid, hi) if len(encode(cut(mid)).encode("utf-8")) <= CARD_TRIM_BYTES else (lo, mid)
-    result = encode(cut(lo))
+        lo, hi = (mid, hi) if len(encode(cut(mid), status_history).encode("utf-8")) <= CARD_TRIM_BYTES else (lo, mid)
+    result = encode(cut(lo), status_history)
     # Nothing above can get here with a card of MAX_CARD_BYTES or more; if CARD_TRIM_BYTES were ever set wrong, the
     # folded text goes rather than a card Feishu would refuse.
-    return result if len(result.encode("utf-8")) < MAX_CARD_BYTES else encode(None)
+    return result if len(result.encode("utf-8")) < MAX_CARD_BYTES else encode(None, status_history)
 
 
 # ---------------------------------------------------------------- routing
@@ -1400,15 +2117,28 @@ def route_buzz_event(event: Mapping[str, Any], *, mirror_pubkey: str, agent_apps
                      unmapped_senders: str = DEFAULT_BUZZ_UNMAPPED_SENDERS,
                      agent_mention_targets: Mapping[str, tuple[str, str]] | None = None,
                      unmanaged_agents: str = DEFAULT_BUZZ_UNMANAGED_AGENTS,
-                     managed_agents: Collection[str] | None = None) -> Outbound | str:
+                     managed_agents: Collection[str] | None = None,
+                     other_mirrors: Collection[str] = frozenset()) -> Outbound | str:
     """Decide who says a Buzz event in Feishu. A str is a skip reason. With a CardContext the event also comes as a card
     (Outbound.card); `text` is then what would have been sent without one, ready for the fallback. `agent_mention_targets`
     is the subset of mention_targets that are the channel's own agents (their own Feishu app is live): what a
-    buzz_unmapped_senders "context" author's own p tags may still notify (see below)."""
+    buzz_unmapped_senders "context" author's own p tags may still notify (see below). `other_mirrors` are identities
+    declared another host's Feishu mirror (ADR-0020): what they say came from another group and is never said again here."""
     author = str(event.get("pubkey") or "")
+    local_status = author == mirror_pubkey and any(
+        isinstance(tag, list) and tag[:2] == [FEISHU_SYNC_STATUS_TAG, "membership"]
+        for tag in event.get("tags") or [])
+    if local_status and str(event.get("kind")) in MESSAGE_KINDS.split(","):
+        # This mirror normally never echoes itself. A membership status is deliberately canonical in Buzz and delivered
+        # to this mirror's bound group once; another host still recognizes the author as `other_mirrors` and skips it.
+        content = _mark_forged_lines(FEISHU_AT_MARKUP_RE.sub(r"＜\1", str(event.get("content") or "")),
+                                     FORGED_FEISHU_SIGNATURE_RE)
+        return Outbound(str(event.get("id") or ""), None, content, None)
     if author == mirror_pubkey:
         return "echo"
-    if str(event.get("kind")) not in MIRROR_KINDS.split(","):
+    if author in other_mirrors:
+        return "other_mirror"
+    if str(event.get("kind")) not in MESSAGE_KINDS.split(","):
         return "kind"
     images, images_over, attachment_urls = event_images(event)
     content = _markdown_without_attachments(str(event.get("content") or ""), attachment_urls)
@@ -1434,7 +2164,7 @@ def route_buzz_event(event: Mapping[str, Any], *, mirror_pubkey: str, agent_apps
             # `managed_agents` unknown (None) is read as "all of them are managed", so nothing is relayed by accident.
             if unmanaged_agents != "relay" or managed_agents is None or author in managed_agents:
                 return "agent_bot_unavailable"
-            # Said through the owner's bot like a human's, signed distinctly. No p tag becomes an <at> and the card
+            # Said through the Desk like a human's, signed distinctly. No p tag becomes an <at> and the card
             # names nobody: the agent's own bot never renders mentions either (open_ids belong to one app), so
             # relaying must not make an agent's message notify more people than it would have itself (skills#143).
             name = _safe_name(names.get(author) or "") or author[:12]
@@ -1445,7 +2175,7 @@ def route_buzz_event(event: Mapping[str, Any], *, mirror_pubkey: str, agent_apps
         if unmapped_senders != "context":
             return "not_channel_human"
         # An author that is neither a verified channel human nor a configured agent (config buzz_unmapped_senders
-        # "context"): said through the owner's bot like a human's, signed distinctly so nobody takes it for a member's.
+        # "context"): said through the Desk like a human's, signed distinctly so nobody takes it for a member's.
         # Symmetric with route_feishu_message's stranger: a mention of one of the channel's own agents still becomes a
         # real <at> (he can wake it, agent_mention_targets), but any other target (a human, or an agent with no live
         # Feishu app) is silently dropped, never a real notification — and never left as readable text either: the
@@ -1531,6 +2261,14 @@ def _reaction_emoji(content: Any) -> str:
     return str(content or "").translate({ord(c): None for c in EMOJI_SELECTORS}).strip()
 
 
+def reverse_reaction_map(mapping: Mapping[str, str]) -> dict[str, str]:
+    """Feishu emoji_type -> the emoji said in Buzz (ADR-0020): the first emoji that maps to it (THUMBSUP is 👍, not "+")."""
+    out: dict[str, str] = {}
+    for emoji, emoji_type in mapping.items():
+        out.setdefault(emoji_type, _reaction_emoji(emoji))
+    return out
+
+
 def merged_reaction_map(configured: Mapping[str, str]) -> dict[str, str]:
     return {**DEFAULT_REACTION_MAP, **{_reaction_emoji(k): v for k, v in configured.items()}}
 
@@ -1543,13 +2281,69 @@ def reaction_target(event: Mapping[str, Any]) -> str | None:
     return None
 
 
+def edit_target(event: Mapping[str, Any]) -> str | None:
+    """A kind 40003 replaces exactly one event, named by its sole valid bare e tag."""
+    targets = [tag[1] for tag in event.get("tags") or []
+               if isinstance(tag, list) and len(tag) >= 2 and tag[0] == "e"
+               and isinstance(tag[1], str) and HEX64_RE.fullmatch(tag[1])]
+    return targets[0] if len(targets) == 1 else None
+
+
+def compact_edit_revision(event: Mapping[str, Any]) -> int:
+    """The producer's causal revision for a GitLab compact overlay; zero keeps legacy ordering."""
+
+    if int(event.get("kind") or 0) != EDIT_KIND:
+        return 0
+    lines = str(event.get("content") or "").splitlines()
+    if not lines:
+        return 0
+    header = lines[0] if lines[0].startswith(CARD_NOTIFY_HEADER) else (
+        lines[-1] if lines[-1].startswith(CARD_NOTIFY_HEADER) else ""
+    )
+    match = COMPACT_EDIT_REV_RE.search(header)
+    return int(match.group(1)) if match is not None else 0
+
+
+def buzz_message_order(event: Mapping[str, Any]) -> tuple[int, int, str, int, str]:
+    """Apply an original before same-second edits, then compact edits in causal revision order."""
+
+    created = int(event.get("created_at") or 0)
+    event_id = str(event.get("id") or "")
+    if int(event.get("kind") or 0) == EDIT_KIND:
+        return created, 1, edit_target(event) or "", compact_edit_revision(event), event_id
+    return created, 0, "", 0, event_id
+
+
+def buzz_reaction_order(event: Mapping[str, Any]) -> tuple[int, int, str]:
+    """At one Nostr second remove an old reaction before adding its replacement."""
+
+    return (
+        int(event.get("created_at") or 0),
+        0 if str(event.get("kind")) == "5" else 1,
+        str(event.get("id") or ""),
+    )
+
+
 def route_buzz_reaction(event: Mapping[str, Any], *, agent_apps: Mapping[str, str], human_pubkeys: set[str],
-                        agent_pubkeys: set[str], reaction_map: Mapping[str, str]) -> tuple[str, str] | str:
-    """Which app's bot puts which Feishu emoji on the target. Only agents with a bot react: a human's
-    reaction is not synced, and no other bot reacts for an agent. A str is a skip reason."""
+                        agent_pubkeys: set[str], reaction_map: Mapping[str, str], relay_authors: Collection[str] = frozenset(),
+                        proxy_app_id: str | None = None, mirror_pubkey: str | None = None,
+                        other_mirrors: Collection[str] = frozenset()) -> tuple[str, str] | str:
+    """Which app's bot puts which Feishu emoji on the target. An agent with its own bot reacts from it; an author in
+    `relay_authors` (reaction_sync "two_way": the channel's people and agents relayed through the Desk) from the
+    configured Desk bot. Without `relay_authors` a human's reaction is not synced ("agents_only"). The mirror's reactions came from
+    Feishu and never go back; another host's mirror's came from another group. A str is a skip reason."""
     if str(event.get("kind")) != "7":
         return "kind"
     author = str(event.get("pubkey") or "")
+    if mirror_pubkey and author == mirror_pubkey:
+        return "echo"
+    if author in other_mirrors:
+        return "other_mirror"
+    if author not in agent_apps and author in relay_authors and proxy_app_id:
+        if reaction_target(event) is None:
+            return "reaction_no_target"
+        emoji_type = reaction_map.get(_reaction_emoji(event.get("content")))
+        return (proxy_app_id, emoji_type) if emoji_type is not None else "reaction_emoji_unmapped"
     if author in human_pubkeys:
         return "reaction_human"
     if author not in agent_apps:
@@ -1822,6 +2616,10 @@ def _parse_send_extra(extra: str | None) -> tuple[str | None, str]:
     return (None if parent in ("", "-") else parent), (mode if mode in (SEND_CARD, SEND_TEXT_FALLBACK) else "")
 
 
+def _edit_extra(target: str, message_id: str, mode: str) -> str:
+    return f"{target}|{message_id}|{mode}"
+
+
 def card_refused(exc: CliError) -> bool:
     """Feishu said no to the card itself (an api or validation refusal that is not a rate limit): it did not go out."""
     return (exc.definite and exc.error_type in CARD_REFUSAL_TYPES and exc.code not in LARK_RATE_LIMIT_CODES
@@ -1841,6 +2639,12 @@ def _marked_time(value: str) -> int:
         return int(value.split(":", 2)[1])
     except (IndexError, ValueError):
         return 0
+
+
+def _agent_intro_value_ok(value: str) -> bool:
+    return (value in ("baseline", FAILED, UNKNOWN)
+            or MESSAGE_ID_RE.fullmatch(value) is not None
+            or re.fullmatch(r"(?:pending|retry):[0-9]{1,12}", value) is not None)
 
 
 def _settled(value: str | None) -> bool:
@@ -1869,9 +2673,16 @@ def buzz_id_for_feishu(state: State, message_id: str) -> str | None:
 
 
 def prune_state(state: State) -> None:
-    for ledger in (state.b2f, state.f2b, state.attempts, state.r2f):
+    if len(state.member_events) > MEMBER_EVENTS_MAX:
+        # Unknown writes cannot be evicted safely: doing so would let a later round generate a second event id.
+        raise GroupSyncError("the pending member event ledger exceeds its safe limit")
+    if set(state.member_event_blocks) - set(state.member_events):
+        raise GroupSyncError("the member event block ledger has no matching pending event")
+    for ledger in (state.b2f, state.f2b, state.e2f, state.attempts, state.r2f):
         for key in list(ledger)[:max(len(ledger) - LEDGER_KEEP, 0)]:
             del ledger[key]
+    state.b2f_modes = {event_id: mode for event_id, mode in state.b2f_modes.items() if event_id in state.b2f}
+    state.b2f_senders = {event_id: app for event_id, app in state.b2f_senders.items() if event_id in state.b2f}
     # An image that is still open (pending, or waiting for a retry) keeps its ledger entry — its 45-minute window and its number of
     # attempts live there — and so do the other entries of its event (where the text went, the count beyond the limit): what is
     # cut is the oldest of the rest, the ones with a result.
@@ -1887,6 +2698,12 @@ def prune_state(state: State) -> None:
             del cache[key]
     state.polled = {root: t for root, t in state.polled.items() if root in state.threads}
     state.tried = {root: t for root, t in state.tried.items() if root in state.threads}
+    for key in list(state.people_seen)[:max(len(state.people_seen) - PEOPLE_KEEP, 0)]:
+        del state.people_seen[key]
+    for key in list(state.f2r)[:max(len(state.f2r) - LEDGER_KEEP, 0)]:
+        del state.f2r[key]
+    newest_note = max(state.member_notes.values(), default=0)
+    state.member_notes = {k: t for k, t in state.member_notes.items() if newest_note - t <= MEMBER_NOTE_TTL}
 
 
 def load_state(state_dir: Path) -> State:
@@ -1898,6 +2715,11 @@ def load_state(state_dir: Path) -> State:
     if not isinstance(data, dict):
         raise GroupSyncError("state file must be a JSON object")
     reaction_fields, identity_fields, image_fields = {"r2f", "react_since"}, {"idmap", "emailmap"}, {"images", "img_unresolved"}
+    edit_fields = {"b2f_modes", "e2f", "edit_unresolved"}
+    two_way_fields = {"members_synced", "feishu_seen", "buzz_seen", "member_notes", "member_events",
+                      "member_event_stream", "member_event_seq", "member_event_blocks", "people_seen", "rwatch", "f2r"}
+    notice_fields = {"member_notice_event", "member_notice_feishu", "member_notice_content", "member_notice_active"}
+    intro_fields = {"agent_intros_initialized", "agent_intros"}
     if not reaction_fields & set(data):
         # Written before reactions were synced: start the reaction cursor at the message cursor, so
         # upgrading does not replay every old reaction.
@@ -1908,21 +2730,89 @@ def load_state(state_dir: Path) -> State:
     if not image_fields & set(data):
         # Written before images were synced: nothing was ever sent as an image, so the image ledger starts empty.
         data = {**data, "images": {}, "img_unresolved": {}}
+    if not edit_fields & set(data):
+        # Older cards were not born with update_multi=true and their actual send mode was not retained. They are
+        # deliberately not guessed: only messages sent by an edit-aware release can be updated safely.
+        data = {**data, "b2f_modes": {}, "e2f": {}, "edit_unresolved": {}}
+    if "b2f_senders" not in data:
+        # Pre-Desk releases used the owner app for proxy sends. Existing agent messages still use their own app.
+        # Do not guess an app for an old entry: it is terminal for outbound writes.
+        data = {**data, "b2f_senders": {}}
+    if not two_way_fields & set(data):
+        # Written before the two-way sync (ADR-0020): no snapshot yet, so the next round only records one.
+        data = {**data, "members_synced": 0, "feishu_seen": {}, "buzz_seen": {}, "member_notes": {}, "member_events": {},
+                "member_event_stream": "", "member_event_seq": 0, "member_event_blocks": {}, "people_seen": {},
+                "rwatch": {}, "f2r": {}}
+    member_ledger_fields = {"member_events", "member_event_stream", "member_event_seq", "member_event_blocks"}
+    present_member_ledger_fields = member_ledger_fields & set(data)
+    if not present_member_ledger_fields:
+        # Written by the first two-way release: snapshots already exist, but no member-event retry ledger did.
+        data = {**data, "member_events": {}, "member_event_stream": "", "member_event_seq": 0,
+                "member_event_blocks": {}}
+    elif present_member_ledger_fields == {"member_events"}:
+        # Written before membership events had a producer order and persistent retry stops. A non-empty old ledger
+        # cannot be upgraded safely because its signed event has no sequence tag; validation below fails closed.
+        data = {**data, "member_event_stream": "", "member_event_seq": 0, "member_event_blocks": {}}
+    elif present_member_ledger_fields == member_ledger_fields - {"member_event_stream"}:
+        # The immediately previous release already had ordered exact retries. A settled ledger can upgrade lazily:
+        # the next operation creates its stream. Any old pending event lacks that signed tag and fails validation below.
+        data = {**data, "member_event_stream": ""}
+    if not notice_fields & set(data):
+        data = {**data, "member_notice_event": "", "member_notice_feishu": "", "member_notice_content": "",
+                "member_notice_active": False}
+    if "member_notice_sender" not in data:
+        data = {**data, "member_notice_sender": ""}
+    if not intro_fields & set(data):
+        # Existing bots predate this feature: the next verified round records them as the baseline and does not spam the group.
+        data = {**data, "agent_intros_initialized": False, "agent_intros": {}}
+    if "agent_intro_senders" not in data:
+        data = {**data, "agent_intro_senders": {}}
     if set(data) != set(State.__dataclass_fields__):
         # A partial state would read as "nothing sent yet" and re-mirror recent messages.
         raise GroupSyncError("state file has missing or unknown fields")
     state = State(**data)
-    str_maps = (state.b2f, state.f2b, state.r2f, state.idmap, state.emailmap, state.images)
+    str_maps = (state.b2f, state.b2f_modes, state.b2f_senders, state.e2f, state.f2b, state.r2f, state.idmap, state.emailmap, state.images,
+                state.feishu_seen, state.buzz_seen, state.people_seen, state.rwatch, state.f2r, state.agent_intros,
+                state.agent_intro_senders)
     int_maps = (state.attempts, state.threads, state.polled, state.tried, state.unresolved, state.f_unresolved,
-                state.img_unresolved)
+                state.edit_unresolved, state.img_unresolved, state.member_notes)
     ok = (isinstance(state.binding, str)
-          and all(isinstance(v, int) and not isinstance(v, bool) for v in (state.floor, state.buzz_since, state.feishu_since, state.buzz_floor, state.feishu_floor, state.react_since))
+          and isinstance(state.member_notice_event, str) and isinstance(state.member_notice_feishu, str)
+          and isinstance(state.member_notice_content, str) and isinstance(state.member_notice_active, bool)
+          and isinstance(state.member_notice_sender, str)
+          and isinstance(state.agent_intros_initialized, bool)
+          and all(isinstance(v, int) and not isinstance(v, bool) for v in (state.floor, state.buzz_since, state.feishu_since, state.buzz_floor, state.feishu_floor, state.react_since, state.members_synced))
           and all(isinstance(m, dict) and all(isinstance(k, str) and isinstance(v, str) for k, v in m.items()) for m in str_maps)
           and all(isinstance(m, dict) and all(isinstance(k, str) and isinstance(v, int) and not isinstance(v, bool)
                                               for k, v in m.items()) for m in int_maps))
     ok = (ok and all(OPEN_ID_RE.fullmatch(k) and UNION_ID_RE.fullmatch(v) for k, v in state.idmap.items())
           and all(HEX64_RE.fullmatch(k) and (OPEN_ID_RE.fullmatch(v) or re.fullmatch(r"miss:[0-9]{1,12}", v))
-                  for k, v in state.emailmap.items()))
+                  for k, v in state.emailmap.items())
+          and all(HEX64_RE.fullmatch(k) and v in (SEND_CARD, SEND_TEXT_FALLBACK) for k, v in state.b2f_modes.items()))
+    ok = ok and all(HEX64_RE.fullmatch(k) and APP_ID_RE.fullmatch(v) and k in state.b2f
+                    for k, v in state.b2f_senders.items())
+    ok = ok and (not state.member_notice_sender or APP_ID_RE.fullmatch(state.member_notice_sender) is not None)
+    ok = ok and all(HEX64_RE.fullmatch(k) and APP_ID_RE.fullmatch(v) and k in state.agent_intros
+                    for k, v in state.agent_intro_senders.items())
+    ok = (ok and (not state.member_notice_event or HEX64_RE.fullmatch(state.member_notice_event))
+          and (not state.member_notice_feishu or MESSAGE_ID_RE.fullmatch(state.member_notice_feishu))
+          and all(HEX64_RE.fullmatch(pubkey) and _agent_intro_value_ok(value)
+                  for pubkey, value in state.agent_intros.items())
+          and isinstance(state.member_events, dict) and len(state.member_events) <= MEMBER_EVENTS_MAX
+          and isinstance(state.member_event_stream, str)
+          and (not state.member_event_stream or HEX64_RE.fullmatch(state.member_event_stream) is not None)
+          and isinstance(state.member_event_seq, int) and not isinstance(state.member_event_seq, bool)
+          and 0 <= state.member_event_seq <= MEMBER_EVENT_SEQUENCE_MAX
+          and (not state.member_event_stream or state.member_event_seq > 0)
+          and isinstance(state.member_event_blocks, dict)
+          and all(isinstance(operation, str) and operation in state.member_events
+                  and isinstance(reason, str) and reason in MEMBER_EVENT_BLOCK_REASONS
+                  for operation, reason in state.member_event_blocks.items())
+          and all(_member_event_record_ok(operation, event, state.binding)
+                  and member_event_stream(event) == state.member_event_stream
+                  and member_event_sequence(event) <= state.member_event_seq
+                  for operation, event in state.member_events.items())
+          and len({member_event_sequence(event) for event in state.member_events.values()}) == len(state.member_events))
     if not ok:
         raise GroupSyncError("state file has malformed fields")
     return state
@@ -2020,11 +2910,10 @@ def _check_buzz_unmapped_senders(cfg: Mapping[str, Any]) -> None:
 def _check_buzz_unmanaged_agents(cfg: Mapping[str, Any]) -> None:
     mode = cfg["buzz_unmanaged_agents"]
     if not isinstance(mode, str) or mode not in BUZZ_UNMANAGED_AGENT_MODES:  # never say what was in it
-        raise GroupSyncError('config buzz_unmanaged_agents must be "skip" (the default) or "relay"')
+        raise GroupSyncError('config buzz_unmanaged_agents must be "relay" (the default) or "skip"')
 
 
-def load_config(path: Path) -> dict[str, Any]:
-    cfg = _load_json(_read_owner_only(Path(path), "config"), "config")
+def _validated_config(cfg: Any) -> dict[str, Any]:
     if not isinstance(cfg, dict):
         raise GroupSyncError("config must be a JSON object")
     unknown, missing = set(cfg) - CONFIG_KEYS - OPTIONAL_CONFIG_KEYS, CONFIG_KEYS - set(cfg)
@@ -2060,6 +2949,12 @@ def load_config(path: Path) -> dict[str, Any]:
         _check_buzz_unmapped_senders(cfg)
     if "buzz_unmanaged_agents" in cfg:
         _check_buzz_unmanaged_agents(cfg)
+    if "membership_sync" in cfg and (not isinstance(cfg["membership_sync"], str) or cfg["membership_sync"] not in MEMBERSHIP_SYNC_MODES):
+        raise GroupSyncError('config membership_sync must be "two_way" (the default) or "buzz_to_feishu"')
+    if "reaction_sync" in cfg and (not isinstance(cfg["reaction_sync"], str) or cfg["reaction_sync"] not in REACTION_SYNC_MODES):
+        raise GroupSyncError('config reaction_sync must be "two_way" (the default) or "agents_only"')
+    if "people_cache_file" in cfg:
+        _absolute(cfg["people_cache_file"], "people_cache_file")
     if "identity" in cfg and cfg["identity"] not in IDENTITY_MODES:
         raise GroupSyncError('config identity must be "union_id" (the default) or "email"')
     if "message_format" in cfg and (not isinstance(cfg["message_format"], str) or cfg["message_format"] not in MESSAGE_FORMATS):
@@ -2072,6 +2967,8 @@ def load_config(path: Path) -> dict[str, Any]:
             raise GroupSyncError("config agents entries must be <pubkey hex>: {app_id, lark_config_dir, lark_data_dir}")
         if not isinstance(agent["app_id"], str) or not APP_ID_RE.fullmatch(agent["app_id"]):
             raise GroupSyncError("config agent app_id is malformed")
+        if agent["app_id"] == cfg["owner_app_id"]:
+            raise GroupSyncError("config agent app cannot be the owner app")
         _absolute(agent["lark_config_dir"], "agent lark_config_dir")
         _absolute(agent["lark_data_dir"], "agent lark_data_dir")
         for key in AGENT_KEYS:
@@ -2079,11 +2976,50 @@ def load_config(path: Path) -> dict[str, Any]:
             if agent[key] in seen[key]:
                 raise GroupSyncError(f"config agents share a {key}; every agent needs its own")
             seen[key].add(agent[key])
+    desk = cfg["desk_pubkey"]
+    if not isinstance(desk, str) or not HEX64_RE.fullmatch(desk) or desk not in cfg["agents"]:
+        raise GroupSyncError("config desk_pubkey must identify one configured Desk agent")
+    if cfg["agents"][desk]["app_id"] == cfg["owner_app_id"]:
+        raise GroupSyncError("config Desk must use its own Feishu app")
     return cfg
+
+
+def load_config(path: Path) -> dict[str, Any]:
+    return _validated_config(_load_json(_read_owner_only(Path(path), "config"), "config"))
 
 
 def _write_config(path: Path, cfg: Mapping[str, Any]) -> None:
     _write_owner_only(Path(path), json.dumps(cfg, ensure_ascii=False, indent=2) + "\n")
+
+
+def migrate_desk_config(path: Path, desk_pubkey: str, *, apply: bool = False,
+                        now: datetime | None = None) -> dict[str, Any]:
+    """Validate a pre-Desk binding; on explicit apply, keep a private backup and atomically add its Desk."""
+    path = Path(path)
+    original = _read_owner_only(path, "config")
+    old = _load_json(original, "config")
+    if not isinstance(old, dict):
+        raise GroupSyncError("config must be a JSON object")
+    if "desk_pubkey" in old:
+        if old["desk_pubkey"] != desk_pubkey:
+            raise GroupSyncError("config already designates a different Desk")
+        _validated_config(old)
+        return {"status": "already_migrated", "channel_id": old["channel_id"], "applied": False}
+    candidate = _validated_config({**old, "desk_pubkey": desk_pubkey})
+    result = {"status": "ready", "channel_id": candidate["channel_id"], "applied": False}
+    if not apply:
+        return result
+    # Timers must be stopped before this command. A second read catches accidental intervening edits.
+    if _read_owner_only(path, "config") != original:
+        raise GroupSyncError("config changed during Desk migration")
+    stamp = (now or datetime.now(timezone.utc)).strftime("%Y%m%dT%H%M%SZ")
+    backup = path.with_name(f"{path.name}.bak.desk-{stamp}")
+    if backup.exists() or backup.is_symlink():
+        raise GroupSyncError("Desk migration backup path already exists")
+    _write_owner_only(backup, original)
+    _write_config(path, candidate)
+    return {"status": "migrated", "channel_id": candidate["channel_id"], "applied": True,
+            "backup": str(backup)}
 
 
 # ---------------------------------------------------------------- CLI adapters
@@ -2162,16 +3098,38 @@ class LarkCli:
     def members(self, chat_id: str, user_id_type: str = "open_id") -> tuple[set[str], dict[str, str]]:
         """(users as `user_id_type` ids, {app id: the bot's member id (an open_id)}). A person's id can be asked for
         as union_id; a bot is always listed by its open_id, the form its @ mentions use."""
+        listing = self.member_listing(chat_id, user_id_type)
+        return set(listing.users), listing.bots
+
+    @staticmethod
+    def _listing_complete(data: Mapping[str, Any], kinds: tuple[str, ...]) -> bool:
+        """Every page was read (seen live: `has_more`, `truncations`, and `user_total` / `bot_total` next to the lists)."""
+        if data.get("has_more") is not False:
+            return False
+        truncations = data.get("truncations")
+        if not isinstance(truncations, list) or truncations:
+            return False
+        for kind in kinds:
+            total = data.get(f"{kind}_total")
+            rows = data.get(f"{kind}s")
+            if not isinstance(rows, list) or type(total) is not int or total != len(rows):
+                return False
+        return True
+
+    def member_listing(self, chat_id: str, user_id_type: str = "open_id") -> "MemberListing":
         if user_id_type == "open_id":
             users_data = bots_data = self.call("chat members", ["im", "+chat-members-list", "--chat-id", chat_id,
                                                                 "--as", "user", "--page-all"])
+            complete = self._listing_complete(users_data, ("user", "bot"))
         else:
             users_data = self._member_page(chat_id, user_id_type, "user")
             bots_data = self._member_page(chat_id, "open_id", "bot")
-        users = {str(u.get("member_id")) for u in users_data.get("users") or [] if isinstance(u, dict) and u.get("member_id")}
+            complete = self._listing_complete(users_data, ("user",)) and self._listing_complete(bots_data, ("bot",))
+        users = {str(u.get("member_id")): str(u.get("name") or "") for u in users_data.get("users") or []
+                 if isinstance(u, dict) and u.get("member_id")}
         bots = {str(b.get("app_id")): str(b.get("member_id")) for b in bots_data.get("bots") or []
                 if isinstance(b, dict) and b.get("app_id") and b.get("member_id")}
-        return users, bots
+        return MemberListing(users, bots, complete)
 
     def search_user(self, email: str) -> list[dict[str, Any]]:
         # Never echoes argv or the server's answer (both carry the address): see `call`.
@@ -2251,6 +3209,19 @@ class LarkCli:
                                         "interactive", "--content", card, "--reply-in-thread", "--idempotency-key", key])
         return self._message_id(data, "reply card")
 
+    def update_card(self, message_id: str, card: str) -> None:
+        """Replace an interactive message in place. Feishu requires the same app identity that sent it and
+        config.update_multi=true in both the existing and replacement cards."""
+        self.call("update card", ["api", "PATCH", f"/open-apis/im/v1/messages/{message_id}",
+                                  "--data", json.dumps({"content": card}), "--as", "bot"])
+
+    def update_text(self, message_id: str, text: str) -> None:
+        """Replace a text message in place through the ordinary message edit endpoint."""
+        content = json.dumps({"text": text}, ensure_ascii=False, separators=(",", ":"))
+        self.call("update text", ["api", "PUT", f"/open-apis/im/v1/messages/{message_id}",
+                                  "--data", json.dumps({"msg_type": "text", "content": content}, ensure_ascii=False),
+                                  "--as", "bot"])
+
     def download_image(self, message_id: str, key: str, workdir: Path) -> Path:
         """A message's image into `workdir`, an empty directory of ours that is also the call's working directory (lark-cli takes
         output paths only relative to it). lark-cli adds an extension of its own choosing, and what it prints about where it saved
@@ -2289,6 +3260,40 @@ class LarkCli:
     def unreact(self, message_id: str, reaction_id: str) -> None:
         self.call("unreact", ["im", "reactions", "delete", "--as", "bot",
                               "--params", json.dumps({"message_id": message_id, "reaction_id": reaction_id})])
+
+    def reaction_details(self, message_ids: list[str], user_id_type: str) -> dict[str, list[tuple[str, str, str]]]:
+        """{message id: [(operator_type, operator_id, emoji_type)]} for the messages whose reactions could be read whole: one
+        `im reactions batch_query` (the user's token; at most 10 per message, the API's limit), then the next pages of a
+        message that has more. A message Feishu could not answer for, or that still has pages left, is not in the result."""
+        out: dict[str, list[tuple[str, str, str]]] = {}
+        queries: list[dict[str, str]] = [{"message_id": m} for m in message_ids]
+        for _ in range(1 + REACTION_PAGES_MAX):
+            if not queries:
+                break
+            data = self.call("reactions query", ["im", "reactions", "batch_query", "--as", "user",
+                                                 "--params", json.dumps({"user_id_type": user_id_type}),
+                                                 "--data", json.dumps({"queries": queries, "page_size_per_message": 10})])
+            failed = {str(f.get("message_id")) for f in data.get("fail_msg_reaction_details") or [] if isinstance(f, dict)}
+            queries = []
+            for row in data.get("success_msg_reaction_details") or []:
+                message_id = str(row.get("message_id") or "") if isinstance(row, dict) else ""
+                if not message_id or message_id in failed:
+                    continue
+                items = out.setdefault(message_id, [])
+                for item in row.get("message_reaction_items") or []:
+                    operator = item.get("operator") if isinstance(item, dict) and isinstance(item.get("operator"), dict) else {}
+                    items.append((str(operator.get("operator_type") or ""), str(operator.get("operator_id") or ""),
+                                  str(item.get("emoji_type") or "") if isinstance(item, dict) else ""))
+                if row.get("has_more"):
+                    if row.get("page_token"):
+                        queries.append({"message_id": message_id, "page_token": str(row["page_token"])})
+                    else:
+                        failed.add(message_id)
+            for message_id in failed:
+                out.pop(message_id, None)
+        for query in queries:  # pages left over: this message cannot be judged this round
+            out.pop(query["message_id"], None)
+        return out
 
     def create_chat(self, name: str, owner_open_id: str) -> str:
         data = self.call("chat create", ["im", "+chat-create", "--as", "bot", "--name", name, "--owner", owner_open_id,
@@ -2406,6 +3411,18 @@ class BuzzCli:
             raise GroupSyncError("Buzz messages thread returned another root than the one asked for")
         return roots[0]
 
+    def thread_event(self, channel: str, event_id: str) -> dict[str, Any]:
+        """Read the containing thread and return the exact event requested. This is used by edit overlays, whose target
+        may be older than the ordinary message overlap window; no neighbouring event is ever guessed."""
+        value = self.call("thread", ["messages", "thread", "--channel", channel, "--event", event_id])
+        if not isinstance(value, list) or not all(isinstance(e, dict) and HEX64_RE.fullmatch(str(e.get("id") or ""))
+                                                  for e in value):
+            raise GroupSyncError("Buzz messages thread did not return a list of events")
+        found = [e for e in value if str(e.get("id") or "") == event_id]
+        if len(found) != 1:
+            raise GroupSyncError("Buzz messages thread did not return the requested event")
+        return found[0]
+
     def download_media(self, segment: str, dest: Path) -> None:
         """Relay media by its `<sha256>[.ext]` path segment (never a url, so the CLI only ever talks to its own relay), signed
         with this identity, into `dest`."""
@@ -2445,7 +3462,10 @@ class Clients:
     owner: LarkCli
     agents: dict[str, LarkCli]  # app_id -> that agent's own profile
     buzz: BuzzCli
-    http: Any = _http_get  # the people endpoint's transport; tests pass their own
+    http: Any = _http_get  # the people endpoint's and the relay query's transport; tests pass their own
+    relay_url: str = ""  # the mirror env's BUZZ_RELAY_URL: where the agent directory is read (ADR-0019)
+    mirror_key: str = ""  # the mirror env's BUZZ_PRIVATE_KEY: signs the reactions it carries into Buzz, in this process (ADR-0020)
+    mirror_auth_tag: str = ""  # the mirror env's BUZZ_AUTH_TAG: an agent identity is a relay member only with it
 
 
 def _clients(cfg: Mapping[str, Any], base_env: Mapping[str, str], runner: Any, http: Any = None) -> Clients:
@@ -2463,6 +3483,9 @@ def _clients(cfg: Mapping[str, Any], base_env: Mapping[str, str], runner: Any, h
         agents=agents,
         buzz=BuzzCli(cfg["buzz_cli"], child_env(base_env, mirror), runner=runner),
         http=http or _http_get,
+        relay_url=mirror.get("BUZZ_RELAY_URL", ""),
+        mirror_key=mirror.get("BUZZ_PRIVATE_KEY", ""),
+        mirror_auth_tag=mirror.get("BUZZ_AUTH_TAG", ""),
     )
 
 
@@ -2553,13 +3576,26 @@ def _new_report() -> dict[str, Any]:
     return {"added_users": 0, "removed_users": 0, "added_bots": 0, "removed_bots": 0, "blocked_bots": 0,
             "member_failures": 0, "removals_withheld": None, "unmapped_members": 0, "identity_conflicts": 0,
             "backlog_skipped": [],
-            "to_feishu": 0, "to_buzz": 0, "unknown": 0, "failed": 0, "errors": 0, "skipped": {},
+            "to_feishu": 0, "to_buzz": 0, "messages_updated": 0,
+            "unknown": 0, "failed": 0, "errors": 0, "skipped": {},
             # Reactions are decoration: their failures are counted, but never make a round need attention.
             "reactions_added": 0, "reactions_removed": 0, "reactions_failed": 0,
             "thread_roots_backfilled": 0, "thread_root_unavailable": 0, "thread_root_failed": 0, "thread_roots_deferred": 0,
             # Cards are how a message is said, not something to look at: a card Feishu refused and that went out as text
             # instead is only counted.
             "cards_sent": 0, "cards_fallback_text": 0, "relayed_agents": 0,
+            # The agent directory (ADR-0019) is a convenience: a failed lookup or a contested claim is counted, never alarmed on.
+            "directory_agents": 0, "directory_failed": 0, "directory_conflicts": 0,
+            # Two-way members (ADR-0020): what the group changed in the channel. A refusal, a protected member and a person
+            # nobody can place are told in the group once and counted here; a failed write is a member_failure like any other.
+            "members_to_buzz": 0, "members_removed_from_buzz": 0, "members_refused": 0, "members_protected": 0,
+            "members_unresolved": 0, "people_cache_failed": 0, "member_events_blocked": {},
+            # A newly joined agent introduces itself once. Directory-only agents are honestly relayed by the Desk bot.
+            "agent_intros_sent": 0, "agent_intros_relayed": 0, "agent_intro_failures": 0, "agent_intro_unknown": 0,
+            "agent_intro_stopped": 0,
+            # Two-way reactions (ADR-0020): Feishu reactions put on (or taken off) Buzz by the mirror, and join-request answers given
+            # in Feishu. Only counted; a failure is counted in reactions_failed like any reaction.
+            "reactions_to_buzz": 0, "reactions_withdrawn_in_buzz": 0, "approvals_to_buzz": 0,
             # Images are the point of a report, so a lost one (images_failed) needs a look; a policy skip (too large, over the
             # per-message limit, a format Feishu refuses ...) is counted by reason and does not.
             "images_to_feishu": 0, "images_to_buzz": 0, "images_failed": 0, "images_skipped": {}}
@@ -2588,9 +3624,12 @@ class Round:
     roles: dict[str, str] = field(default_factory=dict)
     names: dict[str, str] = field(default_factory=dict)
     verified_agents: set[str] = field(default_factory=set)  # agent pubkeys whose profile is the configured app
+    directory: dict[str, str] = field(default_factory=dict)  # channel agents this host has no configuration for -> their published app id
+    introductions: dict[str, AgentIntroduction] = field(default_factory=dict)  # signed public profile/policy read this round
     id_to_pubkey: dict[str, str] = field(default_factory=dict)  # people's ids in the chosen identity space -> pubkey
     ambiguous_ids: set[str] = field(default_factory=set)  # ids that are some member's account, only not whose (a shared binding, two addresses)
     bot_members: dict[str, str] = field(default_factory=dict)
+    preverified_listing: MemberListing | None = None  # read-only Desk gate, consumed by membership reconciliation
     owner_id: str = ""  # the owner's own id in that space: always in the group
     emails: dict[str, str] = field(default_factory=dict)  # pubkey -> address of the people that are mapped: in memory, never stored
     card_ctx: CardContext | None = None  # built when the round's first card needs it: the channel name is asked for once
@@ -2601,10 +3640,43 @@ class Round:
     thread_handled: set[str] = field(default_factory=set)  # events the mirroring loop has taken up
     thread_backfilled: set[str] = field(default_factory=set)  # roots read from Buzz, mirrored only to give replies context
     thread_capped: bool = False  # a reply waits for a read the round's limit does not allow: the cursor stays
+    # Two-way members (ADR-0020).
+    other_mirrors: set[str] = field(default_factory=set)  # bot members whose owner declares them another host's mirror
+    people_cache: dict[str, str] = field(default_factory=dict)  # the host-wide people cache as read this round
+    member_keys: dict[str, str] = field(default_factory=dict)  # pubkeys that joined the channel this round -> their Feishu key
+    agent_index: dict[str, str] = field(default_factory=dict)  # app ids looked up on the relay this round -> agent ("" if nobody's)
+    agent_lookup_failed: bool = False  # a relay lookup failed this round: bots it could not place are asked about again next round
+    signer_key: str = ""  # the people API's signer key, loaded when a member event is signed
+    keep_gone: set[str] = field(default_factory=set)  # left the channel, removals withheld: kept in the snapshot for next round
 
     @property
     def now_ts(self) -> int:
         return int(self.now.timestamp())
+
+    @property
+    def desk_app_id(self) -> str:
+        return self.cfg["agents"][self.cfg["desk_pubkey"]]["app_id"]
+
+    def proxy_client(self) -> LarkCli:
+        return self.clients.agents[self.desk_app_id]
+
+    def outbound_client(self, out: Outbound, *, original: bool = False) -> LarkCli:
+        app = out.via_app_id
+        if app is None:
+            app = self.state.b2f_senders.get(out.event_id) if original else self.desk_app_id
+        if app not in self.clients.agents:
+            raise GroupSyncError("message predates Desk cutover or its sender app is unavailable")
+        return self.clients.agents[app]
+
+    def verify_desk(self) -> None:
+        desk = self.cfg["desk_pubkey"]
+        if self.roles.get(desk) != "bot" or desk not in self.verified_agents:
+            raise GroupSyncError("configured Desk is not a verified bot member of the Buzz Channel")
+        user_id_type = "union_id" if self.union_mode else "open_id"
+        self.preverified_listing = self.clients.owner.member_listing(self.cfg["chat_id"], user_id_type)
+        self.bot_members = dict(self.preverified_listing.bots)
+        if self.desk_app_id not in self.bot_members:
+            raise GroupSyncError("configured Desk bot is not in the Feishu group")
 
     # -- identities and people ------------------------------------------------------------
 
@@ -2705,29 +3777,78 @@ class Round:
         machines = set(self.cfg["agents"]) | {self.cfg["mirror_pubkey"]}
         return {pk for pk, role in self.roles.items() if role in HUMAN_ROLES and pk not in machines}
 
-    def agents_in_channel(self) -> set[str]:
+    def bots_in_channel(self) -> set[str]:
         return {pk for pk, role in self.roles.items() if role == "bot" and pk != self.cfg["mirror_pubkey"]}
+
+    def agents_in_channel(self) -> set[str]:
+        """The channel's bot members that are agents: not this host's mirror, nor a mirror another host declared (ADR-0020)."""
+        return self.bots_in_channel() - self.other_mirrors
+
+    def load_directory(self) -> None:
+        """The published Feishu app ids of the channel's agents this host has no configuration for (ADR-0019), asked only
+        when there are such bots; the same answer tells which of them are other hosts' mirrors (ADR-0020). A failure leaves the
+        directory empty for this round: those agents are still relayed."""
+        foreign = self.bots_in_channel() - set(self.cfg["agents"])
+        if not foreign:
+            return
+        reserved = {agent["app_id"] for agent in self.cfg["agents"].values()} | {self.cfg["owner_app_id"]}
+        try:
+            answer = fetch_agent_directory(self.cfg, self.clients.relay_url, foreign, reserved, self.clients.http, self.now)
+        except GroupSyncError:
+            self.report["directory_failed"] += 1
+            self.agent_lookup_failed = True  # the relay is not answering this round: no further lookups either
+            return
+        self.other_mirrors = set(answer.mirrors)
+        self.directory = dict(answer.apps)
+        self.introductions.update(answer.introductions)
+        self.report["directory_agents"] = len(self.directory)
+        self.report["directory_conflicts"] = answer.conflicts
+
+    def _directory_bots(self) -> dict[str, str]:
+        """Directory agents whose bot is in the group: {pubkey: the bot's member id there}."""
+        return {pk: self.bot_members[app] for pk, app in self.directory.items() if app in self.bot_members}
 
     # -- membership -------------------------------------------------------------------------
 
     def reconcile_members(self) -> None:
         cfg, owner, report, chat = self.cfg, self.clients.owner, self.report, self.cfg["chat_id"]
-        # An agent whose profile could not be verified this round is left exactly as it is: its bot
-        # is neither added nor removed (it counts as a foreign bot for capacity).
-        managed = {cfg["agents"][pk]["app_id"] for pk in self.verified_agents}
-        desired_bots = {cfg["agents"][pk]["app_id"] for pk in self.agents_in_channel() & self.verified_agents}
         user_id_type = "union_id" if self.union_mode else "open_id"
         # The group's own owner is never removed, whoever the channel's people are.
         group = owner.chat(chat, user_id_type)
         group_owner = str(group.get("owner_id") or "")
         protected = frozenset({group_owner}) if group.get("owner_id_type") == user_id_type and group_owner else frozenset()
-        actual_users, self.bot_members = owner.members(chat, user_id_type)
-        plan = plan_membership(desired_users=set(self.id_to_pubkey), desired_bots=desired_bots,
+        listing = self.preverified_listing or owner.member_listing(chat, user_id_type)
+        self.preverified_listing = None
+        actual_users, self.bot_members = set(listing.users), dict(listing.bots)
+        two_way = membership_sync_mode(cfg) == "two_way"
+        baseline = two_way and not self.state.members_synced
+        delta = self.sync_members_both_ways(listing) if two_way else MemberDelta()
+        # An agent whose profile could not be verified this round is left exactly as it is: its bot
+        # is neither added nor removed (it counts as a foreign bot for capacity).
+        managed = ({cfg["agents"][pk]["app_id"] for pk in self.verified_agents} | set(self.directory.values())
+                   | delta.keep_bots)
+        desired_bots = (({cfg["agents"][pk]["app_id"] for pk in self.agents_in_channel() & self.verified_agents}
+                         | set(self.directory.values()) | delta.keep_bots)  # a directory agent is in the channel by construction
+                        - delta.drop_bots - delta.hold_bots)
+        desired_users = (set(self.id_to_pubkey) | delta.keep_users) - delta.drop_users - delta.hold_users
+        # Two-way, the group is a source as well: somebody only in the group is not an "extra" any more (he may bind, and then
+        # joins the channel). remove_extras only cleans up once, in the round that records the baseline; after that the
+        # members who leave the channel are taken out of the group one by one (delta.remove_*).
+        remove_extras = cfg["remove_extras"] and (baseline or not two_way)
+        plan = plan_membership(desired_users=desired_users, desired_bots=desired_bots,
                                actual_users=actual_users, actual_bots=set(self.bot_members),
                                owner_open_id=self.owner_id, owner_app_id=cfg["owner_app_id"],
-                               managed_bots=managed, remove_extras=cfg["remove_extras"], protected=protected)
-        plan, report["removals_withheld"] = guard_removals(plan, unmapped=report["unmapped_members"],
-                                                           allow_bulk=self.allow_bulk_removal)
+                               managed_bots=managed, remove_extras=remove_extras, protected=protected)
+        withheld = report["removals_withheld"]
+        plan, reason = guard_removals(plan, unmapped=report["unmapped_members"], allow_bulk=self.allow_bulk_removal)
+        report["removals_withheld"] = reason or withheld
+        if baseline and reason:
+            self.state.members_synced = 0  # the one clean-up remove_extras still does is waiting: record the baseline after it
+        keep = protected | {self.owner_id}
+        plan = replace(plan,
+                       remove_users=tuple(sorted(set(plan.remove_users) | {u for u in delta.remove_users if u in actual_users and u not in keep})),
+                       remove_bots=tuple(sorted(set(plan.remove_bots) | {b for b in delta.remove_bots
+                                                                          if b in self.bot_members and b != cfg["owner_app_id"]})))
         # The plan counted on its removals; if some were withheld, only add what still fits.
         room = max(MAX_BOTS_PER_CHAT - (len(self.bot_members) - len(plan.remove_bots)), 0)
         if len(plan.add_bots) > room:
@@ -2752,8 +3873,540 @@ class Round:
                 report["member_failures"] += failed
                 report[counter] += len(group) - failed
                 changed = changed or len(group) > failed
-        if changed:
-            _, self.bot_members = owner.members(chat, user_id_type)
+        if changed or delta.leaving:
+            after = owner.member_listing(chat, user_id_type)
+            self.bot_members = dict(after.bots)
+            present = {self._user_key(u) for u in after.users} | {"b:" + app for app in after.bots}
+            for pubkey, key in delta.leaving.items():
+                if key in present:
+                    self.keep_gone.add(pubkey)  # still in the group: taken out again next round
+                else:
+                    self.state.feishu_seen.pop(key, None)  # out, by our hand: when somebody pulls him back in, that is new
+        if two_way:
+            self._record_buzz_side(delta)
+
+    # -- two-way members (ADR-0020) ---------------------------------------------------------
+
+    def _user_key(self, member_id: str) -> str:
+        return f"u:{member_id}" if self.union_mode else f"o:{self.cfg['owner_app_id']}:{member_id}"
+
+    def _person(self, key: str) -> str:
+        """The pubkey of a group member (a Feishu user key): a channel member the bridge vouches for now, then somebody this
+        channel has seen before, then somebody another group sync on this host has seen (people_cache_file). "" if nobody."""
+        current = self.id_to_pubkey.get(_key_member_id(key))
+        if current:
+            return current
+        pubkey, _, seen = self.state.people_seen.get(key, "").partition("|")
+        if pubkey and seen.isdigit() and self.now_ts - int(seen) <= PEOPLE_CACHE_TTL:
+            return pubkey
+        return self.people_cache.get(key) or ""
+
+    def _agent(self, app_id: str, *, look_up: bool) -> str:
+        """The agent pubkey of a group bot: this host's configuration, the directory, and — only when `look_up` and nothing
+        closer knows it — every policy published on the relay (read once per round). "" if it is nobody's agent."""
+        for pubkey, agent in self.cfg["agents"].items():
+            if agent["app_id"] == app_id:
+                return pubkey
+        for pubkey, app in self.directory.items():
+            if app == app_id:
+                return pubkey
+        if not look_up:
+            return ""
+        if app_id not in self.agent_index:
+            if self.agent_lookup_failed:
+                return ""  # the relay failed once this round: not asked again for every other bot
+            reserved = {agent["app_id"] for agent in self.cfg["agents"].values()} | {self.cfg["owner_app_id"]}
+            try:
+                found = fetch_agent_index(self.cfg, self.clients.relay_url, reserved, self.clients.http, self.now,
+                                          wanted=[app_id])
+            except GroupSyncError:
+                self.report["directory_failed"] += 1
+                self.agent_lookup_failed = True
+                return ""
+            self.agent_index[app_id] = found.get(app_id, "")
+            if self.agent_index[app_id]:
+                # Keep the mapping for the rest of this round: an adopted directory agent can introduce itself immediately.
+                self.directory[self.agent_index[app_id]] = app_id
+        return self.agent_index[app_id]
+
+    def _resolve(self, key: str, *, look_up: bool) -> str:
+        return self._agent(key[2:], look_up=look_up) if key.startswith("b:") else self._person(key)
+
+    def _key_of(self, pubkey: str) -> str:
+        """A channel member's Feishu key, where it is known."""
+        if pubkey in self.member_keys:
+            return self.member_keys[pubkey]
+        for member_id, owner in self.id_to_pubkey.items():
+            if owner == pubkey:
+                return self._user_key(member_id)
+        agent = self.cfg["agents"].get(pubkey)
+        if agent is not None:
+            return "b:" + agent["app_id"]
+        if pubkey in self.directory:
+            return "b:" + self.directory[pubkey]
+        return self.state.buzz_seen.get(pubkey, "")
+
+    def _remember_people(self) -> None:
+        fresh = {self._user_key(member_id): pubkey for member_id, pubkey in self.id_to_pubkey.items()}
+        for key, pubkey in fresh.items():
+            self.state.people_seen.pop(key, None)
+            self.state.people_seen[key] = f"{pubkey}|{self.now_ts}"
+        path = self.cfg.get("people_cache_file")
+        if path:
+            try:
+                self.people_cache = merge_people_cache(Path(path), fresh, self.now_ts)
+            except (OSError, GroupSyncError):
+                self.report["people_cache_failed"] += 1
+
+    def _signer(self) -> str:
+        if not self.signer_key:
+            self.signer_key = load_signer_key(Path(self.cfg["people_api"]["signer_env_file"]))
+        return self.signer_key
+
+    def _member_event(self, kind: int, pubkey: str, source_key: str, role: str | None = None) -> str:
+        operation = _member_event_key(kind, pubkey, role, source_key)
+        event = self.state.member_events.get(operation)
+        fresh = event is None
+        key = self._signer()
+        signer = _signer_pubkey(key)
+        if fresh:
+            if len(self.state.member_events) >= MEMBER_EVENTS_MAX:
+                raise MemberEventBlocked("ledger_full")
+            if self.state.member_event_seq >= MEMBER_EVENT_SEQUENCE_MAX:
+                raise MemberEventBlocked("sequence_exhausted")
+            stream = self.state.member_event_stream or _new_member_event_stream()
+            sequence = self.state.member_event_seq + 1
+            tags = [["h", self.cfg["channel_id"]], ["p", pubkey]] + ([["role", role]] if role else [])
+            tags += [[MEMBER_EVENT_NONCE_TAG, _new_member_event_nonce()], [MEMBER_EVENT_STREAM_TAG, stream],
+                     [MEMBER_EVENT_SEQUENCE_TAG, str(sequence)]]
+            event = sign_event(key, kind, tags, "", self.now_ts)
+            self.state.member_event_stream = stream
+            self.state.member_event_seq = sequence
+            self.state.member_events[operation] = event
+            self.persist()  # before the request: a crash or unknown response must retry this byte-for-byte event
+        elif operation in self.state.member_event_blocks:
+            raise MemberEventBlocked(self.state.member_event_blocks[operation])
+        elif event["pubkey"] != signer:
+            raise MemberEventBlocked("signer_changed")
+        if abs(self.now_ts - event["created_at"]) > RELAY_CLOCK_SKEW_SECONDS:
+            raise MemberEventBlocked("expired")
+        try:
+            publish_signed_event(self.clients.relay_url, key, event, self.clients.http, self.now)
+        except RelayRefused:
+            if fresh:
+                # A first request that was definitively refused had no earlier unknown outcome, so it is safe to forget.
+                self.state.member_events.pop(operation, None)
+                self.persist()
+                raise
+            # This refusal says nothing about the earlier unknown request. Keep its exact event until state proves the effect
+            # or the source intent is withdrawn; replacing it here could create a second side effect.
+            self.state.member_event_blocks[operation] = "retry_refused"
+            self.persist()
+            raise MemberEventBlocked("retry_refused") from None
+        except GroupSyncError:
+            raise  # unknown: retain the exact signed event
+        return operation  # the caller atomically saves its member snapshot and clears this ACK
+
+    def _finish_member_event(self, operation: str) -> None:
+        self.state.member_events.pop(operation, None)
+        self.state.member_event_blocks.pop(operation, None)
+        self.persist()
+
+    def _settle_member_events(self, keys: Collection[str], *, complete: bool) -> None:
+        """Drop pending operations whose effect is visible, or whose source-side intent was visibly reverted."""
+        for operation in list(self.state.member_events):
+            parsed = _parse_member_event_key(operation)
+            if parsed is None:  # load_state already rejects it; keep this defensive for in-process mutations
+                continue
+            kind, pubkey, _, source_key = parsed
+            applied = (kind == 9000 and pubkey in self.roles) or (kind == 9001 and pubkey not in self.roles)
+            reverted = complete and ((kind == 9000 and source_key not in keys) or
+                                     (kind == 9001 and source_key in keys))
+            if applied or reverted:
+                del self.state.member_events[operation]
+                self.state.member_event_blocks.pop(operation, None)
+
+    def _note_group(self, note: str, text: str) -> None:
+        """Say something in the group once (from the Channel's Desk). The note is kept even when sending fails: a notice is not
+        worth asking again every minute."""
+        if note in self.state.member_notes:
+            return
+        self.state.member_notes[note] = self.now_ts
+        try:
+            self.proxy_client().send(self.cfg["chat_id"], text, "note-" + hashlib.sha256(note.encode()).hexdigest()[:40])
+        except CliError:
+            self.report["errors"] += 1
+
+    def _membership_failure_reasons(self) -> list[str]:
+        """Safe, actionable membership failures for the shared status message; never include server answers or identities."""
+        report = self.report
+        reasons: list[str] = []
+        if report["directory_failed"]:
+            reasons.append("Agent 目录读取失败：本轮未拉取远端 agent bot，下一轮自动重试。")
+        withheld = report["removals_withheld"]
+        if withheld == "member_list_incomplete":
+            reasons.append("飞书成员列表未确认完整：已暂停按“列表中消失”从 Buzz 移人，下一轮自动重试。")
+        elif withheld == "bulk_removal":
+            reasons.append("待移出成员超过安全上限：已暂停删除；请核对后用 --allow-bulk-removal 执行一轮。")
+        elif withheld == "unmapped_members":
+            reasons.append("有频道成员无法映射到飞书身份：为避免误删已暂停移人；请先完成账号绑定。")
+        if report["blocked_bots"]:
+            reasons.append("飞书群 bot 名额不足：部分 agent bot 未能进群；请释放 bot 名额后重试。")
+        if report["agent_intro_failures"] > report["agent_intro_stopped"]:
+            reasons.append("Agent 自我介绍发送失败：公开资料或飞书发送暂不可用，下一轮自动重试。")
+        if report["agent_intro_stopped"]:
+            reasons.append("Agent 自我介绍连续发送失败：已停止自动重试；请让频道管理员检查 Agent 公开资料和飞书 bot 发送权限。")
+        if report["agent_intro_unknown"]:
+            reasons.append("Agent 自我介绍发送结果无法确认：为避免重复已停止自动重发；请检查群消息并联系频道管理员处理。")
+        blocked = report["member_events_blocked"]
+        if blocked.get("signer_changed"):
+            reasons.append("未决成员变更的签名身份已变化：为避免重复操作已暂停重发；请恢复原签名身份，或人工核对 Buzz 频道成员后处理未决项。")
+        if blocked.get("expired"):
+            reasons.append("未决成员变更已超过 Relay 接收窗口：为避免生成第二条操作已暂停重发；请人工核对 Buzz 频道成员后处理未决项。")
+        if blocked.get("ledger_full"):
+            reasons.append("未决成员变更达到安全上限：已暂停未记账的新操作；请先恢复 Relay 并让现有操作收敛。")
+        if blocked.get("sequence_exhausted"):
+            reasons.append("成员变更序号已耗尽：已暂停新操作；请人工核对 Buzz 频道成员并联系维护者迁移同步 state。")
+        if blocked.get("retry_refused"):
+            reasons.append("Relay 拒绝了先前结果未知的成员变更重试：旧操作是否生效仍无法确认，已暂停该操作重试；请人工核对 Buzz 频道成员。")
+        if report["member_failures"] > sum(blocked.values()):
+            reasons.append("成员变更未完成：飞书成员接口或 Buzz Relay 未接受本轮操作，下一轮自动重试。")
+        return reasons
+
+    def _record_member_event_blocked(self, exc: MemberEventBlocked) -> None:
+        self.report["errors"] += 1
+        self.report["member_failures"] += 1
+        blocked = self.report["member_events_blocked"]
+        blocked[exc.reason] = blocked.get(exc.reason, 0) + 1
+
+    def _link_member_notice(self, event_id: str, message_id: str) -> None:
+        """Attach a direct Feishu fallback to its later Buzz root so the ordinary mirror never sends a duplicate."""
+        self.state.b2f[event_id] = message_id
+        self.state.b2f_modes[event_id] = SEND_TEXT_FALLBACK
+        self.state.b2f_senders[event_id] = self.state.member_notice_sender or self.desk_app_id
+        self.state.unresolved.pop(event_id, None)
+        self.state.attempts.pop("b2f:" + event_id, None)
+
+    def _direct_member_notice(self, content: str) -> None:
+        state = self.state
+        message_id = state.member_notice_feishu
+        if not message_id and state.member_notice_event:
+            message_id = feishu_id_for_buzz(state, state.member_notice_event) or ""
+        if message_id and state.member_notice_sender != self.desk_app_id:
+            # A pre-cutover notice cannot be edited by Desk. Re-root subsequent status under Desk once.
+            if state.member_notice_event:
+                state.b2f.pop(state.member_notice_event, None)
+                state.b2f_modes.pop(state.member_notice_event, None)
+                state.b2f_senders.pop(state.member_notice_event, None)
+            state.member_notice_feishu = message_id = ""
+            state.member_notice_sender = ""
+            self.persist()
+        try:
+            if message_id:
+                self.proxy_client().update_text(message_id, content)
+            else:
+                key = "membership-status-" + hashlib.sha256(self.cfg["channel_id"].encode()).hexdigest()[:32]
+                state.member_notice_sender = self.desk_app_id
+                self.persist()
+                message_id = self.proxy_client().send(self.cfg["chat_id"], content, key)
+        except CliError:
+            self.report["errors"] += 1
+            return
+        state.member_notice_feishu = message_id
+        if state.member_notice_event:
+            self._link_member_notice(state.member_notice_event, message_id)
+
+    def introduce_agents(self) -> None:
+        """Introduce each agent once after it joins this binding.
+
+        Configured agents use their own verified bot profile. A directory-only agent cannot safely lend this process its
+        credentials, so the Desk bot labels the message as a proxy built from signed public metadata. State is persisted
+        before the send and one deterministic Feishu idempotency key is reused while the result remains retryable.
+        """
+        present: dict[str, str] = {}
+        for pubkey in self.agents_in_channel():
+            configured = self.cfg["agents"].get(pubkey)
+            app_id = configured["app_id"] if configured is not None and pubkey in self.verified_agents \
+                else self.directory.get(pubkey)
+            if app_id and app_id in self.bot_members:
+                present[pubkey] = app_id
+        state, report = self.state, self.report
+        if not state.agent_intros_initialized:
+            # Upgrade/binding baseline: every bot present while the feature is first enabled belongs to setup and does not
+            # all speak at once. Subsequent joins are detected by their absence from this binding-scoped ledger.
+            for pubkey in present:
+                state.agent_intros.setdefault(pubkey, "baseline")
+            state.agent_intros_initialized = True
+        candidates = [pubkey for pubkey in sorted(present)
+                      if pubkey not in state.agent_intros
+                      or _is_pending(state.agent_intros.get(pubkey)) or _is_retry(state.agent_intros.get(pubkey))]
+        if not candidates:
+            return
+        for pubkey in candidates:
+            if pubkey not in state.agent_intros:
+                state.agent_intros[pubkey] = _mark(RETRY, self.now_ts)
+                state.agent_intro_senders[pubkey] = (present[pubkey] if present[pubkey] in self.clients.agents
+                                                   else self.desk_app_id)
+        self.persist()
+        missing = [pubkey for pubkey in candidates if pubkey not in self.introductions]
+        if missing:
+            try:
+                answer = fetch_agent_directory(self.cfg, self.clients.relay_url, missing, (), self.clients.http, self.now)
+                self.introductions.update(answer.introductions)
+            except GroupSyncError:
+                pass  # configured agents can still introduce themselves with an explicitly unconfirmed response range
+        for pubkey in candidates:
+            value = state.agent_intros[pubkey]
+            first = _marked_time(value) if _is_pending(value) or _is_retry(value) else self.now_ts
+            if self.now_ts - first > FEISHU_RETRY_WINDOW_SECONDS:
+                state.agent_intros[pubkey] = UNKNOWN
+                report["errors"] += 1
+                report["agent_intro_unknown"] += 1
+                continue
+            app_id = present[pubkey]
+            own_profile = pubkey in self.verified_agents and app_id in self.clients.agents
+            intro = self.introductions.get(pubkey)
+            if intro is None and own_profile:
+                intro = AgentIntroduction(self._display(pubkey), "", "")
+            if intro is None:
+                report["errors"] += 1
+                report["agent_intro_failures"] += 1
+                continue
+            sender_app = app_id if own_profile else state.agent_intro_senders.get(pubkey)
+            if sender_app not in self.clients.agents:
+                state.agent_intros[pubkey] = UNKNOWN  # old proxy attempt is not retried through another identity
+                report["errors"] += 1
+                report["agent_intro_unknown"] += 1
+                continue
+            client = self.clients.agents[sender_app]
+            text = render_agent_introduction(intro, relayed=not own_profile)
+            key = "agent-intro-" + hashlib.sha256(
+                f"{self.cfg['channel_id']}\0{self.cfg['chat_id']}\0{pubkey}".encode()).hexdigest()[:36]
+            state.agent_intros[pubkey] = _mark(PENDING, first)
+            state.agent_intro_senders[pubkey] = sender_app
+            self.persist()
+            try:
+                message_id = client.send(self.cfg["chat_id"], text, key)
+            except CliError as exc:
+                report["errors"] += 1
+                report["agent_intro_failures"] += 1
+                if exc.definite:
+                    attempt = "intro:" + pubkey
+                    state.attempts[attempt] = state.attempts.get(attempt, 0) + 1
+                    if state.attempts[attempt] >= MAX_SEND_ATTEMPTS:
+                        state.agent_intros[pubkey] = FAILED
+                        report["agent_intro_stopped"] += 1
+                    else:
+                        state.agent_intros[pubkey] = _mark(RETRY, first)
+                # An unknown outcome stays pending and is retried only inside Feishu's idempotency window.
+                self.persist()
+                continue
+            state.agent_intros[pubkey] = message_id
+            state.attempts.pop("intro:" + pubkey, None)
+            report["agent_intros_sent"] += 1
+            if not own_profile:
+                report["agent_intros_relayed"] += 1
+            self.persist()
+
+    def publish_membership_status(self) -> None:
+        """Publish/update one canonical Buzz status, with a direct Feishu fallback when Buzz cannot be written.
+
+        The fallback is linked to the eventual Buzz root in b2f, so recovery backfills the canonical event without creating
+        a second group message. Every failing round emits a kind 40003 edit; the first healthy round edits the same root to
+        say that synchronization recovered.
+        """
+        if membership_sync_mode(self.cfg) != "two_way":
+            return
+        state = self.state
+        reasons = self._membership_failure_reasons()
+        stamp = self.now.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        if reasons:
+            state.member_notice_active = True
+            content = f"飞书群成员同步失败（{stamp}）\n原因：\n- " + "\n- ".join(reasons)
+        elif state.member_notice_active:
+            state.member_notice_active = False
+            content = f"飞书群成员同步已恢复（{stamp}）。本轮未发现需要人工处理的成员同步失败。"
+        elif state.member_notice_feishu and not state.member_notice_event and state.member_notice_content:
+            content = state.member_notice_content  # a prior direct fallback still needs its canonical Buzz root
+        else:
+            return
+        state.member_notice_content = content
+        tags = [["h", self.cfg["channel_id"]], [FEISHU_SYNC_STATUS_TAG, "membership"]]
+        created_root = not state.member_notice_event
+        try:
+            if created_root:
+                state.member_notice_event = self._mirror_publish(9, tags, content)
+            else:
+                self._mirror_publish(EDIT_KIND, [*tags, ["e", state.member_notice_event]], content)
+        except GroupSyncError:
+            # Direct Feishu delivery is the designed fallback, not a second user-visible failure. If that also fails,
+            # _direct_member_notice records one error; the original membership problem is already present in the report.
+            self._direct_member_notice(content)
+            self.persist()
+            return
+        if created_root and state.member_notice_feishu:
+            self._link_member_notice(state.member_notice_event, state.member_notice_feishu)
+            self._direct_member_notice(content)  # refresh the fallback to this round's text; do not send another message
+        self.persist()
+
+    def _display(self, pubkey: str) -> str:
+        if pubkey not in self.names:
+            try:
+                self.names.update(self.clients.buzz.names([pubkey]))
+            except GroupSyncError:  # CliError is one
+                pass
+        return _safe_name(self.names.get(pubkey) or "") or pubkey[:12]
+
+    def sync_members_both_ways(self, listing: MemberListing) -> MemberDelta:
+        """Carry the group's changes since the last round into the channel, and work out which members that left the channel
+        leave the group (ADR-0020). Buzz writes happen here; the group's are left to the plan in reconcile_members."""
+        cfg, state, report = self.cfg, self.state, self.report
+        if not listing.complete:
+            report["removals_withheld"] = report["removals_withheld"] or "member_list_incomplete"
+        mirror = cfg["mirror_pubkey"]
+        keys = {self._user_key(u): ("user", u) for u in listing.users}
+        keys.update({"b:" + app: ("bot", app) for app in listing.bots if app != cfg["owner_app_id"]})
+        self._settle_member_events(keys, complete=listing.complete)
+        names = {self._user_key(u): _safe_name(name) for u, name in listing.users.items()}
+        buzz_now = {pk for pk in self.roles if pk != mirror and pk not in self.other_mirrors}
+        self._remember_people()
+        delta = MemberDelta()
+        space = self._user_key("")
+        if any(not key.startswith(("b:", space)) for key in state.feishu_seen):
+            # The people's ids changed kind (identity union_id <-> email, or another owner app): every key would look like a
+            # new member and a gone one at once. Nothing is carried over; the round records a new baseline instead.
+            state.members_synced = 0
+        if not state.members_synced:
+            state.feishu_seen = {key: "" for key in keys}
+            state.members_synced = self.now_ts
+            return delta
+        signer = _signer_pubkey(self._signer())
+        added = [key for key in keys if key not in state.feishu_seen]
+        removed = [key for key in state.feishu_seen if key not in keys] if listing.complete else []
+        gone = [pk for pk in state.buzz_seen if pk not in buzz_now and pk not in self.other_mirrors]
+        fresh = buzz_now - set(state.buzz_seen)
+        for note in [n for n in state.member_notes if n.startswith("unresolved:") and n[len("unresolved:"):] not in keys]:
+            del state.member_notes[note]
+        adds: list[tuple[str, str, str]] = []
+        if not listing.complete:
+            for key in state.feishu_seen:
+                if key not in keys:  # not listed, but the list was cut short: cannot tell, so not put back either
+                    (delta.hold_bots if key.startswith("b:") else delta.hold_users).add(_key_member_id(key))
+        for key in added:
+            kind, _ = keys[key]
+            pubkey = self._resolve(key, look_up=True)
+            if not pubkey:
+                if kind == "user":
+                    # Not written down: once he can be placed (he binds, another channel here sees him) he joins the channel.
+                    report["members_unresolved"] += 1
+                    who = names.get(key) or "有人"
+                    self._note_group(f"unresolved:{key}", (
+                        f"{who} 还不是 Buzz 频道成员：认不出 TA 的 Buzz 账号（可能还没绑定）。请先在 "
+                        f"{cfg['people_api']['base_url']}/bind/ 绑定，再请频道管理员在 Buzz 里把 TA 加进频道。"))
+                elif not self.agent_lookup_failed:
+                    state.feishu_seen[key] = ""  # a bot that is nobody's published agent: left alone, not looked up again
+                continue  # (a failed lookup writes nothing: the bot is asked about again next round)
+            state.member_notes.pop(f"unresolved:{key}", None)
+            state.member_notes.pop(f"protected:{pubkey}", None)
+            if pubkey in buzz_now or pubkey in state.buzz_seen or pubkey == mirror or pubkey in self.other_mirrors:
+                state.feishu_seen[key] = ""
+                continue  # a member already, or it left the channel this round and Buzz wins
+            adds.append((key, pubkey, "bot" if kind == "bot" else "member"))
+        removes: list[tuple[str, str]] = []
+        for key in removed:
+            state.member_notes.pop(f"refused:{key}", None)
+            pubkey = self._resolve(key, look_up=False)
+            if not pubkey or pubkey not in buzz_now or pubkey in fresh:
+                del state.feishu_seen[key]  # nothing to carry: not a member, or it joined the channel this round (Buzz wins)
+                continue
+            if self.roles.get(pubkey) == "owner" or pubkey in (signer, mirror):
+                report["members_protected"] += 1
+                del state.feishu_seen[key]
+                self._note_group(f"protected:{pubkey}", (
+                    f"{self._display(pubkey)} 被移出了飞书群，但 TA 是 Buzz 频道的 owner 或本群同步所用的身份，"
+                    "Buzz 频道里不会移出 TA。"))
+                continue
+            removes.append((key, pubkey))
+        leaving = [(pk, state.buzz_seen.get(pk, "")) for pk in gone]
+        leaving = [(pk, key) for pk, key in leaving if key in keys]
+        self.keep_gone = set()
+        if len(removes) + len(leaving) > BULK_REMOVAL_LIMIT and not self.allow_bulk_removal:
+            report["removals_withheld"] = "bulk_removal"
+            for key, _ in removes:
+                (delta.hold_bots if key.startswith("b:") else delta.hold_users).add(_key_member_id(key))
+            removes, leaving = [], []
+            self.keep_gone = set(gone)  # still in the snapshots: the next round (with --allow-bulk-removal) finds them again
+        for key, pubkey, role in adds:
+            try:
+                operation = self._member_event(9000, pubkey, key, role)
+            except MemberEventBlocked as exc:
+                self._record_member_event_blocked(exc)
+                continue
+            except RelayRefused as exc:
+                if refused_by_policy(exc):
+                    state.feishu_seen[key] = ""  # remember this appearance: only leaving and rejoining retries the policy
+                    report["members_refused"] += 1
+                    self._note_group(f"refused:{key}", (
+                        f"{self._display(pubkey)} 没能加进 Buzz 频道：它的 owner 设置了不让别人把它拉进频道"
+                        f"（{exc.reason.split(' ', 1)[0]}）。需要的话请联系它的 owner。"))
+                else:
+                    report["errors"] += 1
+                    report["member_failures"] += 1
+                continue
+            except GroupSyncError:
+                report["errors"] += 1
+                report["member_failures"] += 1
+                continue
+            state.feishu_seen[key] = ""
+            self.roles[pubkey] = role
+            self.member_keys[pubkey] = key
+            delta.adopted.append(pubkey)
+            report["members_to_buzz"] += 1
+            (delta.keep_bots if role == "bot" else delta.keep_users).add(_key_member_id(key))
+            self._finish_member_event(operation)
+        for key, pubkey in removes:
+            try:
+                operation = self._member_event(9001, pubkey, key)
+            except MemberEventBlocked as exc:
+                self._record_member_event_blocked(exc)
+                (delta.hold_bots if key.startswith("b:") else delta.hold_users).add(_key_member_id(key))
+                continue
+            except GroupSyncError:  # RelayRefused is one: asked again next round (the key stays in the snapshot)
+                report["errors"] += 1
+                report["member_failures"] += 1
+                (delta.hold_bots if key.startswith("b:") else delta.hold_users).add(_key_member_id(key))
+                continue
+            self.roles.pop(pubkey, None)
+            del state.feishu_seen[key]
+            delta.dropped.append(pubkey)
+            report["members_removed_from_buzz"] += 1
+            (delta.drop_bots if key.startswith("b:") else delta.drop_users).add(_key_member_id(key))
+            self._finish_member_event(operation)
+        for pubkey, key in leaving:
+            (delta.remove_bots if key.startswith("b:") else delta.remove_users).add(_key_member_id(key))
+            delta.leaving[pubkey] = key
+        if delta.adopted or delta.dropped:
+            self._announce(delta)
+        return delta
+
+    def _announce(self, delta: MemberDelta) -> None:
+        """One line in the channel, from the mirror, about what the group changed this round."""
+        parts = []
+        if delta.adopted:
+            parts.append("新加入 " + "、".join(self._display(pk) for pk in delta.adopted))
+        if delta.dropped:
+            parts.append("移出 " + "、".join(self._display(pk) for pk in delta.dropped))
+        try:
+            self.clients.buzz.send(self.cfg["channel_id"], "飞书群同步：" + "；".join(parts))
+        except GroupSyncError:
+            self.report["errors"] += 1
+
+    def _record_buzz_side(self, delta: MemberDelta) -> None:
+        """The channel's members as they are at the end of the round, with their Feishu keys: next round's baseline."""
+        mirror = self.cfg["mirror_pubkey"]
+        kept = {pk: self.state.buzz_seen[pk] for pk in self.keep_gone if pk in self.state.buzz_seen}
+        self.state.buzz_seen = {pk: self._key_of(pk) for pk in self.roles if pk != mirror and pk not in self.other_mirrors}
+        self.state.buzz_seen.update(kept)
 
     # -- shared send bookkeeping ----------------------------------------------------------
 
@@ -2808,6 +4461,7 @@ class Round:
             opens = {union: open_id for open_id, union in self.state.idmap.items()}
             ids = {pk: opens[union] for union, pk in self.id_to_pubkey.items() if union in opens}
         ids.update({pk: self.bot_members[app] for pk, app in agent_apps.items()})
+        ids.update(self._directory_bots())  # a directory agent's bot is named the same way (ADR-0019)
         return ids
 
     def _card_context(self, agent_apps: Mapping[str, str]) -> CardContext:
@@ -2819,8 +4473,86 @@ class Round:
             except GroupSyncError:  # CliError is one
                 name = ""
             self.card_ctx = CardContext(link_base=self.cfg["people_api"]["base_url"], channel_id=self.cfg["channel_id"],
-                                        channel_name=name, emails=self.emails, open_ids=self._card_open_ids(agent_apps))
+                                        channel_name=name, emails=self.emails,
+                                        open_ids={})
         return self.card_ctx
+
+    def _buzz_edit(self, event: Mapping[str, Any], by_id: Mapping[str, Mapping[str, Any]],
+                   agent_apps: Mapping[str, str], mention_targets: Mapping[str, tuple[str, str]],
+                   agent_mention_targets: Mapping[str, tuple[str, str]], unmapped_mode: str,
+                   unmanaged_mode: str, managed_agents: set[str]) -> None:
+        """Apply one Buzz kind 40003 to the Feishu copy of its original event. The replacement is rendered with the
+        original event's routing/thread/mention metadata and the edit's content, then sent by the same bot in place."""
+        state, report = self.state, self.report
+        edit_id, created = str(event["id"]), int(event.get("created_at") or 0)
+        value = state.e2f.get(edit_id)
+        if value in (FAILED, UNKNOWN) or _settled(value):
+            state.edit_unresolved.pop(edit_id, None)
+            return
+        open_attempt = _is_pending(value) or _is_retry(value)
+        if open_attempt and self.now_ts - _marked_time(value) > FEISHU_RETRY_WINDOW_SECONDS:
+            self._close(state.e2f, state.edit_unresolved, edit_id)
+            return
+        target = edit_target(event)
+        if target is None:
+            _skip(report, "edit_no_single_target")
+            return
+        original = by_id.get(target)
+        if original is None:
+            try:
+                original = self.clients.buzz.thread_event(self.cfg["channel_id"], target)
+            except GroupSyncError:
+                report["errors"] += 1
+                _skip(report, "edit_target_unavailable")
+                return
+        if str(original.get("kind")) not in {"9", "45001", "45003"}:
+            _skip(report, "edit_target_kind")
+            return
+        if str(original.get("pubkey") or "") != str(event.get("pubkey") or ""):
+            _skip(report, "edit_foreign")
+            return
+        message_id = feishu_id_for_buzz(state, target)
+        mode = state.b2f_modes.get(target)
+        if message_id is None:
+            _skip(report, "edit_target_unmirrored")
+            return
+        if mode not in (SEND_CARD, SEND_TEXT_FALLBACK):
+            _skip(report, "edit_mode_unknown")
+            return
+        replacement = {**original, "content": str(event.get("content") or "")}
+        if self.state.b2f_senders.get(target) not in self.clients.agents:
+            _skip(report, "edit_legacy_sender")
+            return
+        out = route_buzz_event(replacement, mirror_pubkey=self.cfg["mirror_pubkey"], agent_apps=agent_apps,
+                               human_pubkeys=self.humans(), agent_pubkeys=self.agents_in_channel(), names=self.names,
+                               mention_targets={}, unmapped_senders=unmapped_mode,
+                               agent_mention_targets={}, unmanaged_agents=unmanaged_mode,
+                               managed_agents=managed_agents,
+                               card=self._card_context(agent_apps) if mode == SEND_CARD else None)
+        if isinstance(out, str):
+            _skip(report, "edit_" + out)
+            return
+        client = self.outbound_client(out, original=True)
+        first = _marked_time(value) if open_attempt else self.now_ts
+        state.e2f[edit_id] = _mark(PENDING, first, _edit_extra(target, message_id, mode))
+        state.edit_unresolved[edit_id] = created
+        self.persist()
+        try:
+            if mode == SEND_CARD:
+                client.update_card(message_id, out.card)
+            else:
+                client.update_text(message_id, out.text)
+        except CliError as exc:
+            if exc.definite:
+                self._refused("e2f", state.e2f, state.edit_unresolved, edit_id, created, first,
+                              _edit_extra(target, message_id, mode))
+            else:
+                report["unknown"] += 1
+            return
+        state.e2f[edit_id] = message_id
+        state.edit_unresolved.pop(edit_id, None)
+        state.attempts.pop("e2f:" + edit_id, None)
+        report["messages_updated"] += 1
 
     @staticmethod
     def _post(client: LarkCli, chat_id: str, parent: str | None, body: str, key: str, *, card: bool) -> str:
@@ -2834,6 +4566,8 @@ class Round:
         agent_apps = self._agent_apps()
         mention_targets = {pk: (person_id, self.names.get(pk) or pk[:12]) for person_id, pk in self.id_to_pubkey.items()}
         agent_mention_targets = {pk: (self.bot_members[app], self.names.get(pk) or pk[:12]) for pk, app in agent_apps.items()}
+        agent_mention_targets.update({pk: (member, self.names.get(pk) or pk[:12])
+                                      for pk, member in self._directory_bots().items()})
         mention_targets.update(agent_mention_targets)
         unmapped_mode = buzz_unmapped_sender_mode(cfg)  # read every round: narrowing it takes effect at once
         unmanaged_mode = buzz_unmanaged_agent_mode(cfg)
@@ -2843,15 +4577,17 @@ class Round:
         def route(event: Mapping[str, Any]) -> Outbound | str:
             return route_buzz_event(event, mirror_pubkey=cfg["mirror_pubkey"], agent_apps=agent_apps,
                                     human_pubkeys=self.humans(), agent_pubkeys=self.agents_in_channel(),
-                                    names=self.names, mention_targets=mention_targets, unmapped_senders=unmapped_mode,
-                                    agent_mention_targets=agent_mention_targets,
-                                    unmanaged_agents=unmanaged_mode, managed_agents=managed_agents)
+                                    names=self.names, mention_targets={}, unmapped_senders=unmapped_mode,
+                                    agent_mention_targets={},
+                                    unmanaged_agents=unmanaged_mode, managed_agents=managed_agents,
+                                    other_mirrors=self.other_mirrors)
 
         self._give_up_stale(state.b2f, state.unresolved)
+        self._give_up_stale(state.e2f, state.edit_unresolved)
         self._give_up_stale_images()
         floor = max(state.floor, state.buzz_floor)
         since = max(state.buzz_since - BUZZ_OVERLAP_SECONDS, floor, 0)
-        open_times = [*state.unresolved.values(), *state.img_unresolved.values()]
+        open_times = [*state.unresolved.values(), *state.edit_unresolved.values(), *state.img_unresolved.values()]
         if open_times:  # reach back far enough to re-read every retry and pending send, of a text or of an image
             since = max(min(since, min(open_times)), floor, 0)
         try:
@@ -2863,13 +4599,16 @@ class Round:
             for item in list(state.unresolved):
                 state.b2f[item] = UNKNOWN if _is_pending(state.b2f.get(item)) else FAILED
                 state.unresolved.pop(item)
+            for item in list(state.edit_unresolved):
+                state.e2f[item] = UNKNOWN if _is_pending(state.e2f.get(item)) else FAILED
+                state.edit_unresolved.pop(item)
             for item in list(state.img_unresolved):
                 state.images[item] = UNKNOWN if _is_pending(state.images.get(item)) else FAILED
                 state.img_unresolved.pop(item)
             state.buzz_floor = self.now_ts  # everything up to now is dropped, and never read again
             fetched = []
         by_id = {str(e["id"]): e for e in fetched}
-        queue = deque(sorted(fetched, key=lambda e: (int(e.get("created_at") or 0), str(e["id"]))))
+        queue = deque(sorted(fetched, key=buzz_message_order))
         while queue:  # a reply whose thread root has no Feishu copy is put back behind that root (_thread_root_parent)
             event = queue.popleft()
             event_id, created = str(event["id"]), int(event.get("created_at") or 0)
@@ -2879,13 +4618,19 @@ class Round:
             if created < state.floor:
                 _skip(report, "before_binding")
                 continue
+            if int(event.get("kind") or 0) == EDIT_KIND:
+                self._buzz_edit(event, by_id, agent_apps, mention_targets, agent_mention_targets, unmapped_mode,
+                                unmanaged_mode, managed_agents)
+                continue
             attached = any(isinstance(t, list) and t[:1] == ["imeta"] for t in event.get("tags") or [])
             value = state.b2f.get(event_id)
             if value in (FAILED, UNKNOWN) or _settled(value) or event_id in mirrored_from_feishu:
                 state.unresolved.pop(event_id, None)
                 if attached and _settled(value):
                     routed = route(event)  # the text went out earlier (or in the last round): its images may still be to do
-                    if isinstance(routed, Outbound):
+                    if state.b2f_senders.get(event_id) not in self.clients.agents:
+                        self._drop_images(event, "legacy_sender")
+                    elif isinstance(routed, Outbound):
                         self._images_to_feishu(routed, created)
                     else:  # the sender cannot speak any more: what is left is not sent by anyone else
                         self._drop_images(event, routed)
@@ -2895,6 +4640,13 @@ class Round:
                     self._drop_images(event, "text_not_sent")
                 continue
             open_attempt = _is_pending(value) or _is_retry(value)
+            if open_attempt and state.b2f_senders.get(event_id) not in self.clients.agents:
+                state.b2f[event_id] = UNKNOWN
+                state.unresolved.pop(event_id, None)
+                _skip(report, "legacy_send_stopped")
+                if attached:
+                    self._drop_images(event, "legacy_sender")
+                continue
             if open_attempt and self.now_ts - _marked_time(value) > FEISHU_RETRY_WINDOW_SECONDS:
                 self._close(state.b2f, state.unresolved, event_id)  # past the idempotency window: never resend
                 if attached:  # no confirmed caption, and the event is not read again: the images stay out, counted now
@@ -2908,7 +4660,7 @@ class Round:
                     if attached:
                         self._drop_images(event, "text_not_sent")
                 continue
-            client = self.clients.owner if out.via_app_id is None else self.clients.agents[out.via_app_id]
+            client = self.outbound_client(out, original=open_attempt)
             if open_attempt:
                 # A retry repeats the first attempt exactly: same first time, same endpoint (send or
                 # reply to the same parent), same key, and the same request: a card stays a card and text stays text,
@@ -2925,11 +4677,12 @@ class Round:
             if mode == SEND_CARD:  # only a message that is really going out as a card asks for the card's context
                 out = route_buzz_event(event, mirror_pubkey=cfg["mirror_pubkey"], agent_apps=agent_apps,
                                        human_pubkeys=self.humans(), agent_pubkeys=self.agents_in_channel(),
-                                       names=self.names, mention_targets=mention_targets, unmapped_senders=unmapped_mode,
-                                       agent_mention_targets=agent_mention_targets,
+                                       names=self.names, mention_targets={}, unmapped_senders=unmapped_mode,
+                                       agent_mention_targets={},
                                        unmanaged_agents=unmanaged_mode, managed_agents=managed_agents,
-                                       card=self._card_context(agent_apps))
+                                       other_mirrors=self.other_mirrors, card=self._card_context(agent_apps))
             state.b2f[event_id] = _mark(PENDING, first, _send_extra(parent, mode))
+            state.b2f_senders[event_id] = out.via_app_id or self.desk_app_id
             state.unresolved[event_id] = created
             self.persist()  # an unknown outcome is retried only under the same idempotency key
             key = "b2f-" + hashlib.sha256(event_id.encode()).hexdigest()[:40]
@@ -2960,9 +4713,11 @@ class Round:
                     report["unknown"] += 1  # stays pending and unresolved: retried next round
                 continue
             state.b2f[event_id] = message_id
+            state.b2f_modes[event_id] = SEND_CARD if mode == SEND_CARD else SEND_TEXT_FALLBACK
             state.unresolved.pop(event_id, None)
             state.attempts.pop("b2f:" + event_id, None)
             state.attempts.pop("b2f-thread:" + event_id, None)
+            self._watch(message_id, event_id, str(event.get("content") or ""))
             if parent:
                 state.threads[parent] = self.now_ts  # our reply opened or continued this thread
                 state.polled.setdefault(parent, state.feishu_since)  # replies since the last round count
@@ -3126,7 +4881,7 @@ class Round:
             self._skip_image("over_limit", out.images_over)
         if not out.images:
             return
-        client = self.clients.owner if out.via_app_id is None else self.clients.agents[out.via_app_id]
+        client = self.outbound_client(out, original=True)
         thread = state.images.get(f"{out.event_id}:thread")  # the Feishu message the text was sent under ("-": none)
         if thread is None:  # the text went out before the images were synced: the direct parent's copy is the best guess
             parent = feishu_id_for_buzz(state, out.parent_event_id) if out.parent_event_id else None
@@ -3193,6 +4948,126 @@ class Round:
 
     # -- Buzz reactions -> Feishu -----------------------------------------------------------
 
+    # -- two-way reactions (ADR-0020) -------------------------------------------------------
+
+    def _watch(self, message_id: str, event_id: str, content: str = "") -> None:
+        """A message with a copy on both sides: its Feishu reactions are read for a while (a join request for a week)."""
+        if reaction_sync_mode(self.cfg) != "two_way":
+            return
+        span = JOIN_REQUEST_WATCH_SECONDS if JOIN_HEADER_RE.search(content) else REACTION_WATCH_SECONDS
+        watch = self.state.rwatch
+        watch.pop(message_id, None)
+        watch[message_id] = f"{event_id}|{self.now_ts + span}"
+        if len(watch) > REACTION_WATCH_MAX:  # the ones that stop being watched soonest go first
+            for gone in sorted(watch, key=lambda m: int(watch[m].rsplit("|", 1)[1]))[:len(watch) - REACTION_WATCH_MAX]:
+                del watch[gone]
+
+    def _mirror_publish(self, kind: int, tags: list[list[str]], content: str, created_at: int | None = None) -> str:
+        """An event signed here as the mirror. Like the Buzz CLI's own events it carries the mirror's NIP-OA auth tag (clients
+        show an agent's words under its owner by it), and the request carries it as x-auth-tag (relay membership)."""
+        key = secret_hex(self.clients.mirror_key, "mirror env file")
+        try:
+            auth = json.loads(self.clients.mirror_auth_tag) if self.clients.mirror_auth_tag else None
+        except ValueError:
+            auth = None
+        if isinstance(auth, list) and len(auth) >= 2 and auth[0] == "auth" and all(isinstance(x, str) for x in auth):
+            tags = [*tags, auth]
+        return publish_event(self.clients.relay_url, key, kind, tags, content, self.clients.http, self.now,
+                             auth_tag=self.clients.mirror_auth_tag or None, created_at=created_at)
+
+    def _approval_tags(self, inbound: Inbound, reply_to: str | None) -> list[list[str]] | None:
+        """A member's `/approve JOIN-<id>` / `/deny JOIN-<id>` under a Buzz thread (ADR-0020): the extra tags it goes out with, or
+        None when it is not one. Such a reply is signed here instead of by `buzz messages send` (which cannot add a tag), naming the
+        person and the request, the form the join-request script takes a Feishu answer in. (Not a reaction: the relay keeps one
+        reaction per identity, target and emoji, so somebody else's ✅ would block it.)"""
+        if reaction_sync_mode(self.cfg) != "two_way" or not reply_to or inbound.context_only or inbound.image_keys:
+            return None
+        head, sep, body = inbound.text.partition("：")
+        found = APPROVAL_COMMAND_RE.fullmatch(body.strip()) if sep and head.startswith("[飞书] ") else None
+        if found is None:
+            return None
+        return [[FEISHU_AUTHOR_TAG, inbound.sender_pubkey], ["join", found.group(2)]]
+
+    def feishu_reactions_to_buzz(self) -> None:
+        """People's Feishu reactions on the watched messages, said in Buzz by the mirror (kind 7 with the person's pubkey in a
+        feishu-author tag); one taken back in Feishu is taken back in Buzz (kind 5). Bots' reactions never come back (they came from
+        Buzz), nor do those of people nobody can place. Decoration: failures are counted, never alarmed on."""
+        cfg, state, report = self.cfg, self.state, self.report
+        if reaction_sync_mode(cfg) != "two_way":
+            return
+        state.rwatch = {m: v for m, v in state.rwatch.items() if int(v.rsplit("|", 1)[1]) > self.now_ts}
+        if not state.rwatch:
+            return
+        reverse = reverse_reaction_map(merged_reaction_map(cfg.get("reaction_map") or {}))
+        id_type = "union_id" if self.union_mode else "open_id"
+        calls = 0
+        for group in batches(list(state.rwatch), REACTION_QUERY_BATCH):
+            try:
+                found = self.clients.owner.reaction_details(group, id_type)
+            except CliError:
+                report["reactions_failed"] += 1
+                continue
+            for message_id, items in found.items():
+                event_id = state.rwatch[message_id].split("|", 1)[0]
+                present: set[str] = set()
+                for _, operator_id, emoji_type in items:
+                    # A bot's reaction is listed by its app id, which is nobody's id here: it came from Buzz and never goes back.
+                    pubkey = self.id_to_pubkey.get(operator_id)
+                    if not pubkey:
+                        continue
+                    item = f"{message_id}|{operator_id}|{emoji_type}"
+                    present.add(item)
+                    said = state.f2r.get(item, "")
+                    if said and not said.startswith(PENDING):
+                        continue
+                    emoji = reverse.get(emoji_type)
+                    if emoji is None:
+                        state.f2r[item] = SKIPPED
+                        _skip(report, "reaction_emoji_unmapped")
+                        continue
+                    # The relay keeps one reaction per identity, target and emoji: a second person's same emoji shares it.
+                    shared = next((v for k, v in state.f2r.items() if k != item and k.startswith(message_id + "|")
+                                   and k.endswith("|" + emoji_type) and HEX64_RE.fullmatch(v)), None)
+                    if shared:
+                        state.f2r[item] = shared
+                        continue
+                    if calls >= REACTIONS_PER_ROUND:
+                        continue
+                    calls += 1
+                    first = _marked_time(said) if said else self.now_ts  # a retry is the same event: a lost answer makes no copy
+                    state.f2r[item] = _mark(PENDING, first)
+                    try:
+                        state.f2r[item] = self._mirror_publish(7, [["e", event_id], [FEISHU_AUTHOR_TAG, pubkey]], emoji,
+                                                               created_at=first)
+                    except RelayRefused:
+                        report["reactions_failed"] += 1
+                        state.f2r[item] = FAILED
+                        continue
+                    except GroupSyncError:
+                        report["reactions_failed"] += 1
+                        if self.now_ts - first > RELAY_CLOCK_SKEW_SECONDS:
+                            state.f2r[item] = FAILED  # the relay would not take a retry this old any more
+                        continue
+                    report["reactions_to_buzz"] += 1
+                for item in [k for k in state.f2r if k.startswith(message_id + "|") and k not in present]:
+                    said = state.f2r[item]
+                    if not HEX64_RE.fullmatch(said):
+                        del state.f2r[item]  # never said in Buzz (skipped, failed): nothing to take back
+                        continue
+                    if any(v == said for k, v in state.f2r.items() if k != item and k in present):
+                        del state.f2r[item]  # somebody else's same reaction still stands on it
+                        continue
+                    if calls >= REACTIONS_PER_ROUND:
+                        continue
+                    calls += 1
+                    try:
+                        self._mirror_publish(5, [["e", said]], "")
+                    except GroupSyncError:
+                        report["reactions_failed"] += 1
+                        continue
+                    del state.f2r[item]
+                    report["reactions_withdrawn_in_buzz"] += 1
+
     def _reaction_failed(self, key: str, ledger_value: str, item: str) -> None:
         """A refused or uncertain reaction call: tried again next round (the create is idempotent), given
         up after MAX_SEND_ATTEMPTS with one count."""
@@ -3210,6 +5085,8 @@ class Round:
         cfg, state, report = self.cfg, self.state, self.report
         agent_apps, humans, agents = self._agent_apps(), self.humans(), self.agents_in_channel()
         reaction_map = merged_reaction_map(cfg.get("reaction_map") or {})
+        # Two-way (ADR-0020): the channel's people, and the agents whose messages the owner's bot relays, react through that bot.
+        relay_authors = (humans | (agents - set(cfg["agents"]))) if reaction_sync_mode(cfg) == "two_way" else set()
         floor = max(state.floor, state.buzz_floor)
         since = max(state.react_since - BUZZ_OVERLAP_SECONDS, floor, 0)
         try:
@@ -3226,7 +5103,7 @@ class Round:
                     if isinstance(tag, list) and len(tag) >= 2 and tag[0] == "e" and isinstance(tag[1], str):
                         withdrawn.setdefault(tag[1], set()).add(str(event.get("pubkey") or ""))
         calls, capped = 0, False
-        for event in sorted(fetched, key=lambda e: (int(e.get("created_at") or 0), str(e["id"]))):
+        for event in sorted(fetched, key=buzz_reaction_order):
             event_id, created = str(event["id"]), int(event.get("created_at") or 0)
             kind = str(event.get("kind"))
             if kind == "5":
@@ -3235,12 +5112,43 @@ class Round:
                     value = state.r2f.get(target) if isinstance(target, str) else None
                     if not value or value in (FAILED, REMOVED):
                         continue  # not a reaction we made, or already settled
-                    pubkey, message_id, _, reaction_id = value.split("|")
+                    parts = value.split("|")
+                    pubkey, message_id, emoji_type, reaction_id = parts[:4]
                     if pubkey != event.get("pubkey"):
                         _skip(report, "reaction_delete_foreign")  # only the reaction's own author can withdraw it
                         continue
                     if calls >= REACTIONS_PER_ROUND:
                         capped = True
+                        continue
+                    if len(parts) == 5 and (parts[4] == LEGACY_OWNER_REACTION or parts[4].startswith("desk:")):
+                        # One proxy reaction stands for everybody who reacted so in Buzz: it goes with the last.
+                        proxy_marker = parts[4]
+                        if proxy_marker == LEGACY_OWNER_REACTION:
+                            state.r2f[target] = REMOVED
+                            _skip(report, "reaction_legacy_sender")
+                            continue
+                        others = [v for item, v in state.r2f.items() if item != target and v.count("|") == 4
+                                  and v.split("|")[1:3] == [message_id, emoji_type] and v.endswith("|" + proxy_marker)]
+                        if not others:
+                            sender = self.clients.agents.get(proxy_marker[5:])
+                            if sender is None:
+                                # The Desk app that created this reaction has been removed or rotated.
+                                # Keep the Feishu reaction intact and close this withdrawal explicitly;
+                                # a different bot cannot remove that app's reaction.
+                                state.r2f[target] = FAILED
+                                state.attempts.pop("r2f-del:" + target, None)
+                                _skip(report, "reaction_sender_unavailable")
+                                report["reactions_failed"] += 1
+                                continue
+                            calls += 1
+                            try:
+                                sender.unreact(message_id, reaction_id)
+                            except CliError:
+                                self._reaction_failed("r2f-del:" + target, REMOVED, target)
+                                continue
+                            report["reactions_removed"] += 1
+                        state.r2f[target] = REMOVED
+                        state.attempts.pop("r2f-del:" + target, None)
                         continue
                     agent = cfg["agents"].get(pubkey)
                     if agent is None:
@@ -3266,11 +5174,14 @@ class Round:
                 _skip(report, "reaction_withdrawn")
                 continue
             routed = route_buzz_reaction(event, agent_apps=agent_apps, human_pubkeys=humans, agent_pubkeys=agents,
-                                         reaction_map=reaction_map)
+                                         reaction_map=reaction_map, relay_authors=relay_authors,
+                                         proxy_app_id=self.desk_app_id, mirror_pubkey=cfg["mirror_pubkey"],
+                                         other_mirrors=self.other_mirrors)
             if isinstance(routed, str):
                 _skip(report, routed)
                 continue
             app_id, emoji_type = routed
+            via_proxy = str(event.get("pubkey") or "") not in agent_apps and app_id == self.desk_app_id
             message_id = feishu_id_for_buzz(state, reaction_target(event) or "")
             if message_id is None:
                 _skip(report, "reaction_target_unmirrored")  # read again next round while it is inside the window
@@ -3284,7 +5195,8 @@ class Round:
             except CliError:
                 self._reaction_failed("r2f:" + event_id, FAILED, event_id)
                 continue
-            state.r2f[event_id] = "|".join((str(event["pubkey"]), message_id, emoji_type, reaction_id))
+            state.r2f[event_id] = "|".join((str(event["pubkey"]), message_id, emoji_type, reaction_id,
+                                            *(("desk:" + app_id,) if via_proxy else ())))
             state.attempts.pop("r2f:" + event_id, None)
             report["reactions_added"] += 1
         if not capped:  # otherwise the same window is read again, and what is done is in r2f
@@ -3336,6 +5248,7 @@ class Round:
         bot_member_to_pubkey = {self.bot_members[cfg["agents"][pk]["app_id"]]: pk
                                 for pk in self.agents_in_channel() & self.verified_agents
                                 if cfg["agents"][pk]["app_id"] in self.bot_members}
+        bot_member_to_pubkey.update({member: pk for pk, member in self._directory_bots().items()})
         allowed_senders = sender_allowlist(cfg)  # read from the config every round: narrowing it takes effect at once
         unmapped_mode = unmapped_sender_mode(cfg)  # so does this
         floor = max(state.floor, state.feishu_floor)
@@ -3426,14 +5339,30 @@ class Round:
                         self._skip_image(reason, count)
                     report["images_failed"] += failed_images
 
+                extra = self._approval_tags(inbound, reply_to)
                 try:
-                    event_id = self.clients.buzz.send(cfg["channel_id"], inbound.text, reply_to=reply_to,
-                                                      mentions=inbound.mentions, files=tuple(files))
+                    if extra is None:
+                        event_id = self.clients.buzz.send(cfg["channel_id"], inbound.text, reply_to=reply_to,
+                                                          mentions=inbound.mentions, files=tuple(files))
+                    else:
+                        # The first attempt's time, so a retry after a lost answer is the same event (the relay has it).
+                        tags = ([["h", cfg["channel_id"]], ["e", reply_to, "", "reply"]] + [["p", pk] for pk in inbound.mentions]
+                                + extra)
+                        try:
+                            event_id = self._mirror_publish(9, tags, inbound.text, created_at=first)
+                        except RelayRefused:
+                            raise CliError("send", 0, "rejected", definite=True) from None
+                        except GroupSyncError:
+                            raise CliError("send", -1, "unknown", definite=False) from None
+                        report["approvals_to_buzz"] += 1
                 except CliError as exc:
                     if exc.definite:
                         self._refused("f2b", state.f2b, state.f_unresolved, message_id, created, first)
                         if state.f2b[message_id] == FAILED:  # given up: what is known about its images is settled with it
                             settled_images()
+                    elif extra is not None:
+                        # Signed here with the first attempt's time: resending is the same event, so it is simply retried.
+                        self._refused("f2b", state.f2b, state.f_unresolved, message_id, created, first)
                     else:
                         state.f2b[message_id] = UNKNOWN  # maybe delivered: never resend
                         state.f_unresolved.pop(message_id, None)
@@ -3444,6 +5373,7 @@ class Round:
                 state.f_unresolved.pop(message_id, None)
                 state.attempts.pop("f2b:" + message_id, None)
                 report["to_buzz"] += 1
+                self._watch(message_id, event_id)
                 if inbound.context_only:
                     report["context_to_buzz"] += 1
                 report["images_to_buzz"] += len(files)
@@ -3559,19 +5489,25 @@ def round_command(config_path: Path, state_dir: Path, *, base_env: Mapping[str, 
         try:
             run.verify_identities()
             run.load_people()
+            run.load_directory()
         except GroupSyncError as exc:
             # Nothing has started, so nothing is written: a round that cannot say who is who (the bridge is
             # down, the signer is not an owner or admin) neither changes a group nor fixes the binding's start.
             exc.report = report
             raise
         try:
+            # Validate the required sender before any membership mutation, notice, or state baseline.
+            run.verify_desk()
             if not state.binding:  # the first verified round starts the binding: nothing older is mirrored
                 state.binding, state.floor = binding, int(now.timestamp()) - FEISHU_OVERLAP_SECONDS
                 state.buzz_since = state.feishu_since = state.react_since = state.floor
             run.reconcile_members()
+            run.introduce_agents()
+            run.publish_membership_status()
             run.buzz_to_feishu()
             run.feishu_to_buzz()
             run.buzz_reactions_to_feishu()
+            run.feishu_reactions_to_buzz()
         except GroupSyncError as exc:
             exc.report = report
             raise
@@ -3597,6 +5533,10 @@ def main(argv: list[str] | None = None, *, base_env: Mapping[str, str] | None = 
     b = sub.add_parser("bind")
     b.add_argument("--config", required=True)
     b.add_argument("--chat-id", required=True)
+    m = sub.add_parser("migrate-desk")
+    m.add_argument("--config", required=True)
+    m.add_argument("--desk-pubkey", required=True)
+    m.add_argument("--apply", action="store_true")
     r = sub.add_parser("round")
     r.add_argument("--config", required=True)
     r.add_argument("--state-dir", required=True)
@@ -3613,6 +5553,8 @@ def main(argv: list[str] | None = None, *, base_env: Mapping[str, str] | None = 
             out, code = create_chat_command(config, args.name, base_env=env, runner=runner), EXIT_OK
         elif args.command == "bind":
             out, code = bind_command(config, args.chat_id, base_env=env, runner=runner), EXIT_OK
+        elif args.command == "migrate-desk":
+            out, code = migrate_desk_config(config, args.desk_pubkey, apply=args.apply, now=now), EXIT_OK
         else:
             out = round_command(config, Path(args.state_dir), base_env=env, runner=runner, now=now,
                                 allow_bulk_removal=args.allow_bulk_removal, skip_backlog=args.skip_backlog, http=http)

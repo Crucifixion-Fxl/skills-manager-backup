@@ -90,8 +90,12 @@ precondition is an Ops Todo, not a reason to add a CRD or VM agent to the app
 repository.
 
 The following are platform-owned and are intentionally outside this workflow:
-`VMAgent`, `VMCluster`, `VMAlert`, `VMRule`, `VMStaticScrape`, operator/CRD
+`VMAgent`, `VMCluster`, `VMAlert`, `VMStaticScrape`, operator/CRD
 installation, any cluster-wide discovery other than the exact documented DCGM
 profile, remote write, retention, and scrape credentials. Escalate those to the
 observability/SRE owner with the desired target, namespace, labels, port, path,
 interval, and reason.
+
+Application alerting `VMRule` is supported only by
+`workflows/manage-vmalert-rules.md` and `references/victoriametrics/alerting.md`,
+after platform registration. This scrape workflow does not generate alert rules.

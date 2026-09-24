@@ -5,6 +5,7 @@ import subprocess
 import tempfile
 import unittest
 import urllib.error
+from unittest import mock
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -289,7 +290,9 @@ class BuzzAdapterTest(unittest.TestCase):
                                                                          tags=(("p", "a1" * 32),))]}
 
         runner.handlers[("messages", "thread")] = thread
-        self.assertEqual(buzz.send(content, reply_to=ROOT, mentions=["a1" * 32]), EVENT)
+        with mock.patch.object(SYNC, "verify_nostr_event_signature") as verify:
+            self.assertEqual(buzz.send(content, reply_to=ROOT, mentions=["a1" * 32]), EVENT)
+        verify.assert_called_once()
         self.assertEqual(sleeps, [0.5])
         send_args = runner.calls[0]["args"]
         self.assertEqual(send_args[-4:], ["--reply-to", ROOT, "--mention", "a1" * 32])
@@ -312,6 +315,91 @@ class BuzzAdapterTest(unittest.TestCase):
         runner.handlers[("messages", "send")] = lambda args, stdin: {"accepted": False}
         with self.assertRaises(SYNC.SyncError):
             buzz.send(content)
+
+    def test_edit_and_status_reaction_require_exact_readback(self):
+        """L2-1-GIS-128 edit 覆盖原事件；reaction 收敛为 Desk 的唯一当前 Git 状态。"""
+        buzz, runner, _ = self.buzz()
+        content = "✅ **已合并**\n[gitlab-notify:v1][object:mr][state:merged][draft:no][change:lifecycle][transition:none][project:481][mr:31]"
+        edit_id = "a" * 64
+        runner.handlers[("messages", "edit")] = lambda args, stdin: {
+            "accepted": True, "event_id": edit_id,
+        }
+        runner.handlers[("messages", "thread")] = lambda args, stdin: {"events": [
+            self.event(content, kind=40003, tags=(("e", ROOT),), event_id=edit_id),
+        ]}
+
+        with mock.patch.object(SYNC, "verify_nostr_event_signature") as verify:
+            self.assertEqual(buzz.edit(ROOT, content), edit_id)
+        verify.assert_called_once()
+        self.assertEqual(runner.calls[0]["args"][-4:], ["--event", ROOT, "--content", content])
+
+        reads = iter((
+            {"reactions": [{"emoji": "👀", "pubkeys": [DESK]}]},
+            {"reactions": [{"emoji": "✅", "pubkeys": [DESK]}]},
+            {"reactions": [{"emoji": "✅", "pubkeys": [DESK]}]},
+        ))
+        runner.handlers[("reactions", "get")] = lambda args, stdin: next(reads)
+        runner.handlers[("reactions", "remove")] = lambda args, stdin: {"accepted": True}
+        runner.handlers[("reactions", "add")] = lambda args, stdin: {"accepted": True}
+
+        buzz.set_status_reaction(ROOT, "✅")
+        self.assertTrue(buzz.status_reaction_matches(ROOT, "✅"))
+        reaction_calls = [call["args"][1:3] for call in runner.calls if call["args"][1] == "reactions"]
+        self.assertEqual(reaction_calls, [
+            ["reactions", "get"], ["reactions", "remove"], ["reactions", "add"],
+            ["reactions", "get"], ["reactions", "get"],
+        ])
+
+    def test_thread_rejects_unsigned_publisher_facts_before_card_selection(self):
+        """L2-1-GIS-144 relay 不能用伪造 publisher kind9/edit 劫持紧凑状态卡。"""
+        buzz, runner, _ = self.buzz()
+        unsigned_original = self.event(
+            "👀 **可评审**\n[gitlab-notify:v1][object:mr][state:opened][draft:no]"
+            "[change:lifecycle][transition:reviewable][project:481][mr:31]",
+            kind=9, pubkey=DESK,
+        )
+        runner.handlers[("messages", "thread")] = lambda args, stdin: {"events": [unsigned_original]}
+        with self.assertRaisesRegex(SYNC.SyncError, "id or signature"):
+            buzz.thread(ROOT)
+
+        forged = self.event(
+            "forged\n[gitlab-notify:v1][object:mr][state:opened][draft:no][change:activity]"
+            "[transition:none][project:481][mr:31][reaction:failure][rev:999999999]",
+            kind=40003, tags=(("e", ROOT),), pubkey=DESK,
+        )
+        runner.handlers[("messages", "thread")] = lambda args, stdin: {"events": [forged]}
+
+        with self.assertRaisesRegex(SYNC.SyncError, "id or signature"):
+            buzz.thread(ROOT)
+
+        forged["tags"][0] = ["h", OTHER_CHANNEL]
+        with self.assertRaisesRegex(SYNC.SyncError, "invalid publisher fact envelope"):
+            buzz.thread(ROOT)
+
+    def test_compact_edits_explicitly_scan_kind_40003_and_verify_matching_overlays(self):
+        """R4：root thread 不含 edit 时，adapter 用 messages get 显式读取并验签目标层。"""
+        buzz, runner, _ = self.buzz()
+        original = self.event(
+            "👀 **可评审**\n[gitlab-notify:v1][object:mr][state:opened][draft:no]"
+            "[change:lifecycle][transition:reviewable][project:481][mr:31]",
+            event_id=ROOT,
+        )
+        original["created_at"] = 100
+        overlay = self.event(
+            "✅ **已合并**\n[gitlab-notify:v1][object:mr][state:merged][draft:no]"
+            "[change:lifecycle][transition:none][project:481][mr:31][rev:1]",
+            kind=40003, tags=(("e", ROOT),), event_id="a" * 64,
+        )
+        overlay.update({"created_at": 101, "sig": "b" * 128})
+        runner.handlers[("messages", "get")] = lambda args, stdin: {"events": [overlay]}
+
+        with mock.patch.object(SYNC, "verify_nostr_event_signature") as verify:
+            self.assertEqual(buzz.compact_edits([original]), [overlay])
+
+        verify.assert_called_once_with(overlay, label="Buzz compact status overlay")
+        args = runner.calls[0]["args"]
+        self.assertEqual(args[args.index("--kinds") + 1], "40003")
+        self.assertEqual(args[args.index("--since") + 1], "100")
 
     def test_thread_retries_a_transient_cli_read_error(self):
         """L2-1-GIS-004 Relay 刚接受 root 时 thread 暂不可读，重试查询而不重复发送。"""

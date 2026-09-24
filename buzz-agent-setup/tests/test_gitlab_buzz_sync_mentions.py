@@ -264,7 +264,8 @@ class IssueAttentionTest(SyncCase):
         self.gitlab.issue_list = [make_issue(5, assignees=users("carol", "erin")),
                                   make_issue(6, state="closed", assignees=users("bob"))]
         self.run_sync()
-        first_facts = {content: mentions for reply, content, mentions in self.buzz.writes if reply}
+        first_facts = {content: mentions for reply, content, mentions in self.buzz.writes
+                       if "[object:issue]" in content}
         by_issue = {SYNC.parse_header(content)["issue"]: mentions for content, mentions in first_facts.items()}
         self.assertEqual(by_issue[5], (CAROL,))
         self.assertEqual(by_issue[6], ())
@@ -489,7 +490,7 @@ class ChannelRoleAttentionTest(SyncCase):
         self.buzz.roles.update({CAROL: "admin", BOB: "admin"})
         self.gitlab.issue_list = [make_issue(5, assignees=users("carol"))]
         self.run_sync()
-        first = next(mentions for reply, content, mentions in self.buzz.writes if reply and "[issue:5]" in content)
+        first = next(mentions for reply, content, mentions in self.buzz.writes if "[issue:5]" in content)
         self.assertEqual(first, (CAROL,))
         self.gitlab.issue_notes[5] = [note(91, "alice", "ping @bob please")]
         self.run_sync()

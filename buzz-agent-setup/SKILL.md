@@ -20,7 +20,7 @@ Git／SaaS 是事实域，Buzz 是编排域。Channel 管受众与上下文；Ag
 | 三类 Channel、Agent M:N、命名／职责、逐 Agent Skill→平台 scope、DEV-ASSESSMENT、Desk、**平台 Desk（跨 Channel 接单，如 `gitsecops-desk`）**、Canvas、四层配置与指标 | [fchac-model.md](references/fchac-model.md) |
 | 创建 Channel、铸身份、配 harness／Workflow、Onboarding 与验证 | [runtime-setup.md](references/runtime-setup.md) |
 | **不改 Buzz 源码让 Agent 真正看到 imeta 图片**：ACP adapter 同名 stdio proxy、stock `buzz media get` Blossom 鉴权、默认启用、安装／升级／回滚与 L4 | [acp-media-proxy.md](references/acp-media-proxy.md) |
-| **本机升级清单（skill 合并进 main 之后）**：release 钉在哪几处（同步 runner／飞书镜像与 todo 单元／责任人 helper 的 prompt 与沙箱／各 harness 的插件副本）、改了什么该动哪几处、升级顺序、破坏性变更窗口（责任人配置 v1↔v2）、验证与回滚；agent 实际读的是哪份 skill 副本、怎么更新见 runtime-setup.md「验证运行时实际加载的 Skill revision」 | [local-upgrade-runbook.md](references/local-upgrade-runbook.md) |
+| **本机完整升级（skill 合并进 main 之后）**：所有 release pin 收敛到同一 40 位 main SHA；`audit_local_alignment.py` 从 systemd unit 自动盘点同步 runner／飞书镜像／todo／入群申请／agent prompt＋责任人配置＋沙箱／ACP 图片代理／实际 enabled harness 插件，升级前生成待办、升级后 `fail=0, unknown=0`；含 canonical launcher、破坏性变更窗口、live 验证与回滚。agent 实际读哪份插件见 runtime-setup.md「验证运行时实际加载的 Skill revision」 | [local-upgrade-runbook.md](references/local-upgrade-runbook.md) |
 | 定时分析 Workflow（进展／复盘／pipeline 健康／架构坏味道）、最终报告站立受众与行动消息（通知对应责任人）；平台 Desk 的转交与平台反馈周报（`platform-feedback-summary`）顺序 | [scheduled-workflows.md](references/scheduled-workflows.md) |
 | **长报告写成飞书文档（谁产出谁发）**：报告超过约 8 行／每日走查类，完整内容由产出它的 agent 用自己的 bot（`--as bot`、自己的 lark-cli profile）建文档、只读授权给群、发摘要＋链接，频道 Thread 只发摘要；bot 缺文档 scope 是给 owner 的阻塞项，不得退回 `--as user` | [feishu-doc-report.md](references/feishu-doc-report.md) |
 | 通用高影响执行：Agent propose、平台管理员 approve、职能 executor 提交 `act_id`、隔离 broker execute | [act-authorization.md](references/act-authorization.md) |
@@ -28,9 +28,10 @@ Git／SaaS 是事实域，Buzz 是编排域。Channel 管受众与上下文；Ag
 | **个人 Channel**：一个人自己的 private Channel＋个人助手；owner timer 每 10 分钟无 LLM 拉取本人 GitLab todo 发到 Channel @ 本人（经飞书卡片通知，Buzz 手机端不可用时也能在飞书里收到），可信作者回 `todo:done:<id>` 或对待办消息点 ✅ 后回写 GitLab done，并引导按 todo 类型用 Workflow 配置自动处理。含 Rule 1／11 的窄例外 | [personal-channel.md](references/personal-channel.md)；决策 [ADR-0013](../../docs/05-adr/0013-run-personal-todo-sync-with-the-owners-pat.md)；timer [systemd/personal-todo-sync.md](references/systemd/personal-todo-sync.md) |
 | **已取代**（保留作参考，清理阶段删除）：Desk 当 router 的 `issue_thread_router.py`，含 outbox／action／checkpoint、public-only 与 service identity 门禁 | [issue-thread-routing.md](references/issue-thread-routing.md) |
 | 普通 GitLab 事件流／摘要播报（已并入全量变更同步，旧 notifier 待退役） | [gitlab-integration.md](references/gitlab-integration.md) |
-| **Buzz Channel ↔ 飞书群（本地 CLI 路线）**：setup 采访（新建群还是关联已有群、是否移出多余成员、哪些 agent 进群）、两种绑定的权限预检、agent 的 PersonalAgent 与隔离 lark-cli profile、`buzz_feishu_group_sync.py` 的成员对账与消息双向同步（人的身份按 `identity` 认：`union_id` 默认，前置是 bridge 已部署 union_id 回填与新响应字段；或 `email`；不用 bridge 应用的 open_id）、agent 的 Buzz reaction（👀 💬 等）同步成飞书表情、Buzz → 飞书默认发成卡片（`message_format`，飞书拒绝卡片内容时回退成文字）、图片双向同步（Buzz 的 imeta 附件 → 飞书图片消息，卡片之后作为随后的独立消息；飞书里人发的图片去掉元数据后作为附件发到 Buzz）、**非成员的发言默认以上下文镜像（`feishu_unmapped_senders`：署名 `[飞书·非成员]`，图片走成员同一路径，真实 @agent 产生 p tag 并唤醒它、不能 @ 到人；显式 `"skip"` 才关闭）**、**反方向对称：非成员/非 agent 的 Buzz 作者可选仅上下文镜像进飞书（`buzz_unmapped_senders`，同一条 @ 规则）**、**配置完每个群都要给群里发一条使用说明（什么场景 @ 谁，Setup 第 5 步）** | [feishu-group-sync.md](references/feishu-group-sync.md) |
+| **Buzz Channel ↔ 飞书群（本地 CLI 路线）**：setup 采访（新建群还是关联已有群、是否移出多余成员、哪些 agent 进群）、两种绑定的权限预检、agent 的 PersonalAgent 与隔离 lark-cli profile、`buzz_feishu_group_sync.py` 的成员对账与消息双向同步（人的身份按 `identity` 认：`union_id` 默认，前置是 bridge 已部署 union_id 回填与新响应字段；或 `email`；不用 bridge 应用的 open_id）、agent 的 Buzz reaction（👀 💬 等）同步成飞书表情、Buzz → 飞书默认发成卡片（`message_format`，飞书拒绝卡片内容时回退成文字）、图片双向同步（Buzz 的 imeta 附件 → 飞书图片消息，卡片之后作为随后的独立消息；飞书里人发的图片去掉元数据后作为附件发到 Buzz）、**非成员的发言默认以上下文镜像（`feishu_unmapped_senders`：署名 `[飞书·非成员]`，图片走成员同一路径，真实 @agent 产生 p tag 并唤醒它、不能 @ 到人；显式 `"skip"` 才关闭）**、**反方向对称：非成员/非 agent 的 Buzz 作者可选仅上下文镜像进飞书（`buzz_unmapped_senders`，同一条 @ 规则）**、**配置完每个群都要给群里发一条使用说明（什么场景 @ 谁，Setup 第 5 步）**、**别人 owner 的 agent：缺省由本频道 Desk bot 代发（`buzz_unmanaged_agents`），owner 把它的飞书 app_id 公开在 kind:30177 后别的群也能拉它的 bot、@ 到它（ADR-0019，`buzz_agent_feishu_app.py`）**、**成员与表情双向同步：在飞书群里拉人 / 拉 agent / 移人频道跟着变，飞书里也能同意 agent 入群；新进群 Agent 用公开 kind:0 about + 30177 respond_to 做一次人话自我介绍，不泄漏 instruction，失败可见并重试（ADR-0020，缺省开启，上线先用 `--mirror` 声明镜像）** | 入口与配置 [feishu-group-sync.md](references/feishu-group-sync.md)；消息细节 [feishu-message-sync.md](references/feishu-message-sync.md)；路由策略 [feishu-routing-policy.md](references/feishu-routing-policy.md)；双向部分 [feishu-two-way-sync.md](references/feishu-two-way-sync.md) |
 | **把 agent 拉进新频道（邀请即申请）**：频道 admin 邀请设了 `BUZZ_ACP_CHANNELS` 的业务角色 agent 就是申请；owner 的定时任务（无大模型）以 agent 身份在群里发申请、说明能做什么，owner 在同一个 Thread 点 ✅ 或回 `/approve JOIN-<id>` 后改 env 清单／责任人配置／prompt 频道表，并在 agent 空闲时重启、核对订阅；平台类 agent 设 `owner_only`、executor 设 `nobody` | [agent-channel-join.md](references/agent-channel-join.md)；决策 [ADR-0018](../../docs/05-adr/0018-treat-a-bot-invite-as-a-join-request-the-agent-owner-approves-in-the-channel.md) |
 | **退役 Agent 的完整清理清单**（停进程、移出 Channel、吊销 GitLab token、kind 5 删 kind:30177、本机残留、工作目录、Canvas／prompt／route 里的引用）、agent 的持久 systemd 用户单元、手工 `glab api` 的 host 坑 | [runtime-setup.md](references/runtime-setup.md)（「9. 退役 Agent」「用持久用户单元托管 Agent 进程」「手工 `glab api` 要显式指定 host」） |
+
 | bot 的 access level 改不了（降权只能签新换旧）、把 bot 标 external（Developer 档除外） | [agent-credentials.md](references/agent-credentials.md)（「bot 的 access level 改不了」「会提 MR 的 bot（Developer）不标 external」） |
 | **本机 agent 隔离加固**：`env -i` 白名单管不到 agent 的 Bash 工具（`~/.bashrc` 会把个人密钥灌回来，检测与门禁见 runtime-setup），Claude Code 内置沙箱（bubblewrap）作为同 UID 下的本地加固层：前提、共用／每 agent 配置分层、已知坑与探针清单 | [agent-sandbox.md](references/agent-sandbox.md)；门禁见 [runtime-setup.md](references/runtime-setup.md)（「白名单只管启动那一刻」） |
 | **开发类 agent 要 docker／任意命令**：沙箱本身挡住 docker，buzz-broker 是沙箱外的窄接口——专用 Unix 用户 + rootless docker + 按令牌认策略，agent 上传工作区在隔离任务里跑命令；机制、已验证事实、已知的坑（rootless 端口冲突等）、残余风险 | [buzz-broker.md](references/buzz-broker.md) |
@@ -39,6 +40,8 @@ Git／SaaS 是事实域，Buzz 是编排域。Channel 管受众与上下文；Ag
 | **每个 repo 一个 maintainer agent**（权限等同该 repo 的 GitLab Maintainer）：token 只在隔离 broker、名单取自 GitLab Maintainer 且 fail closed、只有 Maintainer 能点名并算授权（不走 ACT）、`glab` approve／auto-merge 绑定 `head_sha`、动作分级 A/M/E/D、入／退频道与 token 回收 | [repo-maintainer-agent.md](references/repo-maintainer-agent.md)；名单／准入／防重放脚本 `scripts/gitlab_maintainer_roster.py` |
 | Agent 不可见、不回复、冒名、启动与 Workflow 故障 | [troubleshooting.md](references/troubleshooting.md) |
 | 铸身份、签事件、同步配置示例与离线测试 | [scripts/README.md](references/scripts/README.md) |
+
+**飞书群同步的统一默认策略（PO 2026-09-24）**：每个 Channel／群必须配置本频道 `-desk` 的 `desk_pubkey`，由该 Desk bot 代发人的消息、Workflow 消息及允许镜像的上下文；原作者署名保留。已有独立 bot 的 Agent 仍自己发言。Desk 缺失、身份未验证或未入群时失败，不使用 owner bot 代发，也不提供旧策略兼容开关。此约束适用于所有绑定，不只 Naturehood；发布后须逐群核对配置和真实发送身份，不能把代码合并等同于切换成功。owner 的 user token 仍负责群读取和成员操作。详见 [feishu-group-sync.md](references/feishu-group-sync.md)。
 
 不要默认一次性读取全部 reference。FCHAC HTML 的分支规范 2.2.2 仍是待决草图，批准前不得进入 Agent prompt、自动路由或测试期望。
 
@@ -136,6 +139,7 @@ AI 无法自行得知、必须问人的输入，一次问齐，给出默认建�
 - `gitlab_project_token.py` 对 `POST`／`PUT`／`PATCH`／`DELETE` 默认 fail closed；provision receipt 中的 `ordinary_agent_gitlab_writes_enabled=false` 或 `l4_canary=pending` 不能授权写入。只有 owner launcher 同时固定 `BUZZ_GITLAB_PROJECT_TOKEN_L4_RECEIPT`、`BUZZ_GITLAB_PROJECT_TOKEN_L4_HEAD_SHA` 和当前 `BUZZ_GITLAB_PROJECT_TOKEN_PROVISIONING_RECEIPT`，且 L4 receipt 为 0600 非 symlink、绑定当前 map/head/provisioning receipt、覆盖四种写方法并完成开发档位项目 canary 时，才允许对应 Developer 项目写入；provisioning receipt 变化（包括轮换）会使旧 L4 receipt 失效；Reporter／Planner 仍只读，GET 不受影响。该门禁是 wrapper 的调用路径控制，不替代同 UID 进程隔离；高影响 executor token 仍不得进入 LLM 进程。
 - 写每个 Agent 的 0600 env 与 prompt；启用 GitLab 同步时写 runner manifest、launcher 与对应主机调度配置（Linux [systemd](references/systemd/README.md)，macOS [launchd](references/launchd/README.md)）。
 - 跑同步／路由 `--dry-run` 与本 Skill 的正／负向验证套件，并生成无 secret 的 receipt。
+- Skill 新 revision 要落到本机时，按 [本机完整升级](references/local-upgrade-runbook.md) 统一切换；不能只更新当前会话的插件或某一类 unit。最终必须用目标 40 位 SHA 运行只读审计器并得到 `fail=0, unknown=0`，再单独报告 service 运行态与 live 效果。
 
 #### 三、必须人来做或需要他人审批的例外
 
@@ -265,6 +269,7 @@ ACT 必须单平台、单职能、单动作，包含精确资源／payload、当
 ```bash
 python3 skills/buzz-agent-setup/references/scripts/nostrkit.py
 python3 skills/buzz-agent-setup/tests/test_runtime_plugin_install.py
+python3 skills/buzz-agent-setup/tests/test_audit_local_alignment.py
 python3 skills/buzz-agent-setup/scripts/run_offline_tests.py
 uv run python scripts/validate.py --skill skills/buzz-agent-setup --security
 ```

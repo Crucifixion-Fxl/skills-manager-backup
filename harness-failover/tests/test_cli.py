@@ -42,6 +42,7 @@ def make_home(tmp_path, grok_pct=100.0, claude_ok=True, log_lines=None, respond_
         write(f"{agents}/{name}.env",
               "BUZZ_PRIVATE_KEY=" + "nsec" + "1" + "fake" * 14 + f"\nAGENT_PUBKEY_HEX={AGENT_PK}\n"
               f"BUZZ_ACP_AGENT_COMMAND={grok['BUZZ_ACP_AGENT_COMMAND']}\nBUZZ_ACP_AGENT_ARGS=\nBUZZ_ACP_MODEL='grok-4.6'\n"
+              "BUZZ_ACP_MEDIA_MODE=stock_text_only\n"
               f"BUZZ_ACP_EFFORT_LEVEL=high\nBUZZ_ACP_RESPOND_TO={respond_to}\nBUZZ_ACP_RESPOND_TO_ALLOWLIST={allowlist}\n"
               f"BUZZ_ACP_AGENT_OWNER={OWNER_PK}\n", 0o600)
         write(f"{agents}/{name}.log", "\n".join(log_lines or []) + "\n")
@@ -71,13 +72,11 @@ class FakeOps:
 
     def _read(self, name):
         from harness_failover import envfile as _E
-        v = _E.read_vars(f"{self.home}/.config/buzz/agents/{name}.env",
-                         ["BUZZ_ACP_AGENT_COMMAND", "BUZZ_ACP_MODEL", "BUZZ_ACP_EFFORT_LEVEL", "HARNESS_CLAUDE_WRAPPER", "CODEX_HOME"])
-        env = {k: v[k] for k in ("BUZZ_ACP_AGENT_COMMAND", "BUZZ_ACP_MODEL", "BUZZ_ACP_EFFORT_LEVEL") if k in v}
-        if v.get("HARNESS_CLAUDE_WRAPPER"):
+        path = f"{self.home}/.config/buzz/agents/{name}.env"
+        v = _E.read_vars(path, [*C.PROC_KEYS, "HARNESS_CLAUDE_WRAPPER"])
+        env = {k: v[k] for k in C.PROC_KEYS if k in v}
+        if v.get("HARNESS_CLAUDE_WRAPPER") and not env.get("CLAUDE_CODE_EXECUTABLE"):
             env["CLAUDE_CODE_EXECUTABLE"] = v["HARNESS_CLAUDE_WRAPPER"]
-        if v.get("CODEX_HOME"):
-            env["CODEX_HOME"] = v["CODEX_HOME"]
         return env
 
     @staticmethod

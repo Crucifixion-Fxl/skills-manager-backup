@@ -4,8 +4,8 @@
 应用凭据只能留在它自己 owner 的本机（SKILL.md Rule 11），所以别的操作者永远拿不到它的发送能力。今天这种消息直接被
 丢掉（`agent_bot_unavailable`），群里看不到这个 agent 的任何回复。
 
-配置 `buzz_unmanaged_agents`（可选）：`"skip"`（缺省，和以前逐字节一致）或 `"relay"`。设成 `"relay"` 时，**本机配置里
-根本没有的**频道 agent（`agents_in_channel()` 给的是频道里所有 role=bot 成员，不看本地配置）由 owner 应用 bot 代发，
+配置 `buzz_unmanaged_agents`（可选）：`"relay"`（缺省，ADR-0019 起）或 `"skip"`（以前的行为，显式写才生效）。`"relay"` 时，
+**本机配置里根本没有的**频道 agent（`agents_in_channel()` 给的是频道里所有 role=bot 成员，不看本地配置）由 owner 应用 bot 代发，
 署名插入「·助手」区分（`名字（Buzz·助手）：正文`，卡片模式下 speaker 是「名字（助手）」）。
 
 两条边界必须守住，它们正是这个改动最容易破坏的地方：
@@ -55,13 +55,14 @@ class UnmanagedAgentConfig(TmpCase):
     def load(self, **extra):
         return FGS.load_config(write_owner_only(self.tmp / "c.json", json.dumps(dict(self.raw(), **extra))))
 
-    def test_the_key_is_optional_and_absent_means_skip(self):
-        """L1-FGS-700: `buzz_unmanaged_agents` 可以不写：配置照常加载、`buzz_unmanaged_agent_mode(cfg)` 是 "skip"
-        （和以前一样丢弃，走 agent_bot_unavailable）；它是可选键，不是必填键。"""
+    def test_the_key_is_optional_and_absent_means_relay(self):
+        """L1-FGS-700: `buzz_unmanaged_agents` 可以不写：配置照常加载、`buzz_unmanaged_agent_mode(cfg)` 是 "relay"
+        （ADR-0019：缺省代发）；它是可选键，不是必填键。写 "skip" 仍然可以退回以前的丢弃行为。"""
         raw = self.raw()
         self.assertNotIn("buzz_unmanaged_agents", raw)
         cfg = FGS.load_config(write_owner_only(self.tmp / "none.json", json.dumps(raw)))
-        self.assertEqual(FGS.buzz_unmanaged_agent_mode(cfg), "skip")
+        self.assertEqual(FGS.buzz_unmanaged_agent_mode(cfg), "relay")
+        self.assertEqual(FGS.buzz_unmanaged_agent_mode(self.load(buzz_unmanaged_agents="skip")), "skip")
         self.assertIn("buzz_unmanaged_agents", FGS.OPTIONAL_CONFIG_KEYS)
         self.assertNotIn("buzz_unmanaged_agents", FGS.CONFIG_KEYS)
 
@@ -95,10 +96,12 @@ class UnmanagedAgentRouting(unittest.TestCase):
         args.update(kw)
         return FGS.route_buzz_event(ev, **args)
 
-    def test_default_mode_is_unchanged_skip(self):
-        """L1-FGS-710: 不写 `unmanaged_agents`（缺省 "skip"）时行为和以前逐字节一样：本机没配的频道 agent 仍然
-        `agent_bot_unavailable`，不镜像。"""
-        self.assertEqual(self.route(event(eid(1), FOREIGN_AGENT_PK, "hi")), "agent_bot_unavailable")
+    def test_default_mode_relays_and_skip_still_drops(self):
+        """L1-FGS-710: 不写 `unmanaged_agents`（缺省 "relay"，ADR-0019）时本机没配的频道 agent 由 owner bot 代发；显式 "skip"
+        时仍然 `agent_bot_unavailable`，不镜像。"""
+        out = self.route(event(eid(1), FOREIGN_AGENT_PK, "hi"))
+        self.assertIsInstance(out, FGS.Outbound)
+        self.assertEqual(out.text, f"nh-dev（Buzz·{LABEL}）：hi")
         self.assertEqual(self.route(event(eid(2), FOREIGN_AGENT_PK, "hi"), unmanaged_agents="skip"),
                          "agent_bot_unavailable")
 

@@ -71,10 +71,15 @@ def check_launchers(profile, launchers) -> None:
 
 
 def running_env_matches(env: dict, profile) -> bool:
-    ok = env.get("BUZZ_ACP_AGENT_COMMAND") == profile.command and env.get("BUZZ_ACP_MODEL") == profile.model
+    want = profile.env_updates()
+    ok = env.get("BUZZ_ACP_AGENT_COMMAND") == profile.launch_command and env.get("BUZZ_ACP_MODEL") == profile.model
     ok = ok and env.get("BUZZ_ACP_EFFORT_LEVEL", profile.effort) == profile.effort
+    for key in ("BUZZ_ACP_MEDIA_ADAPTER_COMMAND", "BUZZ_ACP_MEDIA_BUZZ_CLI", "BUZZ_ACP_MEDIA_MODE"):
+        actual, expected = env.get(key), want.get(key)
+        ok = ok and (actual in (None, "") if expected is None else actual == expected)
     if profile.harness == "claude":
         ok = ok and env.get("CLAUDE_CODE_EXECUTABLE") == profile.wrapper
+        ok = ok and env.get("CLAUDE_CONFIG_DIR") == profile.home
     if profile.harness == "codex":
         ok = ok and env.get("CODEX_HOME") == profile.home
     return ok
@@ -101,11 +106,32 @@ def drifted(agents, running_env) -> list:
         v = a["vars"]
         want = {"BUZZ_ACP_AGENT_COMMAND": v.get("BUZZ_ACP_AGENT_COMMAND"), "BUZZ_ACP_MODEL": v.get("BUZZ_ACP_MODEL"),
                 "BUZZ_ACP_EFFORT_LEVEL": v.get("BUZZ_ACP_EFFORT_LEVEL")}
+        media_adapter, media_cli, media_mode = (
+            v.get("BUZZ_ACP_MEDIA_ADAPTER_COMMAND"),
+            v.get("BUZZ_ACP_MEDIA_BUZZ_CLI"),
+            v.get("BUZZ_ACP_MEDIA_MODE"),
+        )
+        proxy_tuple = bool(media_adapter) and bool(media_cli) and not media_mode
+        direct_tuple = not media_adapter and not media_cli and media_mode == "stock_text_only"
+        if not (proxy_tuple or direct_tuple):
+            out.append(a["name"])
+            continue
+        if proxy_tuple:
+            want["BUZZ_ACP_MEDIA_ADAPTER_COMMAND"] = media_adapter
+            want["BUZZ_ACP_MEDIA_BUZZ_CLI"] = media_cli
+            want["BUZZ_ACP_MEDIA_MODE"] = None
+        else:
+            want["BUZZ_ACP_MEDIA_ADAPTER_COMMAND"] = None
+            want["BUZZ_ACP_MEDIA_BUZZ_CLI"] = None
+            want["BUZZ_ACP_MEDIA_MODE"] = "stock_text_only"
+        for key in ("CLAUDE_CONFIG_DIR", "CLAUDE_CODE_EXECUTABLE"):
+            if v.get(key):
+                want[key] = v[key]
         if v.get("HARNESS_CLAUDE_WRAPPER"):
             want["CLAUDE_CODE_EXECUTABLE"] = v["HARNESS_CLAUDE_WRAPPER"]
         if v.get("CODEX_HOME"):
             want["CODEX_HOME"] = v["CODEX_HOME"]
-        if any(val is not None and env.get(k) != val for k, val in want.items()):
+        if any((env.get(k) not in (None, "") if val is None else env.get(k) != val) for k, val in want.items()):
             out.append(a["name"])
     return out
 

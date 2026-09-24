@@ -70,7 +70,7 @@ class DeliveryStateTest(unittest.TestCase):
         self.gitlab.note_list[(PID, 182)] = []
         summary = self.syncer().run()
         self.assertEqual(summary["created"], 2)
-        self.assertEqual(sum("/issues/181" in content for _, _, content in self.buzz.writes), 2)
+        self.assertEqual(sum("/issues/181" in content for _, _, content in self.buzz.writes), 1)
 
     def test_publish_before_ack_leaves_durable_pending_and_retry_recovers_without_duplicate(self):
         """L1-GIS-080 A lost send ACK leaves PENDING on disk; retry finds the signed root and records recovery."""
@@ -97,10 +97,36 @@ class DeliveryStateTest(unittest.TestCase):
 
         self.buzz.send = original_send
         summary = self.syncer().run()
-        self.assertEqual((summary["recovered"], len(self.buzz.events)), (1, 2))
+        self.assertEqual((summary["recovered"], len(self.buzz.events)), (1, 1))
         ledger = json.loads(self.syncer().outbox_path().read_text(encoding="utf-8"))
         self.assertEqual(ledger["pending"], [])
         self.assertTrue(any(item.get("recovered") is True for item in ledger["acked"]))
+
+    def test_work_item_root_recovers_after_lost_send_ack(self):
+        """A foreign-channel issues root cannot hide this channel's work_items root after a lost ACK."""
+        issue = make_issue(182)
+        issue["web_url"] = issue["web_url"].replace("/-/issues/", "/-/work_items/")
+        self.gitlab.issue_list[PID] = [issue]
+        self.buzz.events.append({
+            "id": "f" * 64, "pubkey": FAKES.DESK, "kind": 9, "created_at": 1000,
+            "tags": [["h", "11111111-1111-4111-8111-111111111111"]],
+            "content": issue["web_url"].replace("/-/work_items/", "/-/issues/"),
+        })
+        original_send = self.buzz.send
+
+        def lose_ack(content, reply_to=None, mentions=()):
+            original_send(content, reply_to, mentions)
+            raise SYNC.SyncError("simulated lost ACK")
+
+        self.buzz.send = lose_ack
+        with self.assertRaisesRegex(SYNC.SyncError, "simulated lost ACK"):
+            self.syncer().run()
+        self.buzz.send = original_send
+        summary = self.syncer().run()
+        own_roots = [e for e in self.buzz.events if ["h", CHANNEL] in e["tags"]]
+        self.assertEqual((summary["recovered"], len(own_roots)), (1, 1))
+        self.assertEqual(len(self.gitlab.note_list[(PID, 182)]), 1)
+        self.assertEqual(json.loads(self.syncer().outbox_path().read_text())["pending"], [])
 
     def test_overlapping_project_sets_share_a_project_scope_lock(self):
         """L1-GIS-081 Configs [481,482] and [482,483] cannot write the same channel concurrently."""
@@ -120,11 +146,12 @@ class DeliveryStateTest(unittest.TestCase):
     def test_restart_reconciles_old_pending_before_any_new_delivery(self):
         """L1-GIS-086 An unresolved old PENDING stops the run before a newer GitLab object is published."""
         syncer = self.syncer()
-        syncer._queue_delivery("buzz_message", {
+        change_id = syncer._queue_delivery("buzz_message", {
             "content": "[gitlab-notify:v1][type:push][project:481] unresolved prior fact",
             "reply_to": None,
             "mentions": [],
         })
+        syncer._mark_delivery_attempted(change_id)
         self.gitlab.issue_list[PID] = [make_issue(186)]
 
         with self.assertRaisesRegex(SYNC.SyncError, "still pending"):
@@ -133,6 +160,62 @@ class DeliveryStateTest(unittest.TestCase):
         self.assertEqual(self.buzz.writes, [])
         ledger = json.loads(syncer.outbox_path().read_text(encoding="utf-8"))
         self.assertEqual(len(ledger["pending"]), 1)
+
+    def test_restart_retries_an_idempotent_status_reaction(self):
+        """L1-GIS-127 Edit 成功而 reaction 暂时失败时，重启会补齐同一卡片的 Git 状态。"""
+        target = "e" * 64
+        reactions = {}
+        self.buzz.status_reaction_matches = lambda event_id, emoji: reactions.get(event_id) == emoji
+        self.buzz.set_status_reaction = lambda event_id, emoji: reactions.__setitem__(event_id, emoji)
+        syncer = self.syncer()
+        syncer._project_visibilities[PID] = "public"
+        syncer._queue_delivery("buzz_reaction", {
+            "event_id": target, "emoji": "✅", "project_id": PID,
+        })
+
+        self.assertEqual(syncer._reconcile_pending(), 0)
+
+        self.assertEqual(reactions, {target: "✅"})
+        ledger = json.loads(syncer.outbox_path().read_text(encoding="utf-8"))
+        self.assertEqual(ledger["pending"], [])
+        self.assertTrue(ledger["acked"][-1]["recovered"])
+
+    def test_definite_local_rejection_does_not_leave_an_unrecoverable_pending_edit(self):
+        """L1-GIS-129 明确零写入的本地拒绝撤销 pending；未知结果仍由既有 outbox 规则卡住。"""
+        syncer = self.syncer()
+        syncer._project_visibilities[PID] = "public"
+        payload = {"event_id": "e" * 64, "content": "replacement", "project_id": PID}
+
+        with self.assertRaises(SYNC.BuzzSendRejected):
+            syncer._deliver(
+                "buzz_edit", payload,
+                lambda: (_ for _ in ()).throw(SYNC.BuzzSendRejected("definite rejection")),
+            )
+
+        ledger = json.loads(syncer.outbox_path().read_text(encoding="utf-8"))
+        self.assertEqual(ledger["pending"], [])
+        self.assertEqual(ledger["acked"], [])
+
+    def test_restart_rejection_of_unstarted_edit_atomically_cancels_its_group(self):
+        """L1-GIS-143 重启首次执行 edit 若明确零写入，不得留下 reaction/提醒 continuation。"""
+        syncer = self.syncer()
+        syncer._project_visibilities[PID] = "public"
+        target = "e" * 64
+        syncer._queue_deliveries([
+            ("buzz_edit", {"event_id": target, "content": "replacement", "project_id": PID}),
+            ("buzz_reaction", {"event_id": target, "emoji": "✅", "project_id": PID}),
+            ("buzz_message", {
+                "content": "attention", "reply_to": target, "mentions": ["a" * 64],
+                "project_id": PID,
+            }),
+        ])
+        self.buzz.edit = lambda *_: (_ for _ in ()).throw(SYNC.BuzzSendRejected("zero write"))
+
+        with self.assertRaises(SYNC.BuzzSendRejected):
+            syncer._reconcile_pending()
+
+        ledger = json.loads(syncer.outbox_path().read_text(encoding="utf-8"))
+        self.assertEqual(ledger["pending"], [])
 
 
 class PrivateAudienceTest(unittest.TestCase):
@@ -167,7 +250,7 @@ class PrivateAudienceTest(unittest.TestCase):
                 gitlab.projects[PID]["visibility"] = "private"
                 gitlab.issue_list[PID] = [make_issue(182)]
                 summary, buzz = self.run_sync(actual, gitlab=gitlab)
-                self.assertEqual((summary["status"], len(buzz.writes)), ("ok", 2))
+                self.assertEqual((summary["status"], len(buzz.writes)), ("ok", 1))
 
     def test_retired_audience_block_is_rejected_loudly(self):
         """L1-GIS-083 (ADR-0006 修订) The retired audience block must be deleted, not silently ignored."""
@@ -189,7 +272,7 @@ class PrivateAudienceTest(unittest.TestCase):
             sync_config(), self.gitlab, buzz, state_dir=Path(self.tmp.name),
         ).run()
         self.assertEqual(summary["status"], "ok")
-        self.assertEqual(len(buzz.writes), 2)  # plaque + first fact (issue #78)
+        self.assertEqual(len(buzz.writes), 1)
 
     def test_project_visibility_drift_fails_closed_at_the_write_boundary(self):
         """L1-GIS-096 public→private 或 private→public 在本轮写入前发生时，不使用预检缓存继续投递。"""

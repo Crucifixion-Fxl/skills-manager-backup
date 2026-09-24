@@ -164,13 +164,15 @@ systemctl --user list-timers 'gitlab-buzz-sync-*'
 systemctl --user disable --now gitlab-buzz-sync-<channel>.timer
 # 2. 确认没有正在写的一轮（inactive/failed 都可以；active 就等它结束，不要 kill）
 systemctl --user is-active gitlab-buzz-sync-<channel>.service
-# 3. 回滚版本：改 unit 与 manifest 的 <immutable-release> 到上一个已验证 commit
+# 3. 回到不理解 attempted/group 的旧版前，先用新版把 outbox pending 排空；配置 schema 有变化时同时还原配置备份
+# 4. 回滚版本：改 unit 与 manifest 的 <immutable-release> 到上一个已验证 commit
 systemctl --user daemon-reload
 systemctl --user start gitlab-buzz-sync-<channel>.service
 systemctl --user enable --now gitlab-buzz-sync-<channel>.timer
 ```
 
-- cursor、outbox 与 binding 保持原样（0700 state、GitLab binding note），不删除 config/env/state、Desk membership 或 GitLab token；重新启用后从 outbox 与 cursor 续上。
+- 升级前除 manifest、unit 外，还要备份每份 sync config。回滚到不认识 `compact_status_updates` 的旧 release 时必须还原该 config 备份（或先删除新键并用旧版 `validate_config` 回读），不能只改代码路径。
+- cursor、outbox 与 binding 的回滚策略不同：cursor 与 binding 保持原样（0700 state、GitLab binding note），不删除 env/state、Desk membership 或 GitLab token；回到不理解 `attempted` / group continuation 的旧 release 前，outbox 的 `pending` 必须由新版逐项恢复并排到空数组。即使剩下的 kind 只是旧版认识的 `buzz_message` / `buzz_diff`，`attempted:false` 也表示它尚未调用、只能由新版安全续跑；不能交给旧版猜测，更不能直接删 state。未知 kind 同样严禁回退。
 - 任何时候一个 Channel 只有这一个调度者：先 disable timer 再做任何手动运行或版本切换，因此不会出现两个 writer；手动 `start` 与 timer 撞上时只会并入同一个 oneshot job；绕过 systemd 并行直接运行入口时，per-project lock 也只让一方写入，另一方返回 `locked`。
 - 只停路由：timer 停用期间在 owner manifest 禁用 route mode，再按上面步骤恢复 timer。
 - 不回退到 Desk heartbeat 同步；那会重新把 LLM 放进无人值守路径并形成第二个调度者。
@@ -186,6 +188,6 @@ systemctl --user enable --now gitlab-buzz-sync-<channel>.timer
 7. 最新 Canvas 由 allowlisted admin 发布时，合法 Desk `change:routing` fact 得到唯一 Desk route reply，位于 canonical Thread 且只有一个 Role `p` tag。伪造作者、恶意最新 Canvas、unknown/executor Role、closed/unmatched fact 均不回复。
 8. Role Agent 的 `respond_to` 明确允许 Desk identity；不得为兼容而静默改成 `anyone`。
 9. 空轮零 Channel 消息；有 push 活动时恰好一条 `template_summary` 摘要，通过 publisher gates，无内部 ID、无重复。
-10. disable timer 后不再有新一轮；重新 enable 后从原 cursor／outbox 续上。所有 Agent 的业务消息遵守责任人注意力预算：只有需行动／评审／决定／解除阻塞才加入最多 3 个已验证 human `p` tag。
+10. disable timer 后不再有新一轮；重新 enable 后从兼容的 cursor／outbox 续上。所有 Agent 的业务消息遵守责任人注意力预算：只有需行动／评审／决定／解除阻塞才加入最多 3 个已验证 human `p` tag。
 
 只有以上证据和分阶段 L4 场景都通过后，才可 `enable --now` timer；公开 schedule Workflow 永不恢复。`call_webhook` + HTTP route-reply listener 只是无法在 timer 中执行本地固定路由脚本时的降级适配器；它会引入 Channel 成员可读 bearer、ingress 与额外 L4，不能与本地 route gate 同时启用。

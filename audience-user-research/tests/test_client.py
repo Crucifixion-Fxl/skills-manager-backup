@@ -15,6 +15,7 @@ from user_research.client import DEFAULT_AUDIENCE_PLATFORM_BASE_URL
 KEY = "awpk_v2_" + "a" * 26 + "_" + "B" * 43
 CONTEXT = {
     "project_id": "kiwibit",
+    "research_track": "materialized_audience",
     "binding_revision": "pbr_" + "a" * 64,
     "credential_profile": "user_research",
     "allowed_actions": sorted(
@@ -35,6 +36,46 @@ CONTEXT = {
 
 
 class ClientTests(unittest.TestCase):
+    def test_timeout_defaults_and_configurable_ceiling(self) -> None:
+        config = AudienceClientConfig()
+        self.assertEqual(config.timeout_seconds, 10.0)
+        self.assertEqual(config.attachment_timeout_seconds, 120.0)
+        with patch.dict(
+            os.environ,
+            {
+                "AUDIENCE_PLATFORM_TIMEOUT_SECONDS": "120",
+                "AUDIENCE_PLATFORM_ATTACHMENT_TIMEOUT_SECONDS": "120",
+            },
+        ):
+            from_environment = AudienceClientConfig.from_environment()
+        self.assertEqual(from_environment.timeout_seconds, 120.0)
+        self.assertEqual(from_environment.attachment_timeout_seconds, 120.0)
+        AudienceClient(
+            AudienceClientConfig(
+                base_url="http://127.0.0.1:1",
+                personal_api_key=KEY,
+                allow_localhost_http=True,
+                timeout_seconds=120.0,
+                attachment_timeout_seconds=120.0,
+            )
+        )
+        for timeout_overrides in (
+            {"timeout_seconds": 120.1},
+            {"attachment_timeout_seconds": 120.1},
+            {"timeout_seconds": 0},
+            {"attachment_timeout_seconds": 0},
+        ):
+            with self.subTest(timeout_overrides=timeout_overrides):
+                with self.assertRaisesRegex(SafeApiError, "invalid_timeout"):
+                    AudienceClient(
+                        AudienceClientConfig(
+                            base_url="http://127.0.0.1:1",
+                            personal_api_key=KEY,
+                            allow_localhost_http=True,
+                            **timeout_overrides,
+                        )
+                    )
+
     def test_default_origin_is_prod_us_personal_api(self) -> None:
         self.assertEqual(
             AudienceClientConfig().base_url,
@@ -102,6 +143,34 @@ class ClientTests(unittest.TestCase):
         self.assertEqual(request.full_url, "http://127.0.0.1:1/api/platform/v3/personal-key")
         self.assertEqual(request.get_header("Authorization"), "Bearer " + KEY)
         self.assertEqual(client.verified_context, CONTEXT)
+
+    def test_questionnaire_only_self_context_is_accepted_by_bundled_contract(self) -> None:
+        client = self.client()
+        context = {**CONTEXT, "project_id": "neopace", "research_track": "questionnaire_only"}
+        with patch.object(
+            client._opener, "open", return_value=io.BytesIO(json.dumps(context).encode())
+        ):
+            self.assertEqual(client.verify_self_context(), context)
+        self.assertEqual(client.verified_context, context)
+
+    def test_legacy_four_field_self_context_keeps_exact_project_and_grants(self) -> None:
+        client = self.client()
+        context = {
+            "project_id": "kiwibit",
+            "binding_revision": CONTEXT["binding_revision"],
+            "credential_profile": "user_research",
+            "allowed_actions": ["idea.read"],
+        }
+        with patch.object(
+            client._opener, "open", return_value=io.BytesIO(json.dumps(context).encode())
+        ):
+            self.assertEqual(client.verify_self_context(), context)
+        self.assertEqual(client.verified_context, context)
+        self.assertNotIn("research_track", client.verified_context)
+        with self.assertRaisesRegex(SafeApiError, "operation_not_granted"):
+            client.call(Operation("personal_research_readiness"))
+        with self.assertRaisesRegex(SafeApiError, "project_binding_mismatch"):
+            client.call(Operation("personal_idea_list"), path={"project_id": "neopace"})
 
     def test_project_route_is_injected_from_context_and_binding_is_checked(self) -> None:
         client = self.client()
@@ -473,7 +542,7 @@ class ClientTests(unittest.TestCase):
                     path={"research_id": "research_" + "b" * 26},
                     query={"form_id": "Form123"},
                 )
-            self.assertEqual(opened.call_args.kwargs["timeout"], 30.0)
+            self.assertEqual(opened.call_args.kwargs["timeout"], 120.0)
             self.assertEqual(target.read_bytes(), content)
             self.assertEqual(target.stat().st_mode & 0o777, 0o600)
             self.assertEqual(result["bytes"], len(content))

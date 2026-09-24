@@ -7,6 +7,10 @@
 {"profiles": [
   {"id": "claude-work", "harness": "claude", "model": "sonnet", "effort": "medium", "priority": 25,
    "wrapper": "~/.local/bin/claude-work", "home": "~/.claude-work"},
+  {"id": "codex-buzz",
+   "command": "~/.local/share/buzz-agent-setup/adapters/codex-acp",
+   "media_proxy": "~/.local/share/buzz-agent-setup/acp-media-proxy/<sha256>/codex-acp",
+   "media_buzz_cli": "~/.local/opt/buzz-0.5.23/usr/bin/buzz"},
   {"id": "glm", "enabled": false},
   {"id": "claude-buzz", "effort": "high"}
 ]}
@@ -19,6 +23,8 @@
 | `model` / `effort` | 写进 `BUZZ_ACP_MODEL` / `BUZZ_ACP_EFFORT_LEVEL`；effort ∈ default low medium high xhigh max ultra |
 | `wrapper` | claude 系：写进 `HARNESS_CLAUDE_WRAPPER`，启动脚本据此设 `CLAUDE_CODE_EXECUTABLE` |
 | `home` | 账号目录：claude 系 = `CLAUDE_CONFIG_DIR`（wrapper 内设置）；codex = `CODEX_HOME`（写进 env） |
+| `command` | 可选；真实 adapter 的绝对路径覆盖。未设置时使用对应 harness 的默认 adapter |
+| `media_proxy` / `media_buzz_cli` | 可选但必须成对；proxy basename 必须和真实 adapter 一致。设置后切换会原子写入并回读 `BUZZ_ACP_AGENT_COMMAND`、`BUZZ_ACP_MEDIA_ADAPTER_COMMAND`、`BUZZ_ACP_MEDIA_BUZZ_CLI`；未设置则显式写 `BUZZ_ACP_MEDIA_MODE=stock_text_only` |
 | `provider` | 例如 `glm`，仅用于说明 |
 | `priority` | 越小越优先；故障切换按此顺序找第一个可用的 |
 | `enabled` | `false` 从候选中移除 |

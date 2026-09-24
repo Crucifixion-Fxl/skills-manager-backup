@@ -1,0 +1,23 @@
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: alerts-{{alert_set_id}}
+  namespace: {{business_namespace}}
+  labels:
+    monitoring.addx.io/alert-set: {{alert_set_id}}
+spec:
+  groups:
+    - name: {{alert_set_id}}-business-1m
+      interval: 1m
+      rules:
+        - alert: {{alert_name}}
+          expr: {{expression_json}}
+          for: "{{pending_duration}}"
+          labels:
+            notification_service: {{notification_service}}
+            environment: {{environment}}
+            namespace: {{business_namespace}}
+            severity: {{severity}}
+          annotations:
+            summary: {{summary_json}}
+            description: {{description_json}}

@@ -304,6 +304,15 @@ def verify_nostr_event_signature(event: dict[str, Any], *, label: str) -> None:
         raise RouteError(f"{label} event id or signature is invalid")
 
 
+def _same_signed_event(left: Any, right: Any) -> bool:
+    """Compare the immutable NIP-01 envelope while ignoring adapter decorations."""
+
+    fields = ("id", "pubkey", "created_at", "kind", "tags", "content", "sig")
+    return isinstance(left, dict) and isinstance(right, dict) and all(
+        left.get(field) == right.get(field) for field in fields
+    )
+
+
 def validate_config(config: Any, *, mode: str | None = None) -> dict[str, Any]:
     if not isinstance(config, dict):
         raise ConfigError("config must be a JSON object")
@@ -560,13 +569,16 @@ class RouteReplyService:
             raise RouteError("channel is not allowlisted")
         return select_canvas_policy(self.buzz.canvas_events(channel_id), channel_id, channel_rule)
 
-    def route(self, raw_request: Any, *, policy: dict[str, Any] | None = None) -> dict[str, str]:
+    def route(
+        self, raw_request: Any, *, policy: dict[str, Any] | None = None,
+        source_event: dict[str, Any] | None = None,
+    ) -> dict[str, str]:
         # The listener is concurrent so a partial HTTP upload cannot block healthful callers;
         # serialize the durable read-before-write section in and across processes.
         with self._route_lock:
             handle = self._open_lock()
             try:
-                return self._route(raw_request, policy=policy)
+                return self._route(raw_request, policy=policy, source_event=source_event)
             finally:
                 fcntl.flock(handle, fcntl.LOCK_UN)
                 handle.close()
@@ -648,7 +660,8 @@ class RouteReplyService:
         return authored[0] if authored else None
 
     def _validated_source(
-        self, raw_request: Any, *, policy: dict[str, Any] | None = None
+        self, raw_request: Any, *, policy: dict[str, Any] | None = None,
+        source_event: dict[str, Any] | None = None,
     ) -> tuple[dict[str, str], dict[str, str], list[dict[str, Any]], str, dict[str, Any]]:
         request = parse_request(raw_request)
         channel_rule = self.channels.get(request["channel_id"])
@@ -672,9 +685,38 @@ class RouteReplyService:
         if len(triggers) != 1:
             raise RouteError("trigger message was not found exactly once")
         trigger = triggers[0]
+        if source_event is not None:
+            if not _same_signed_event(trigger, source_event):
+                raise RouteError("route trigger changed after its signed scan")
+        # The local scanner has already authenticated every source event, but the
+        # compatibility HTTP path has no signed envelope to compare. An edit must
+        # therefore always prove its own NIP-01 identity here as well.
+        if source_event is not None or trigger.get("kind") == 40003:
+            verify_nostr_event_signature(trigger, label="re-read route trigger")
+        routed_trigger = trigger
+        if trigger.get("kind") == 40003:
+            target = sync.edit_target(trigger)
+            if target is None:
+                raise RouteError("edit trigger has no unique original target")
+            original_thread = self.buzz.thread(request["channel_id"], target)
+            originals = [event for event in original_thread if event.get("id") == target]
+            if len(originals) != 1:
+                raise RouteError("edit trigger original was not found exactly once")
+            original = originals[0]
+            if (
+                original.get("kind") != 9 or original.get("pubkey") != publisher_pubkey
+                or not _exact_channel(original, request["channel_id"])
+            ):
+                raise RouteError("edit trigger does not target one publisher-authored channel message")
+            verify_nostr_event_signature(original, label="edit trigger original")
+            # Routing uses the edit's authenticated content and id, but the immutable original's
+            # thread tags.  The route marker therefore stays idempotent per Git change while the
+            # reply lands in the canonical discussion rather than under the overlay event.
+            routed_trigger = {**trigger, "id": original["id"], "kind": 9, "tags": original.get("tags")}
+            events = [*original_thread, trigger]
         header = sync.parse_header(trigger.get("content"))
         if (
-            trigger.get("kind") != 9
+            trigger.get("kind") not in (9, 40003)
             or trigger.get("pubkey") != publisher_pubkey
             or not _exact_channel(trigger, request["channel_id"])
             or not header
@@ -682,13 +724,18 @@ class RouteReplyService:
             or not sync.matches_trigger_prefix(trigger.get("content"), route["trigger_prefix"])
         ):
             raise RouteError("trigger does not match the server-bound route fact")
-        root_id = _canonical_root(events, trigger, request["channel_id"])
+        root_id = _canonical_root(events, routed_trigger, request["channel_id"])
         return request, route, events, root_id, policy
 
-    def preview(self, raw_request: Any, *, policy: dict[str, Any] | None = None) -> dict[str, str]:
+    def preview(
+        self, raw_request: Any, *, policy: dict[str, Any] | None = None,
+        source_event: dict[str, Any] | None = None,
+    ) -> dict[str, str]:
         """Validate a local scan decision without creating state or sending."""
 
-        request, route, _, root_id, policy = self._validated_source(raw_request, policy=policy)
+        request, route, _, root_id, policy = self._validated_source(
+            raw_request, policy=policy, source_event=source_event,
+        )
         return {
             "status": "would_send",
             "root_event_id": root_id,
@@ -697,8 +744,13 @@ class RouteReplyService:
             "canvas_event_id": policy["event_id"],
         }
 
-    def _route(self, raw_request: Any, *, policy: dict[str, Any] | None = None) -> dict[str, str]:
-        request, route, events, root_id, _ = self._validated_source(raw_request, policy=policy)
+    def _route(
+        self, raw_request: Any, *, policy: dict[str, Any] | None = None,
+        source_event: dict[str, Any] | None = None,
+    ) -> dict[str, str]:
+        request, route, events, root_id, _ = self._validated_source(
+            raw_request, policy=policy, source_event=source_event,
+        )
         content = render_route_message(request, route)
         marker = route_marker(request, route)
         operation = {
@@ -786,13 +838,13 @@ class RouteBuzzCli:
         return events
 
     def channel_messages(self, channel_id: str, since_unix: int) -> list[dict[str, Any]]:
-        """Read every kind-9 Channel message since a durable local cursor."""
+        """Read ordinary facts and edit overlays since a durable local cursor."""
 
         found: dict[str, dict[str, Any]] = {}
         before: int | None = None
         for _ in range(sync.CHANNEL_PAGE_MAX):
             args = [
-                "messages", "get", "--channel", channel_id, "--kinds", "9",
+                "messages", "get", "--channel", channel_id, "--kinds", "9,40003",
                 "--since", str(int(since_unix)), "--limit", str(sync.CHANNEL_PAGE_LIMIT),
             ]
             if before is not None:
@@ -941,7 +993,7 @@ class LocalRouteScanner:
             return None
         event_id, created_at, content = event.get("id"), event.get("created_at"), event.get("content")
         if (
-            event.get("kind") != 9
+            event.get("kind") not in (9, 40003)
             or not isinstance(event_id, str)
             or not sync.HEX64_RE.fullmatch(event_id)
             or not sync._positive_int(created_at)
@@ -949,6 +1001,8 @@ class LocalRouteScanner:
             or not _exact_channel(event, self.channel_id)
         ):
             raise RouteError("Bridge-authored route scan event has an invalid envelope")
+        if event.get("kind") == 40003 and sync.edit_target(event) is None:
+            raise RouteError("Bridge-authored route edit has an invalid target")
         verify_nostr_event_signature(event, label="Bridge-authored route scan")
         return event_id, int(created_at), content
 
@@ -1002,10 +1056,10 @@ class LocalRouteScanner:
                 request = {"channel_id": self.channel_id, "message_id": event_id, "route_id": route_id}
                 matched += 1
                 if dry_run:
-                    self.service.preview(request, policy=policy)
+                    self.service.preview(request, policy=policy, source_event=event)
                     would_send += 1
                     continue
-                result = self.service.route(request, policy=policy)
+                result = self.service.route(request, policy=policy, source_event=event)
                 if result["status"] == "sent":
                     sent += 1
                 else:

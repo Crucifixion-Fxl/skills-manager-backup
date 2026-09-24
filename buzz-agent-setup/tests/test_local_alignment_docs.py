@@ -14,15 +14,20 @@ test that needs it is skipped there and runs locally).
 from __future__ import annotations
 
 import calendar
+import hashlib
 import importlib.util
 import json
 import os
 import re
+import shlex
 import shutil
+import stat
+import struct
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 
@@ -38,6 +43,7 @@ RUNBOOK = REFS / "local-upgrade-runbook.md"
 ENTRYPOINT = SKILL / "SKILL.md"
 FAILOVER_PROFILES = REPO / "skills" / "harness-failover" / "assets" / "profiles.default.json"
 REGISTER_SCRIPT = REFS / "scripts" / "feishu_register_agent_apps.sh"
+RUN_AGENT = REFS / "scripts" / "run-agent.py"
 
 SKILL_COPY_HEADING = "### 验证运行时实际加载的 Skill revision"
 PERSISTENT_UNIT_HEADING = "### 用持久用户单元托管 Agent 进程"
@@ -134,13 +140,16 @@ QR_FACTS = (
 
 RUNBOOK_FACTS = {
     "## 1. release 钉在几处": (
+        "适用的新功能默认启用",
+        "静默跳过",
         "release_dir",
         "BUZZ_DESK_RUNNER_MANIFEST",
-        "desk-runner.json",
-        "<immutable-release>",
-        "两处必须是同一个目录",
+        "gitlab-buzz-sync-launch.sh",
+        "gitlab_buzz_sync_timer.py",
+        "两处都切到同一个 release",
         "buzz-feishu-<channel>.service",
         "gitlab-todo-sync-<name>.service",
+        "buzz-agent-join.service",
         "buzz_send_with_responsible_mentions.py",
         "allowRead",
         "people_file",
@@ -150,19 +159,28 @@ RUNBOOK_FACTS = {
     ),
     "## 2. 改了什么，该动哪几处": (
         "git diff <旧 40 位> <新 40 位> -- skills/buzz-agent-setup/scripts skills/buzz-agent-setup/references/scripts",
-        "逐字相同",
-        "不用重装 prompt、沙箱和配置，也不用重启",
-        "da298c11",
-        "15f888b6",
+        "不用于豁免 full convergence",
+        "所有 pin 仍统一切新 SHA",
+        "长期保留多个 release pin",
+        "revision 仍统一",
     ),
     "## 3. 顺序：先做不破坏的部分": (
-        "git archive",
-        "--strip-components=2",
+        "cat-file blob",
+        "--no-replace-objects",
+        "umask 022",
+        "--extract",
         "chmod -R a-w",
+        "audit_local_alignment.py",
+        "/run/user/<uid>/systemd/transient/",
+        "绝不读取其内容",
+        "Buzz CLI",
         "相同的白名单 env",
         "--dry-run",
         "不要从自己的交互 shell 直接跑",
         "备份成 `<原名>.bak.<时间>`",
+        "run-agent.py",
+        "local-alignment-roles.json",
+        "compare_local_alignment_receipts.py",
         "disable --now",
         "daemon-reload",
         "读 `status`",
@@ -186,6 +204,9 @@ RUNBOOK_FACTS = {
         "wc -c < <people_file>",
         "load_config",
         "importlib",
+        "audit_local_alignment.py",
+        "fail=0, unknown=0",
+        "固定 Buzz CLI 哈希",
         "resolve_plugin_install.py",
         "git_commit_sha",
         "`errors` 为 0",
@@ -195,7 +216,12 @@ RUNBOOK_FACTS = {
         "*.bak.<时间>",
         "daemon-reload",
         "三样一起还原",
+        "run-agent.py",
+        "local-alignment-roles.json",
+        "共享 launcher",
+        "absent",
         "Canvas 别名表还在，才回得去",
+        "旧目标 SHA",
     ),
 }
 
@@ -258,6 +284,15 @@ def load_script(name: str):
     spec = importlib.util.spec_from_file_location(f"local_alignment_{name}", path)
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
+
+
+def load_python(path: Path, name: str):
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    sys.modules[name] = module
     spec.loader.exec_module(module)
     return module
 
@@ -452,9 +487,11 @@ class LocalUpgradeRunbookTest(ContractCase):
     def test_the_mapping_rows_point_at_the_right_places(self) -> None:
         body = section(self.text, "## 2. 改了什么，该动哪几处")
         expected = {
-            "`gitlab_buzz_route_reply.py`": ("release_dir", "ExecStart"),
+            "`gitlab_buzz_route_reply.py`": ("release_dir", "unit 入口"),
             "`buzz_feishu_group_sync.py`": ("buzz-feishu-<channel>.service", "ExecStart"),
             "`gitlab_todo_sync.py`": ("gitlab-todo-sync-<name>.service", "ExecStart"),
+            "`buzz_agent_join_requests.py`": ("buzz-agent-join.service", "timer"),
+            "`buzz_acp_media_proxy.py`": ("agent", "摘要目录", "重启"),
             "`buzz_send_with_responsible_mentions.py`": ("prompt", "allowRead", "BUZZ_RESPONSIBLE_CONFIG", "重启"),
             "`SKILL.md`": ("插件副本", "重启"),
             "`provision_gitlab_agent_token.py`": ("不钉在任何地方",),
@@ -467,9 +504,33 @@ class LocalUpgradeRunbookTest(ContractCase):
 
     def test_the_safe_steps_come_in_the_documented_order(self) -> None:
         body = section(self.text, "## 3. 顺序：先做不破坏的部分")
-        order = ["git archive", "--dry-run", "备份成 `<原名>.bak.<时间>`", "读 `status`"]
+        order = [
+            "cat-file blob",
+            "audit_local_alignment.py",
+            "--dry-run",
+            "备份成 `<原名>.bak.<时间>`",
+            "读 live 结果",
+            "最终审计必须归零",
+        ]
         positions = [index_of(body, marker) for marker in order]
         self.assertEqual(positions, sorted(positions), order)
+        self.assertLess(
+            index_of(body, "备份成 `<原名>.bak.<时间>`"),
+            index_of(body, "把 [agent-prompt-contract.md]"),
+        )
+        audit_block = next(b for b in code_blocks(body) if "audit_local_alignment.py" in b)
+        self.assertIn("/usr/bin/python3 -I", audit_block)
+        self.assertIn("unset LD_PRELOAD", audit_block)
+        self.assertIn("set +e", body)
+        self.assertIn("AUDIT_RC", body)
+        self.assertIn("PRE_RECEIPT", body)
+        self.assertIn("POST_RECEIPT", body)
+        self.assertIn("inventory_ids", body)
+        self.assertIn("transient_services", body)
+        self.assertIn("lookup_only_units", body)
+        self.assertIn("不 import／执行 target release 的其它 Python module", body)
+        self.assertIn("不执行 Claude／Codex／Grok wrapper", body)
+        self.assertIn("`checks`↔`summary`↔`gaps`", body)
 
     def test_the_dry_run_uses_the_launchers_env_whitelist_and_the_syncs_real_flags(self) -> None:
         body = section(self.text, "## 3. 顺序：先做不破坏的部分")
@@ -493,37 +554,331 @@ class LocalUpgradeRunbookTest(ContractCase):
                 self.assertIn(flag, block)
 
     @unittest.skipUnless(
-        shutil.which("git") and shutil.which("tar") and (REPO / ".git").exists(),
-        "needs git, tar and a git checkout (the CI image has no git)",
+        shutil.which("git") and (REPO / ".git").exists(),
+        "needs git and a git checkout (the CI image has no git)",
     )
     def test_the_release_commands_build_the_layout_the_page_describes(self) -> None:
         body = section(self.text, "## 3. 顺序：先做不破坏的部分")
-        block = next(b for b in code_blocks(body) if "git" in b and "archive" in b)
-        script = "\n".join(
-            line for line in block.replace("<skills 克隆>", str(REPO)).replace("origin/main", "HEAD").splitlines()
-            if " fetch " not in line  # no network in a test
+        block = next(b for b in code_blocks(body) if "git" in b and "cat-file blob" in b)
+        self.assertIn("set -euo pipefail", block)
+        source_branch = subprocess.run(
+            ["git", "-C", str(REPO), "branch", "--show-current"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        self.assertTrue(source_branch)
+        script = block.replace(
+            "SOURCE_REMOTE=git@gitlab.addx.ai:engineering/skills.git",
+            f"SOURCE_REMOTE={shlex.quote(str(REPO))}",
+        ).replace("TARGET_REF=refs/heads/main", "TARGET_REF=HEAD").replace(
+            "--branch main", f"--branch {shlex.quote(source_branch)}"
         )
+        self.assertGreaterEqual(block.count("/usr/bin/env -i"), 4)
+        with tempfile.TemporaryDirectory() as unsafe_home:
+            Path(unsafe_home).chmod(0o770)
+            rejected_home = subprocess.run(
+                ["bash", "-c", script],
+                env={"HOME": unsafe_home, "PATH": "/usr/bin:/bin"},
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            self.assertNotEqual(0, rejected_home.returncode)
+            self.assertFalse((Path(unsafe_home) / ".local").exists())
         with tempfile.TemporaryDirectory() as tmp:
             try:
                 done = subprocess.run(
-                    ["bash", "-euo", "pipefail", "-c", script],
-                    env={"HOME": tmp, "PATH": os.environ.get("PATH", "/usr/bin:/bin")},
+                    ["bash", "-c", script],
+                    env={
+                        "HOME": tmp,
+                        "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+                        "GIT_CONFIG_COUNT": "1",
+                        "GIT_CONFIG_KEY_0": "url.file:///definitely/missing.insteadOf",
+                        "GIT_CONFIG_VALUE_0": str(REPO),
+                        "GIT_SSH_COMMAND": "/bin/false",
+                    },
                     capture_output=True,
                     text=True,
                     timeout=120,
                 )
                 self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
                 releases = Path(tmp) / ".local" / "share" / "buzz-agent-setup" / "releases"
-                (release,) = list(releases.iterdir())
+                (release,) = [
+                    path for path in releases.iterdir() if re.fullmatch(r"[0-9a-f]{40}", path.name)
+                ]
                 self.assertRegex(release.name, r"^[0-9a-f]{40}$")
+                manifest = json.loads(read(release / ".release-manifest.json"))
+                self.assertEqual(release.name, manifest["commit"])
+                self.assertIn("scripts/audit_local_alignment.py", manifest["files"])
+                for relative, record in manifest["files"].items():
+                    deployed = release / relative
+                    self.assertEqual(stat.S_IMODE(deployed.stat().st_mode), record["mode"])
+                    self.assertEqual(
+                        hashlib.sha256(deployed.read_bytes()).hexdigest(),
+                        record["sha256"],
+                    )
                 for path in ("scripts/gitlab_buzz_sync.py", "scripts/gitlab_buzz_desk_runner.py",
                              "scripts/gitlab_todo_sync.py", "scripts/buzz_send_with_responsible_mentions.py",
                              "references/scripts/nostrkit.py"):
                     with self.subTest(path=path):
                         self.assertTrue((release / path).is_file())
                 self.assertEqual(release.stat().st_mode & 0o222, 0, "the release must be read-only")
+                verified = subprocess.run(
+                    [
+                        "/usr/bin/python3",
+                        "-I",
+                        "-c",
+                        (
+                            "import importlib.util,sys; from pathlib import Path; "
+                            "spec=importlib.util.spec_from_file_location('audit',sys.argv[1]); "
+                            "module=importlib.util.module_from_spec(spec); "
+                            "spec.loader.exec_module(module); "
+                            "auditor=module.Auditor(Path(sys.argv[2]),sys.argv[3]); "
+                            "raise SystemExit(0 if auditor.validate_release_manifest(Path(sys.argv[4])) else 1)"
+                        ),
+                        str(release / "scripts/audit_local_alignment.py"),
+                        tmp,
+                        release.name,
+                        str(release),
+                    ],
+                    env={"HOME": tmp, "PATH": "/usr/bin:/bin"},
+                    capture_output=True,
+                    text=True,
+                    timeout=120,
+                    check=False,
+                )
+                self.assertEqual(0, verified.returncode, verified.stdout + verified.stderr)
+                release.chmod(0o755)
+                manifest_path = release / ".release-manifest.json"
+                manifest_path.chmod(0o644)
+                manifest_path.unlink()
+                drifted = release / "scripts/gitlab_buzz_sync.py"
+                drifted.chmod(0o644)
+                drifted.write_text(
+                    drifted.read_text(encoding="utf-8") + "# not in source commit\n",
+                    encoding="utf-8",
+                )
+                rejected = subprocess.run(
+                    [
+                        "/usr/bin/python3",
+                        "-I",
+                        str(release / "scripts/build_release_manifest.py"),
+                        "--release",
+                        str(release),
+                        "--commit",
+                        release.name,
+                        "--source-repo",
+                        str(REPO),
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=120,
+                    check=False,
+                )
+                self.assertEqual(2, rejected.returncode)
+                duplicate = subprocess.run(
+                    ["bash", "-c", script],
+                    env={"HOME": tmp, "PATH": os.environ.get("PATH", "/usr/bin:/bin")},
+                    capture_output=True,
+                    text=True,
+                    timeout=120,
+                )
+                self.assertNotEqual(duplicate.returncode, 0)
+                self.assertFalse(list(releases.glob(".release-*")))
             finally:
                 subprocess.run(["chmod", "-R", "u+w", tmp], check=False)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            try:
+                restrictive = subprocess.run(
+                    ["bash", "-c", "umask 077\n" + script],
+                    env={"HOME": tmp, "PATH": os.environ.get("PATH", "/usr/bin:/bin")},
+                    capture_output=True,
+                    text=True,
+                    timeout=120,
+                )
+                self.assertEqual(
+                    restrictive.returncode,
+                    0,
+                    restrictive.stdout + restrictive.stderr,
+                )
+            finally:
+                subprocess.run(["chmod", "-R", "u+w", tmp], check=False)
+
+        failed_script = "\n".join(
+            (line[: len(line) - len(line.lstrip())] + "false \\")
+            if " cat-file blob " in line
+            else line
+            for line in script.splitlines()
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            try:
+                failed = subprocess.run(
+                    ["bash", "-c", failed_script],
+                    env={"HOME": tmp, "PATH": os.environ.get("PATH", "/usr/bin:/bin")},
+                    capture_output=True,
+                    text=True,
+                    timeout=120,
+                )
+                self.assertNotEqual(failed.returncode, 0)
+                releases = Path(tmp) / ".local/share/buzz-agent-setup/releases"
+                self.assertFalse(
+                    [path for path in releases.iterdir() if re.fullmatch(r"[0-9a-f]{40}", path.name)]
+                )
+                self.assertFalse(list(releases.glob(".release-*")))
+                self.assertFalse(list(releases.glob(".source.*")))
+            finally:
+                subprocess.run(["chmod", "-R", "u+w", tmp], check=False)
+
+        clone_failed_script = re.sub(
+            r"(?m)^\s*SOURCE_REMOTE=.*$",
+            "SOURCE_REMOTE=/definitely/missing/skills.git",
+            script,
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            clone_failed = subprocess.run(
+                ["bash", "-c", clone_failed_script],
+                env={"HOME": tmp, "PATH": "/usr/bin:/bin"},
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            self.assertNotEqual(0, clone_failed.returncode)
+            releases = Path(tmp) / ".local/share/buzz-agent-setup/releases"
+            self.assertFalse(list(releases.glob(".source.*")))
+
+    @unittest.skipUnless(shutil.which("git"), "needs git")
+    def test_manifest_builder_ignores_replace_refs_and_archive_attributes(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            repo = root / "repo"
+            repo.mkdir(mode=0o700)
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            subprocess.run(
+                ["git", "-C", str(repo), "config", "user.email", "test@example.test"],
+                check=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(repo), "config", "user.name", "Test"],
+                check=True,
+            )
+            source = repo / "skills/buzz-agent-setup/SKILL.md"
+            source.parent.mkdir(parents=True)
+            original = "---\nname: buzz-agent-setup\n---\n$Format:%H$\n"
+            source.write_text(original, encoding="utf-8")
+            subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
+            subprocess.run(
+                ["git", "-C", str(repo), "commit", "-q", "-m", "original"],
+                check=True,
+            )
+            target = subprocess.run(
+                ["git", "-C", str(repo), "rev-parse", "HEAD"],
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+            source.write_text("replacement\n", encoding="utf-8")
+            subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
+            subprocess.run(
+                ["git", "-C", str(repo), "commit", "-q", "-m", "replacement"],
+                check=True,
+            )
+            replacement = subprocess.run(
+                ["git", "-C", str(repo), "rev-parse", "HEAD"],
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+            subprocess.run(
+                ["git", "-C", str(repo), "replace", target, replacement],
+                check=True,
+            )
+            attributes = repo / ".git/info/attributes"
+            attributes.parent.mkdir(parents=True, exist_ok=True)
+            attributes.write_text(
+                "skills/buzz-agent-setup/SKILL.md export-subst\n",
+                encoding="utf-8",
+            )
+            release = root / "release"
+            release.mkdir(mode=0o700)
+            (release / "SKILL.md").write_text(original, encoding="utf-8")
+            completed = subprocess.run(
+                [
+                    "/usr/bin/python3",
+                    "-I",
+                    str(SCRIPTS / "build_release_manifest.py"),
+                    "--release",
+                    str(release),
+                    "--commit",
+                    target,
+                    "--source-repo",
+                    str(repo),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(0, completed.returncode, completed.stderr)
+            manifest = json.loads(read(release / ".release-manifest.json"))
+            self.assertEqual(
+                hashlib.sha256(original.encode()).hexdigest(),
+                manifest["files"]["SKILL.md"]["sha256"],
+            )
+
+    def test_manifest_builder_rejects_group_writable_source_ancestor(self) -> None:
+        builder = load_python(
+            SCRIPTS / "build_release_manifest.py",
+            "strict_release_manifest_builder",
+        )
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            parent = root / "private-group-writable"
+            repo = parent / "repo"
+            repo.mkdir(parents=True)
+            parent.chmod(0o770)
+            repo.chmod(0o700)
+            self.assertFalse(builder.trusted_directory_chain(repo, os.geteuid()))
+
+    def test_manifest_builder_rejects_one_oversized_release_file(self) -> None:
+        builder = load_python(
+            SCRIPTS / "build_release_manifest.py",
+            "bounded_release_manifest_builder",
+        )
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            oversized = root / "oversized.bin"
+            with oversized.open("wb") as handle:
+                handle.truncate(builder.MAX_FILE_BYTES + 1)
+            with mock.patch.object(builder, "archive_records") as archive:
+                with self.assertRaisesRegex(ValueError, "oversized file"):
+                    builder.build(root, "a" * 40, root)
+            archive.assert_not_called()
+
+    def test_manifest_builder_maps_git_timeout_to_stable_exit_two(self) -> None:
+        builder = load_python(
+            SCRIPTS / "build_release_manifest.py",
+            "timeout_release_manifest_builder",
+        )
+        argv = [
+            "build_release_manifest.py",
+            "--release",
+            "/unavailable",
+            "--commit",
+            "a" * 40,
+            "--source-repo",
+            "/unavailable",
+            "--extract",
+        ]
+        with (
+            mock.patch.object(sys, "argv", argv),
+            mock.patch.object(
+                builder,
+                "materialize",
+                side_effect=subprocess.TimeoutExpired(["git"], 30),
+            ),
+        ):
+            self.assertEqual(2, builder.main())
 
     def test_the_layout_claim_matches_how_the_scripts_find_each_other(self) -> None:
         sync = read(SCRIPTS / "gitlab_buzz_sync.py")
@@ -559,10 +914,10 @@ class LocalUpgradeRunbookTest(ContractCase):
         self.assertLess(positions[-1], workflow)
         self.assertLess(workflow, canvas)
 
-    def test_the_known_gaps_point_at_their_issues(self) -> None:
-        for issue in ("skills#137", "skills#138", "skills#140", "skills#141"):
-            with self.subTest(issue=issue):
-                self.assertIn(issue, self.text)
+    def test_the_previous_manual_gap_is_now_an_executable_gate(self) -> None:
+        self.assertIn("scripts/audit_local_alignment.py", self.text)
+        self.assertIn("任一 `fail` 或 `unknown` 都返回非零", self.text)
+        self.assertTrue((SCRIPTS / "audit_local_alignment.py").is_file())
 
 
 class NewDocsCarryNoSecretsTest(unittest.TestCase):
@@ -590,6 +945,348 @@ class NewDocsCarryNoSecretsTest(unittest.TestCase):
             for pattern in self.PATTERNS:
                 with self.subTest(document=label, pattern=pattern):
                     self.assertIsNone(re.search(pattern, text), f"{label} matches {pattern}")
+
+
+class CanonicalAgentLauncherTest(unittest.TestCase):
+    def test_documented_isolated_interpreter_ignores_hostile_python_env(self) -> None:
+        documented = Path("/usr/bin/python3")
+        interpreter = documented if documented.is_file() else Path(sys.executable)
+        completed = subprocess.run(
+            [str(interpreter), "-I", str(RUN_AGENT)],
+            env={
+                "PATH": "/usr/bin:/bin",
+                "PYTHONHOME": "/definitely/missing",
+                "PYTHONPATH": "/hostile",
+            },
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        self.assertEqual(2, completed.returncode, completed.stderr)
+        self.assertIn("usage: run-agent.py", completed.stderr)
+        self.assertNotIn("Fatal Python error", completed.stderr)
+
+    def test_launcher_sanitizes_parent_environment_and_preserves_config(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp).resolve()
+            agents = home / ".config/buzz/agents"
+            workdir = home / "buzz-agent-work/demo"
+            safe_bin = home / ".local/bin"
+            agents.mkdir(parents=True)
+            (workdir / ".git").mkdir(parents=True)
+            safe_bin.mkdir(parents=True)
+            for path in (
+                home / ".config",
+                home / ".config/buzz",
+                agents,
+                home / "buzz-agent-work",
+                workdir,
+                home / ".local",
+                safe_bin,
+            ):
+                path.chmod(0o755)
+            (home / "buzz-agent-work").chmod(0o755)
+            workdir.chmod(0o755)
+            safe_bin.chmod(0o755)
+            (safe_bin / "buzz-acp").symlink_to("/usr/bin/true")
+            buzz_acp_digest = hashlib.sha256(
+                Path("/usr/bin/true").read_bytes()
+            ).hexdigest()
+            executables = {}
+            for name in ("media-proxy", "claude-agent-acp", "codex-acp", "buzz", "claude-buzz"):
+                path = home / ".local/lib/buzz-agents" / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                (home / ".local/lib").chmod(0o755)
+                path.parent.chmod(0o755)
+                path.write_text("fixture\n", encoding="utf-8")
+                path.chmod(0o500)
+                executables[name] = path
+            env_file = agents / "demo.env"
+            (home / ".claude-buzz").mkdir(mode=0o700)
+            env_file.write_text(
+                "BUZZ_RELAY_URL='wss://relay.example.test'\n"
+                f"AGENT_WORKDIR='{workdir}'\n"
+                f"BUZZ_AGENT_SAFE_PATH='{safe_bin}:/usr/bin'\n"
+                "BUZZ_PRIVATE_KEY=$OWNER_TOKEN\n"
+                "BUZZ_ACP_AGENT_OWNER=owner\n"
+                "BUZZ_ACP_BINARY=/usr/bin/true\n"
+                f"BUZZ_ACP_BINARY_SHA256={buzz_acp_digest}\n"
+                f"BUZZ_ACP_AGENT_COMMAND='{executables['media-proxy']}'\n"
+                f"BUZZ_ACP_MEDIA_ADAPTER_COMMAND='{executables['claude-agent-acp']}'\n"
+                f"BUZZ_ACP_MEDIA_BUZZ_CLI='{executables['buzz']}'\n"
+                f"HARNESS_CLAUDE_WRAPPER='{executables['claude-buzz']}'\n"
+                f"CLAUDE_CODE_EXECUTABLE='{executables['claude-buzz']}'\n"
+                f"CLAUDE_CONFIG_DIR='{home / '.claude-buzz'}'\n"
+                f"BUZZ_ACP_SYSTEM_PROMPT_FILE='{agents / 'demo.prompt.md'}'\n"
+                f"BUZZ_RESPONSIBLE_CONFIG='{agents / 'demo.json'}'\n",
+                encoding="utf-8",
+            )
+            env_file.chmod(0o600)
+            launcher = load_python(RUN_AGENT, "canonical_run_agent")
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "OWNER_TOKEN": "parent-secret-must-not-expand",
+                    "HOSTILE_MARKER": "must-not-survive",
+                },
+            ):
+                _, binary, argv, environment, digest = launcher.prepare_launch(
+                    "demo", home=home, uid=os.geteuid(), username="fixture-user"
+                )
+            self.assertEqual(binary, Path("/usr/bin/true"))
+            self.assertEqual(argv[1:], ("--relay-url", "wss://relay.example.test"))
+            self.assertEqual(digest, buzz_acp_digest)
+            self.assertEqual(environment["HOME"], str(home))
+            self.assertNotIn("HOSTILE_MARKER", environment)
+            self.assertEqual(environment["BUZZ_PRIVATE_KEY"], "$OWNER_TOKEN")
+            self.assertNotIn("parent-secret-must-not-expand", environment.values())
+
+            agents.chmod(0o770)
+            with self.assertRaises(launcher.LauncherError):
+                launcher.prepare_launch(
+                    "demo", home=home, uid=os.geteuid(), username="fixture-user"
+                )
+            agents.chmod(0o755)
+
+            original = env_file.read_text(encoding="utf-8")
+            unsafe_bin = home / "unsafe-bin"
+            unsafe_bin.mkdir()
+            unsafe_bin.chmod(0o777)
+            env_file.write_text(
+                original.replace(
+                    f"BUZZ_AGENT_SAFE_PATH='{safe_bin}:/usr/bin'",
+                    f"BUZZ_AGENT_SAFE_PATH='{unsafe_bin}:/usr/bin'",
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaises(launcher.LauncherError):
+                launcher.prepare_launch(
+                    "demo", home=home, uid=os.geteuid(), username="fixture-user"
+                )
+
+            codex_home = home / ".codex-buzz"
+            codex_home.mkdir()
+            codex_home.chmod(0o755)
+            codex_path = safe_bin / "codex"
+            codex_path.write_text("fixture\n", encoding="utf-8")
+            codex_path.chmod(0o500)
+            codex_env = original.replace(
+                str(executables["claude-agent-acp"]),
+                str(executables["codex-acp"]),
+            ) + f"CODEX_HOME={codex_home}\nCODEX_PATH={codex_path}\n"
+            env_file.write_text(codex_env, encoding="utf-8")
+            _, _, _, codex_environment, _ = launcher.prepare_launch(
+                "demo", home=home, uid=os.geteuid(), username="fixture-user"
+            )
+            self.assertEqual(str(codex_home), codex_environment["CODEX_HOME"])
+            self.assertEqual(str(codex_path), codex_environment["CODEX_PATH"])
+            env_file.write_text(
+                codex_env.replace(str(codex_path), "$HOME/.local/bin/codex"),
+                encoding="utf-8",
+            )
+            with self.assertRaises(launcher.LauncherError):
+                launcher.prepare_launch(
+                    "demo", home=home, uid=os.geteuid(), username="fixture-user"
+                )
+
+            outside = home / "outside"
+            (outside / ".git").mkdir(parents=True)
+            outside.chmod(0o755)
+            env_file.write_text(
+                original.replace(
+                    f"AGENT_WORKDIR='{workdir}'", f"AGENT_WORKDIR='{outside}'"
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaises(launcher.LauncherError):
+                launcher.prepare_launch(
+                    "demo", home=home, uid=os.geteuid(), username="fixture-user"
+                )
+
+            other_wrapper = home / ".local/lib/buzz-agents/other-claude"
+            other_wrapper.write_text("fixture\n", encoding="utf-8")
+            other_wrapper.chmod(0o500)
+            env_file.write_text(
+                original.replace(
+                    f"HARNESS_CLAUDE_WRAPPER='{executables['claude-buzz']}'",
+                    f"HARNESS_CLAUDE_WRAPPER='{other_wrapper}'",
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaises(launcher.LauncherError):
+                launcher.prepare_launch(
+                    "demo", home=home, uid=os.geteuid(), username="fixture-user"
+                )
+
+    def test_launcher_rejects_command_syntax_without_executing_it(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp).resolve()
+            agents = home / ".config/buzz/agents"
+            sentinel = home / "must-not-exist"
+            agents.mkdir(parents=True)
+            env_file = agents / "demo.env"
+            env_file.write_text(
+                f"EXTRA=$(touch {sentinel})\n",
+                encoding="utf-8",
+            )
+            env_file.chmod(0o600)
+            launcher = load_python(RUN_AGENT, "canonical_run_agent_reject")
+            with self.assertRaises(launcher.LauncherError):
+                launcher._read_env(env_file, os.geteuid())
+            self.assertFalse(sentinel.exists())
+
+    def test_launcher_rejects_nul_and_noncanonical_binary_pin(self) -> None:
+        launcher = load_python(RUN_AGENT, "canonical_run_agent_literal_safety")
+        with self.assertRaises(launcher.LauncherError):
+            launcher._literal("bad\x00value")
+        with tempfile.TemporaryDirectory() as tmp:
+            alias = Path(tmp) / "buzz-acp"
+            alias.symlink_to("/usr/bin/true")
+            with self.assertRaises(launcher.LauncherError):
+                launcher._trusted_path(
+                    str(alias), os.geteuid(), executable=True, canonical=True
+                )
+
+    def test_launcher_rejects_an_unpinned_shebang_interpreter_chain(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            binary = Path(tmp) / "buzz-acp"
+            binary.write_text("#!/bin/sh\nprintf fd-exec-ok\n", encoding="utf-8")
+            binary.chmod(0o500)
+            launcher = load_python(RUN_AGENT, "canonical_run_agent_elf_only")
+            with self.assertRaises(launcher.LauncherError):
+                launcher._open_binary(binary, os.geteuid(), None)
+
+    def test_launcher_rejects_malformed_elf_and_execs_verified_fd(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            binary = Path(tmp) / "buzz-acp"
+            binary.write_bytes(b"\x7fELF" + b"\x00" * 128)
+            binary.chmod(0o500)
+            launcher = load_python(RUN_AGENT, "canonical_run_agent_fd_exec")
+            digest = hashlib.sha256(binary.read_bytes()).hexdigest()
+            with self.assertRaises(launcher.LauncherError):
+                launcher._open_binary(binary, os.geteuid(), digest)
+
+            unsafe_parent = Path(tmp) / "cross-uid-writable"
+            unsafe_parent.mkdir()
+            unsafe_parent.chmod(0o777)
+            unsafe_child = unsafe_parent / "adapter"
+            unsafe_child.write_text("fixture\n", encoding="utf-8")
+            unsafe_child.chmod(0o500)
+            with self.assertRaises(launcher.LauncherError):
+                launcher._trusted_path(
+                    str(unsafe_child),
+                    os.geteuid(),
+                    executable=True,
+                )
+
+            group_writable_parent = Path(tmp) / "private-group-writable"
+            group_writable_parent.mkdir()
+            group_writable_parent.chmod(0o770)
+            group_writable_child = group_writable_parent / "adapter"
+            group_writable_child.write_text("fixture\n", encoding="utf-8")
+            group_writable_child.chmod(0o500)
+            with self.assertRaises(launcher.LauncherError):
+                launcher._trusted_path(
+                    str(group_writable_child),
+                    os.geteuid(),
+                    executable=True,
+                )
+
+            bad_entry_data = bytearray(Path("/usr/bin/true").read_bytes())
+            struct.pack_into("<H", bad_entry_data, 54, 64)
+            bad_entry_size = Path(tmp) / "bad-entry-size"
+            bad_entry_size.write_bytes(bad_entry_data)
+            bad_entry_size.chmod(0o500)
+            with self.assertRaises(launcher.LauncherError):
+                launcher._open_binary(
+                    bad_entry_size,
+                    os.geteuid(),
+                    hashlib.sha256(bad_entry_size.read_bytes()).hexdigest(),
+                )
+
+            no_load_data = bytearray(Path("/usr/bin/true").read_bytes())
+            program_offset = struct.unpack_from("<Q", no_load_data, 32)[0]
+            program_size = struct.unpack_from("<H", no_load_data, 54)[0]
+            program_count = struct.unpack_from("<H", no_load_data, 56)[0]
+            for index in range(program_count):
+                offset = program_offset + index * program_size
+                if struct.unpack_from("<I", no_load_data, offset)[0] == 1:
+                    struct.pack_into("<I", no_load_data, offset, 0)
+            no_load = Path(tmp) / "no-load-segments"
+            no_load.write_bytes(no_load_data)
+            no_load.chmod(0o500)
+            with self.assertRaises(launcher.LauncherError):
+                launcher._open_binary(
+                    no_load,
+                    os.geteuid(),
+                    hashlib.sha256(no_load.read_bytes()).hexdigest(),
+                )
+
+            load_offsets = [
+                program_offset + index * program_size
+                for index in range(program_count)
+                if struct.unpack_from(
+                    "<I", bad_entry_data, program_offset + index * program_size
+                )[0]
+                == 1
+            ]
+            self.assertTrue(load_offsets)
+
+            def reject_mutated_elf(name: str, data: bytearray) -> None:
+                target = Path(tmp) / name
+                target.write_bytes(data)
+                target.chmod(0o500)
+                with self.assertRaises(launcher.LauncherError):
+                    launcher._open_binary(
+                        target,
+                        os.geteuid(),
+                        hashlib.sha256(target.read_bytes()).hexdigest(),
+                    )
+
+            bad_sizes = bytearray(Path("/usr/bin/true").read_bytes())
+            memory_size = struct.unpack_from("<Q", bad_sizes, load_offsets[0] + 40)[0]
+            struct.pack_into("<Q", bad_sizes, load_offsets[0] + 32, memory_size + 1)
+            reject_mutated_elf("load-filesz-over-memsz", bad_sizes)
+
+            bad_alignment = bytearray(Path("/usr/bin/true").read_bytes())
+            struct.pack_into("<Q", bad_alignment, load_offsets[0] + 48, 3)
+            reject_mutated_elf("load-bad-alignment", bad_alignment)
+
+            out_of_bounds = bytearray(Path("/usr/bin/true").read_bytes())
+            struct.pack_into("<Q", out_of_bounds, load_offsets[0] + 8, len(out_of_bounds))
+            struct.pack_into("<Q", out_of_bounds, load_offsets[0] + 32, 2)
+            struct.pack_into("<Q", out_of_bounds, load_offsets[0] + 40, 2)
+            reject_mutated_elf("load-out-of-bounds", out_of_bounds)
+
+            no_executable_load = bytearray(Path("/usr/bin/true").read_bytes())
+            for offset in load_offsets:
+                flags = struct.unpack_from("<I", no_executable_load, offset + 4)[0]
+                struct.pack_into("<I", no_executable_load, offset + 4, flags & ~0x1)
+            reject_mutated_elf("entry-not-executable", no_executable_load)
+
+            descriptor = launcher._open_binary(
+                Path("/usr/bin/true"),
+                os.geteuid(),
+                hashlib.sha256(Path("/usr/bin/true").read_bytes()).hexdigest(),
+            )
+            os.close(descriptor)
+            code = (
+                "import hashlib,importlib.util,os,sys; from pathlib import Path; "
+                "s=importlib.util.spec_from_file_location('fd_exec',sys.argv[1]); "
+                "m=importlib.util.module_from_spec(s); s.loader.exec_module(m); "
+                "p=Path(sys.argv[2]); d=hashlib.sha256(p.read_bytes()).hexdigest(); "
+                "f=m._open_binary(p,os.geteuid(),d); m._exec_binary(f,(str(p),),{})"
+            )
+            completed = subprocess.run(
+                [sys.executable, "-I", "-c", code, str(RUN_AGENT), "/usr/bin/true"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=10,
+                check=False,
+            )
+            self.assertEqual(0, completed.returncode, completed.stderr)
 
 
 if __name__ == "__main__":

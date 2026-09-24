@@ -980,7 +980,9 @@ class ContextRound(TmpCase):
 class ContextDocs(unittest.TestCase):
     SKILL = base.TESTS.parent
     REPO = SKILL.parent.parent
-    DOC = (SKILL / "references" / "feishu-group-sync.md").read_text(encoding="utf-8")
+    GROUP_DOC = (SKILL / "references" / "feishu-group-sync.md").read_text(encoding="utf-8")
+    MESSAGE_DOC = (SKILL / "references" / "feishu-message-sync.md").read_text(encoding="utf-8")
+    DOC = (SKILL / "references" / "feishu-routing-policy.md").read_text(encoding="utf-8")
     HEADING = "## 非成员的发言（仅上下文镜像）"
     ADR = REPO / "docs" / "05-adr" / "0016-mirror-unmapped-feishu-speakers-as-context-only.md"
 
@@ -1010,11 +1012,11 @@ class ContextDocs(unittest.TestCase):
 
     def test_the_config_the_skip_list_and_the_scripts_readme_mention_it(self):
         """L1-FGS-522: 配置一节的可选键清单、飞书 → Buzz 的「跳过的情况」（`unmapped_sender` 那一条指向它）、脚本 README 该脚本一行、SKILL.md 的路由表都提到它。"""
-        start = self.DOC.find("## 配置（0600")
-        config = self.DOC[start:self.DOC.find("\n## ", start + 1)]
+        start = self.GROUP_DOC.find("## 配置（0600")
+        config = self.GROUP_DOC[start:self.GROUP_DOC.find("\n## ", start + 1)]
         self.assertIn("`feishu_unmapped_senders`", config)
         self.assertRegex(config, r"只有[^。]*`feishu_unmapped_senders`[^。]*可以不写")
-        run = self.DOC[self.DOC.find("4. **飞书 → Buzz**"):self.DOC.find("5. **Buzz reaction")]
+        run = self.MESSAGE_DOC[self.MESSAGE_DOC.find("4. **飞书 → Buzz**"):self.MESSAGE_DOC.find("5. **表情双向同步")]
         line = next(item for item in run.splitlines() if "`unmapped_sender`" in item)
         self.assertIn("`feishu_unmapped_senders`", line)
         readme = (self.SKILL / "references" / "scripts" / "README.md").read_text(encoding="utf-8")

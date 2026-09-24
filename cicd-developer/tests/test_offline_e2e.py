@@ -19,6 +19,9 @@ from types import ModuleType
 import pytest
 import yaml
 
+# Keep the registered-alert contract in this existing CI entry point.
+from test_vmalert_rules import RuleTests as TestRegisteredVMAlertRules  # noqa: F401
+
 
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = SKILL_ROOT.parents[1]
@@ -209,6 +212,18 @@ RULE_JSON = """[
 ]"""
 
 DEFAULT_SLOT_VALUES = {
+    "alert_set_id": "sample-prod",
+    "notification_service": "sample",
+    "monitoring_namespace": "victoria-metrics",
+    "business_namespace": "sample",
+    "environment": "prod",
+    "alert_name": "SampleErrorRateHigh",
+    "expression_json": json.dumps('sum(rate(sample_errors_total{namespace="sample"}[5m])) > 1'),
+    "pending_duration": "5m",
+    "severity": "critical",
+    "summary_json": json.dumps("Sample errors above threshold"),
+    "description_json": json.dumps("Check the sample service error rate"),
+
     "access_mode": "ReadWrite",
     "identity_mode": "DirectKSA",
     "account_id": "123456789012",
@@ -1160,6 +1175,12 @@ BUILD_CASES = [
         ],
     },
     {
+        "id": "OFF-BUILD-VM-ALERT",
+        "prompt": "write vm alert rules for PagerDuty",
+        "workflow": "workflows/manage-vmalert-rules.md",
+        "terms": ["notification_service", "check_vmalert_rules.py", "PagerDuty", "application context"],
+    },
+    {
         "id": "OFF-BUILD-037",
         "prompt": "create VMServiceScrape victoria metrics scrape for my service",
         "workflow": "workflows/manage-victoriametrics-scrape.md",
@@ -1432,6 +1453,37 @@ def test_rendered_recipe_workspace_passes_validators(tmp_path: Path) -> None:
     result = run_validate_sh(tmp_path)
 
     assert result.returncode == 0, result.stdout
+
+
+def test_vmalert_recipe_survives_existing_kustomize_overlay(tmp_path: Path) -> None:
+    (tmp_path / "alerts.yaml").write_text(
+        render_recipe_template(RECIPE_ROOT / "victoriametrics/vm-alert-rule.yaml.tmpl"),
+        encoding="utf-8",
+    )
+    (tmp_path / "kustomization.yaml").write_text(
+        yaml.safe_dump({
+            "apiVersion": "kustomize.config.k8s.io/v1beta1", "kind": "Kustomization",
+            "namespace": "sample", "resources": ["alerts.yaml"],
+            "labels": [{"includeSelectors": False, "includeTemplates": True,
+                        "pairs": {"env": "prod", "deployment.addx.io/stack": "b"}}],
+        }), encoding="utf-8",
+    )
+    rendered = subprocess.run(["kustomize", "build", str(tmp_path)], check=True,
+                              capture_output=True, text=True)
+    documents = list(yaml.safe_load_all(rendered.stdout))
+    assert len(documents) == 1
+    assert documents[0]["kind"] == "VMRule"
+    assert documents[0]["metadata"]["namespace"] == "sample"
+    assert documents[0]["metadata"]["labels"] == {
+        "monitoring.addx.io/alert-set": "sample-prod", "env": "prod",
+        "deployment.addx.io/stack": "b",
+    }
+    context = dict(cluster="us-prod", id="sample-prod", namespace="sample",
+                   environment="prod", application="sample-prod", project="app-runtime",
+                   repository="https://gitlab.addx.ai/app/sample.git", revision="main",
+                   path="k8s/overlays/prod", notification_service="sample")
+    checker = load_validator_module("check_vmalert_rules.py")
+    assert checker.validate(documents, context) == 1
 
 
 def test_victoriametrics_static_gke_managed_dcgm_recipe_requires_k8s_context(

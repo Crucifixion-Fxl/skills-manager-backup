@@ -125,6 +125,21 @@ def canvas_event(*, private_key=CANVAS_ADMIN_PRIVATE, content=CANVAS_TEXT, creat
     }
 
 
+def edit_event(target, content=HEADER, *, created_at=101, private_key=BRIDGE_PRIVATE_KEY):
+    """A real Buzz kind-40003 overlay: same author, channel tag and one bare target e tag."""
+    pubkey = ROUTE.sync.publisher_pubkey_from_private_key(private_key)
+    tags = [["h", CHANNEL], ["e", target]]
+    canonical = json.dumps(
+        [0, pubkey, created_at, 40003, tags, content], ensure_ascii=False, separators=(",", ":")
+    ).encode()
+    digest = hashlib.sha256(canonical).digest()
+    return {
+        "id": digest.hex(), "pubkey": pubkey, "kind": 40003, "content": content,
+        "tags": tags, "created_at": created_at,
+        "sig": ROUTE.sync.nk.schnorr_sign(digest, bytes.fromhex(private_key), b"\x00" * 32).hex(),
+    }
+
+
 CANVAS_EVENT = canvas_event()["id"]
 
 
@@ -683,6 +698,7 @@ class BuzzAdapterTest(unittest.TestCase):
         adapter.command = paged
         found = adapter.channel_messages(CHANNEL, 1000)
         self.assertEqual(len(found), page_limit + 1)
+        self.assertEqual(calls[0][calls[0].index("--kinds") + 1], "9,40003")
         self.assertEqual(calls[1][calls[1].index("--before") + 1], "2000")
 
         boundary_page = [
@@ -805,6 +821,79 @@ class LocalRouteScannerTest(unittest.TestCase):
         self.assertEqual(len(buzz.sent), 1)
         self.assertEqual(buzz.sent[0][2:], (root["id"], ROLE_PUBKEY))
         self.assertEqual(buzz.scan_args, (CHANNEL, 60))
+
+    def test_a_signed_edit_overlay_triggers_the_route_once_from_the_original_thread(self):
+        """L2-1-GIS-126 原位更新仍是业务触发：扫描 40003，以 edit id 幂等并回到原卡所在 Thread。"""
+        old_header = HEADER.replace("[status:ready]", "[status:backlog]")
+        original = event(ROOT, DESK, old_header, created_at=90, private_key=BRIDGE_PRIVATE_KEY)
+        overlay = edit_event(original["id"])
+        buzz = FakeBuzz([original, overlay], sender=DESK)
+        with tempfile.TemporaryDirectory() as tmp:
+            state_dir = Path(tmp) / "state"
+            service = ROUTE.RouteReplyService({CHANNEL: CHANNEL_RULE}, DESK, buzz, state_dir=state_dir)
+            result = ROUTE.LocalRouteScanner(
+                self.local_config(tmp), service, buzz, state_dir=state_dir, clock=lambda: 200
+            ).run()
+
+        self.assertEqual((result["matched"], result["sent"], result["duplicate"]), (1, 1, 0))
+        self.assertEqual(len(buzz.sent), 1)
+        self.assertEqual(buzz.sent[0][2], original["id"])
+        self.assertIn(f"[source:{overlay['id']}]", buzz.sent[0][1])
+
+    def test_a_history_only_edit_overlay_never_retriggers_the_current_route(self):
+        """L2-1-GIS-136 只追加旧 activity 历史的 edit 带 route:skip，不重复唤醒当前 Role。"""
+        original = event(
+            ROOT, DESK, HEADER.replace("[status:ready]", "[status:backlog]"),
+            created_at=90, private_key=BRIDGE_PRIVATE_KEY,
+        )
+        overlay = edit_event(original["id"], HEADER + "[route:skip]")
+        buzz = FakeBuzz([original, overlay], sender=DESK)
+        with tempfile.TemporaryDirectory() as tmp:
+            state_dir = Path(tmp) / "state"
+            service = ROUTE.RouteReplyService({CHANNEL: CHANNEL_RULE}, DESK, buzz, state_dir=state_dir)
+            result = ROUTE.LocalRouteScanner(
+                self.local_config(tmp), service, buzz, state_dir=state_dir, clock=lambda: 200,
+            ).run()
+
+        self.assertEqual((result["matched"], result["sent"]), (0, 0))
+        self.assertEqual(buzz.sent, [])
+
+    def test_http_equivalent_path_rejects_an_unsigned_edit_overlay(self):
+        """L2-1-GIS-137 HTTP fallback 也必须验 edit 与 original，不能信任可伪造的 pubkey 字段。"""
+        original = event(
+            ROOT, DESK, HEADER.replace("[status:ready]", "[status:backlog]"),
+            created_at=90, private_key=BRIDGE_PRIVATE_KEY,
+        )
+        overlay = edit_event(original["id"])
+        overlay.pop("sig")
+        buzz = FakeBuzz([original, overlay], sender=SENDER)
+        with tempfile.TemporaryDirectory() as tmp:
+            service = ROUTE.RouteReplyService(
+                {CHANNEL: CHANNEL_RULE}, SENDER, buzz, state_dir=Path(tmp) / "state",
+            )
+            with self.assertRaisesRegex(ROUTE.RouteError, "id or signature"):
+                service.route({
+                    "channel_id": CHANNEL, "message_id": overlay["id"], "route_id": ROUTE_ID,
+                })
+
+        self.assertEqual(buzz.sent, [])
+
+    def test_a_relay_cannot_change_a_signed_edit_target_between_scan_and_route(self):
+        """L2-1-GIS-130 scanner 验签后，route 二次读取必须是同一 NIP-01 envelope。"""
+        original = event(ROOT, DESK, HEADER, created_at=90, private_key=BRIDGE_PRIVATE_KEY)
+        overlay = edit_event(original["id"])
+        tampered = {**overlay, "tags": [["h", CHANNEL], ["e", "f" * 64]]}
+        buzz = FakeBuzz([original, tampered], sender=DESK)
+        with tempfile.TemporaryDirectory() as tmp:
+            service = ROUTE.RouteReplyService(
+                {CHANNEL: CHANNEL_RULE}, DESK, buzz, state_dir=Path(tmp) / "state",
+            )
+            policy = service.load_policy(CHANNEL)
+            with self.assertRaisesRegex(ROUTE.RouteError, "changed after its signed scan"):
+                service.preview(
+                    {"channel_id": CHANNEL, "message_id": overlay["id"], "route_id": ROUTE_ID},
+                    policy=policy, source_event=overlay,
+                )
 
     def test_scan_cursor_and_route_ledger_survive_restart_without_duplicate_mentions(self):
         """L1-GIS-103 Timer overlap and process restart do not route one source fact twice."""
@@ -1055,11 +1144,12 @@ class DocumentationContractTest(unittest.TestCase):
         self.assertNotIn('"mention":', text)
         self.assertNotIn('"reason":', text)
         self.assertNotIn("reply_in_thread", text)
-        self.assertNotIn("str_contains", text)
+        self.assertIn("str_contains", text)
+        self.assertIn("compact_status_updates: false", text)
         self.assertRegex(
             " ".join(re.search(r"(?ms)^\s*filter:\s*>-?\s*\n(.*?)\n\s*steps:", text).group(1).split()),
-            r'^trigger_author == "[^"]+" && str_starts_with\(trigger_text, '
-            r'"\[gitlab-notify:v1\]\[object:issue\]\[type:[^\]]+\]\[status:[^\]]+\]'
+            r'^trigger_author == "[^"]+" && str_contains\(trigger_text, '
+            r'"\\n\[gitlab-notify:v1\]\[object:issue\]\[type:[^\]]+\]\[status:[^\]]+\]'
             r'\[state:(opened|closed)\]\[change:routing\]"\)$',
         )
 

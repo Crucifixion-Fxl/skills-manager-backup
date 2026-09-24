@@ -3,6 +3,7 @@
   "publisher_pubkey": "0000000000000000000000000000000000000000000000000000000000000001",
   "since": "2026-09-14T00:00:00Z",
   "include_confidential": false,
+  "compact_status_updates": true,
   "exclude": [
     {
       "assignee_username": "example-excluded-user"

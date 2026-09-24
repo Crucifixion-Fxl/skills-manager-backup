@@ -1,5 +1,9 @@
 # User Research Skill
 
+此安装包以 canonical `lli/user-research-skill` main `9e691064` 为基础，并保留尚未合并的
+!144 (`14dab06`) 安全、兼容与原生 VOC 改动；不是 canonical main 的字节级镜像。
+精确来源见 [semantic owner](contracts/semantic-owner.json)。
+
 这是一个可独立安装的 **Skill + Audience Personal API 客户端**。冷启动 Agent 使用完整仓库、
 Python 3.9+ 和安全注入的 Project Personal key，从 self-context 发现 Project，并按公开契约执行。
 运行时模块使用 `from __future__ import annotations`，`X | Y` 在 Python 3.9 导入时不会求值。
@@ -45,8 +49,8 @@ python3 scripts/api.py get_project_personal_key_context --request-stdin <<'JSON'
 JSON
 ```
 
-成功的在线响应给出唯一可信的 `project_id`、`binding_revision` 和 `allowed_actions`。
-随后读取 Research readiness 和 query capabilities，再按[Project journey](references/typeform-research.md)
+成功的在线响应给出唯一可信的 `project_id`、`binding_revision` 和 `allowed_actions`，并可能返回 `research_track`；缺省按 `materialized_audience` 处理。
+仅在 `materialized_audience` 需要圈人时读取 Research readiness 和 query capabilities，再按[Project journey](references/typeform-research.md)
 执行。所有写操作使用稳定幂等键；所有异步阶段读取同一 Research 的精确 request/receipt。
 
 原生 VOC 可用 `scripts/tdd_native_voc_journey.py --phase collect` 采集并落地 Dataset

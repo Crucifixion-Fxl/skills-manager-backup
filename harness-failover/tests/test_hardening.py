@@ -42,7 +42,8 @@ def fake_systemd(tmp_path, monkeypatch):
     log = tmp_path / "calls.log"
     child = subprocess.Popen(["sleep", "60"], env={
         "BUZZ_ACP_AGENT_COMMAND": "/x/adapter", "BUZZ_ACP_MODEL": "sonnet", "BUZZ_ACP_EFFORT_LEVEL": "medium",
-        "CLAUDE_CODE_EXECUTABLE": "/w/claude-buzz", "CODEX_HOME": "/c/home",
+        "BUZZ_ACP_MEDIA_ADAPTER_COMMAND": "/x/real-adapter", "BUZZ_ACP_MEDIA_BUZZ_CLI": "/x/buzz",
+        "CLAUDE_CODE_EXECUTABLE": "/w/claude-buzz", "CLAUDE_CONFIG_DIR": "/c/claude", "CODEX_HOME": "/c/home",
         "BUZZ_PRIVATE_KEY": "nsec1THISMUSTNEVERLEAK", "GITLAB_TOKEN": "glpat-NEVERLEAK", "UNRELATED": "y"})
     ctl = bindir / "systemctl"
     ctl.write_text(f"""#!/usr/bin/env bash
@@ -75,7 +76,9 @@ def test_system_ops_restart_and_is_active_use_the_right_systemctl_calls(fake_sys
 def test_running_env_reads_proc_but_returns_only_the_non_secret_harness_variables(fake_systemd, tmp_path):
     env = C.SystemOps(str(tmp_path)).running_env("buzz-local-x.service")
     assert env == {"BUZZ_ACP_AGENT_COMMAND": "/x/adapter", "BUZZ_ACP_MODEL": "sonnet", "BUZZ_ACP_EFFORT_LEVEL": "medium",
-                   "CLAUDE_CODE_EXECUTABLE": "/w/claude-buzz", "CODEX_HOME": "/c/home"}
+                   "BUZZ_ACP_MEDIA_ADAPTER_COMMAND": "/x/real-adapter", "BUZZ_ACP_MEDIA_BUZZ_CLI": "/x/buzz",
+                   "CLAUDE_CODE_EXECUTABLE": "/w/claude-buzz", "CLAUDE_CONFIG_DIR": "/c/claude",
+                   "CODEX_HOME": "/c/home"}
     assert "NEVERLEAK" not in json.dumps(env) and "THISMUSTNEVERLEAK" not in json.dumps(env)
 
 
@@ -258,7 +261,8 @@ BY = {p.id: p for p in P.load_profiles(HOME)}
 def test_running_env_must_match_command_and_effort_too():
     p = BY["claude-buzz"]
     good = {"BUZZ_ACP_AGENT_COMMAND": p.command, "BUZZ_ACP_MODEL": "sonnet", "BUZZ_ACP_EFFORT_LEVEL": "medium",
-            "CLAUDE_CODE_EXECUTABLE": p.wrapper}
+            "BUZZ_ACP_MEDIA_MODE": "stock_text_only", "CLAUDE_CODE_EXECUTABLE": p.wrapper,
+            "CLAUDE_CONFIG_DIR": p.home}
     assert W.running_env_matches(good, p)
     assert not W.running_env_matches({**good, "BUZZ_ACP_AGENT_COMMAND": "/old/adapter"}, p)
     assert not W.running_env_matches({**good, "BUZZ_ACP_EFFORT_LEVEL": "high"}, p)

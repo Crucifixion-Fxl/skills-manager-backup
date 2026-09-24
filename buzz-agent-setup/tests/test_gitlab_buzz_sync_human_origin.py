@@ -299,7 +299,7 @@ class MarkerToHumanRootBindsTest(HumanOriginCase):
 
 class BareLinkStaysAHintTest(HumanOriginCase):
     def test_a_bare_link_to_a_human_message_is_still_ignored(self):
-        """L1-GIS-HO-010 裸深链指向人的消息仍只是引用：忽略，issue 自开门牌，没有 warning、没有停摆（ADR-0011）。"""
+        """L1-GIS-HO-010 裸深链指向人的消息仍只是引用：忽略，issue 以首条事实自开 root，没有 warning、没有停摆（ADR-0011）。"""
         self.gitlab.issue_list[PID] = [make_issue(81, description=f"讨论见 {bare_link(self.discussion)}")]
         result = self.run_sync()
         self.assertEqual((result["stalled"], result["origin_fallbacks"]), ([], []))
@@ -355,14 +355,14 @@ class UnusableMarkerFallsBackTest(HumanOriginCase):
         return result
 
     def test_a_marker_naming_a_reply_falls_back(self):
-        """L1-GIS-HO-020 marker 指向话题里的一条回帖（不是顶层）：自开门牌 + warning，不停摆，也不走到根去。"""
+        """L1-GIS-HO-020 marker 指向话题里的一条回帖（不是顶层）：以首条事实自开 root + warning，不停摆，也不走到根去。"""
         reply = self.buzz.add(PERSON, "这条是回帖", reply_to=self.discussion)
         self.gitlab.issue_list[PID] = [make_issue(130, description=marker(reply))]
         self.assert_own_plaque_and_warning(130, ["top-level"])
         self.assertEqual(self.desk_replies(self.discussion), [])
 
     def test_a_root_the_cli_cannot_find_falls_back(self):
-        """L1-GIS-HO-021 根读不到（CLI 退出码 1，被删或不存在）：自开门牌 + warning，对象照常同步。"""
+        """L1-GIS-HO-021 根读不到（CLI 退出码 1，被删或不存在）：以首条事实自开 root + warning，对象照常同步。"""
         self.gitlab.issue_list[PID] = [make_issue(131, description=marker("c" * 64)), make_issue(132)]
         result = self.assert_own_plaque_and_warning(131, ["cannot be read"])
         self.assertTrue(any("#132" in text for text in self.plaques()))
@@ -398,7 +398,7 @@ class UnusableMarkerFallsBackTest(HumanOriginCase):
         self.assertIn("issue 5", reason)
 
     def test_a_marker_for_another_channel_falls_back_without_reading_anything(self):
-        """L1-GIS-HO-023 marker 的 channel_id 不是本频道：自开门牌 + warning；不去读别的频道。"""
+        """L1-GIS-HO-023 marker 的 channel_id 不是本频道：以首条事实自开 root + warning；不去读别的频道。"""
         other = "00000000-0000-4000-8000-0000000000c9"
         self.gitlab.issue_list[PID] = [make_issue(134, description=marker(self.discussion, channel=other))]
         self.assert_own_plaque_and_warning(134, ["channel"])
@@ -580,15 +580,26 @@ class BoundRootValidationTest(HumanOriginCase):
 class OriginSemanticsStayTest(HumanOriginCase):
     def test_a_marker_to_a_desk_plaque_still_binds_and_walks_from_a_fact_reply(self):
         """L1-GIS-HO-050 回归：marker 指向 Desk 门牌绑定；指向 Desk 事实回帖时走到该 Thread 的根（真实形态的整条 Thread 输出）。"""
+        first = SYNC.issue_fact(make_issue(14), PID)
+        plaque = self.buzz.send(SYNC.render_issue_plaque(first, "buzz-sync-test/pilot"))
+        fact = self.buzz.send(SYNC.render_message(first, "routing", first=True), reply_to=plaque)
+        self.bind(14, plaque)
         self.gitlab.issue_list[PID] = [make_issue(14)]
-        self.run_sync()
-        plaque = self.binding("issue", 14)
-        fact = self.desk_replies(plaque)[0]["id"]
         self.gitlab.issue_list[PID].append(make_issue(180, description=marker(plaque)))
         self.gitlab.issue_list[PID].append(make_issue(181, description=marker(fact)))
         result = self.run_sync()
         self.assertEqual((result["stalled"], result["origin_fallbacks"]), ([], []))
         self.assertEqual((self.binding("issue", 180), self.binding("issue", 181)), (plaque, plaque))
+
+    def test_a_marker_to_a_new_fact_root_uses_that_thread(self):
+        self.gitlab.issue_list[PID] = [make_issue(14)]
+        self.run_sync()
+        root = self.binding("issue", 14)
+        self.assertEqual(SYNC.parse_header(self.buzz.thread(root)[0]["content"])["issue"], 14)
+        self.gitlab.issue_list[PID].append(make_issue(180, description=marker(root)))
+        result = self.run_sync()
+        self.assertEqual((result["stalled"], result["origin_fallbacks"]), ([], []))
+        self.assertEqual(self.binding("issue", 180), root)
 
     def test_a_person_reply_inside_a_desk_thread_still_walks_to_the_desk_root(self):
         """L1-GIS-HO-055 回归：marker 指向 Desk 门牌 Thread 里某个人的回帖：照旧走到 Thread 的根（Desk 门牌）并绑定；只有根也不是 Desk 的才回退（人的话题里的回帖）。"""

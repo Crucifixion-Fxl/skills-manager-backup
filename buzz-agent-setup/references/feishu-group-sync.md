@@ -12,7 +12,7 @@
 - owner 想让自己负责的某个 Buzz channel 在飞书里有一个对应的群，频道里的 agent 能在群里被 @，两边的消息互相可见。
 - owner 本机已经有：登录好的个人 lark-cli（bot 和 user 两种身份都可用）、buzz CLI、这个频道的 owner 或 admin 权限。
 - 运行主机应当是单用户的，或者开启了 `hidepid`。lark-cli 的 `--text` 没有 stdin 选项，所以消息正文会出现在进程参数里，同机的其他用户能读到。
-- 要同步图片的话：发图的 bot（owner 的个人应用 bot、每个 agent 的 bot）要有上传图片的权限（开放平台里的 `im:resource`；没有 API 可以加 scope，见 LCV-11）；owner 的 user 登录要能读群消息的资源（下载飞书里的图片）。缺权限时图片计入 `images_failed`，文字不受影响。细节见下文「图片同步」。
+- 要同步图片的话：发图的 bot（本频道 Desk、每个 agent 的 bot）要有上传图片的权限（开放平台里的 `im:resource`；没有 API 可以加 scope，见 LCV-11）；owner 的 user 登录要能读群消息的资源（下载飞书里的图片）。缺权限时图片计入 `images_failed`，文字不受影响。细节见下文「图片同步」。
 - bridge 已部署了「频道人员接口」并且打开了开关（infra/buzz-deploy ADR-0015，`CHANNEL_PEOPLE_API_ENABLED`），owner 是这个频道的 owner 或 admin。
 - **上线前置：bridge 已部署 union_id 回填与新的响应字段（infra/buzz-deploy#77：`union_ids`，以及只在开了 `CHANNEL_PEOPLE_EMAILS_ENABLED` 时才有的 `emails`）。**默认的 `identity: "union_id"` 要用 `union_ids`；bridge 还没部署时脚本每一轮都会中止并说明缺什么（什么也不会动），可以先在配置里写 `"identity": "email"`（要 bridge 开 `CHANNEL_PEOPLE_EMAILS_ENABLED`）。见下文「人的身份怎么认」。
 
@@ -20,8 +20,8 @@
 
 | 部件 | 身份 | 用途 |
 |---|---|---|
-| owner 的 lark-cli（默认配置） | 个人应用的 **bot** | 建群（群主设为 owner）；在群里转述 Buzz 上人的发言（默认发成卡片，见「消息卡片」；含图片） |
-| owner 的 lark-cli（默认配置） | owner 本人的 **user** token | 加人、减人、拉 agent bot 进群；轮询群消息和话题消息；下载飞书消息里的图片 |
+| owner 的 lark-cli（默认配置） | owner 本人的 **user** token | 建群并设 owner；加人、减人、拉 agent bot 进群；轮询群消息和话题消息；下载飞书消息里的图片 |
+| 本频道 Desk 的独立 lark-cli profile | 本频道 `-desk` 的 **bot** | 默认代发 Buzz 人类、Workflow、非成员上下文及远端 Agent 的消息；发送图片、状态通知和代理表情 |
 | 每个 agent 自己的 lark-cli profile | 该 agent 的 PersonalAgent **bot** | 把这个 agent 在 Buzz 上说的话（含图片）发到群里；把它在 Buzz 上打的 reaction 变成飞书表情（也由它自己的 bot 打） |
 | buzz CLI | **镜像身份**（每个频道一个，bot 角色，由 owner 用 NIP-OA 背书） | 读频道成员、消息和 reaction；下载 Buzz 上的图片附件（`media get`）；把飞书上人的发言带署名（图片作为附件）发进频道 |
 | bridge 的人员接口 | 频道 owner / admin 用**自己的 Buzz key** 做 NIP-98 签名的一个 GET：`<base_url>/bind/api/channels/<频道>/people` | 每一轮取一次本频道现存成员里已验证绑定的人：`people`（`{pubkey: open_id}`，**bridge 应用**的 open_id，本地认不出人，只解析不使用）、`union_ids`（`{pubkey: on_…}`）、`emails`（`{pubkey: [邮箱]}`，bridge 开了 `CHANNEL_PEOPLE_EMAILS_ENABLED` 才有）。绑定会变，所以每轮重取；pubkey → id 的对应关系不落盘 |
@@ -32,7 +32,9 @@
 **每轮开始先核对身份，不符就不发。**
 - owner 的 lark-cli profile：`auth status` 返回的 `appId` 和 user `openId`，必须等于配置里的 `owner_app_id` 和 `owner_open_id`，否则整轮拒绝。
 - 镜像身份：镜像 env 文件里的 key，用 `buzz users get` 查到的自身 pubkey 必须等于 `mirror_pubkey`，否则整轮拒绝。这能挡住把 env 文件误指向 owner 的配置错误。
-- 每个 agent 的 profile：`appId` 必须等于它登记的 `app_id`。不符（包括 `auth status` 暂时出错）的 agent 本轮不投递，它的 bot 也保持原样：已在群里的不移出，不在群里的不拉进来。绝不改由 owner bot 代发。
+- 每个 agent 的 profile：`appId` 必须等于它登记的 `app_id`。本频道 Desk 必须是频道 bot 成员、profile 已验证、bot 已在群里；缺任一条件整轮失败。其他 Agent 身份不符时只暂停该 Agent 的投递，绝不由 Desk 冒充它。
+
+**统一发送策略（2026-09-24）**：每个 Channel ↔ 群绑定必须在 `desk_pubkey` 中明确指定自己的 Desk。没有 Desk、Desk 未验证或 bot 未入群时失败；没有 owner bot 代发模式、自动回退或按名字猜 Desk。人的消息与 Workflow 消息保留原作者署名；配置了本机飞书 bot 的 Agent 仍由自己的 bot 发。owner 的 user token 继续负责群读取和成员操作，切换发送者并不免除这一路凭据的维护。旧版本用 owner bot 发出的未决发送不再重试，旧消息也不由 owner bot 继续编辑或补图；历史飞书消息不会被自动搬到新话题。上线必须逐群配置、验证与回读，单独合并脚本不算所有群已切换。
 
 ## 人的身份怎么认：union_id（默认）与 email
 
@@ -96,9 +98,10 @@
    - 确认这个 env 文件的 key 确实是频道 owner / admin：脚本每轮会自己核对，不是就报错并说明原因。
 7. 人的身份用哪种（`identity`）？缺省 `union_id`，前提是 bridge 已部署 union_id 回填与新响应字段（infra/buzz-deploy#77）；bridge 开了 `CHANNEL_PEOPLE_EMAILS_ENABLED` 也可以选 `email`。先向 bridge 的负责人确认它现在给不给 `union_ids` / `emails`，别到运行时才发现每轮都中止。
 8. 群里不是频道成员的人（没有 Buzz 账号，或还没绑定飞书账号）的发言，默认会让 agent 读到（`feishu_unmapped_senders: "context"`）：署名 `[飞书·非成员]`，图片走成员同一条下载、校验、去元数据与上传路径；飞书里真实选中的 @agent 会成为 Buzz p tag，@ 到人不生效。团队 Channel 的 agent 按 [runtime-setup.md](runtime-setup.md) 配成 `BUZZ_ACP_RESPOND_TO=anyone` 时，这个 p tag 会建立 turn 并让 agent 响应；`owner-only` 或未包含镜像身份的 allowlist agent 仍会被自己的作者门禁挡下。要关闭非成员镜像就显式选 `"skip"`。说清「唤醒不等于授权」与其余风险，见「非成员的发言（仅上下文镜像）」。它与发言人白名单互斥；已配白名单而未写本键时隐式为 `"skip"`。
-9. 频道里有没有**不归你管的 agent**（别人 owner 的 agent 也在这个频道）？有的话它的凭据永远不会在你机器上，缺省会把它的发言丢掉
-   （`agent_bot_unavailable`）；设 `buzz_unmanaged_agents: "relay"` 可以让镜像 bot 代发（署名 `名字（Buzz·助手）：`，不 @ 任何人），
-   见「本机没有凭据的 agent（镜像代发）」。
+9. 频道里有没有**不归你管的 agent**（别人 owner 的 agent 也在这个频道）？它的凭据永远不会在你机器上，缺省由本频道 Desk bot 代发
+   （`buzz_unmanaged_agents` 缺省 `"relay"`，署名 `名字（Buzz·助手）：`，不 @ 任何人）；只有你明确不想让它的发言进群才写 `"skip"`。
+   它的 owner 公开了飞书 app_id 的话，它的 bot 也会被拉进群、能被 @，不用你做任何事，见「本机没有凭据的 agent（Desk 代发）」与
+   「别人的 agent 的飞书应用（kind:30177 目录）」。
 10. 反过来，Buzz 那边不是验证过的频道成员、也不是配置的 agent 的作者（比如一个 Workflow 自己的签名身份）发的消息，要不要镜像进飞书？缺省不要（`buzz_unmapped_senders: "skip"`，`not_channel_human`，直接丢弃——丢掉一条话题根会让同一 Thread 之后所有回复在飞书里断链）。选 `"context"` 就镜像（署名插入「·非成员」，只有 @ 到频道自己的 agent 才生效，@ 到人不生效），跟第 8 条是同一条 @ 规则的另一半，见「非成员/非 agent 的 Buzz 消息（仅上下文镜像）」。
 
 ### 2. 预检：`preflight`
@@ -160,122 +163,18 @@ python3 scripts/buzz_feishu_group_sync.py bind --config <cfg.json> --chat-id oc_
 python3 scripts/buzz_feishu_group_sync.py round --config <cfg.json> --state-dir <dir> [--allow-bulk-removal] [--skip-backlog]
 ```
 
-每次调用跑一轮，由 owner 的 `systemd --user` timer 每分钟触发一次（示例见文末）。
+每次调用跑一轮，由 owner 的 `systemd --user` timer 每分钟触发一次。同一个 state 目录有文件锁、只服务一个 `channel|chat` 绑定；绑定起点只在首次身份核对成功后写入。完整的读取窗口、话题根补发、正文中和、幂等与图片契约见 [feishu-message-sync.md](feishu-message-sync.md)。
 
-- 同一个 state 目录上有文件锁，已有一轮在跑时新的一轮直接退出。
-- 一个 state 目录只服务一个 `channel|chat` 绑定，换了频道或群就拒绝运行。
-- **绑定从第一次身份核对通过的那一轮开始算**，之前的消息都不镜像。首轮因身份不符失败，不会提前定下起点。
+每轮依次执行：
 
-每轮按下面的顺序执行：
+1. 核对 owner、agent 与镜像身份；
+2. 对账成员。缺省的双向基线、飞书拉人进 Buzz、Buzz 移人、失败状态消息及安全上限见 [feishu-two-way-sync.md](feishu-two-way-sync.md)；
+3. **Buzz → 飞书**：镜像消息、编辑、话题与图片；
+4. **飞书 → Buzz**：`unmapped_sender` 缺省按上下文放行；显式把 `feishu_unmapped_senders` 设为 `"skip"`，或被 `feishu_sender_allowlist` 拦下时计入跳过原因，`sender_not_allowed` 只影响飞书 → Buzz；
+5. **表情双向同步**，再处理飞书里的 `/approve` / `/deny`。当前规则见 [feishu-two-way-sync.md](feishu-two-way-sync.md)；
+6. 推进各自游标；受单轮上限截住或存在未决项时不越过待处理事件。
 
-1. **核对身份**：见上文「每轮开始先核对身份」。
-
-2. **成员对账**
-   - desired，即应该在群里的人：
-     - 频道里的人，也就是角色为 owner、admin、member、guest 的成员。配置里登记过的 agent 和镜像身份，无论角色是什么，都不算人。映射方法是 pubkey → 内部身份（bridge 的人员接口给 `union_ids`，或经通讯录换出的 open_id，见上文「人的身份怎么认」）。**每一轮都取最新的**：某人解绑或离职，下一轮他就映射不到；新同事绑定并进频道，下一轮就被拉进群。取不到就整轮报错（见下面「人员接口失败」），不会猜。
-     - agent：角色为 bot、在配置里登记过、而且身份核对通过的 agent，取它登记的 app_id。
-     - owner 本人和个人应用的 bot 始终在 desired 里；群主（群信息里的 `owner_id`）也始终保留。
-   - actual，即群里现在的成员：`+chat-members-list --as user`（union_id 模式加 `--member-id-type union_id --member-types user`，bot 另列一次，按 open_id）。
-   - 差集一律用 owner 的 **user** 身份加减（LCV-04；union_id 模式的 `member_id_type` 是 `union_id`），而且**先删后加**：群里 bot 满 15 个时，先移出离开频道的 agent bot，才有位置给新 agent 的 bot。如果移除被下面的保护规则暂缓了，放不下的 bot 计入 `blocked_bots`，不会去加然后被飞书拒绝。
-     - 加人时用 `succeed_type=1`，能加的先加，不可用的 id 只计入 `member_failures`。
-     - 每次请求最多 50 人或 5 个 bot。
-     - 某一批请求出错只记一次 `errors`，不影响后面的消息同步。
-   - **人员接口失败**：整轮中止（退出码 1），不发任何消息、不动群成员，也不写 state——所以首轮失败不会定下绑定的起点。原因写在 stderr，不含响应正文。下面这些都算失败，下一分钟的那一轮会重试：
-     - 连不上或超时（15 秒）、HTTP 状态不是 200（401 签名或时钟问题，404 你不是这个频道的 owner / admin 或频道不存在，5xx）、重定向（不跟随）；
-     - 响应不是 JSON、超过 1 MiB、频道对不上、`people` 里有格式不对的 key（不是 64 位小写 hex）或 open_id（不是 `ou_…`）；`union_ids` 的值不是 `on_…`、`emails` 的值不是形状合法的邮箱列表（1 到 20 个；契约是小写，大小写不同、首尾有空格的地址也接受，脚本按规范形式——去空格、转小写——使用，和 `gitlab_buzz_people_generate.py` 对同一个应答的宽松处理一致）、这两个字段的 key 格式不对——不论选哪种模式，格式不对就中止；
-     - 所选模式需要的字段缺失：union_id 模式没有 `union_ids`（bridge 还没部署 union_id 回填），email 模式没有 `emails`（bridge 没开 `CHANNEL_PEOPLE_EMAILS_ENABLED`），错误里会明说。不用的字段缺席不要紧；
-     - union_id 模式下 owner 自己的 `user_info` 读不到、或其中的 `open_id` 不是配置的 `owner_open_id`：不知道群里哪个账号是 owner，整轮中止；
-     - 签名用的 key 在频道里不是 owner 或 admin：脚本先自己报清楚，不发请求。
-   - 为什么不缓存、也不在接口失败时沿用上一轮的映射：沿用旧映射会把已解绑或已离职的人继续留在群里，或者把新同事当成外人。宁可这一轮什么都不做。
-   - **移人的保护规则**：
-     - 只移出配置里登记过、而且本轮身份核对通过的 agent bot。群里其他 bot 一律不动。
-     - 频道里只要还有映射不到的人，本轮就**不移人**（`removals_withheld: "unmapped_members"`）。因为群里的某个未知成员可能正是他；而一个出了问题的接口会让所有人都显得映射不到（不过接口出错时整轮已经中止，见下）。
-     - 一次要移出超过 10 个成员时，整体暂缓（`removals_withheld: "bulk_removal"`）。确认无误后，带上 `--allow-bulk-removal` 再跑一次。
-
-3. **Buzz → 飞书**
-   - 读取：`buzz messages get --kinds 9,45001,45003 --since <游标−900s>`，返回里有格式不对的事件时整轮拒绝（丢掉一行会让这一页显得不满，翻页就会提前结束）；如果还有等待重试或结果未知的发送，就再往前读到最早那条的时间。relay 每次最多返回 200 条，并且最新的在前，所以脚本用 `--before` 往前翻页。
-   - 积压超过 50 页（约 1 万条）时整轮拒绝，不会跳过任何消息。owner 确认可以放弃这段积压后，带 `--skip-backlog` 跑一轮：到当前为止的 Buzz 积压全部丢弃，以后也不再读取，报告里的 `backlog_skipped` 会列出 `buzz`。
-   - 跳过的情况：
-     - 镜像身份自己发的事件（回声）；
-     - 绑定之前的事件；
-     - 作者既不是频道里的人，也不是已核对的 agent（`not_channel_human`）；
-     - 频道里没有飞书 bot 的 agent（`agent_bot_unavailable`）——除非它**本机根本没配**且开了 `buzz_unmanaged_agents: "relay"`，见下文「本机没有凭据的 agent（镜像代发）」。
-   - 谁来发：agent 的发言用这个 agent 自己的 lark-cli profile 发，符合 ADR-0002 Buzz-first；人的发言用个人应用 bot 发。默认发成**卡片**（见下文「消息卡片」）；配置 `message_format: "text"` 时发文字，正文带「张三（Buzz）：」前缀，p tag 转成飞书 `<at>`。
-   - 回复：有 `e` tag 的回复发成飞书话题回复，reply 标记优先于 root 标记，并把父消息登记为要轮询的话题。直接父消息在飞书里没有副本时，先补发话题根再回复，见下面「话题根补发」；补不出根才作为普通消息发出。
-   - **话题根补发**（GitLab 通知就是话题回复：同一个 MR 的评论、流水线通过、新提交都回在 MR 那条根消息的话题下。根不在账本里——比绑定起点早、或当时被跳过——回复原来就成了一条条互相没有关联的顶层消息）：回复的直接父消息在账本里就挂直接父；否则找它的**话题根**，飞书里没有根就**先把根补发到飞书，再把回复作为话题回复发在这条根下面**。
-     - 怎么找根：回复自己的 `root` 标记就是根 id；只有 `reply` 标记时（buzz 的直接回复都是这样），直接父如果是这一轮读到的、自己就是话题顶层的事件就用它，否则 `buzz messages thread --channel <频道> --event <直接父> --depth-limit 0`（镜像身份读）取话题根。实测 0.5.23 的 `messages thread` 返回整个话题的事件数组（形态和 `messages get` 一样，根在最前，`--event` 是根、直接回复还是嵌套回复都一样），`--depth-limit 0` 只返回根；返回里必须恰好一个顶层事件（已知根 id 时还要就是它），否则当作取话题失败，不猜。
-     - 根和普通镜像走**同一条路**：同一个 `route_buzz_event` 决定谁来发（人的根走 owner bot 带署名，agent 的根走它自己的 profile）、同一个幂等键 `b2f-<sha256(event_id)[:40]>`、同一套 pending / retry / failed / unknown 账本语义，账本记 `b2f[根 id] = 飞书消息 id`，所以 reaction 同步能找到它、飞书里对它的回复能映射回 Buzz。**根再老也补**（不受绑定起点限制），但只补有新回复的话题的根：这是给回复补上下文，不是回填历史，话题里其他旧消息不补。补发的根按「现在」计时，不占读取窗口。
-     - 同一轮里根一定在它的回复前面发出（读到的事件里就有根、只是同一秒排在后面时，也先发根）。同一个话题一轮只取一次；之后的回复直接在账本里找到根，不再取、不再补。回复发出后话题登记进 `threads` / `polled`，和以前一样。
-     - **回复等根，不越过它**：根被飞书拒绝（`retry`），或结果不确定（`pending`：超时、网络错误）时，回复**不发**，留在 `unresolved` 里下一轮再来，根每轮按同一个键重试；根成功后回复接着发在它下面。绝不先把回复当顶层发（会乱序、还会重复）。等根的回复和别的未决项一样，超过 6 小时仍读不回来就关闭并报告一次（`failed`），实际上根的 45 分钟窗口和 3 次上限会先让它退回顶层。
-     - **退回顶层**（回复不丢，作为普通消息发出，和补发之前一样）：根不可镜像——路由跳过（`agent_bot_unavailable`、`not_channel_human`、`echo`、`kind`、`empty`，跳过原因照常计入 `skipped`）；根连续 3 次被拒（记 `failed`）；根结果不确定超过 45 分钟窗口（记 `unknown`）；取话题连续 3 次失败。这些情形计 `thread_root_unavailable`（前三种）或 `thread_root_failed`（最后一种）。退回顶层发出的回复，重试时仍是顶层、同一个键。
-     - **取话题失败**（buzz 报错：话题根找不到、超时、返回的不是恰好一个根）：这条回复这一轮等，不动账本；每条回复最多试 3 次（`state.attempts` 里的 `b2f-thread:<回复 id>`），第 3 次仍失败就退回顶层。每次失败记 `errors` 和 `thread_root_failed` 各一次。
-     - **单轮上限**：每轮最多取 `THREAD_ROOT_LOOKUPS_PER_ROUND`（20）个话题；超出的回复这一轮不发、留在 `unresolved`（`thread_roots_deferred` 计数），并且这一轮的 Buzz 消息游标不前进，下一轮接着补，一条不丢、一条不重。已知根 id 且账本里已有副本、或根就在这一轮读到的事件里的话题不占上限。
-     - 没有新增 state 字段：等根的回复只在 `unresolved` 里（`b2f` 里没有它），根用它自己的 `b2f` 条目（pending / retry）；旧版本写的 state 原样可用，旧版本按顶层发出、结果未知的回复重试时仍是顶层。
-     - 只改 Buzz → 飞书方向，不改文字以外的格式：根是一条普通的镜像消息，所以（默认）也是一张卡片，标题是根的第一行、正文第一行是根的作者。
-   - 图片：事件带的图片附件（`imeta` tag）在文字（默认是卡片）发出之后，由**同一个发送者**作为随后的图片消息发出，文字在话题里时图也进同一个话题。正文里与附件重复的 `![image](url)` 从文字里去掉。补发的话题根（见上面「话题根补发」）也一样：根（默认是一张卡片）带的图片跟在根的卡片后面发出。规则、上限和失败语义见下文「图片同步」。
-
-4. **飞书 → Buzz**
-   - 轮询：每轮用 user 身份拉两次群消息。
-     - 镜像用：从游标窗口（上一轮时间 −120s，再往前覆盖等待重试的消息）开始，按时间正序读，最多 40 页（2000 条）。离线再久，上一轮之后的消息也都会补回；一轮读不完时整轮报错，不静默截断。owner 确认可以放弃后，带 `--skip-backlog` 跑一轮：到当前为止的飞书积压全部丢弃，`backlog_skipped` 列出 `feishu`。
-     - 发现话题用：最近 6 小时里最新的 500 条，只用来发现带话题的根消息，不据此镜像。
-     - 两次都按两个信号判断是否读完：`data.has_more` 和 `meta.pagination.complete`（实测被截断时两者都会给）。
-   - 话题：每轮轮询最活跃的 10 个，再轮换 10 个最久没轮询过的，所以每个话题都会轮到；超过 7 天没有动静的话题不再轮询。
-     - 每个话题有自己的游标（上次完整轮询的时间 −120s），隔几轮才轮到的冷话题也不会漏掉回复。在 Buzz 侧回复而登记的话题，游标从上一轮算起。
-     - 话题回复按时间倒序读最新的 500 条（10 页）。两次轮询之间的新回复多于 500 条时，镜像已读到的部分，计一次 `errors`，这个话题的游标不前进。
-     - 某个话题出错只计一次 `errors`，不影响其他话题；持续出错的话题排到轮换队尾，不会一直占着名额。
-   - 跳过的情况：
-     - 已删除的消息、系统消息、`sender_type=app` 的消息（agent 的话本来就来自 Buzz）；
-     - 映射不到的发送者（`unmapped_sender`，D-L6）——默认 `feishu_unmapped_senders` 为 `"context"` 时不跳过，改按「非成员」仅作上下文镜像；只有显式 `"skip"` 或受发言人白名单限制时才计这个跳过原因，见「非成员的发言（仅上下文镜像）」；
-     - union_id 模式下发信人配对不上（`sender_unpaired`）、缓存与新证据矛盾（`identity_conflict`）；被 @ 的人配对不上只是不产生 @（`mention_unpaired`），消息照发；
-     - 已经不在频道里的发送者（`sender_not_in_channel`）；
-     - 配置了 `feishu_sender_allowlist` 时，已映射、在频道里、但不在名单里的发送者（`sender_not_allowed`），见「只让特定的人的发言进 Buzz」；
-     - 内容为空的消息（`empty`）：先于认人判断，所以不会为它调飞书。
-   - 镜像：用镜像身份带「[飞书] 张三：」署名发进频道。
-     - `mentions[]` 里当前频道成员的实体会转成 `--mention`：agent 的 bot 对应该 agent 的 pubkey，人对应这个人的 pubkey。@所有人、@owner bot、@自己都不转。只能看 `mentions`，不能匹配正文（LCV-09）。
-     - 话题回复用 `--reply-to` 挂到根消息对应的 Buzz 事件下面。
-     - 超过 10 分钟的积压，会在正文末尾注明飞书上的原始时间。
-     - 图片：人发的 image 消息和富文本里的图，作为图片附件随文字一起镜像（见下文「图片同步」）；文件、音频、视频仍按 lark-cli 渲染出来的文字镜像，不下载、不转发。撤回和删除都不同步。
-
-5. **Buzz reaction → 飞书表情**（排在两个消息方向之后：目标消息在同一轮里刚镜像出去，agent 对它打的 reaction 也能在这一轮落上）
-   - **只同步 agent 的 reaction**，由这个 agent 自己的 bot 打，不由 owner bot 或别的 bot 代打：
-     - 人的 reaction 不同步（`reaction_human`），飞书上的表情也不同步回 Buzz；
-     - 作者不是频道里的 agent（`reaction_not_agent`），或这个 agent 没有可用的飞书 bot（`agent_bot_unavailable`）：跳过。
-   - 读取：用镜像身份 `buzz messages get --kinds 7,5`（kind 7 是 reaction，kind 5 是撤销）。游标是**单独的** `react_since`，重读窗口 900 秒，读取起点不早于绑定起点和 `buzz_floor`（用 `--skip-backlog` 丢弃 Buzz 积压的时间点）。
-   - 表情映射：先去掉 emoji 的变体选择符（U+FE0E、U+FE0F）和首尾空白，再查表。默认表如下，配置的 `reaction_map` 可以追加或覆盖；查不到（比如 🚀）就跳过并计 `reaction_emoji_unmapped`，不影响同一批里的其他 reaction。
-
-     | Buzz | 👀 | 💬 | ✅ | 👍、`+` | 👌 | 🙏 | 💪 |
-     |---|---|---|---|---|---|---|---|
-     | 飞书 emoji_type | `GLANCE` | `Typing` | `DONE` | `THUMBSUP` | `OK` | `THANKS` | `MUSCLE` |
-
-     👀 和 💬 是 agent 收到请求时打的两个。
-   - 目标：kind 7 里第一个合法的 `e` tag（没有就是 `reaction_no_target`）。目标必须**已经镜像**：Buzz 上的消息用它在飞书的副本，飞书上的消息（镜像进 Buzz 的那条）反查回飞书原消息。目标还没镜像出去（比如飞书限流没发成功）时跳过并计 `reaction_target_unmirrored`，只要那条 reaction 还在重读窗口里，之后每一轮都会再试。绑定起点之前的 reaction 不补（`before_binding`）。
-   - 打上之后，账本 `r2f[reaction 事件 id]` 记作者、飞书消息 id、emoji_type 和飞书返回的 reaction_id（用 `|` 连成一串），同一条 reaction 在重读窗口里被读到多次也只打一次。飞书对同一（消息、表情、应用）的创建是幂等的，所以结果不确定后的重试不会叠出两个表情。
-   - **撤销**：kind 5 指向那条 kind 7，并且 **kind 5 的作者就是这条 reaction 的作者**，才算撤销：
-     - 别人发的 kind 5 不算（`reaction_delete_foreign`），指向不相干事件的 kind 5 直接忽略；
-     - 已经打上的，用同一个 agent 的 bot 把飞书表情删掉，账本改记 `removed`，之后不再补回；不论中继撤销后还留着那条 kind 7 还是把它删了都一样；
-     - 同一批里先打后撤的，飞书上根本不出现（`reaction_withdrawn`），也记进账本，之后即使读不到那条 kind 5 也不会补打；
-     - 同一批里的 kind 7 和 kind 5 按 `created_at` 从旧到新处理：撤销后又打回同一个表情时先删再加。反过来会先拿到旧 reaction 的 id（飞书对同一表情只有一个 reaction），再被删掉，表情就没了；
-     - 撤销时配置里已经没有这个 agent：没人能替它删，不调用任何接口，账本记 `removed`，飞书上的表情留着。
-   - **失败**：飞书拒绝或结果不确定（超时、传输错误）都下一轮重试；连续 3 次没成功就放弃，账本记 `failed`（撤销记 `removed`），`reactions_failed` 加一。重试只发生在那条 reaction 还在重读窗口（900 秒）里的时候。**表情是装饰，它的失败不触发「需要关注」**。
-   - **单轮上限**：一轮最多 50 次飞书调用（打和删合计）。超出的留到下一轮，这一轮游标不前进，一个不丢、一个不重。
-   - **读不到**：中继读 reaction 出错时整轮报错（退出码 1），但消息已经先同步完并落盘，下一轮不会重发。积压超过 50 页（约 1 万条）时不卡住整轮：读不完的部分丢弃，游标推到当前时间，`backlog_skipped` 列出 `reactions`（需要关注，退出码 3），不需要 `--skip-backlog`；消息同步照常。丢弃不会推高读取起点，所以 900 秒重读窗口里的积压还会被读到，每轮再报一次，直到它老出窗口。
-
-6. **推进游标**：消息两个方向的游标都推到本轮的墙钟时间，不取「见过的最新消息时间」。（reaction 有自己的游标 `react_since`，在上一步结束时推进，被单轮上限截住的那一轮除外。）
-   - 这样时钟偏快的客户端推不动游标；时钟偏慢的客户端，靠 900s（Buzz）和 120s（飞书）的回看窗口补上。
-   - 当时跳过的消息，之后也不会回填。
-
-**正文和署名都要中和，只有显式 @ 才能通知**：
-
-- buzz CLI 会把正文里唯一解析得到的 `@名字` 和 `nostr:npub1…` 自动变成通知（`messages send --help`：「uniquely resolved member names still notify」；`gitlab_buzz_sync.neutralize` 也是为此而写）。所以飞书→Buzz 的正文复用 `neutralize`，把 `@` 换成 `＠`、`nostr:` 换成 `nostr：`，通知只来自 `--mention`。
-- 飞书会把文本里的 `<at …>` 当成真 @。所以 Buzz→飞书的正文把 `<at` 和 `</at`（不分大小写）换成全角 `＜`，p tag 生成的 `<at>` 在中和之后才附加。
-- display name 是用户自己改的，两个方向的署名和 `<at>` 标签文字都要先清洗：
-  - 去掉零宽字符、双向控制符等格式字符；
-  - 把所有换行（含 U+2028、U+2029、U+0085、VT、FF）压成空格；
-  - 尖括号和引号换成全角字符，`@` 和 `nostr:` 按上面的规则中和。
-- 正文先去掉双向控制符、再中和 `@` 和 `nostr:`（顺序不能反：夹着控制符的 `nostr:` 中和不掉，控制符去掉以后又变回 `nostr:`），最后对整段文字再中和一遍。从第二行起（按所有换行符分行，包括 CR、U+2028、U+2029、U+0085），形如对方署名格式的行（以「[飞书]」开头，或含有「(Buzz):」，不分大小写，不限前面名字的长度）前面加 `↳ `，一眼看得出这不是另一条镜像消息。
-  - 匹配前先做 NFKC 归一化，再去掉格式字符、组合符、变体选择符和空白填充字符（如 U+3164、U+2800），所以全角变体和夹在中间的不可见字符都绕不过去。
-  - 陌生人（`feishu_unmapped_senders: "context"`）的正文用更宽的判断，见「非成员的发言（仅上下文镜像）」；成员的正文仍是这里的判断，逐字节不变。
-  - 这只是显示层的提示：真正的署名永远在消息第一行，正文里用普通文字冒充别人（例如「老板说……」）无法杜绝，和任何聊天工具一样。
+发送前先在 state 落 `pending:<首次尝试时间>`。结果未知与确定被拒的重试、终态及退出码以下面的契约为准。
 
 **不重发原则**（发送前先在 state 里记下 `pending:<首次尝试时间>` 并落盘）：
 
@@ -294,13 +193,16 @@ python3 scripts/buzz_feishu_group_sync.py round --config <cfg.json> --state-dir 
 - 成员相关：`added_users`、`removed_users`、`added_bots`、`removed_bots`、`blocked_bots`、`member_failures`、`removals_withheld`、`unmapped_members`；
 - `identity_conflicts`：身份互相矛盾的次数（缓存的旧配对与新证据矛盾、一个人的多个邮箱指向不同的账号、两个 pubkey 共用同一个飞书账号）；非零需要关注；
 - `backlog_skipped`：本轮丢弃了积压的方向（`buzz`、`feishu` 用 `--skip-backlog`；`reactions` 是自动丢弃），没有就是空列表；
-- 消息相关：`to_feishu`、`to_buzz`、`unknown`、`failed`、`errors`；
+- 消息相关：`to_feishu`、`to_buzz`、`messages_updated`（Buzz 编辑事件在原飞书消息上更新成功的条数）、`unknown`、`failed`、`errors`；
 - `context_to_buzz`：生效模式为 `feishu_unmapped_senders: "context"`（缺省）时就有，是 `to_buzz` 里属于非成员发言的那部分；只是计数，**不会**让退出码变成 3；
 - 图片相关：`images_to_feishu`、`images_to_buzz`（发出去的张数）、`images_failed`（下载或发送失败、放弃的张数）、`images_skipped`（一个对象，键是原因，见下文「图片同步」，是策略不是故障）；`images_failed` 非零需要关注，`images_skipped` 不触发；
 - 话题根补发：`thread_roots_backfilled`（补发到飞书的根，也计入 `to_feishu`）、`thread_root_unavailable`（根不可镜像或已放弃、回复退回顶层的条数）、`thread_root_failed`（取话题失败的次数）、`thread_roots_deferred`（超过单轮上限、留到下一轮的回复条数）；这四个只是计数，**自己不会**让退出码变成 3（取话题失败另计一次 `errors`，那个会）；
 - 卡片相关：`cards_sent`（发成卡片的条数）、`cards_fallback_text`（卡片被飞书拒绝、改发文字的条数）；这两个只是计数，**不会**让退出码变成 3；
-- 代发：`relayed_agents`（本机没有凭据、由镜像 bot 代发的 agent 消息条数，见「本机没有凭据的 agent（镜像代发）」；也计入 `to_feishu`）；只是计数，**不会**让退出码变成 3；
-- 表情相关：`reactions_added`、`reactions_removed`、`reactions_failed`（放弃的次数）；这三个只是计数，**不会**让退出码变成 3；
+- 代发：`relayed_agents`（本机没有凭据、由本频道 Desk bot 代发的 agent 消息条数，见「本机没有凭据的 agent（Desk 代发）」；也计入 `to_feishu`）；只是计数，**不会**让退出码变成 3；
+- agent 目录（ADR-0019）：`directory_agents`（这一轮从 relay 查到公开了飞书 app_id 的外来 agent 个数）、`directory_failed`（查询失败的次数，0 或 1：连不上、非 200、应答不是事件数组；这一轮不用目录，外来 agent 照样代发；双向成员同步会在频道和群的状态消息中说明本轮没有拉取远端 agent bot、下一轮自动重试）、`directory_conflicts`（被弃用的 app_id 个数：两个 agent 声称同一个，或和本机配置的 agent / owner 应用撞了）；三个都只是计数，**不会**让退出码变成 3，见「别人的 agent 的飞书应用（kind:30177 目录）」；
+- 成员双向同步（ADR-0020）：`members_to_buzz`（因为在飞书里被拉进群而加进频道的人 / agent 个数）、`members_removed_from_buzz`（因为被移出群而移出频道的个数）、`members_refused`（agent 的 `channel_add_policy` 不让加的次数，群里提示一次）、`members_protected`（在飞书被移出、但频道里不移出的 owner / 同步签名身份，群里提示一次）、`members_unresolved`（被拉进群、但认不出 Buzz 账号的人数，群里提示一次去绑定）、`people_cache_failed`（`people_cache_file` 读写失败的次数）、`member_events_blocked`（为避免重复 9000/9001 而暂停的原因 → 次数）；前六个只是计数，最后一个同时计入 `member_failures` 与 `errors`，令退出码变成 3。双向模式会把目录失败、列表不完整、安全上限、未绑定、bot 名额不足和成员写入失败汇总到同一条频道 / 群状态消息，后续失败与恢复都原地更新；Buzz 暂时不可写时先直接提示飞书，恢复后补建 Buzz 根事件而不重复发群消息。见「成员双向同步」；
+- Agent 入群介绍：`agent_intros_sent`（本轮成功）、`agent_intros_relayed`（其中由群助手按公开资料透明代发）、`agent_intro_failures`（本轮公开资料或发送失败）、`agent_intro_unknown`（超过幂等重试窗口仍无法确认结果）、`agent_intro_stopped`（连续明确失败后停止重试）。后三项会计入 `errors` 并进入同一条成员同步状态消息；正文与状态只使用公开资料，不包含 prompt / instruction。见 [feishu-two-way-sync.md](feishu-two-way-sync.md)「Agent 入群后的自我介绍」；
+- 表情相关：`reactions_added`、`reactions_removed`、`reactions_failed`（放弃的次数）；双向（ADR-0020）另有 `reactions_to_buzz`（镜像把飞书里人打的表情打到 Buzz 的次数）、`reactions_withdrawn_in_buzz`（飞书里撤回、镜像在 Buzz 也撤回的次数）、`approvals_to_buzz`（飞书里的 `/approve` / `/deny JOIN-<id>` 转成镜像在申请上打的 ✅ / ❌ 的次数）；这六个只是计数，**不会**让退出码变成 3；
 - `skipped`：一个对象，键是跳过原因（见上文各处）。
 
 退出码：
@@ -317,7 +219,7 @@ python3 scripts/buzz_feishu_group_sync.py round --config <cfg.json> --state-dir 
 
 **怎么发**
 
-- **发送者是 owner 应用的 bot**（不是某个 agent）：`lark-cli im +messages-send --as bot --chat-id <群> --text "$(cat guide.txt)" --idempotency-key usage-guide-<配置名>-1 --format json`。带幂等 key，重跑不会发两遍。
+- **发送者是本频道 Desk bot**：设置 `LARKSUITE_CLI_CONFIG_DIR=<Desk config>` 与 `LARKSUITE_CLI_DATA_DIR=<Desk data>`，再执行 `lark-cli im +messages-send --as bot --chat-id <群> --text "$(cat guide.txt)" --idempotency-key usage-guide-<配置名>-1 --format json`。带幂等 key，重跑不会发两遍；owner 应用不代发这份说明。
 - **正文里不要出现 `<at …>`**，助手名字写成纯文本 `@nh-desk`：飞书里 `<at>` 会真的 @ 到 bot，把 agent 唤醒去回答一段说明。bot 发的消息同步脚本会跳过（`sender_type=app`），所以说明不会回流进 Buzz。
 - 群被禁言时 bot 发不出去（`230035 Send Message Permission deny`）：让群主放开发言，或者用群主本人的身份（`--as user`）发；不要绕过去。
 
@@ -357,25 +259,32 @@ python3 scripts/buzz_feishu_group_sync.py round --config <cfg.json> --state-dir 
 
 配置 `message_format`（可选）：`"card"`（缺省）或 `"text"`。`text` 就是卡片出现之前的样子：一条文字消息，人的发言带「张三（Buzz）：」前缀，p tag 转成 `<at user_id=…>`。要退回只改这一个键，下一轮起生效；已经发出去的不动、不重发，state 不用迁移（没有新增字段）。已经在重试的消息（结果未知、或被拒还没发出去的）**按首次尝试的方式重试**：切换 `message_format` 不改它们——首次是文字的仍发文字、首次是卡片的仍发卡片，同一个幂等键下的请求不变；只有切换之后的新消息用新的格式。
 
-**一条被镜像的 Buzz 消息 = 一张短卡片**（卡片 JSON 2.0）。手机上不刷屏是第一目标（jchen 2026-09-23）：折叠之前只有标题和一行灰字（加 @ 行），正文全部收在「展开全文」里，没有副标题、没有预览、没有底部按钮：
+**一条被镜像的 Buzz 消息 = 一张短卡片**（卡片 JSON 2.0）。手机上不刷屏是第一目标（jchen 2026-09-23）：通常折叠之前只有标题和一行灰字（加 @ 行），正文收在「展开全文」里；GitLab 同步消息末尾的「状态记录」例外，它在折叠面板之后直接显示，见下表。没有副标题和预览；普通消息没有底部按钮，GitLab 同步消息有一个确定性导航按钮：
 
 | 部分 | 内容 |
 |---|---|
-| 标题 | **消息的第一行**（#127）：正文第一个非空行，取纯文字——加粗、删除线、斜体、行内代码的记号、行首的标题/引用/列表/任务记号去掉，链接和图片只留文字（地址不进标题）；标题里的转义方括号与链接包装一并清洗（同步为防伪造把标题里的反斜杠和方括号写成 `\\` `\[` `\]`，门牌行是链接 `[#132 \[标题\] …](url)`：链接只留文字，转义还原成原来的字符，与同步的 `_md_escape` 互逆；反斜杠后面是别的字符的不动）；一行、清洗过（同名字的清洗），手机一行要放得下：最宽 36 列（中文、全角、emoji 算 2 列，其余算 1 列，约 18 个汉字），超出取前面放得下的部分加「…」（「…」按 2 列留位）。同步消息的机器行（header 行、`🔔 通知` 行）不进卡片、取标题之前就已去掉，旧 `key: value` 长格式取 `title:` 的值（见下「机器行不进卡片」）；分隔线和只剩记号的行跳过；首个有内容的行是代码围栏就不从代码里取；没有可用的行（空正文、只有 header）就退回发言人。36 列是按手机屏宽估的，没有真机实测，实测后再调 `CARD_TITLE_COLUMNS` |
+| 标题 | **消息的第一行**（#127）：正文第一个非空行，取纯文字——加粗、删除线、斜体、行内代码的记号、行首的标题/引用/列表/任务记号去掉，链接和图片只留文字（地址不进标题）；标题里的转义方括号与链接包装一并清洗（同步为防伪造把标题里的反斜杠和方括号写成 `\\` `\[` `\]`，门牌行是链接 `[#132 \[标题\] …](url)`：链接只留文字，转义还原成原来的字符，与同步的 `_md_escape` 互逆；反斜杠后面是别的字符的不动）；一行、清洗过（同名字的清洗），最多 72 列（中文、全角、emoji 算 2 列，其余算 1 列，约 36 个汉字），由飞书手机客户端自然显示为手机两行；超出取前面放得下的部分加「…」（「…」按 2 列留位），不在标题里人工插入换行。同步消息的机器行（header 行、`🔔 通知` 行）不进卡片、取标题之前就已去掉，旧 `key: value` 长格式取 `title:` 的值（见下「机器行不进卡片」）；分隔线和只剩记号的行跳过；首个有内容的行是代码围栏就不从代码里取；没有可用的行（空正文、只有 header）就退回发言人。需要调整时改 `CARD_TITLE_COLUMNS` |
 | 副标题 | 没有（2026-09-23 起；原来的「发言人 · #频道名」挪到正文第一行和摘要里） |
 | 正文第一行 | 「发言人 · #频道名」，灰色小字、`plain_text`（名字成不了链接或标签），右边一个小号的「在 Buzz 中打开」链接（markdown，两者用 `column_set` 排在同一行）；链接不合法时只有灰字。发言人是人的 Buzz 显示名（清洗过，没有名字用 pubkey 前 12 位）或 agent 的显示名，各最长 60 个字符；频道名读 `buzz channels get --channel`，第一张要发的卡片才取，一轮最多取一次（缓存在内存里）；取不到就只写发言人，不影响发送。不再有「（Buzz）：」前缀 |
 | 颜色 | 人 blue，agent green |
 | 消息列表里的一行 | `config.summary`（摘要）：「发言人 · #频道名：内容前约 60 个字符」（取不到频道名就是「发言人：…」），纯文本、一行，超出加「…」；内容是去掉机器行之后的（不以 header 开头，旧格式也没有 `title:` 键名），并和标题走同一套清洗（链接只留文字，加粗、删除线、斜体、行内代码的记号和转义都去掉），清洗在截断之前 |
 | @ 行 | 有 p tag 时，正文第一行之后单独一行，见下 |
-| 折叠面板 | 消息比标题多出内容时就有（标题被截断、丢了链接地址、是表格行，或者还有别的行）：「展开全文（N 字）」，默认收起，里面是**完整的** markdown（含标题那一行；加粗、列表、表格、代码块、链接、引用都保留）。整条消息只有标题这一行时没有面板 |
-| 按钮 | 没有（2026-09-23 起，改成正文第一行的小号链接） |
+| 折叠面板 | 消息比标题多出内容时就有（标题被截断、丢了链接地址、是表格行，或者还有别的行）：「展开全文（N 字）」，默认收起，里面是除末尾「状态记录」外的**完整** markdown（含标题那一行；加粗、列表、表格、代码块、链接、引用都保留）。整条消息只有标题这一行时没有面板 |
+| 状态记录 | 只认 GitLab 同步消息中严格位于可读正文末尾、机器 header 之前的 `状态记录`，且其后至少有一条 `- ` 记录；这一整段不进折叠面板，作为最后一个**内容区**直接显示。普通消息的同名文字、或不在末尾的区块照常折叠。异常超长时明确标记「仅显示最近部分」，优先保留最近记录，卡片仍小于 30 KB |
+| 按钮 | 普通消息没有底部按钮。结构合法的 GitLab 同步消息在绝对底部显示默认样式的「在 GitLab 中打开」按钮；目标是同步器生成的 HTTPS 对象 URL。状态记录仍是按钮前的最后一个内容区 |
 | 图片 | 卡片里不放图片：事件带的图片附件在卡片之后作为随后的图片消息发出（同一个发送者、同一个话题，见「图片同步」）；正文里与附件重复的 `![image](url)` 已经去掉，别的 `![alt](url)` 改成「[图片：alt] 地址」，所以卡片的 markdown 里没有外链图片语法 |
+
+**GitLab 按钮不信任普通正文。**只有同步 header 位于同步器规定的首行或末行时才解析目标；当前格式从同步器生成的 headline markdown 链接取 URL，旧格式或编辑聚合格式可从 `url:`、`MR:`、`Issue:`、`Pipeline:`、`Comment:`、`GitLab:` 行或独立对象 URL 取。目标必须是无账号密码的 HTTPS URL，且路径包含 GitLab Web 对象的 `/-/`。普通 Buzz 消息里的链接、正文中间伪造的 header、HTTP URL 都不能产生按钮。Comment 的按钮指向对应 `#note_<id>`。只承载目标的独立/带标签 URL 行从卡片正文移到按钮，不在折叠区重复；headline 链接保留，因为它还承载标题。Buzz 原消息、文字模式与卡片失败后的文字回退都不改。
+
+**Comment 仍是消息，不是状态。**Issue/MR comment 继续由 GitLab 同步器作为 canonical Thread 里的独立回复投递，飞书侧也同步成该话题里的消息；comment 不写进 reaction，也不追加到主卡片的「状态记录」。主卡片的原位编辑只承载 Git 状态、字段/流水线等确定性时间线。
+
+当一次状态变化确实需要给责任人真实 `p` tag 时，Buzz edit 本身无法新增 tag，同步器会另发一条带时间和变更标识的极简「Git 状态需要你关注」回复；飞书会同步这条注意力提醒，但不会重复完整状态正文。没有收件人时，状态变化只 update 原卡。
 
 **机器行不进卡片**（skills#134）：GitLab → Buzz 同步消息里有几行是给程序读的，对飞书上的读者是噪音，卡片的任何位置都没有——标题、正文、折叠全文、`config.summary`。只影响卡片：Buzz 里的消息、同步的去重与读回、文字模式（`message_format: text`）和卡片被拒后回退的文字都不变。中和之后按结构认，不按内容猜：
 
 - **header 行**：整行以 `[gitlab-notify:v1]` 开头。只认同步自己认 header 的两个位置：最后一个非空行（新格式，2026-09-18 起）和第一行（旧格式）；正文中间、句子里、代码围栏里引用的同名文字是作者写的内容，不动。
 - **`🔔 通知 @…` 行**（ADR-0012，给 Buzz 客户端做正文 @ 高亮用）：只在带 header 的同步消息里去掉；卡片自己的 @ 行（见下「@ 的三种形式」）不受影响，仍然只在有 p tag 时出现。人在普通消息里写的「🔔 通知 …」不动。
-- **旧 `key: value` 长格式**（同步 2026-09-18 之前的写法）：header 在第一行、第二行是 `title: 值`，后面是 `url:` `labels:` `assignees:` `milestone:` `description:`（MR 还有 `branches:` `sha:` `reviewers:` `author:`）各一行。标题取 `title:` 的值、不带键名；折叠全文里这一行同样不带键名。其余键值行照常显示，`url:` 那行保留方便点开，`unmapped:` 是给人看的说明也保留。只按结构认（header 首行 + 第二行是 `title: 值`）：没有 header 的 `title:` 行、header 在末行的 `title:` 行、header 首行但第二行不是 `title:` 的（2026-09-17 的紧凑 MR 格式）都不改。
+- **旧 `key: value` 长格式**（同步 2026-09-18 之前的写法）：header 在第一行、第二行是 `title: 值`，后面是 `url:` `labels:` `assignees:` `milestone:` `description:`（MR 还有 `branches:` `sha:` `reviewers:` `author:`）各一行。标题取 `title:` 的值、不带键名；折叠全文里这一行同样不带键名。其余键值行照常显示，`url:` 那行移到卡片底部的 GitLab 按钮，`unmapped:` 是给人看的说明仍保留。只按结构认（header 首行 + 第二行是 `title: 值`）：没有 header 的 `title:` 行、header 在末行的 `title:` 行、header 首行但第二行不是 `title:` 的（2026-09-17 的紧凑 MR 格式）都不改。
 
 存量旧格式的消息不迁移（同步对存量 Thread 不变），约 2500 条；每个旧话题第一次有新回复时，它的根会被补发成卡片（`thread_roots_backfilled`），就是上面的旧格式，所以这条规则要长期在。
 
@@ -393,58 +302,28 @@ python3 scripts/buzz_feishu_group_sync.py round --config <cfg.json> --state-dir 
 
 **用户文字进卡片前一律中和**：`<` 全部换成全角 `＜`（所以 `<at id=all>`〔@所有人〕、伪造的 @、`<font>`、`<a>` 都成不了卡片标签，代码块里的 `<` 也会变成 `＜`）；去掉双向控制符和其他控制字符，各种换行统一成 `\n`，孤立的代理码位换成 `?`；沿用「像另一边署名的行前面加 `↳ `」的标记；名字、频道名和标题（消息的第一行；旧格式是 `title:` 的值）走清洗并限长——标题在清洗之前已经过上面的中和，`@` 变成全角 `＠`、引号和尖括号变成全角；同步消息的机器行是在中和之后按整行去掉的（见上「机器行不进卡片」）。markdown 语法本身（加粗、列表、表格、代码块、链接、引用）**保留**——Buzz 的消息本来就是 markdown。
 
-**30 KB 上限与截断**：飞书拒绝 30 KB 及以上的卡片。整张卡片 JSON 超过 28 KB 时，脚本二分找出折叠面板还能放下多少个字符（按字符截断，不切断字符；截断处落在代码围栏里就先补收尾的围栏），末尾加一行「（内容过长已截断，完整内容请在 Buzz 中打开）」；任何内容出来的卡片都 < 30 KB（名字、频道名、@ 行也都有上限）。标题和正文第一行不受影响。截断时在链接、图片、裸 URL、行内代码、加粗中间就退回到它开始之前（宁可少放一点）；转义（`\[` `\]` `\\`）是文字不是语法，截在转义中间就连半个转义一起去掉。
+**30 KB 上限与截断**：飞书拒绝 30 KB 及以上的卡片。整张卡片 JSON 超过 28 KB 时，脚本二分找出折叠面板还能放下多少个字符（按字符截断，不切断字符；截断处落在代码围栏里就先补收尾的围栏），末尾加一行「（内容过长已截断，完整内容请在 Buzz 中打开）」；任何内容出来的卡片都 < 30 KB（名字、频道名、@ 行也都有上限）。标题和正文第一行不受影响。截断时在链接、图片、裸 URL、行内代码、加粗中间就退回到它开始之前（宁可少放一点）；转义（`\[` `\]` `\\`）是文字不是语法，截在转义中间就连半个转义一起去掉。若卡片仅靠可见的「状态记录」就超限，先把它缩成「状态记录」＋明确的截断说明＋尽可能多的最近记录；它仍然直接显示，不移入折叠面板。
 
 **飞书拒绝卡片时：回退成文字**。飞书明确拒绝这张卡的内容（lark-cli 错误 `type` 是 `api` 或 `validation`，且不是限流：限流码 230020、11232、99991400）说明这张卡没发出去：立即用**文字发送路径**重发同一条消息——文字内容与 `text` 模式一样，同一个父消息（话题回复还是话题回复）、同一个 bot（agent 的卡片改发文字仍由它自己的 bot），幂等键换成 `<键>-text`；`cards_fallback_text` 加一，`cards_sent` 不加，不算错误。账本里这条消息记 `,text`：之后不论文字被拒还是结果不确定，都只重试文字（文字可能已送达，再发卡片会重复）。总的规则：账本 extra 记的是首次尝试的发送方式（`,card` = 首次是卡片，`,text` = 卡片被拒后改发的文字，没有记号 = 文字模式的普通文字，和旧版本一样），每次重试**原样重复首次尝试**，同一个键、同一个请求。认证、权限、限流这类拒绝说的不是卡片内容，文字也会被拒，所以**不回退**，照旧记一次拒绝、下一轮用卡片重试。**结果不确定的失败（超时、`type: network`）不回退**：卡片可能已经发出去了，用同一个键、同一个接口重试，飞书按键去重。
+
+### Buzz 编辑原位同步到飞书
+
+Buzz 的 `kind:40003` 是编辑覆盖层：正文是替换后的完整内容，唯一合法的裸 `e` tag 指向原事件。同步脚本把它当控制事件，**不发第二条飞书消息**：
+
+- 原事件必须已经由当前绑定镜像、仍能从本轮消息或它的精确 Thread 回读、类型是 `9` / `45001` / `45003`，而且编辑者与原作者的 pubkey 相同；多目标、跨作者、目标未镜像都跳过，绝不猜。
+- 更新由原来发送消息的应用完成：Agent 消息用该 Agent 的 bot，新策略下代发的消息用本频道 Desk bot。旧 owner bot 消息不再由同步器编辑。卡片走 `PATCH /open-apis/im/v1/messages/{message_id}`，文字走 `PUT`；都是完整内容替换，原 `message_id`、话题位置和 Buzz 深链不变。
+- 普通编辑按 `created_at` 旧到新应用；GitLab compact overlay 在同一秒内按机器头里的 `rev` 递增应用，保证最终卡片是最新状态。没有 `rev` 的旧事件维持稳定的兼容顺序。
+- 新发卡片的 `config.update_multi` 固定为 `true`，这是飞书允许后续共享更新的前置条件。升级前已经发出的卡片没有这个声明，state 也不知道其实际发送模式，因此不回填、不试错，记 `edit_mode_unknown`；升级后新发的消息才可自动编辑。
+- 确定被拒时最多重试 3 次；网络超时等结果未知时保留 pending，用同一完整内容再次更新不会产生重复消息。首次尝试起 45 分钟后关闭，未决事件会把 Buzz 读取起点往回拉。飞书自身还限制卡片只能更新发送后 14 天内的消息，普通消息的可编辑时间由企业管理员设置。
+- `messages_updated` 只计成功更新；原消息仍在 `b2f`，编辑事件的结果在 `e2f`。编辑只替换文字/卡片本体，不增删原消息后面已经同步的独立图片消息。
 
 **飞书 → Buzz 不受影响**：我们的 bot 发出的卡片在飞书里是 `sender_type=app`、`msg_type=interactive`。账本认得自己发出去的消息 id；即使账本丢了，读群消息和话题回复时也按 `sender_type=app` 跳过，不会被当作人的发言镜像回 Buzz，也不会在话题轮询里被当成回复。
 
 ## 图片同步
 
-两个方向都同步图片；其他文件类型不同步。所有图片相关的失败都只影响那一张图：文字和别的图照发，也不会造成文字重发。
+两个方向都同步图片，其他文件类型不同步。每张 ≤ 10 MB、每个事件最多 9 张；飞书 → Buzz 只接受 jpeg / png / gif / webp，并在上传前去除元数据。图片的来源、魔数与 hash 校验、临时目录、话题归属、幂等账本、失败与模型输入边界见 [feishu-message-sync.md](feishu-message-sync.md)。
 
-### Buzz → 飞书
-
-- **来源**：事件的 `imeta` tag（NIP-92 风格，每个字段是「键 值」字符串），实测形态：`["imeta", "url https://<relay>/media/<sha256>.jpg", "m image/jpeg", "x <sha256>", "size 146535", "dim 1366x1200", "blurhash …", "thumb …"]`。Buzz CLI 发带附件的消息时还会自己在正文后面加一行 `![image](<url>)`。`url` 要鉴权（不带签名直接取是 401），所以用镜像身份的 `buzz media get <sha256>[.ext] -o <临时文件>` 下载；脚本**只把 url 里的 `<64 位小写 hex>[.扩展名]` 一段**交给 CLI，不交整个 url（CLI 本来也拒绝非 relay 的 origin）。`x` 必须与 url 里的 sha256 一致，`m` 和 `size` 都不信。
-- **逐张校验**（不通过就跳过并按原因计数，不影响别的）：
-  | 检查 | 不通过时的原因（`images_skipped`） |
-  |---|---|
-  | imeta 的形状：`url` 是 `<主机>/media/<sha256>[.ext]`（不是缩略图、没有查询串、没有大写）、`x` 一致 | `bad_imeta` |
-  | 声明的 `size` 超过 10 MB（不下载）；或下载下来的字节超过 10 MB | `too_large` |
-  | 字节的魔数不是飞书接受的图片格式（jpg / png / webp / gif / bmp / tiff）——不看 `m`，也不看扩展名；svg、html、pdf 都不是 | `not_image` |
-  | 字节的 sha256 不是事件写的那个 blob | `hash_mismatch` |
-  | 下载下来的不是普通文件（符号链接、目录） | `unreadable` |
-  | 同一个事件最多 9 张（去重之后、含不认的形状），多出的只计数 | `over_limit`（按张数计） |
-  | 事件的文字没有确认发出（`failed` / `unknown`）——没有说明、人的图没有署名，不发图；放弃文字的那一轮就计（这个事件之后不会再被读到）；文字是在别的路径上被关成终态的（放弃积压、旧版本的 state），事件再被读到时同样结算 | `text_not_sent` |
-  | 文字发出以后发送者不能再发了（agent 的 profile 与配置不符、bot 不在群里）——绝不改由别的 bot 代发 | 跳过文字时的原因，如 `agent_bot_unavailable` |
-- **发送**：文字先发（默认是一张卡片，见「消息卡片」；`message_format: text` 时是带署名的文字，卡片被飞书拒绝而回退成文字时也一样）；文字发出（或早先已发出）之后，按 imeta 顺序把每张图作为**随后的独立图片消息**发出——卡片本身不放图片（卡片的 markdown 只认飞书自己的 image_key，不认外链），发送者与文字**一致**（人的发言走 owner 应用 bot、agent 的走它自己的 bot），文字是话题回复时图也用 `+messages-reply --reply-in-thread` 发到同一个父消息。lark-cli 只收**相对当前目录**的文件名（绝对路径和 `..` 直接被拒），所以图放在 mkdtemp 的 0700 临时目录里、lark-cli 的 cwd 就是这个目录，文件名是脚本生成的 `img-<序号>.<按魔数认出的扩展名>`；发完立刻删文件，一个事件处理完整个目录删掉，账本里没有任何本地路径。
-- **只有图片、没有说明文字**时，文字消息（卡片模式下是一张正文为「[图片]」的卡片）是占位「[图片]」（文字模式下人的仍带署名）：文字消息是这个事件在飞书里的「本体」，话题和账本都挂在它上面。
-- **正文里的 markdown 图片语法**（文字与卡片规则一致：卡片的标题与折叠全文、消息列表里的那一行、回退的文字，都用处理过的同一份正文）：与 imeta 重复的 `![image](url)` 去掉（图作为图发）；没有 imeta 的 `![alt](url)`（agent 手写的、外部图片）**不下载**，改成「[图片：alt] 地址」（alt 为空或只是 CLI 自己的占位 `image` 时是「[图片] 地址」；地址不是 http(s) 就不带地址），不会把一串 markdown 原样发出去。
-- **账本与幂等**：state 里的 `images`，键 `<事件 id>:<序号>`，值是飞书消息 id、`pending:<首次尝试时间>`、`retry:<首次尝试时间>`、`failed`、`unknown` 或 `skipped`；文字发在哪里也记在这里（键 `<事件 id>:thread`，值是文字所在话题的根消息 id，`-` 表示不在话题里），图片跟着它走——不是每次重新按直接父消息推算，因为直接父在飞书上没有副本时文字挂在话题根下面（见「话题根补发」）；每张图一个幂等键 `b2f-img-<sha256(事件 id:序号)[:36]>`。发送前先落盘 pending。部分成功的事件下一轮只补缺的图；结果不确定（超时、`type: network`、没有消息 id）用同一个键、同一个接口重试，从首次尝试起 45 分钟内，之后记 `unknown` 并报告一次、永不重发；确定被拒或下载失败（本地磁盘写不了——临时目录建不出来、改名 / 写文件出 OSError——也算）记 `retry`，累计 3 次放弃并计入 `images_failed`（同样受 45 分钟限制），磁盘恢复后下一轮补上；未决的图把 Buzz 的读取起点往回拉，事件早已超出 900 秒窗口也读得到，事件读不到（被删）时 6 小时后关掉；`--skip-backlog` 丢弃积压时一并关掉悬着的图。
-
-### 飞书 → Buzz
-
-- **哪些**：人发的 image 消息（lark-cli 渲染成 `[Image: img_…]`）和富文本 post 里的图（`![Image](img_…)`），按 key 在一条消息里去重、最多 9 张。文件、音频、视频（含视频封面）不转发、不下载，仍按 lark-cli 渲染出来的文字镜像。
-- **流程**：**先路由、再下载**——发信人认不出、被显式 `"skip"` 或发言人白名单（`feishu_sender_allowlist`）挡下、已删除、内容为空等一切被跳过的消息，不下载、不上传、不写账本、不建临时目录，图片只跟着「会被镜像」的消息走。默认 `feishu_unmapped_senders: "context"` 时，飞书已认证但映射不到频道成员的人的图片也走这条路径，不再特别丢弃。放行以后，用 owner 的 **user** 身份 `im +messages-resources-download --type image` 下载，每张放进 mkdtemp 的 0700 目录里一个空的子目录（那也是这次调用的 cwd）；然后按内容判断（魔数是 jpeg / png / gif / webp、≤ 10 MB，每个事件最多 9 张），**去掉元数据**（下面），写成脚本生成名字的 0600 文件，最后用镜像身份 `buzz messages send --file <路径>`（可重复）连同文字一起发出，一条飞书消息仍是一条 Buzz 事件。成员文字是「[飞书] 张三：…」，非成员是「[飞书·非成员] 张三：…」；去掉图片标记后没有文字时正文是「[图片]」，所以一张图都发不了时读的人也知道飞书那边有张图。
-- **运行时边界：附件送达不等于模型已看到图片**。本节保证图片成为 Buzz 事件的 `imeta` 附件；截至已核实的 Buzz Desktop / `buzz-acp` 0.5.23，harness 只把事件正文和 tags 格式化成 ACP 的 `{type: "text"}` content block，没有下载 `imeta` 媒体、也没有生成 ACP image content block。因此真实 @agent 会唤醒它，但不能仅凭本同步脚本声称模型已拿到图片像素或完成视觉识别；那需要单独补 harness 的多模态组装并做真实运行态验收。这个限制对成员和非成员相同。
-- **为什么要去元数据**：Buzz 的 relay 会拒绝带元数据的媒体（`422 media contains metadata`）。无损、不重新编码、纯 Python（不依赖 PIL）：
-  | 格式 | 去掉什么 | 保留 |
-  |---|---|---|
-  | jpeg | APP1–APP15（EXIF、ICC、IPTC、XMP 等）、COM 注释、EOI 之后的多余字节 | JFIF（APP0）与其余段、扫描数据原样 |
-  | png | iCCP、cICP、eXIf、pHYs、gAMA、iTXt / tEXt / zTXt、tIME 等所有辅助块、IEND 之后的字节 | IHDR、PLTE、tRNS、IDAT、IEND、APNG 动画块（acTL / fcTL / fdAT），块（含 CRC）原样 |
-  | webp | ICCP、EXIF、XMP 块，VP8X 里宣告它们的标志位，RIFF 之后的字节 | VP8 / VP8L / VP8X / ALPH / ANIM / ANMF，RIFF 长度重算 |
-  | gif | 注释、纯文本扩展、除动画循环（NETSCAPE2.0、ANIMEXTS1.0）以外的应用扩展（XMP 等）、结束符之后的字节 | 图形控制扩展与图像数据 |
-  | bmp、tiff | 没法可靠去元数据，不转（`unsupported_format`） | — |
-  结构不对（截断、长度越界、缺结束标记）一律不猜（`bad_image`）。去掉 ICC / cICP 以后广色域（如 Display P3）的图颜色会略有变化；CMYK jpeg 的 Adobe 标记（APP14）也会被去掉——这是过 relay 的代价。
-- **不信飞书给的任何名字或路径**：`--output` 是脚本生成的相对名；lark-cli 会给它补一个按内容类型推断的扩展名，应答里的 `saved_path` 也不用——读的是那个子目录里**唯一**的文件；读之前拒绝符号链接（`unreadable`）；上传给 Buzz 的文件名也是生成的，扩展名按魔数。路径始终在临时目录里。
-- **失败只影响那一张图**：不是图片 / 格式不支持 / 结构坏了 / 超限 / 符号链接按原因计数（`images_skipped`，一次）；下载出错（网络、超时、飞书报错）或本地磁盘写不了（临时目录建不出来、写上传文件出 OSError）计入 `images_failed`（需要关注，退出码 3）。文字和别的图**同一轮照发**，不等重试；只有一张图又失败时文字是占位「[图片]」。飞书 → Buzz 不重试失败的图：Buzz 的发送没有幂等键，事后补图只能是另一条消息，这里不做——`images_failed` 让退出码变成 3，人看到以后可以去飞书里手工补。计数在消息有结果（发出、结果不确定、或被拒三次放弃）时才记，被拒重试的中途不重复记。Buzz 发送本身的规则不变：结果不确定记 `unknown`、永不重发；确定被拒重试三次。
-
-### 上限与前置
-
-- 每张 ≤ 10 MB，格式按上表，每个事件 / 消息最多 9 张；飞书对图片的分辨率也有上限（数值以飞书开放平台文档为准），脚本不检查——超了飞书会拒绝，走上面的重试后计入 `images_failed`。
-- 权限：发图的 bot 要有上传图片的权限（`im:resource`），owner 的 user 登录要能读群消息的资源；缺权限时飞书会拒绝（多半是 `permission` 类错误），走同样的重试后计入 `images_failed`。
-- 镜像身份能下载的 Buzz 媒体就是它经 relay 的 Blossom GET 鉴权能读的：脚本只按事件里写的 sha256 取，权限由 relay 决定。
-- 图片不是装饰：`images_failed` 会让退出码变成 3，`images_skipped` 只是计数。
+`images_failed` 会让退出码变成 3；`images_skipped` 是策略计数。图片失败不重发已经成功的文字或其他图片。
 
 ## 配置（0600，owner-only，不含 secret）
 
@@ -454,6 +333,7 @@ python3 scripts/buzz_feishu_group_sync.py round --config <cfg.json> --state-dir 
   "chat_id": null,
   "owner_open_id": "ou_xxx",
   "owner_app_id": "cli_xxx",
+  "desk_pubkey": "<本频道 Desk 的 64 位小写 hex 公钥>",
   "mirror_pubkey": "<64 hex>",
   "mirror_env_file": "/abs/.config/buzz/agents/<mirror>.env",
   "people_api": {"base_url": "https://<bridge 的 BIND_PUBLIC_ORIGIN>", "signer_env_file": "/abs/.config/buzz/env"},
@@ -468,12 +348,17 @@ python3 scripts/buzz_feishu_group_sync.py round --config <cfg.json> --state-dir 
 }
 ```
 
-- 键是严格校验的：上面列出的每一个键都必须有，不能多；只有 `reaction_map`、`identity`、`message_format`、`feishu_sender_allowlist`、`feishu_unmapped_senders` 和 `buzz_unmapped_senders` 可以不写。`chat_id` 由 `create-chat` 或 `bind` 写入，之前保持 `null`。旧版的 `people_export` 和 `email_domain` 已经取消，留着会被拒绝。
+- 键是严格校验的：上面列出的每一个键都必须有，不能多；只有 `reaction_map`、`identity`、`message_format`、`feishu_sender_allowlist`、`feishu_unmapped_senders`、`buzz_unmapped_senders`、`buzz_unmanaged_agents`、`membership_sync`、`reaction_sync` 和 `people_cache_file` 可以不写。`chat_id` 由 `create-chat` 或 `bind` 写入，之前保持 `null`。旧版的 `people_export` 和 `email_domain` 已经取消，留着会被拒绝。
+- `desk_pubkey` 必填，必须在 `agents` 中，且该 Agent 的 `app_id` 必须与 `owner_app_id` 不同；它指向该绑定唯一的默认代发者。配置多个平台 Desk 的频道也要明确选一个，不按显示名猜。配置缺失或该 Desk 不在 Buzz Channel／飞书群时整轮失败，不能退回 owner bot。
+
+**存量绑定迁移**：先逐个停用该绑定的 `buzz-feishu-<channel>.timer` 并等正在运行的 service 结束；确认 Desk 已在 Buzz Channel 中为 bot、它的独立 Feishu profile 与 app 已配置在 `agents` 中、bot 已入对应飞书群。用新 release 的脚本执行 `migrate-desk --config <cfg.json> --desk-pubkey <64 hex>` 做只读 dry-run；输出 `status=ready` 才加 `--apply`。应用时脚本先在同目录写 0600 的 `config.json.bak.desk-<UTC>`，再原子写入 `desk_pubkey`；回读 `load_config`、备份与目标文件权限，最后手动跑一轮 `round` 并核对真实发送者和 Thread，成功后才重启 timer。已迁移同一 Desk 再执行只返回 `already_migrated`，不同 Desk、配置无效、备份同名时拒绝。失败时保持 timer 停止；恢复备份也只能在停止状态做，不能重启旧 owner bot 发送策略。正负向行为由 `DeskConfigMigration` 测试覆盖。所有运行中群都逐一执行，不能只迁一个样例。
 - `identity`（可选）：`"union_id"`（缺省）或 `"email"`，别的值（含大小写不同、空串、`null`）一律拒绝，不会悄悄退回默认。含义与前置条件见上文「人的身份怎么认」。
 - `message_format`（可选）：`"card"`（缺省）或 `"text"`，别的值（含大小写不同、空串、`null`、别的类型）一律拒绝，不会悄悄退回默认。`text` 与卡片出现之前逐字节一致，是一键退回的办法。含义见下文「消息卡片」。
 - `feishu_sender_allowlist`（可选）：Buzz pubkey 的列表，只有名单里的人在飞书里的发言才会镜像进 Buzz；不写就不限制（和以前逐字节一致）。非空、每项 64 位小写 hex、去重后最多 50 个，别的写法（不是列表、空列表、大写或长度不对、多于 50 个不同的）整份配置被拒，错误里只说键名、不带值。用途和语义见下文「只让特定的人的发言进 Buzz」。
 - `feishu_unmapped_senders`（可选）：`"context"`（缺省）或 `"skip"`，别的值（含大小写不同、带空白、空串、`null`、别的类型）整份配置被拒，不会悄悄退回默认，错误信息说明键名和可选值、不带出值。没有这个键时，映射不到的人的发言以「仅上下文」镜像进 Buzz；`"skip"` 显式关闭。它与 `feishu_sender_allowlist` 互斥：显式同时写 `"context"` 与白名单时整份配置被拒；存量配置只写了白名单而没写本键时，白名单的明确限制意图优先，隐式为 `"skip"`。语义和风险见「非成员的发言（仅上下文镜像）」。
 - `buzz_unmapped_senders`（可选）：`"skip"`（缺省）或 `"context"`，校验规则与 `feishu_unmapped_senders` 相同（错误信息各自独立，不共用）。它是反方向：`"context"` 让既不是验证过的频道人类成员、也不是配置的 agent 的 Buzz 作者的消息，以「仅上下文」镜像进飞书。两个方向互相独立，可以只开一个、也可以同时开；不与 `feishu_sender_allowlist` 互斥（那份名单管的是飞书 → Buzz 的方向，不影响这边）。语义和风险见「非成员/非 agent 的 Buzz 消息（仅上下文镜像）」。
+- `buzz_unmanaged_agents`（可选）：`"relay"`（缺省，ADR-0019 起）或 `"skip"`，别的值整份配置被拒、错误里不带值。它管的是**本机配置里根本没有的**频道 agent（别人 owner 的 agent）说的话：`"relay"` 由本频道 Desk bot 代发，`"skip"` 丢弃（`agent_bot_unavailable`，ADR-0019 之前的缺省）。语义见「本机没有凭据的 agent（Desk 代发）」。
+- `membership_sync`（可选）：`"two_way"`（缺省，ADR-0020）或 `"buzz_to_feishu"`（以前的单向对账）；`reaction_sync`（可选）：`"two_way"`（缺省）或 `"agents_only"`（只同步 agent 的 Buzz 表情）；`people_cache_file`（可选）：本机所有群同步共用的人员缓存的绝对路径。别的值整份配置被拒、错误里不带值。成员与表情的双向同步、飞书里同意 agent 入群，见 [feishu-two-way-sync.md](feishu-two-way-sync.md)。**注意**：双向时在飞书群里拉进一个 agent 就会把它加进频道；没设 `BUZZ_ACP_CHANNELS`（订阅全部频道、不走入群申请）、`channel_add_policy` 还是缺省 `anyone` 的 agent 加进来后会**直接开始回复**，不经任何审批。防线是 ADR-0018 已要求的：平台类 agent 设 `owner_only`、executor 设 `nobody`，这样 relay 会拒绝、群里只收到一条提示。
 - `reaction_map`（可选）：`{"🎉": "Party"}`。键是 Buzz 的 emoji（非空、不超过 16 个字符，变体选择符会被去掉，带不带 U+FE0F 一样），值是飞书 emoji_type（只含字母、数字、下划线，不超过 40 位，取值见 lark-cli 的 `lark-im-reactions.md`）。追加或覆盖上面的默认表，写错就整个配置被拒绝。
 - `people_api` 恰好是 `{base_url, signer_env_file}`：
   - `base_url` 必须恰好是 `https://主机[:端口]`（没有路径、查询、userinfo 和结尾斜杠）。原因是签名里的 URL 是这个 origin 加请求目标，bridge 用它自己配置的 `BIND_PUBLIC_ORIGIN` 来核对，两边差一个字符都会验不过。
@@ -487,20 +372,22 @@ python3 scripts/buzz_feishu_group_sync.py round --config <cfg.json> --state-dir 
   - 不传 D-Bus 和运行时目录，这样 lark-cli 只会用每个 profile 自己的文件 keychain。
   - secret 不进 argv，也不进 stdout。
 
-## state（0600，不含正文和 secret，没有明文邮箱，也没有「谁是谁」的对应关系）
+## state（0600，不含正文和 secret，没有明文邮箱；「谁是谁」只在双向成员同步时为本频道成员记）
 
 state 目录必须是本人所有、不是符号链接、组和其他人都无法访问（0700，脚本创建时就是这个权限）。目录里有两个文件：
 - `round.lock`：以 0600 创建，打开时不跟随符号链接。
 - `state.json`：保存下表这些字段。
 
-两者任何一项不满足，整轮都拒绝运行。`state.json` 必须字段齐全，缺字段、多字段或类型不对时同样整轮拒绝：缺字段的 state 会被当成「什么都还没发」，从而重发最近的消息。唯一的例外是升级：只缺 `r2f` 和 `react_since`（表情同步之前写的 state）、只缺 `idmap` 和 `emailmap`（身份缓存之前写的 state）、或只缺 `images` 和 `img_unresolved`（图片同步之前写的 state：之前没有发过任何图，账本从空开始）时照常读取：`r2f` 从空开始，`react_since` 从 `buzz_since` 起算，所以升级不会把历史 reaction 补发一遍；两个身份缓存从空开始，按需补上（它们只省飞书调用）。只缺其中一个字段不算升级，照样拒绝。
+两者任何一项不满足，整轮都拒绝运行。`state.json` 必须字段齐全，缺字段、多字段或类型不对时同样整轮拒绝：缺字段的 state 会被当成「什么都还没发」，从而重发最近的消息。唯一的例外是升级：只缺 `r2f` 和 `react_since`（表情同步之前写的 state）、只缺 `idmap` 和 `emailmap`（身份缓存之前写的 state）、或只缺 `images` 和 `img_unresolved`（图片同步之前写的 state：之前没有发过任何图，账本从空开始）时照常读取：`r2f` 从空开始，`react_since` 从 `buzz_since` 起算，所以升级不会把历史 reaction 补发一遍；两个身份缓存从空开始，按需补上（它们只省飞书调用）。只缺其中一个字段不算升级，照样拒绝。同样，只缺双向同步的十一个字段（`members_synced`、`feishu_seen`、`buzz_seen`、`member_notes`、`member_events`、`member_event_stream`、`member_event_seq`、`member_event_blocks`、`people_seen`、`rwatch`、`f2r`，ADR-0020 之前写的 state）时照常读取，下一轮只记基线；已有双向快照、缺后来增加的成员事件账本四字段时，它们从空账本、空 stream、序号 0 开始。上一版已有序号但尚无 stream 时，仅当未决账本为空才安全升级；下一次成员写入生成 stream，未决旧事件则失败关闭。只缺 `agent_intros_initialized` 与 `agent_intros` 时按升级读取：下一轮把群里已有 Agent 记为介绍基线，不集体刷屏。见 [feishu-two-way-sync.md](feishu-two-way-sync.md)「state 与报告」。
 
 | 字段 | 内容 |
 |---|---|
 | `binding`、`floor` | 绑定的 `channel|chat`，以及绑定开始的时间 |
 | `buzz_since`、`feishu_since` | 两个方向的游标 |
 | `buzz_floor`、`feishu_floor` | 用 `--skip-backlog` 丢弃积压的时间点，更早的不再读取 |
-| `b2f`、`f2b` | 两个方向的消息 id 映射，值可以是对方的消息 id、`pending:<时间>`、`retry:<时间>`、`failed` 或 `unknown`。Buzz → 飞书的 `pending` / `retry` 后面还记着首次尝试时回复的那条飞书消息（没有就是 `-`），再后面是首次尝试的发送方式：`,card`（首次是卡片，如 `pending:<时间>:-,card`）、`,text`（卡片被拒后改发的文字，如 `retry:<时间>:-,text`，之后只重试文字），没有记号就是普通文字（文字模式、旧版本写的 state）；重试原样重复首次尝试，切换 `message_format` 不改。卡片没有新增任何 state 字段 |
+| `b2f`、`f2b` | 两个方向的消息 id 映射，值可以是对方的消息 id、`pending:<时间>`、`retry:<时间>`、`failed` 或 `unknown`。Buzz → 飞书的 `pending` / `retry` 后面还记着首次尝试时回复的那条飞书消息（没有就是 `-`），再后面是首次尝试的发送方式：`,card`（首次是卡片，如 `pending:<时间>:-,card`）、`,text`（卡片被拒后改发的文字，如 `retry:<时间>:-,text`，之后只重试文字），没有记号就是普通文字（文字模式、旧版本写的 state）；重试原样重复首次尝试，切换 `message_format` 不改 |
+| `b2f_modes` | 由支持编辑同步的版本成功发出的 Buzz 消息实际在飞书里的类型：`card` 或 `text`。旧 state 迁移为空，不猜历史消息类型 |
+| `e2f`、`edit_unresolved` | Buzz 编辑事件的更新结果与未决发现时间。成功值仍是原飞书 `message_id`；pending / retry 额外记原 Buzz id、飞书 id 和发送模式，保证重试仍更新同一个对象 |
 | `attempts` | 每条消息被确定拒绝的次数；表情的重试次数也在这里，键是 `r2f:<reaction 事件 id>`（打）和 `r2f-del:<reaction 事件 id>`（删），成功或放弃后清掉 |
 | `r2f` | Buzz 上 reaction 事件 id → `作者 pubkey\|飞书消息 id\|emoji_type\|reaction_id`（已打上），或终态 `failed`（打不上，放弃）、`removed`（已撤销、不再处理） |
 | `react_since` | reaction 的读取游标（kind 7 和 5）。单独一个，因为一轮被单轮上限截住时只有它不前进 |
@@ -509,6 +396,8 @@ state 目录必须是本人所有、不是符号链接、组和其他人都无�
 | `images`、`img_unresolved` | Buzz → 飞书的图片账本（键 `<事件 id>:<序号>`；超过 9 张的部分记在 `<事件 id>:over`）：飞书消息 id / `pending:<首次时间>` / `retry:<首次时间>` / `failed` / `unknown` / `skipped`，另有 `<事件 id>:thread`（文字发在哪里：话题根的消息 id 或 `-`，图片跟着它走）；以及等待重试或结果未知的图 → 事件时间，用来把读取窗口往前拉。`attempts` 里图片的重试次数键是 `b2f-img:<事件 id>:<序号>`（Buzz → 飞书），结果出来就清掉 |
 | `unresolved`、`f_unresolved` | 等待重试或结果未知的项目 → 原始时间，用来把读取窗口往前拉。Buzz → 飞书方向还包括等话题根的回复（`b2f` 里没有它，只有这里；根发出去、或取话题重试用完、或根被放弃之后才发出）和补发的根（按补发的时间计） |
 | `threads`、`polled`、`tried` | 飞书话题根消息 id → 最近活跃时间、上次完整轮询的时间（该话题自己的游标）、上次失败或没读完的时间（决定轮换顺序） |
+| `members_synced`、`feishu_seen`、`buzz_seen`、`member_notes`、`member_events`、`member_event_stream`、`member_event_seq`、`member_event_blocks`、`people_seen`、`rwatch`、`f2r` | 双向成员与表情同步（ADR-0020）：快照、提示记录、9000/9001 精确重试的完整签名事件、与 signer 解耦的随机事件流、事件顺序高水位、持久暂停原因、本频道见过的人、读表情的消息、镜像打到 Buzz 的表情。`member_events` 最多 256 条，未知项不自动淘汰；达到上限就暂停新写入并提示。双向时 `buzz_seen` / `people_seen` 为**本频道成员**记 pubkey ↔ 飞书 id；单向（`"buzz_to_feishu"`）时不落任何对应。逐项见 [feishu-two-way-sync.md](feishu-two-way-sync.md)「state 与报告」 |
+| `agent_intros_initialized`、`agent_intros` | 入群介绍的升级基线与每个 Agent 的一次性幂等账本；pending/retry 在安全窗口内复用同一个飞书幂等键，成功后保存 message_id |
 
 state 是有界的：id 映射（含 `r2f` 与 `images`）最多保留 20000 条（`images` 里还有未决项的图片，连同同一事件的 `:thread` / `:over` 记录不裁：它的 45 分钟窗口和重试次数就在账本值里，裁的是最早的、已经有结果的），话题最多保留 200 个，`idmap` 和 `emailmap` 各最多 5000 条（丢的是最早写入的，丢了只是多查一次）。state 文件损坏、字段类型不对或多出字段时整轮拒绝，不会当成空状态，否则会把所有消息重发一遍。
 
@@ -516,7 +405,7 @@ state 是有界的：id 映射（含 `r2f` 与 `images`）最多保留 20000 条
 
 两个坑要先知道（2026-09-20 naturehood 上线时踩到，#110）：
 
-- **脚本要用不可变拷贝，不要指到工作树或临时目录**：定时器每几分钟就跑一次，工作树一切分支、临时目录一清就断。把要跑的版本 `git archive` 到一个只读目录（例如 `~/.local/share/buzz-agent-setup/releases/feishu-group-sync-<短 sha>/`，`chmod -R a-w`），单元指向它；升级时换一个新目录再改单元，不覆盖旧的。脚本自己会去找同目录下的 `references/scripts/`，所以要拷整个 `skills/buzz-agent-setup`，不能只拷一个 `.py`。
+- **脚本要用不可变拷贝，不要指到工作树或临时目录**：定时器每几分钟就跑一次，工作树一切分支、临时目录一清就断。按 [local-upgrade-runbook.md](local-upgrade-runbook.md) 把完整 `skills/buzz-agent-setup` 原子安装到 `~/.local/share/buzz-agent-setup/releases/<40 位 SHA>/` 并 `chmod -R a-w`；单元指向它，升级时换一个新目录，不覆盖旧的。release 根下直接是 `scripts/` 与 `references/`，不再使用 `feishu-group-sync-<短 sha>/skills/buzz-agent-setup/` 旧布局。
 - **`PATH` 必须带上 lark-cli 的 node 目录**：`lark-cli` 是 node 脚本（`#!/usr/bin/env node`），systemd 用户单元的默认 `PATH` 里没有 nvm 的目录，缺了它每一次飞书调用都会失败。脚本只把 `PATH` 等白名单变量传给子进程，所以要在单元里 `Environment=PATH=…` 写明。
 
 ```ini
@@ -526,8 +415,10 @@ After=network-online.target
 
 [Service]
 Type=oneshot
+UMask=0077
+NoNewPrivileges=yes
 Environment=PATH=%h/.nvm/versions/node/<版本>/bin:/usr/local/bin:/usr/bin:/bin
-ExecStart=/usr/bin/python3 %h/.local/share/buzz-agent-setup/releases/feishu-group-sync-<短 sha>/skills/buzz-agent-setup/scripts/buzz_feishu_group_sync.py round --config %h/.config/buzz-feishu-sync/<channel>/config.json --state-dir %h/.config/buzz-feishu-sync/<channel>/state
+ExecStart=/usr/bin/python3 %h/.local/share/buzz-agent-setup/releases/<40 位 SHA>/scripts/buzz_feishu_group_sync.py round --config %h/.config/buzz-feishu-sync/<channel>/config.json --state-dir %h/.config/buzz-feishu-sync/<channel>/state
 # 3 = 本轮完成但需要关注（比如有人映射不到），不算服务失败
 SuccessExitStatus=3
 TimeoutStartSec=10min
@@ -535,16 +426,18 @@ Nice=5
 
 # ~/.config/systemd/user/buzz-feishu-<channel>.timer
 [Timer]
+OnActiveSec=1min
 OnBootSec=2min
 OnUnitActiveSec=1min
 AccuracySec=15s
+Unit=buzz-feishu-<channel>.service
 [Install]
 WantedBy=timers.target
 ```
 
 **同步间隔不要超过 120 秒**（重读窗口）：开着 `feishu_unmapped_senders: "context"` 时，陌生人的话要等窗口，间隔更长的话第一次读到时年龄已经超过窗口、当轮就发，暂时映射不到的成员的发言就得不到自愈（见「非成员的发言（仅上下文镜像）」）。
 
-装好后 `systemctl --user daemon-reload && systemctl --user enable --now buzz-feishu-<channel>.timer`，再 `systemctl --user start buzz-feishu-<channel>.service` 手动跑一轮，用 `journalctl --user -u buzz-feishu-<channel>.service` 看每轮的报告（只有计数，没有邮箱或 id）。验收时可以把间隔临时改成 2 分钟，验完改回 5 分钟。
+装好后 `systemctl --user daemon-reload && systemctl --user enable --now buzz-feishu-<channel>.timer`，再 `systemctl --user start buzz-feishu-<channel>.service` 手动跑一轮，用 `journalctl --user -u buzz-feishu-<channel>.service` 看每轮的报告（只有计数，没有邮箱或 id）。验收和长期运行都保持 `OnUnitActiveSec=1min`；如需临时降频也不得超过 120 秒，不能改回 5 分钟。
 
 ## 首轮之后怎么验收
 
@@ -560,146 +453,61 @@ WantedBy=timers.target
 - **`remove_extras: false` 时，群里原有的、不在频道映射里的人会一直留着并看到频道消息**（预检的 `extras_stay_and_see_channel_messages`）。私有频道要收紧就设 `true`（会移出他们，也是对真人可见的动作，先确认）。
 - 没有绑定的成员拉不进群、也收不到 @ 通知：让他们到 bridge 的绑定页绑定飞书账号，下一轮就会被拉进群。
 
-## 只让特定的人的发言进 Buzz（个人频道 / 只认 owner 的 agent）
+## 发言人与代发策略
 
-**用途。**个人 agent 通常以 owner 的完整权限在本机运行，只认 owner 的公钥（`BUZZ_ACP_RESPOND_TO` 不含镜像身份）。想在飞书里指挥它，前提是「只有 owner 本人的飞书发言才会进 Buzz」。默认情况下，任何已绑定、在频道里的人在群里说的话都会由镜像身份发进频道，所以要在脚本层加一道硬保证：即使以后有别人被拉进这个飞书群，他们的发言也不能进 Buzz。
+以下策略的完整语义、风险与验收见 [feishu-routing-policy.md](feishu-routing-policy.md)：
 
-**配置**：可选键 `feishu_sender_allowlist`，写在配置文件里（其余键的格式见上文「配置」）：
+- `feishu_sender_allowlist`：只让指定 Buzz pubkey 的人的飞书发言进入 Buzz；
+- `feishu_unmapped_senders`：缺省 `"context"`，把飞书非成员的发言作为不可信上下文镜像；
+- `buzz_unmapped_senders`：决定 Buzz 侧非成员 / 非 agent 作者是否只作上下文镜像；
+- `buzz_unmanaged_agents`：`"relay"`（缺省）或 `"skip"`；本机无凭据的 agent 缺省由镜像身份代发。
 
-```json
-"feishu_sender_allowlist": ["<owner 的 Buzz pubkey，64 位小写 hex>"]
-```
+真实飞书 @agent 才产生 p tag；能唤醒不等于获得授权。平台类 agent 应设 `owner_only`，executor 应设 `nobody`；未设置 `BUZZ_ACP_CHANNELS` 且仍是 `anyone` 的 agent 被从飞书拉入频道后会直接开始回复。
 
-**语义**
+## 别人的 agent 的飞书应用（kind:30177 目录）
 
-- **格式**：非空列表，每项是 64 位小写 hex 的 Buzz pubkey，去重后最多 50 个（同一个 pubkey 写两遍不会让名单变宽）；写错——不是列表、空列表、大写、长度不对、超过 50 个——整份配置被拒，脚本不会悄悄退回「不限制」。
-- **缺省不限制**：不写这个键，行为和以前逐字节一致（已映射、在频道里的人的发言都镜像）。写了就是白名单：名单外的人一律不镜像。名单是每一轮从配置里重新读的，收窄以后下一轮就生效；已经在重试里的、发信人被移出名单的消息，下一轮按 `sender_not_allowed` 关闭，不再重发。
-- **先判身份，再判白名单，两者都要满足**：发信人先要认得出来（映射得上：`unmapped_sender`、`sender_unpaired`、`identity_conflict` 等原因照旧）、在频道里（`sender_not_in_channel`），然后才看名单。名单不能替谁作身份担保——名单里的人如果映射不到，他的发言照样不镜像。
-- **被挡下的消息**：不发送、不写任何账本（这条消息在 `f2b`、`f_unresolved`、`attempts` 里都没有记录；只有上面说的、名单收窄之前就已经在重试里的消息，会被记为放弃），报告 `skipped` 里 `sender_not_allowed` 计一次。这是计数，不触发「需要关注」（退出码不变）。消息在 120 秒的重读窗口里会被再读到，所以同一条可能被计数不止一次。它也不会在之后补发，哪怕名单后来放宽了。
-- **话题里的回复、带 @ 的消息走同一条路径**，绕不开名单。
-- **@ 提及的对象不受名单限制**：名单只管「谁的发言能进 Buzz」，不管「谁能被 @」。名单里的人在飞书里 @ 了别的同事或 agent，p tag 照常产生。
-- **只管飞书 → Buzz**。Buzz → 飞书、reaction 同步、成员对账、署名格式（`[飞书] 名字：`）都不受影响，state 也没有新字段。报告和错误信息里没有 pubkey 全值，也没有被挡下那条消息的正文。
+决定见 ADR-0019（engineering/skills#147），取代 infra/buzz-deploy#96 里「bridge 提供 agent 映射接口」的方案。
 
-**和「不要把镜像身份加进只认 owner 的 agent 的名单」的关系。**那条规则（见「一次问齐这些问题」第 5 条）仍然有效，白名单不是放开它的理由。因为镜像身份发的消息署名是「[飞书] 名字：」，agent 认的是镜像身份的公钥而不是名字，所以只要镜像身份进了这个 agent 的名单，凡是进得了 Buzz 的飞书发言，agent 都会当成命令。有了白名单，这个风险只是**缩小**到「名单里那几个人的飞书账号」（谁拿到这个账号，谁就能指挥它），**不是消除**：名单里的人自己的飞书账号被盗、被人借用，或者他在群里转发了别人的话，仍然会进到 Buzz。所以：
+**为什么需要**：代发只解决「看得到别人的 agent 的回复」。要在飞书里 **@ 到**它，它自己的 bot 得在群里、同步脚本得知道那个 bot 是谁——
+而「哪个 agent 对应哪个飞书应用」以前只写在 agent owner 本机的 `agents` 里，别的操作者无从得知，飞书里的 `@nh-dev` 只能当文字转发，
+agent 永远不会被唤醒。
 
-- 名单只放 owner 自己（一个人），不要放不需要的人；
-- 同时在飞书里把这个群的「谁可以添加群成员」设成**仅群主**，群里不加别人（`preflight --mode existing` 的 `cannot_add_members` 只是在检查 owner 自己能不能加人，不能代替这个设置）；`remove_extras: true` 也让脚本每一轮把频道外的人移出去，但那是事后补救，不是事前保证；
-- 这条通道的命令权限最终由 agent 那一侧的配置决定，脚本的白名单只是其中一道。
+**怎么公开**：agent 的 owner 把 `"feishu": {"app_id": "cli_…"}` 写进这个 agent 的 kind:30177（owner 签名、relay 上全员可读，relay 不校验
+content，Buzz Desktop 解析时忽略它不认识的字段）。用 `scripts/buzz_agent_feishu_app.py`，见下文「agent 的飞书身份」第 6 步。app_id 不是机密：
+拿到它换不来任何发送能力，凭据仍然只在 owner 本机。
 
-**个人频道同时跑着 GitLab todo 同步（ADR-0013）时**：镜像身份是频道里的 bot 成员，而 `gitlab_todo_sync.py` 每轮先做成员闸门——频道里出现「owner、todo 发布者、`done_authors`」之外的成员就在读取任何 todo 之前 fail-closed（错误信息 `personal Channel has a member outside the owner, the publisher and the trusted done authors`，服务失败、todo 停止投递）。所以给个人频道加镜像身份的同一步，要把镜像身份的公钥加进 todo 配置（`~/.config/buzz/todo/<名>.json`，0600）的 `done_authors`，然后 `systemctl --user reset-failed` 并手动启动一次该服务确认 `"status":"ok"`。这不放宽实际权限：镜像发的消息以「[飞书] 名字：」开头，不是 `todo:done:<id>` 回复；能进 Buzz 的只有白名单里的 owner；闸门要求的「频道里恰好一个人类成员」仍由 owner 一个人满足。反过来，不设白名单的群绝不要这样做。
+**同步脚本怎么读**：每轮只在频道里有「本机没配置的 bot 成员」时，用 `people_api.signer_env_file` 那把 key（频道 owner/admin 的个人 key，
+只在进程内签名）签一次 relay 的 `POST {BUZZ_RELAY_URL}/query`，一起取这些 agent 的 kind 0 与 kind 30177：
 
-## 非成员的发言（仅上下文镜像）
+- `/query` 回来的每条事件先重算 NIP-01 规范 id，再验 BIP-340 `sig`；HTTP 200 不是事件信任边界。验证失败的条目
+  直接丢弃，不参与最新 head 选择。发布 helper 读 30177 与镜像 profile 时也执行同样验证。
+- 30177 的作者必须等于该 agent **最新** kind 0 里 `auth` 标签声明的 owner（与 Desktop 选 30177 的规则相同）；取 owner 签的最新一条，
+  同一时间取 id 最小的；最新那条没写 app_id 就是没有，不回退到更早的。
+- app_id 格式不合法的不用；**两个 agent 声称同一个 app_id** 时谁都不用；与本机配置的 agent 或 owner 应用撞了也不用（本机配置永远优先）。
+  这几种计入 `directory_conflicts`。
+- `auth` 标签里的 NIP-OA 背书签名不另外验；但 kind 0 和 30177 事件本身的 id / sig 都必须验证通过。
+- **读不到**（连不上、非 200、429、应答不是事件数组）：这一轮不用目录，`directory_failed` 加一，**不**影响退出码；外来 agent 照样代发，
+  其余同步照常。
 
-**用途。**业务群里常有一大批人不是频道成员（没有 Buzz 账号，或还没绑定飞书账号）。他们对 agent 报告的澄清、图片和真实 @agent 都应该进 Buzz，让 agent 看得到并响应，不要求他们先成为频道成员。因为飞书与 Buzz 都是员工认证系统，这条能力自 2026-09-23 起默认开启；但员工身份认证不等于给这条消息额外的 Agent 执行权限。决定的来龙去脉见 ADR-0016。
+**查到以后**：
 
-**配置**：可选键 `feishu_unmapped_senders`，写在配置文件里（其余键的格式见上文「配置」）：
+- 它的 bot 按 app_id 由 owner 的 user 身份拉进群（和本机配置的 agent 一样，占群里 bot 名额，满了计 `blocked_bots`）；飞书那边如果因为
+  这个应用的可用范围等原因拒绝，计入 `member_failures`，照常重试。
+- 飞书里 @ 它的 bot（真 mention）→ Buzz 里对它 pubkey 的 p tag，能唤醒它（它愿不愿意回应仍由它自己的 `respond_to` 与频道清单决定）；
+  人在 Buzz 里 @ 它 → 飞书里对它 bot 的 `<at>`。
+- 它自己的 Buzz 消息由本频道 Desk bot 发到飞书群（本机没有它的凭据，`buzz_unmanaged_agents` 缺省 `"relay"`），卡片保留该 Agent 的原作者署名；镜像只负责飞书 → Buzz 的消息。它打的 Buzz reaction 在 `reaction_sync` 缺省的 `"two_way"` 下由同一个 Desk bot 打到飞书，`"agents_only"` 下跳过。owner bot 不代发消息或 reaction。
+- 30177 里声明了 `"feishu": {"mirror": true}` 的身份是别的机器的镜像，不是 agent：不进目录、它的消息跳过（`other_mirror`），见
+  [feishu-two-way-sync.md](feishu-two-way-sync.md)「认人」。
 
-```json
-"feishu_unmapped_senders": "context"
-```
+**已接受的风险**：频道成员可以用自己名下的 agent 声称别人 agent 的 app_id。后果只是在同时有这两个 agent 的频道里把对那个 bot 的 @
+认给声称者，不泄露、不授予任何能力；真正的 agent 也在频道里时两边都会被弃用（`directory_conflicts`）。
 
-**语义**
+**已知限制**：
 
-- **取值**：`"context"`（缺省）——映射不到的人的发言由镜像身份发进 Buzz；`"skip"`——显式关闭，发言不镜像并计 `unmapped_sender`。别的值整份配置被拒，脚本不会悄悄退回另一个值。这个键每一轮从配置里重新读，改了下一轮就生效。已配 `feishu_sender_allowlist` 而未写本键时隐式为 `"skip"`；显式把白名单和 `"context"` 同时写入会被拒。
-- **署名**：带 `[飞书·非成员]` 标签，整条是 `[飞书·非成员] 姓名：正文`（成员仍是 `[飞书] 姓名：正文`），这个标签是 agent 和读的人区分两者的依据，规则要认标签，不能只看名字——名字是他自己在飞书里设的，可能和成员同名。名字用和成员一样的清洗（没有格式字符、换行、`@`、`nostr:`），清洗后是空的写「飞书用户」。正文后面的行如果长得像我们的署名——`[飞书] …`、`[飞书·非成员] …`，Markdown 转义、加粗、引用、行内代码、列表编号（`1. `）、任务列表框（`- [ ] `）、项目符号 / 箭头 / 竖线 / emoji、标题记号打头也算，全角括号、`【】`、字间空格、别的中点写法、看不见的字符也算——前面加「↳ 」标记。陌生人的正文用这个更宽的判断；成员的正文仍是原来的、逐字节不变（见上文「正文先去掉双向控制符……」）。
-- **只是上下文，不是命令**：
-  - **能 @ 到 agent，不能 @ 到人**（PO 决定，2026-09-22）：正文里手打的 `@名字`、`nostr:npub…` 和成员的一样被中和（全角＠），Buzz CLI 也解析不出 @；飞书消息里选中的 @ 只有落在**频道里配置了飞书应用的 bot**上才转成真正的 mention（事件带 p tag）——匹配的是 `bot_member_to_pubkey`，和成员路径同一份表、同一个 id 空间，不需要额外的飞书调用；选中的是**人**（哪怕是频道成员）一律丢弃，不产生任何 mention。同一个 agent 被 @ 多次只算一次，@ 多个 agent 各算一次，@ 到没配飞书应用的 agent 静默丢弃、不报错。团队 Channel 的普通 agent 按 runtime-setup 设为 `BUZZ_ACP_RESPOND_TO=anyone`，这个真实 p tag 会建立 turn 并让它响应；`owner-only` 或未包含镜像身份的 allowlist agent 会被自己的作者门禁挡下。`--reply-to` 不会自动给上级消息的作者加 p tag（用真实事件核过），所以话题回复里没被 @ 的人不会被牵连唤醒。
-  - **图片和成员走同一条路径**：保留图片 key，用 owner 的飞书 user 身份下载，校验 jpeg / png / gif / webp 魔数与 10 MB 上限，去掉 EXIF / ICC 等元数据，每个事件最多 9 张，再以镜像身份用 `--file` 发进 Buzz；任一张失败只影响那一张（见「图片同步」）。这保证附件进入 Buzz，不代表当前 `buzz-acp` 已把图片像素放进模型输入；视觉识别的 harness 缺口见「图片同步」的运行时边界。
-  - **姓名和正文有长度上限**：姓名是他自己在飞书里设的，最多 60 个字符（`CONTEXT_NAME_LIMIT`）；孤立的代理项字符（编码不出来，会让 Buzz CLI 的调用抛异常）换成 U+FFFD。陌生人的正文最多 4000 个字符（`CONTEXT_BODY_LIMIT`），超过的截断并注明原文多少字——Buzz CLI 对一条消息有字节上限，超了会被当成「确定被拒」、重试三次记 `failed`、触发「需要关注」，陌生人不该能做到这一点。成员的正文不动。
-  - agent 读到它时**只能当不可信数据**：可以作为证据（「业务方说这是两类人群的通知」），但不是指令，也不能替代 owner 或频道成员的决定。
-- **「映射不到」就是「非成员」**：脚本只知道当前频道成员的绑定（bridge 只返回现存成员），所以被移出频道的人、还没绑定飞书账号的成员、绑定有问题的成员（union_id 还没回填、email 模式下地址查询出错或搜到不同的账号、本轮查询预算用完、「没找到」的十分钟复查期内）和真正的陌生人在一轮里分不出来，发言都按 `[飞书·非成员]` 镜像——最低信任的标签，内容不丢；这些情形自己的计数（`unmapped_members`、`errors`、`identity_conflicts`）照旧报告、照旧需要关注。纯函数里的 `sender_not_in_channel` 在真实的一轮里到不了。
-- **仍然跳过的**：发信人 id 不是飞书的人（空、乱码、不是 `ou_…`），或 union 模式下飞书没有担保他是谁（`sender_unpaired`）；缓存和新证据矛盾（`identity_conflict`）；**已知是某位成员的账号、只是分不清是谁**——两个 pubkey 绑了同一个飞书账号、一位成员的两个邮箱指向两个账号——也是 `identity_conflict`，不当成陌生人、也不归给谁；已删除、系统消息、app（bot）发的、空内容照旧跳过。
-- **查身份出错照旧重试**：查身份的那次飞书调用本身出错，不知道发信人是谁就不能当「非成员」发出去，按「确定没发出」处理——记一次 `errors`、留在重试里，下一轮成功后镜像一次且只有一次。
-- **要等一会儿才发**：陌生人的话要等它比重读窗口（120 秒）更老才发，等待期间不写账本、不计数（所以晚两三分钟出现在 Buzz 里）。原因是自愈：暂时映射不到的成员（bridge 的绑定还没出现、地址搜索失败、union_id 未回填）下一轮映射恢复了，就按成员发出——署名 `[飞书] 名字：`、@ 的 agent 照常产生 p tag，和 `"skip"` 一直以来的自愈一样；一发出就定死的话，这条 @ 会永久丢失。每条话最后一次被读到时年龄必然大于窗口，所以一定会发（实际等待约 1 到 2 分钟：飞书的 `create_time` 只到分钟）。**自愈的前提是同步间隔不超过 120 秒**（缺省示例每分钟一轮）：间隔更长时，第一次读到时年龄已经超过窗口，陌生人的话当轮就发。
-- **保持顺序**：等待期间，成员那条会叫醒 agent 的消息（带 @）如果晚于一句还在等待的陌生人的话，也一起等，根还在等待的话题里成员的回复也等——先出现陌生人的话、再出现叫醒 agent 的那条，回复挂在根下面；没有 @ 的成员消息、比陌生人的话更早的成员 @ 不等（最多晚 1 到 2 分钟，不丢不重）。不这样的话，agent 被叫醒时读不到那条 @ 所指的话。
-- **与 `feishu_sender_allowlist` 互斥**：名单的用途是把别人的话挡在 Buzz 外，两者并用自相矛盾，显式同时写 `"context"` 与名单时整份配置被拒；只写了名单的存量配置隐式为 `"skip"`，函数层面也失败即关闭（有名单时映射不到的人仍是 `unmapped_sender`）。
-- **其余和成员发言一样**：话题里的回复挂在根消息对应的 Buzz 事件下面；发送、账本、重试与 `unknown` / `failed` 语义是同一条路径；积压超过 10 分钟的消息注明飞书上的原始时间；镜像进 Buzz 的消息不会被同步回飞书；Buzz → 飞书、reaction、成员对账都不受影响。
-- **计数**：生效模式为 `"context"` 时报告多一个 `context_to_buzz`（`to_buzz` 里属于非成员的那部分，没人说话是 0）；显式关闭或因发言人白名单隐式关闭时，报告里没有这个键，形状和以前一样。这是计数，不触发「需要关注」。报告和 state 里没有姓名和正文。
-- **不追溯补发**：以前在 `"skip"` 下跳过的发言，之后改成 `"context"` 也不补发（消息在 120 秒的重读窗口里会被再读到，所以恰好在切换前后一两轮里的消息可能被镜像）；之后再关，已经镜像进 Buzz 的留在那里；关的时候还在重试里的消息被放弃（计一次 `failed`，需要关注，和发言人白名单收窄时一样）。
-
-**风险**（默认开启；owner 上线或保留默认值前要知道）
-
-- 群里任何人的话——包括你不认识的人、被别人邀请进来的人——都会出现在**私有频道**里，被频道里的成员和所有 agent 读到。
-- **群里任何人都能唤醒 agent**（PO 决定，2026-09-22）：这是本节放宽的关键一点，之前的版本是「没有 @、不唤醒」，现在改成「能 @ 到 agent，不能 @ 到人」——群里的 44 个人（以及以后被别人拉进来、owner 不认识的人）都能直接 @ 一个 agent 让它开始处理，不需要 Buzz 账号、不需要在绑定页验证身份、不需要 owner 批准。这不是"读上下文"的副作用，是**故意放开的能力**。
-  - **没有放开的部分**：唤醒不等于授权。agent 被唤醒后，飞书正文仍然是**不可信数据**（和任何频道消息一样）：agent 的既有规则要求不执行消息里的指令、`/approve` 只认注册的 pubkey、GitLab 写操作要先落 Issue 走 `gitlab-issue-sop`、高影响动作要走 ACT 审批。这些防线是 agent 本来就有的，不是为这个功能新增的——如果某个 agent 的 prompt 里写了「被 @ 就照办」或没有做输入校验，现在任何群成员都能触发它，这条 gap 比以前更容易被撞到。
-  - **谁能进这个群，owner 就该管起来**：群主是谁、"谁可以添加群成员"设成什么，直接决定了谁能唤醒 agent；这条边界现在完全落在飞书群的成员管理上，Buzz 频道成员管理管不到它。
-- 群里的人可以在这些话里放提示词注入（「忽略之前的规则……」），现在他们还能直接 @ 一个 agent 把注入内容送到它面前。agent 的规则里已经把频道消息当不可信数据；给读这类消息的 agent 写规则时，别写「镜像身份发的消息都照办」，也别写「被 @ 就一定是可信请求」。
-- 量：群里的每一条非成员发言都会进频道一条，**没有每轮上限**（每条一次子进程、一次 state 写盘）：群里有人刷屏，频道里也会被刷屏，还会连带唤醒 agent 处理一堆消息——发现后关掉开关。群很吵的话，先看 `context_to_buzz` 的量再决定。
-- 频道里如果有 `message_posted` 类的 Workflow：非成员的发言也是频道消息，会触发它。上线或保留默认值前检查，别让它对任意消息都动作。
-- 「唤醒」靠的是事件带 p tag：`--reply-to` 不会自动给上级消息的作者加 p tag（用真实事件核过），所以话题回复里没被 @ 的人不会被牵连唤醒；harness 是否另有基于话题的唤醒，没有专门做过实验。
-
-**「为什么某人的话没进 Buzz」／「为什么 @ 了 agent 没反应」怎么排查**
-
-1. 看该轮报告的 `skipped`：`unmapped_sender` 是这个人不是频道成员、或还没绑定飞书账号（生效模式为 `"context"` 时，这类人的话不再出现在这里，而是晚两三分钟带 `[飞书·非成员]` 标签出现在频道里）；`sender_unpaired` / `identity_conflict` 是飞书没能确认他是谁；`sender_not_in_channel` 是绑定过但已不在频道；`sender_not_allowed` 是被发言人白名单挡下。
-2. 非成员 @ 了一个 agent 却没反应：先看 @ 的对象是不是**人**——@ 到人（哪怕是频道成员）不生效，这是设计使然，不是故障；再看这个 agent 有没有配置飞书应用（`bot_member_to_pubkey` 里没有它就静默丢弃）；最后核对 agent 的作者门禁。团队 Channel 的普通 agent 应是 `BUZZ_ACP_RESPOND_TO=anyone`；`owner-only` 不接受镜像身份，allowlist 只有显式包含镜像身份才接受，而这类受限 agent 不应为了飞书 @ 临时放宽。
-3. 想让非成员本人被别人 @ 到（不只是让他读上下文或 @ agent）：让他成为频道成员并在绑定页绑定飞书账号；本节的默认能力只解决「读上下文」和「@ 到 agent」，不能让非成员被别人 @ 到。
-
-## 非成员/非 agent 的 Buzz 消息（仅上下文镜像）
-
-**用途。**Buzz → 飞书方向只放行「验证过的频道人类成员」或「配置好的 agent」，其余作者一律 `not_channel_human`，直接丢弃——即便事件签名完全
-有效。一个具体的坏后果：某条 Thread 的根消息由这样一个作者发出（比如一个 Workflow 自己的签名身份，没有 kind:0 profile），根消息一丢，
-`_thread_root_parent` 就找不到可挂的父消息，同一 Thread 之后所有回复都只能退回顶层发出——整条 Thread 在飞书里断链。想让这类作者的话也镜像
-进飞书，就开这个开关。决定的来龙去脉见 ADR-0017（它沿用 ADR-0016 的 @ 规则，两者是同一个决定的两个方向）。
-
-**配置**：可选键 `buzz_unmapped_senders`，写在配置文件里（其余键的格式见上文「配置」）：
-
-```json
-"buzz_unmapped_senders": "context"
-```
-
-**语义**
-
-- **取值**：`"skip"`（缺省）——和以前逐字节一致：这样的作者 `not_channel_human`，不镜像；`"context"`——由 owner 应用 bot 发出，只作为读的
-  上下文。别的值整份配置被拒。这个键每一轮从配置里重新读，改了下一轮就生效。
-- **门槛比飞书那边低**：Buzz 的每一个事件都已经过 relay 的签名校验，作者是谁没有歧义，不需要「平台是否担保这个人」那一层判断（飞书那边的
-  `sender_unpaired` / `identity_conflict` 在这边没有对应物）；也不要求能解出 profile 显示名——解不出（比如 Workflow 的签名身份没有 kind:0）
-  退回公钥前 12 位，跟既有的人类分支一致。
-- **署名**：沿用既有的「名字（Buzz）：」格式，插入「·非成员」区分：`名字（Buzz·非成员）：正文`（成员仍是 `名字（Buzz）：正文`）；卡片模式下
-  speaker 显示为「名字（非成员）」，蓝色模板（不是 agent 的绿色模板）。
-- **能 @ 到 agent，不能 @ 到人**（与飞书那边的 `feishu_unmapped_senders: "context"` 同一条规则）：正文里 @ 到频道自己配置的、当下有飞书 bot
-  的 agent，生成真的 `<at>`（能唤醒它，卡片、文本两条发送路径都生效）；@ 到任何人类成员、或没有飞书 bot 的 agent，一律静默丢弃——不生成
-  `<at>`，也不留纯文字 `@名字`：正文（和卡片标题/折叠全文，因为它们是同一段文字）里能解出显示名的这类目标，字面的 `@名字` 会被替换成全角
-  `＠名字`（比成员分支更严格：成员分支里映射不到的目标至少留着原始文字，这里连原始文字都不留）；解不出显示名的目标没有字面文字可找，
-  正文原样保留，`<at>` 仍然不生成。
-- `agent_bot_unavailable`（配置了但当下没有飞书 bot 的 agent）是一个更具体的已知情形，不受这个开关影响，两种模式下都照旧丢弃，不会被
-  当成「非成员」镜像。**本机根本没配**的频道 agent 另有开关，见下。
-
-- **话题、账本、重试都不用改**：根消息一旦被镜像，`_thread_root_parent` 自然找得到父消息，回复正常挂上去；去重账本、重试与 unknown 语义、
-  飞书 → Buzz 方向都和成员发言一致。
-- **报告不新增字段**：镜像的非成员消息计入既有的 `to_feishu`，和成员消息一样计数；这里没有 `feishu_unmapped_senders` 那边的 `context_to_buzz`
-  ——Buzz → 飞书这个方向本来就没有「按人群细分计数」的既有约定，不为了对称硬加一个。
-- **不追溯补发**：以前因 `not_channel_human` 丢弃的消息，之后再开也不补发（缺省的 `--reply-to`/账本机制不回填历史）。
-- **与 `feishu_sender_allowlist` 无关**：那份名单管的是飞书 → Buzz 方向谁的话能进 Buzz，跟这个方向没有交集，两者可以任意组合。
-
-**风险**（owner 决定开之前要知道）
-
-- **任何签名有效的 Buzz 账号都能把话发进这个飞书群**——不需要是频道成员、不需要 owner 批准；这条边界完全落在「谁能给这个 Buzz 频道发消息」上。
-- **非成员/非 agent 的 Buzz 作者也能唤醒频道里的 agent**（真实 `<at>`）：唤醒不等于授权，agent 既有的「频道消息是不可信数据」「`/approve`
-  只认注册的 pubkey」等规则照常适用，不是这里新增的防线，但攻击面比只有验证成员/agent 能唤醒时更大。
-- 署名只靠「·非成员」标签区分，不靠名字；读这类消息的人和别的自动化如果只认名字、不认标签，会把非成员的话当成成员说的。
-
-**「为什么某条消息没转发到飞书」怎么排查**：先看报告的 `skipped.not_channel_human`——开着本节的开关时这个数字应该是 0（那样的作者改走
-`to_feishu`）；如果开了还有 `not_channel_human`，多半是撞上了 `agent_bot_unavailable`（配置了但没有飞书 bot 的 agent，这个开关管不到）。
-
-## 本机没有凭据的 agent（镜像代发）
-
-配置 `buzz_unmanaged_agents`（可选）：`"skip"`（缺省，与以前逐字节一致）或 `"relay"`。需求 engineering/skills#143。
-
-**为什么需要**：一个 agent 可以同时属于多个 Channel（M:N），而每个 Channel 的群同步跑在**不同的人**的机器上。agent 的飞书应用凭据只能留在它
-自己 owner 的本机（SKILL.md Rule 11 不允许复制给别人），所以别的操作者**永远**没有它的发送能力。缺省行为是把这种消息丢掉
-（`agent_bot_unavailable`），结果是群里看不到这个 agent 的任何回复——2026-09-22 `nh-dev` 被拉进别人运行同步的频道时就是这样。
-
-- **只覆盖「本机根本没配」的 agent**：`agents_in_channel()` 给的是频道里所有 `role=bot` 的成员，不看本地配置；只有**不在** `agents` 里的那些
-  才代发。配置里有、只是这一轮没验证过或 bot 还没进群的 agent 仍然 `agent_bot_unavailable`：那是暂时且会自愈的状态（下一轮 reconcile 把它的
-  bot 拉进群就恢复），代发会让同一个 agent 一会儿自己说话、一会儿被转述。
-- **谁来发、怎么署名**：由 owner 的个人应用 bot 代发，沿用既有格式插入「·助手」：`名字（Buzz·助手）：正文`；卡片模式下 speaker 显示为
-  「名字（助手）」，蓝色模板（不是 agent 自己 bot 的绿色模板）——让人一眼看出这是被转述的，不是它自己的 bot 在说话。
-- **代发不放宽通知**：p tag 一律不生成 `<at>`，卡片也不点名任何人。这与 agent 用自己 bot 发言那条路径一致（那条路径从来不渲染 `<at>`，因为
-  open_id 属于另一个应用），所以代发不会让一个 agent 的消息比它自己发时更吵。
-- **表情不在范围内**：reaction 仍然只能由 agent 自己的 bot 打，没有凭据就照旧跳过（`route_buzz_reaction` 不接这个开关）。代发只搬运消息，
-  不获得该 agent 的任何凭据。
-- **报告**：代发的消息计入既有的 `to_feishu`，另有 `relayed_agents` 计数区分「代发」与「自己发」；它只是计数，不影响退出码。
-- **上线建议**：新建绑定时，如果频道里有不归你管的 agent，就设成 `"relay"`；存量绑定是否打开是各频道自己的风险决定。这个开关仍然默认关闭，不跟随已改为默认开启的 `feishu_unmapped_senders`。
+- 映射要 agent 的 owner 主动公开；没公开的 agent 仍然只能代发、@ 不到（`directory_agents` 能看出查到了几个）。
+- 目录里的 agent **离开频道后**：双向成员同步（`membership_sync` 缺省 `"two_way"`，ADR-0020）按快照里记下的 app_id 把它的 bot 移出群；
+  单向（`"buzz_to_feishu"`）时仍不会自动移出，要手动移出。
+- 每个有外来 agent 的频道每轮多一次 relay 请求（几 KB）。
 
 ## 换绑到另一个飞书群
 
@@ -754,16 +562,24 @@ WantedBy=timers.target
    - 只有 agent 需要私信同事时，才去后台放开可用范围。飞书没有给个人应用改可用范围的 API（LCV-11）。
    - 2026-09-19 实测：可用范围外的人收发消息都正常，包括收到 bot 私信。当时的实测对象是应用创建者，普通同事留到真机试点时再确认一次。
 5. 把 app_id 和上面两个目录写进本配置的 `agents`。`round` 每轮都会核对这个 profile 的 `appId`。
-6. 回收：删除这两个目录，再到开放平台后台人工删除应用。飞书没有删除应用的 API。
+6. **把 app_id 公开到这个 agent 的 kind:30177**（ADR-0019），这样它被拉进**别人**运行同步的频道时，那边也能把它的 bot 拉进群、在飞书里 @ 到它。
+   由 agent 的 owner 运行，先 `--dry-run` 看一眼再正式发：
+
+   ```bash
+   python3 scripts/buzz_agent_feishu_app.py --owner-env ~/.config/buzz/env --agent <agent pubkey hex> --app-id <cli_…> --dry-run
+   python3 scripts/buzz_agent_feishu_app.py --owner-env ~/.config/buzz/env --agent <agent pubkey hex> --app-id <cli_…>
+   ```
+
+   - 它只改已有的 kind:30177（只合并 `feishu.app_id`，别的字段原样），relay 上没有 owner 签的这条就拒绝、不新建；旧事件备份在
+     `~/.local/state/buzz-agent-feishu-app/`（0600）。输出 `published` / `unchanged` / `would_publish`，不打印 key。
+   - app_id 不是机密，公开它不给别人任何发送能力；凭据仍只在 owner 本机。
+7. 回收：删除这两个目录，再到开放平台后台人工删除应用。飞书没有删除应用的 API。
 
 ## 边界
 
 - 图片同步的范围和限制见上文「图片同步」：只转图片，每张 ≤ 10 MB、每个事件最多 9 张；飞书 → Buzz 只转 jpeg / png / gif / webp 且要去掉元数据（ICC 也会被去掉）；失败只影响那一张图，`images_failed` 需要关注、`images_skipped` 只是计数。lark-cli 的 `--image` 与 `+messages-resources-download` 都只收相对当前目录的路径，脚本为此给每个事件、每张图建 0700 临时目录，发完就删；同机的其他用户读不到，但同一个 UID 下的进程读得到（和正文、token 一样）。
 - 升级到带图片的版本后的第一轮：还在 900 秒重读窗口里、文字早已发出的带图事件，账本里没有它们的图，会被当成还没发而补发出来；更早的不补（游标已经过了）。
-- 表情同步是单向的、有范围的：只有 agent 在 Buzz 上打的 reaction 会变成飞书表情。人的 reaction 不同步，飞书上的表情也不进 Buzz；目标消息必须已经镜像；绑定起点之前的不补。
-  - 重读窗口是 15 分钟：因为目标还没镜像、或飞书暂时拒绝而没打上的 reaction，只在它还留在窗口里的这段时间会重试；被拒或结果不确定累计 3 次就放弃（`reactions_failed`）。
-  - 一轮最多 50 次飞书调用，读不到 reaction 时整轮报错（消息已先同步），见上文第 5 步。
-  - agent 的 bot 不在群里、或被飞书限流时，飞书会拒绝这个表情，走上面的重试与放弃。这类失败只进计数，不触发「需要关注」，想知道有没有表情丢了就看 `reactions_failed`。
+- 表情缺省双向同步：Buzz 上 agent 的 reaction 进飞书，飞书上人的 reaction 由镜像身份写回 Buzz；范围、重读窗口、撤销、防回声和 `agents_only` 退回模式见 [feishu-two-way-sync.md](feishu-two-way-sync.md)。
 - 同一个 UID 下的 0600 文件互相可读。agent 的 lark-cli secret 属于普通 agent 凭据的级别（SKILL.md 规则 11），高影响动作仍然走 ACT。
 - 依赖 owner 机器在线：
   - 离线期间两个方向的消息，恢复后都会补上：Buzz 每轮最多约 1 万条，飞书每轮最多 2000 条，超过时整轮报错，由 owner 决定是否用 `--skip-backlog` 放弃；

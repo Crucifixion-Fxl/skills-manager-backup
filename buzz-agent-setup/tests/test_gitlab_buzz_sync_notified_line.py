@@ -85,7 +85,7 @@ class NotifiedTokensTest(unittest.TestCase):
 
 class NotifiedLineHelperTest(unittest.TestCase):
     CONTENT = "\n".join([
-        "📋 **首次同步 · 已打开** · [#5 Issue 5](http://h/-/issues/5)",
+        "📋 **已打开** · [#5 Issue 5](http://h/-/issues/5)",
         "assignees carol",
         "[gitlab-notify:v1][object:issue][type:feature][status:ready][state:opened][change:routing]"
         "[project:481][issue:5]",

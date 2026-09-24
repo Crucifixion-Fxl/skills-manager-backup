@@ -60,7 +60,7 @@ unknown and the next supported read/recovery. Do not expose upstream bodies, cre
 | Response pagination snapshot conflict (`409`) | Restart at page one and use the new watermark/snapshot token on every later page. |
 | `newer_responses=true` on current Research report | Keep and download that stored Markdown. Tell the user new responses arrived after publication. Do not auto-create a report request, auto-run an LLM, or publish a replacement until the user explicitly asks. Latest counts and rows remain on aggregate/CSV. |
 | Response is `unmatched` | Keep it for answer-only analysis; never infer a user/profile from content, time or link shape. |
-| Attachment download `transport_error` while the same Research JSON aggregate succeeded | Retry the identical Research, operation and output path as a read-only download. Use the attachment timeout up to 30s. Do not change IDs, file shape or create a replacement resource. |
+| Attachment download `transport_error` while the same Research JSON aggregate succeeded | Retry the identical Research, operation and output path as a read-only download. Use the attachment timeout up to 120s. Do not change IDs, file shape or create a replacement resource. |
 | Other `503`/transport timeout on a read | Report temporary unavailability and retry the read later. |
 | Timeout/outcome unknown after a write | Do exact status/readback only. Do not issue a replacement effect. |
 

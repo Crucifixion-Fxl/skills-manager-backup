@@ -155,6 +155,7 @@ class FakeBuzz:
     def __init__(self):
         self.events = []
         self.writes = []
+        self.reactions = {}
 
     def send(self, content, reply_to=None, mentions=()):
         event_id = hashlib.sha256(f"{len(self.events)}:{content}".encode()).hexdigest()
@@ -190,6 +191,12 @@ class FakeBuzz:
 
     def channel_members(self):
         return {}
+
+    def set_status_reaction(self, event_id, emoji):
+        self.reactions[event_id] = emoji
+
+    def status_reaction_matches(self, event_id, emoji):
+        return self.reactions.get(event_id) == emoji
 
 
 def root_mr_iid(content):
@@ -234,6 +241,7 @@ class MRGroupTest(unittest.TestCase):
 
     def test_staging_master_fanout_shares_one_thread(self):
         """The #77 case: fix/<base>-staging and fix/<base>-master by one author land in one thread."""
+        self.config["compact_status_updates"] = True
         self.gitlab.mr_list = [
             make_mr(968, "fix/postcard-alertgroup-staging", "staging"),
             make_mr(969, "fix/postcard-alertgroup-master", "master"),
@@ -251,6 +259,7 @@ class MRGroupTest(unittest.TestCase):
                   and "[change:lifecycle]" in (SYNC.header_line(e["content"]) or "")]
         self.assertEqual(len(joined), 1)
         self.assertEqual(joined[0]["tags"][1][1], anchor["id"])  # first fact replies to the group root
+        self.assertEqual(self.buzz.reactions[joined[0]["id"]], "📝")
 
         for iid in (968, 969):  # both binding notes point into the one thread
             note = self.gitlab.mr_note_list[iid][0]["body"]

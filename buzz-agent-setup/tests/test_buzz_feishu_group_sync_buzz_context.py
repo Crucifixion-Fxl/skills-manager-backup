@@ -312,7 +312,8 @@ class RoundBuzzUnmappedSenders(TmpCase):
 class BuzzContextDocs(unittest.TestCase):
     SKILL = base.TESTS.parent
     REPO = SKILL.parent.parent
-    DOC = (SKILL / "references" / "feishu-group-sync.md").read_text(encoding="utf-8")
+    GROUP_DOC = (SKILL / "references" / "feishu-group-sync.md").read_text(encoding="utf-8")
+    DOC = (SKILL / "references" / "feishu-routing-policy.md").read_text(encoding="utf-8")
     HEADING = "## 非成员/非 agent 的 Buzz 消息（仅上下文镜像）"
     ADR = REPO / "docs" / "05-adr" / "0017-mirror-unmapped-buzz-authors-as-context-only.md"
 
@@ -334,11 +335,11 @@ class BuzzContextDocs(unittest.TestCase):
 
     def test_the_config_key_list_and_the_feature_bullet_mention_it(self):
         """L1-FGS-641: 配置一节的可选键清单、「配置这次同步」编号列表都提到新键。"""
-        start = self.DOC.find("## 配置（0600")
-        config = self.DOC[start:self.DOC.find("\n## ", start + 1)]
+        start = self.GROUP_DOC.find("## 配置（0600")
+        config = self.GROUP_DOC[start:self.GROUP_DOC.find("\n## ", start + 1)]
         self.assertIn("`buzz_unmapped_senders`", config)
         self.assertRegex(config, r"只有[^。]*`buzz_unmapped_senders`[^。]*可以不写")
-        setup = self.DOC[self.DOC.find("8. 群里不是频道成员的人"):self.DOC.find("\n\n### 2. 预检")]
+        setup = self.GROUP_DOC[self.GROUP_DOC.find("8. 群里不是频道成员的人"):self.GROUP_DOC.find("\n\n### 2. 预检")]
         self.assertIn("buzz_unmapped_senders", setup)
 
     def test_the_adr_exists_is_indexed_and_records_the_decision(self):

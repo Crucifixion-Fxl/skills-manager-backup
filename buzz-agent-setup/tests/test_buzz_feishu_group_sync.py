@@ -70,14 +70,16 @@ BOB_PK = "22" * 32
 CAROL_PK = "33" * 32  # 频道成员，但没有已验证的绑定
 GUEST_PK = "55" * 32  # 频道 guest
 AGENT_PK = "aa" * 32
-AGENT2_PK = "ab" * 32  # 频道里的 agent，但没有配置飞书 bot
-MIRROR_PK = "bb" * 32
+AGENT2_KEY = "c5" * 32
+AGENT2_PK = FGS.sync.nk.pubkey_xonly(bytes.fromhex(AGENT2_KEY)).hex()  # 频道里的 agent，但没有配置飞书 bot
 OUTSIDER_PK = "44" * 32  # 有绑定，但不在频道里
 
 MIRROR_KEY = "c1" * 32
 OWNER_KEY = "c2" * 32  # 父进程环境里 owner 的 key，绝不能传给子进程
 # owner 用这把 key 给 bridge 的接口做 NIP-98 签名，所以公钥必须是真的（不是随便一串 hex）
 OWNER_PK = FGS.sync.nk.pubkey_xonly(bytes.fromhex(OWNER_KEY)).hex()
+# The mirror signs its reactions in-process (ADR-0020), so its pubkey is the real one of its key, like the owner's.
+MIRROR_PK = FGS.sync.nk.pubkey_xonly(bytes.fromhex(MIRROR_KEY)).hex()
 
 OWNER_OPEN = "ou_owner00000000000000000000000001"
 ALICE_OPEN = "ou_alice00000000000000000000000001"
@@ -116,6 +118,11 @@ def write_owner_only(path: Path, text: str) -> Path:
 def event(event_id, pubkey, content, *, kind=9, created_at=T0, tags=()):
     return {"id": event_id, "pubkey": pubkey, "kind": kind, "created_at": created_at,
             "content": content, "tags": [["h", CHANNEL], *[list(t) for t in tags]], "sig": "00" * 64}
+
+
+def edit_event(n, pubkey, target, content, *, created_at=T0):
+    """Buzz kind 40003 as the relay returns it: the replacement content and one bare e tag naming the original."""
+    return event(eid(0xb000 + n), pubkey, content, kind=40003, created_at=created_at, tags=[("e", target)])
 
 
 def eid(n):
@@ -327,9 +334,9 @@ class FakeWorld:
         self.chat = {"chat_id": CHAT, "owner_id": OWNER_OPEN, "user_manager_id_list": [],
                      "bot_manager_id_list": [OWNER_APP], "add_member_permission": "all_members",
                      "moderation_permission": "all_members", "external": False, "chat_status": "normal",
-                     "chat_mode": "group", "bot_count": 1, "user_count": 1}
+                     "chat_mode": "group", "bot_count": 2, "user_count": 1}
         self.users = {OWNER_OPEN}
-        self.bots = {OWNER_APP: OWNER_BOT_MEMBER}
+        self.bots = {OWNER_APP: OWNER_BOT_MEMBER, AGENT_APP: AGENT_BOT_MEMBER}
         self.bot_members = {OWNER_APP: OWNER_BOT_MEMBER, AGENT_APP: AGENT_BOT_MEMBER,
                             TEAM_BOT_APP: "ou_teambot000000000000000000000001"}
         # bridge 那边：已验证的绑定（pubkey -> open_id）。接口只会返回其中属于本频道现存成员的那部分。
@@ -344,6 +351,7 @@ class FakeWorld:
         self.message_get_fail = []  # 每次单条消息 GET 弹出一个：network | api
         self.message_get_tamper = None  # callable(message_id, user_id_type, item) -> item 或 [item, …]：让飞书「说错话」
         self.message_get_gone = set()  # 列出来以后才被删掉的消息：单条 GET 报 not_found
+        self.message_update_fail = []  # modes popped per PUT/PATCH: rate_limited | network
         self.chat_owner_is_app = False  # 群主是个应用（bot 建的群）：owner_id_type 是 app_id
         # 飞书的通讯录：每个有绑定的人，他的每个邮箱都是他在 owner 应用里的账号的企业邮箱（可覆盖）
         self.feishu_emails = {}  # owner 应用 open_id -> {"email", "enterprise_email"}
@@ -353,8 +361,26 @@ class FakeWorld:
         self.search_fail = {}  # 查询 -> 依次弹出的失败方式：network | api
         self.api_requests = []
         self.api_fail = []  # 每次调用弹出一个：network | timeout | 401 | 404 | 500 | 503 | redirect | malformed | ...
+        # relay 的 POST /query（ADR-0019：agent 的飞书 app_id 公开在 kind:30177）：能查到的 kind 0 / 30177 事件、每次查询、失败方式
+        self.relay_events = []
+        self.relay_queries = []  # {"filters", "signer"} per verified /query
+        self.relay_fail = []  # modes popped per /query: network | 500 | 429 | malformed | not_list | bad_signature
+        # relay 的 POST /events（ADR-0020：成员变动 9000/9001 由 signer key、表情 7/5 由镜像身份在进程内签名后发出）
+        self.relay_writes = []  # 每条被接受的事件（原样）
+        self.relay_write_requests = []  # 每次 POST /events 的事件，包括运输结果未知的请求
+        self.relay_write_attempts = []  # 每次 POST /events：{"event", "signer", "auth_tag"}（先于任何拒绝记录）
+        self.relay_write_fail = []  # modes popped per /events: network | 500 | reject
+        self.add_policy = {}  # agent pubkey -> "owner_only" | "nobody"（缺省 anyone）
+        self.agent_owners = {}  # agent pubkey -> 它的 owner（owner_only 时只有他能加）
+        self.needs_auth_tag = {MIRROR_PK}  # 这些身份是 NIP-OA agent：没有 x-auth-tag 头就不是 relay 成员
+        self.members_incomplete = False  # `+chat-members-list` 说还有下一页（成员没读全）
+        self.member_listing_fault = None  # 缺失 / 错类型的完整性元数据（删人必须 fail closed）
+        self.batch_reactions = {}  # 飞书消息 id -> [{"emoji_type", "operator": {"operator_id", "operator_type"}}]
+        self.batch_reaction_fail = []  # modes popped per `im reactions batch_query`: api | message_failed
+        self.batch_reaction_calls = []  # 每次查询的消息 id 列表
         self.messages = []
         self.threads = {}  # root message id -> replies
+        self.message_updates = []  # in-place PUT/PATCH calls, with the app identity that made them
         self.lark_calls = []
         self.owner_in_scope = True
         self.contact_error = None
@@ -632,8 +658,15 @@ class FakeWorld:
         return "img_v3_" + sha[:24], None
 
     # ---- bridge：GET /bind/api/channels/{channel}/people（infra/buzz-deploy ADR-0015）--------------
-    def http_get(self, url, headers, timeout):
-        """扮演 bridge：真的按 NIP-98 验签，语义与 Go 侧 VerifyNIP98 + web.handlePeople 一致。"""
+    def http_get(self, url, headers, timeout, body=None):
+        """扮演 bridge：真的按 NIP-98 验签，语义与 Go 侧 VerifyNIP98 + web.handlePeople 一致。
+        带 body 的 POST 到 relay 的 /query 由 _serve_relay_query 扮演（不计入 api_requests，也不消耗 api_fail）。"""
+        if url == f"{MEDIA_ORIGIN}/query":
+            return self._serve_relay_query(url, headers, body)
+        if url == f"{MEDIA_ORIGIN}/events":
+            return self._serve_relay_events(url, headers, body)
+        if body is not None:
+            raise AssertionError(f"unexpected POST to {url}")
         self.api_requests.append({"url": url, "headers": dict(headers), "timeout": timeout})
         mode = self.api_fail.pop(0) if self.api_fail else None
         if mode == "network":
@@ -708,6 +741,134 @@ class FakeWorld:
             doc.pop(key, None)
         return 200, json.dumps(doc).encode()
 
+    def _serve_relay_query(self, url, headers, body):
+        """扮演 relay 的 POST /query（buzz-relay api/bridge.rs + buzz-auth nip98.rs）：kind 27235、u 与 method 各一个、±60 秒、
+        带 payload 就必须等于 body 的 sha256；body 是 filters 的 JSON 数组，应答是事件的 JSON 数组。"""
+        mode = self.relay_fail.pop(0) if self.relay_fail else None
+        if mode == "network":
+            raise OSError("connection refused")
+        if mode in ("500", "429"):
+            return int(mode), b'{"error":"x"}'
+        signer = self._verify_relay_nip98(headers.get("Authorization", ""), url, body)
+        if signer is None or mode == "bad_signature":
+            return 401, b'{"error":"NIP-98"}'
+        filters = json.loads(body)
+        self.relay_queries.append({"filters": filters, "signer": signer})
+        if mode == "malformed":
+            return 200, b"<html>"
+        if mode == "not_list":
+            return 200, b'{"events":[]}'
+
+        def match(ev, f):
+            if "kinds" in f and ev["kind"] not in f["kinds"]:
+                return False
+            if "authors" in f and ev["pubkey"] not in f["authors"]:
+                return False
+            if "#d" in f and not any(t[0] == "d" and t[1] in f["#d"] for t in ev["tags"]):
+                return False
+            return True
+        return 200, json.dumps([ev for ev in self.relay_events if any(match(ev, f) for f in filters)]).encode()
+
+    def _serve_relay_events(self, url, headers, body):
+        """扮演 relay 的 POST /events（buzz-relay api/bridge.rs submit_event + side_effects.rs），照源码建模：
+        - NIP-98 同 /query（带 payload 就必须等于 body 的 sha256）；事件本身 id 与签名都要对，作者就是签名头的人；
+        - NIP-OA agent（needs_auth_tag）没有 x-auth-tag 头就不是 relay 成员（403）；
+        - 9000 / 9001：h 是本频道、签名者是 owner/admin；9000 还看被加者的 channel_add_policy（owner_only 只许它的 owner、nobody 谁都不许），
+          拒绝文本就是源码里的 `policy:owner_only …` / `policy:nobody …`；role 标签决定角色（缺省 member）；
+        - 7 / 5：签名者得是频道成员，7 的 e 目标得存在；接受后事件进入 events，之后 `messages get` 读得到。
+        应答：200 {"event_id","accepted","message"}；拒绝是 400 {"error": …}。"""
+        self.relay_write_requests.append(json.loads(body))
+        mode = self.relay_write_fail.pop(0) if self.relay_write_fail else None
+        if mode == "network":
+            raise OSError("connection reset")
+        if mode == "500":
+            return 500, b'{"error":"x"}'
+        if mode == "lost":  # stored, but the answer never arrives: the caller cannot tell it apart from "network"
+            self._serve_relay_events(url, headers, body)
+            raise OSError("connection reset after the request was sent")
+        signer = self._verify_relay_nip98(headers.get("Authorization", ""), url, body)
+        if signer is None:
+            return 401, b'{"error":"NIP-98"}'
+        ev = json.loads(body)
+        self.relay_write_attempts.append({"event": ev, "signer": signer, "auth_tag": headers.get("x-auth-tag")})
+        ser = json.dumps([0, ev["pubkey"], ev["created_at"], ev["kind"], ev["tags"], ev["content"]], separators=(",", ":"),
+                         ensure_ascii=False)
+        if (hashlib.sha256(ser.encode()).hexdigest() != ev["id"] or ev["pubkey"] != signer
+                or not FGS.sync.nk.schnorr_verify(bytes.fromhex(ev["id"]), bytes.fromhex(ev["pubkey"]), bytes.fromhex(ev["sig"]))):
+            return 400, b'{"error":"invalid: bad event id or signature"}'
+        if signer in self.needs_auth_tag and not headers.get("x-auth-tag"):
+            return 403, b'{"error":"restricted: not a relay member"}'
+        if mode == "reject":
+            return 400, b'{"error":"invalid: rejected"}'
+        roles = {m["pubkey"]: m["role"] for m in self.members}
+        tags = {t[0]: t[1] for t in ev["tags"] if len(t) >= 2}
+        if any(e["id"] == ev["id"] for e in self.events) or any(w["id"] == ev["id"] for w in self.relay_writes):
+            return 200, json.dumps({"event_id": ev["id"], "accepted": True, "message": "duplicate:"}).encode()
+        if ev["kind"] == 7 and any(e["kind"] == 7 and e["pubkey"] == signer and e["content"] == ev["content"]
+                                   and [t[1] for t in e["tags"] if t[0] == "e"] == [tags.get("e")] for e in self.events):
+            # relay-v0.2.1 ingest.rs: one reaction per (actor, target, emoji)
+            return 200, json.dumps({"event_id": ev["id"], "accepted": False, "message": "duplicate: reaction already exists"}).encode()
+        if ev["kind"] in (9000, 9001):
+            if tags.get("h") != CHANNEL or roles.get(signer) not in ("owner", "admin"):
+                return 400, b'{"error":"restricted: only an owner or admin can change members"}'
+            target = tags["p"]
+            if ev["kind"] == 9000:
+                policy = self.add_policy.get(target)
+                if target != signer and policy == "nobody":
+                    return 400, json.dumps({"error": "policy:nobody — this agent has disabled external channel additions"}).encode()
+                if target != signer and policy == "owner_only" and self.agent_owners.get(target) != signer:
+                    return 400, json.dumps({"error": "policy:owner_only — only the agent owner can add this agent"}).encode()
+                self.members = [m for m in self.members if m["pubkey"] != target] + [
+                    {"pubkey": target, "role": tags.get("role", "member")}]
+            else:
+                self.members = [m for m in self.members if m["pubkey"] != target]
+        elif ev["kind"] in (7, 5, 9, 40003):
+            if signer not in roles:
+                return 400, b'{"error":"restricted: not a channel member"}'
+            if ev["kind"] == 7 and tags.get("e") not in {e["id"] for e in self.events}:
+                return 400, b'{"error":"invalid: unknown target"}'
+            if ev["kind"] == 40003:
+                targets = [e for e in self.events if e["id"] == tags.get("e") and e["pubkey"] == signer]
+                if len(targets) != 1:
+                    return 400, b'{"error":"invalid: unknown edit target"}'
+            if ev["kind"] == 5:  # the relay stops returning a deleted reaction
+                gone = {t[1] for t in ev["tags"] if t[0] == "e"}
+                self.events = [e for e in self.events if not (e["id"] in gone and e["pubkey"] == signer)]
+            self.events.append(dict(ev))
+        else:
+            return 400, b'{"error":"invalid: unexpected kind"}'
+        self.relay_writes.append(ev)
+        return 200, json.dumps({"event_id": ev["id"], "accepted": True, "message": ""}).encode()
+
+    def member_writes(self):
+        """(kind, target pubkey, role) of every accepted 9000 / 9001."""
+        return [(ev["kind"], next(t[1] for t in ev["tags"] if t[0] == "p"), next((t[1] for t in ev["tags"] if t[0] == "role"), None))
+                for ev in self.relay_writes if ev["kind"] in (9000, 9001)]
+
+    def _verify_relay_nip98(self, header, url, body):
+        if not header.startswith("Nostr "):
+            return None
+        try:
+            ev = json.loads(base64.b64decode(header[6:], validate=True))
+            ser = json.dumps([0, ev["pubkey"], ev["created_at"], ev["kind"], ev["tags"], ev["content"]],
+                             separators=(",", ":"), ensure_ascii=False)
+            if hashlib.sha256(ser.encode()).hexdigest() != ev["id"]:
+                return None
+            if not FGS.sync.nk.schnorr_verify(bytes.fromhex(ev["id"]), bytes.fromhex(ev["pubkey"]), bytes.fromhex(ev["sig"])):
+                return None
+            us = [t[1] for t in ev["tags"] if t[0] == "u"]
+            ms = [t[1] for t in ev["tags"] if t[0] == "method"]
+            payload = [t[1] for t in ev["tags"] if t[0] == "payload"]
+            if ev["kind"] != 27235 or us != [url] or [m.upper() for m in ms] != ["POST"]:
+                return None
+            if payload and payload != [hashlib.sha256(body).hexdigest()]:
+                return None
+            if abs(ev["created_at"] - ts(self.clock)) > 60:
+                return None
+            return ev["pubkey"]
+        except (ValueError, KeyError, TypeError, IndexError):
+            return None
+
     def emails_of(self, pubkey):
         """这个人在 bridge 里已验证的邮箱（小写、去重、排序）。"""
         return self.emails.get(pubkey) or [f"{self.display.get(pubkey, pubkey[:8]).lower()}@a4x.io"]
@@ -754,9 +915,28 @@ class FakeWorld:
                 return fail(args, 99991400)
             id_type = self._opt(args, "--member-id-type") or "open_id"
             kinds = self._opt(args, "--member-types", many=True) or ["user", "bot"]
-            return ok({"users": [{"member_id": self.conv(u, id_type), "name": u} for u in sorted(self.users)] if "user" in kinds else [],
-                       "bots": [{"app_id": a, "member_id": self.conv(m, id_type), "name": a}
-                                for a, m in sorted(self.bots.items())] if "bot" in kinds else []})
+            data = {"users": [{"member_id": self.conv(u, id_type), "name": u} for u in sorted(self.users)] if "user" in kinds else [],
+                    "bots": [{"app_id": a, "member_id": self.conv(m, id_type), "name": a}
+                             for a, m in sorted(self.bots.items())] if "bot" in kinds else []}
+            data.update(has_more=False, truncations=[], user_total=len(data["users"]), bot_total=len(data["bots"]))
+            if self.members_incomplete:  # 实测形态：has_more / truncations / *_total 说明没读全
+                data.update(has_more=True, page_token="next", user_total=len(data["users"]) + 1)
+            fault = self.member_listing_fault
+            requested = kinds[0]
+            if fault == "missing_has_more":
+                data.pop("has_more")
+            elif fault == "missing_truncations":
+                data.pop("truncations")
+            elif fault == "truncations_object":
+                data["truncations"] = {}
+            elif fault == "missing_total":
+                data.pop(f"{requested}_total")
+            elif fault == "bool_total":
+                data[f"{requested}_total"] = False
+            elif fault == "rows_object":
+                data[f"{requested}s"] = {"not": "a list"}
+                data[f"{requested}_total"] = 1
+            return ok(data)
         if head == ("contact", "+search-user"):
             assert as_ == "user"
             query = self._opt(args, "--query")
@@ -864,6 +1044,38 @@ class FakeWorld:
             method, path = args[1], args[2]
             params = json.loads(self._opt(args, "--params") or "{}")
             data = json.loads(self._opt(args, "--data") or "{}")
+            if method in ("PUT", "PATCH") and path.startswith("/open-apis/im/v1/messages/"):
+                mode = self.message_update_fail.pop(0) if self.message_update_fail else None
+                if mode == "rate_limited":
+                    return fail(args, 230020, "rate_limited")
+                if mode == "network":
+                    return subprocess.CompletedProcess(args, 1, "", json.dumps(
+                        {"ok": False, "error": {"type": "network", "message": "connection reset"}}))
+                mid = path.rsplit("/", 1)[1]
+                msg = next((m for m in self.messages if m["message_id"] == mid), None)
+                if msg is None:
+                    for replies in self.threads.values():
+                        msg = msg or next((m for m in replies if m["message_id"] == mid), None)
+                if msg is None:
+                    return fail(args, 230002, "not_found")
+                if msg["sender"]["id"] != app:
+                    return fail(args, 230071, "not_sender")
+                if method == "PATCH":
+                    old_card, new_card = json.loads(msg["content"]), json.loads(data.get("content") or "{}")
+                    if not (old_card.get("config", {}).get("update_multi") is True
+                            and new_card.get("config", {}).get("update_multi") is True):
+                        return fail(args, 230099, "card_not_shared")
+                    msg["content"] = data["content"]
+                    msg["msg_type"] = "interactive"
+                else:
+                    if data.get("msg_type") != "text":
+                        return fail(args, 230054, "unsupported_message_type")
+                    msg["content"] = json.loads(data.get("content") or "{}").get("text", "")
+                    msg["msg_type"] = "text"
+                msg["updated"] = True
+                msg["update_time"] = str(int(self.clock.timestamp() * 1000))
+                self.message_updates.append({"method": method, "message_id": mid, "app": app, "data": data})
+                return ok({})
             if method == "GET" and path == f"/open-apis/im/v1/chats/{CHAT}":
                 id_type = params.get("user_id_type", "open_id")
                 chat = dict(self.chat, owner_id=self.conv(self.chat["owner_id"], id_type), owner_id_type=id_type,
@@ -978,7 +1190,7 @@ class FakeWorld:
     def channel_gets(self):
         return [c for c in self.buzz_calls if tuple(c["args"][:2]) == ("channels", "get")]
 
-    VALID_EMOJI = {"GLANCE", "Typing", "DONE", "THUMBSUP", "OK", "THANKS", "MUSCLE", "OnIt", "Party"}
+    VALID_EMOJI = {"GLANCE", "Typing", "DONE", "THUMBSUP", "OK", "THANKS", "MUSCLE", "OnIt", "Party", "CrossMark"}
 
     def _message_ids(self):
         ids = {m["message_id"] for m in self.messages}
@@ -986,10 +1198,45 @@ class FakeWorld:
             ids |= {m["message_id"] for m in replies}
         return ids
 
+    def _batch_reactions(self, args):
+        """im reactions batch_query（2026-09-23 对真实消息只读实测）：user 身份；--params 的 user_id_type 决定人的 operator_id；
+        page_size_per_message 最多 10；应答 success_msg_reaction_details[{message_id, has_more, page_token?, message_reaction_items[
+        {action_time, emoji_type, operator{operator_id, operator_type}}]}]，没有 reaction_id；bot 打的 operator_type 是 app、id 是 app_id。"""
+        assert self._opt(args, "--as") == "user"
+        params = json.loads(self._opt(args, "--params") or "{}")
+        data = json.loads(self._opt(args, "--data"))
+        size = data.get("page_size_per_message", 10)
+        assert 1 <= size <= 10, "the API takes at most 10 per message"
+        self.batch_reaction_calls.append([q["message_id"] for q in data["queries"]])
+        mode = self.batch_reaction_fail.pop(0) if self.batch_reaction_fail else None
+        if mode == "api":
+            return fail(args, 99991400)
+        details, fails = [], []
+        for q in data["queries"]:
+            mid = q["message_id"]
+            if mode == "message_failed":
+                fails.append({"message_id": mid, "fail_reason": "no_permission"})
+                continue
+            items = [dict(r) for r in self.batch_reactions.get(mid, [])]
+            items += [{"emoji_type": r["emoji"], "operator": {"operator_id": r["app"], "operator_type": "app"}}
+                      for r in self.reactions if r["message_id"] == mid]
+            start = int(q.get("page_token") or 0)
+            page = items[start:start + size]
+            row = {"message_id": mid, "has_more": start + size < len(items),
+                   "message_reaction_items": [dict(i, action_time="1790000000") for i in page]}
+            if row["has_more"]:
+                row["page_token"] = str(start + size)
+            details.append(row)
+        assert params.get("user_id_type") in ("union_id", "open_id")
+        return {"ok": True, "data": {"success_msg_reaction_details": details, "success_msg_reaction_counts": [],
+                                     "fail_msg_reaction_details": fails}}
+
     def _reactions(self, args, app):
         """im reactions create|delete，照真实行为建模：调用者必须在群里、消息必须存在；同一个 (消息, 表情, 应用)
         重复添加是幂等的（同一个 reaction_id）；只能删自己加的。参数走 --params / --data（没有类型化 flag）。"""
         verb = args[2]
+        if verb == "batch_query":
+            return self._batch_reactions(args)
         assert self._opt(args, "--as") == "bot"
         params = json.loads(self._opt(args, "--params") or "{}")
         mode = self.reaction_fail.pop(0) if self.reaction_fail else None
@@ -1073,7 +1320,8 @@ class FakeWorld:
         return {(r["message_id"], r["emoji"], r["app"]) for r in self.reactions}
 
     def reaction_calls(self):
-        return [c for c in self.lark_calls if tuple(c["args"][:2]) == ("im", "reactions")]
+        """Reactions made or withdrawn (create / delete); reading them (batch_query) is not one."""
+        return [c for c in self.lark_calls if tuple(c["args"][:2]) == ("im", "reactions") and c["args"][2] != "batch_query"]
 
     def buzz_sends(self):
         return [c for c in self.buzz_calls if tuple(c["args"][:2]) == ("messages", "send")]
@@ -1083,6 +1331,10 @@ class FakeWorld:
 
     def lark_sends(self):
         return [c for c in self.lark_calls if tuple(c["args"][:2]) in (("im", "+messages-send"), ("im", "+messages-reply"))]
+
+    def lark_updates(self):
+        return [c for c in self.lark_calls if c["args"][:2] in (["api", "PUT"], ["api", "PATCH"])
+                and c["args"][2].startswith("/open-apis/im/v1/messages/")]
 
     def member_ops(self):
         return [c for c in self.lark_calls if c["args"][0] == "api" and c["args"][2].endswith("/members")]
@@ -1115,6 +1367,7 @@ class Env:
                                   "lark_data_dir": str(tmp / "agent-data")}},
             "buzz_cli": self.buzz_cli, "buzz_cli_sha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
             "lark_cli": LARK_CLI,
+            "desk_pubkey": AGENT_PK,
             "message_format": "text",  # most cases pin what is said as text; the card cases say "card"
         }
         cfg.update(overrides)
@@ -1143,6 +1396,38 @@ class TmpCase(unittest.TestCase):
 
     def tearDown(self):
         self._tmp.cleanup()
+
+
+class DeskConfigMigration(TmpCase):
+    def test_dry_run_validates_without_writing_then_apply_backs_up_and_is_idempotent(self):
+        env = Env(self.tmp)
+        old = json.loads(env.config.read_text())
+        old.pop("desk_pubkey")
+        original = json.dumps(old)
+        write_owner_only(env.config, original)
+        ready = FGS.migrate_desk_config(env.config, AGENT_PK)
+        self.assertEqual((ready["status"], ready["applied"]), ("ready", False))
+        self.assertEqual(env.config.read_text(), original)
+        self.assertEqual(list(self.tmp.glob("config.json.bak.desk-*")), [])
+        done = FGS.migrate_desk_config(env.config, AGENT_PK, apply=True, now=NOW)
+        backup = Path(done["backup"])
+        self.assertEqual((done["status"], done["applied"]), ("migrated", True))
+        self.assertEqual(backup.read_text(), original)
+        self.assertEqual(os.stat(backup).st_mode & 0o777, 0o600)
+        self.assertEqual(FGS.load_config(env.config)["desk_pubkey"], AGENT_PK)
+        self.assertEqual(FGS.migrate_desk_config(env.config, AGENT_PK, apply=True)["status"], "already_migrated")
+        self.assertEqual(list(self.tmp.glob("config.json.bak.desk-*")), [backup])
+
+    def test_missing_or_conflicting_desk_never_changes_the_config(self):
+        env = Env(self.tmp)
+        old = json.loads(env.config.read_text())
+        old.pop("desk_pubkey")
+        original = json.dumps(old)
+        write_owner_only(env.config, original)
+        with self.assertRaisesRegex(FGS.GroupSyncError, "desk_pubkey"):
+            FGS.migrate_desk_config(env.config, AGENT2_PK, apply=True)
+        self.assertEqual(env.config.read_text(), original)
+        self.assertEqual(list(self.tmp.glob("config.json.bak.desk-*")), [])
 
 
 # ================================ L1 ================================
@@ -1452,6 +1737,7 @@ class BuzzToFeishuRouting(unittest.TestCase):
         """L1-FGS-033: 镜像身份自己发的（回声）、非消息 kind、空正文都跳过。"""
         self.assertEqual(self.route(event(eid(4), MIRROR_PK, "[飞书] x：y")), "echo")
         self.assertEqual(self.route(event(eid(5), ALICE_PK, "diff", kind=40008)), "kind")
+        self.assertEqual(self.route(edit_event(99, ALICE_PK, eid(5), "replacement")), "kind")
         self.assertEqual(self.route(event(eid(6), ALICE_PK, "  ")), "empty")
 
     def test_owner_bot_turns_p_tags_into_feishu_at(self):
@@ -1698,6 +1984,38 @@ class StateAndEnv(TmpCase):
                 FGS.load_state(self.tmp)
         self.assertEqual(FGS.load_state(self.tmp / "missing"), FGS.State())
 
+    def test_pre_edit_state_migrates_with_empty_edit_ledgers(self):
+        """L1-FGS-051A: a state written by the release before edit sync loads without replaying anything; legacy cards have
+        no guessed mode, so they cannot accidentally be patched as the wrong message type."""
+        state = FGS.State(b2f={eid(1): "om_1"})
+        FGS.save_state(self.tmp, state)
+        path = self.tmp / FGS.STATE_FILE
+        legacy = json.loads(path.read_text())
+        for key in ("b2f_modes", "e2f", "edit_unresolved"):
+            legacy.pop(key)
+        write_owner_only(path, json.dumps(legacy))
+
+        loaded = FGS.load_state(self.tmp)
+
+        self.assertEqual(loaded.b2f, {eid(1): "om_1"})
+        self.assertEqual((loaded.b2f_modes, loaded.e2f, loaded.edit_unresolved), ({}, {}, {}))
+
+    def test_pre_membership_notice_state_migrates_without_replaying_a_notice(self):
+        """L1-FGS-051B: 失败状态通知上线前的 state 没有通知 id / 飞书 fallback id / content / active；升级后取空，
+        不猜旧消息、不重放。"""
+        state = FGS.State()
+        FGS.save_state(self.tmp, state)
+        path = self.tmp / FGS.STATE_FILE
+        legacy = json.loads(path.read_text())
+        for key in ("member_notice_event", "member_notice_feishu", "member_notice_content", "member_notice_active"):
+            legacy.pop(key, None)
+        write_owner_only(path, json.dumps(legacy))
+
+        loaded = FGS.load_state(self.tmp)
+
+        self.assertEqual((loaded.member_notice_event, loaded.member_notice_feishu, loaded.member_notice_content,
+                          loaded.member_notice_active), ("", "", "", False))
+
     def test_mirror_env_file_whitelist(self):
         """L1-FGS-052: 镜像 env 文件只取 BUZZ_PRIVATE_KEY / BUZZ_RELAY_URL / BUZZ_AUTH_TAG；非 0600 拒绝。"""
         p = write_owner_only(self.tmp / "m.env", f"BUZZ_PRIVATE_KEY={MIRROR_KEY}\nexport BUZZ_RELAY_URL=https://r.test\nOTHER=1\n")
@@ -1844,7 +2162,7 @@ class Adapters(unittest.TestCase):
             self.assertEqual(ctx.exception.definite, definite, rc)
 
     def test_buzz_messages_pages_backwards_with_kinds(self):
-        """L1-FGS-064: messages get 最多 200 条且最新在前：按 --before 往前翻页并带 --kinds 9,45001,45003；输出不是列表、同一秒超过一页都报错。"""
+        """L1-FGS-064: messages get 最多 200 条且最新在前：按 --before 往前翻页并带普通消息与编辑事件 kinds；输出不是列表、同一秒超过一页都报错。"""
         events = [event(eid(i), ALICE_PK, f"m{i}", created_at=T0 + i) for i in range(250)]
         calls = []
 
@@ -1858,7 +2176,7 @@ class Adapters(unittest.TestCase):
         got = FGS.BuzzCli(BUZZ_CLI, {}, runner=runner).messages(CHANNEL, 0)
         self.assertEqual(len(got), 250)
         self.assertEqual(len(calls), 2)
-        self.assertEqual(calls[0][calls[0].index("--kinds") + 1], "9,45001,45003")
+        self.assertEqual(calls[0][calls[0].index("--kinds") + 1], "9,45001,45003,40003")
         self.assertEqual(calls[0][calls[0].index("--limit") + 1], "200")
 
         def as_dict(argv, **kw):
@@ -1970,23 +2288,62 @@ class RoundIdentity(TmpCase):
         self.assertEqual([t for t in second["tags"] if t[0] == "p"], [])
 
     def test_buzz_to_feishu_sender_identity(self):
-        """L2-1-FGS-003: 人的发言经 owner 应用 bot（不带 agent 目录），agent 的发言经它自己的 profile（CONFIG_DIR 与 DATA_DIR 都是它的）；没 bot 的 agent 不投。"""
+        """L2-1-FGS-003: 人与远端 Agent 由本频道 Desk bot 代发并署名；本机 Agent 仍用自己的 bot。"""
         w = self.world()
         env, report = self.run_round(w)
         by_text = {text_of(c): c for c in w.lark_sends()}
         human = by_text["Alice（Buzz）：hello from buzz"]
-        self.assertEqual((human["app"], human["as"]), (OWNER_APP, "bot"))
-        self.assertNotIn("LARKSUITE_CLI_CONFIG_DIR", human["env"])
+        self.assertEqual((human["app"], human["as"]), (AGENT_APP, "bot"))
+        self.assertEqual(human["env"]["LARKSUITE_CLI_CONFIG_DIR"], str(self.tmp / "agent-cfg"))
         agent = by_text["@Alice 已完成"]
         self.assertEqual((agent["app"], agent["as"]), (AGENT_APP, "bot"))
         self.assertEqual(agent["env"]["LARKSUITE_CLI_CONFIG_DIR"], str(self.tmp / "agent-cfg"))
         self.assertEqual(agent["env"]["LARKSUITE_CLI_DATA_DIR"], str(self.tmp / "agent-data"))
         self.assertNotIn("<at", text_of(agent))
-        self.assertFalse(any("no bot" in t for t in by_text))
-        self.assertEqual(report["skipped"].get("agent_bot_unavailable"), 1)
+        relayed = by_text[f"{AGENT2_PK[:12]}（Buzz·助手）：no bot"]
+        self.assertEqual((relayed["app"], relayed["as"]), (AGENT_APP, "bot"))
+        self.assertEqual(relayed["env"]["LARKSUITE_CLI_CONFIG_DIR"], str(self.tmp / "agent-cfg"))
+        self.assertNotIn("agent_bot_unavailable", report["skipped"])
+        self.assertEqual(report["relayed_agents"], 1)
+
+    def test_desk_is_the_default_proxy_sender_when_explicitly_bound(self):
+        w = self.world()
+        env = Env(self.tmp, feishu_unmapped_senders="skip")
+        env.round(w)
+        sends = {text_of(c): c for c in w.lark_sends()}
+        human = sends["Alice（Buzz）：hello from buzz"]
+        relayed = sends[f"{AGENT2_PK[:12]}（Buzz·助手）：no bot"]
+        self.assertEqual((human["app"], relayed["app"]), (AGENT_APP, AGENT_APP))
+        self.assertEqual(human["env"]["LARKSUITE_CLI_CONFIG_DIR"], str(self.tmp / "agent-cfg"))
+        self.assertEqual(env.state()["b2f_senders"][eid(1)], AGENT_APP)
+        self.assertEqual(env.state()["b2f_senders"][eid(4)], AGENT_APP)
+        self.assertNotIn("<at user_id=", text_of(sends["Bob（Buzz）：@helper-agent 看下"]))
+
+    def test_desk_policy_fails_closed_without_a_bound_desk(self):
+        env = Env(self.tmp)
+        raw = json.loads(env.config.read_text())
+        raw.pop("desk_pubkey")
+        bad = write_owner_only(self.tmp / "no-desk.json", json.dumps(raw))
+        with self.assertRaisesRegex(FGS.GroupSyncError, "desk_pubkey"):
+            FGS.load_config(bad)
+
+    def test_workflow_root_and_human_reply_stay_in_one_feishu_thread_under_desk(self):
+        w = self.world()
+        workflow = "66" * 32  # signed nonmember Workflow author, without a kind:0 display name
+        w.events = [event(eid(200), workflow, "workflow root"),
+                    event(eid(201), BOB_PK, "follow-up", created_at=T0 + 1,
+                          tags=[("e", eid(200), "", "reply")])]
+        env = Env(self.tmp, buzz_unmapped_senders="context")
+        report = env.round(w)
+        sends = w.lark_sends()
+        self.assertEqual([c["app"] for c in sends], [AGENT_APP, AGENT_APP])
+        self.assertEqual(report["to_feishu"], 2)
+        root = env.state()["b2f"][eid(200)]
+        self.assertEqual(sends[1]["args"][sends[1]["args"].index("--message-id") + 1], root)
+        self.assertEqual(env.state()["b2f_senders"][eid(200)], AGENT_APP)
 
     def test_buzz_reply_mentions_agent_bot_in_feishu_thread(self):
-        """L2-1-FGS-004: Buzz 上回复并 @agent 的消息，由 owner bot 回复到对应飞书消息的话题里，并带 agent bot 的 <at>。"""
+        """L2-1-FGS-004: Desk 将回复发到对应飞书话题，不使用 owner 应用的 open_id。"""
         w = self.world()
         self.run_round(w)
         root = next(c for c in w.lark_sends() if text_of(c) == "Alice（Buzz）：hello from buzz")
@@ -1994,10 +2351,10 @@ class RoundIdentity(TmpCase):
         replies = [c for c in w.lark_sends() if c["args"][1] == "+messages-reply"]
         self.assertEqual(len(replies), 1)
         r = replies[0]
-        self.assertEqual(r["app"], OWNER_APP)
+        self.assertEqual(r["app"], AGENT_APP)
         self.assertEqual(r["args"][r["args"].index("--message-id") + 1], root_mid)
         self.assertIn("--reply-in-thread", r["args"])
-        self.assertEqual(text_of(r), f'Bob（Buzz）：@helper-agent 看下 <at user_id="{AGENT_BOT_MEMBER}">helper-agent</at>')
+        self.assertEqual(text_of(r), "Bob（Buzz）：@helper-agent 看下")
 
     def test_membership_ops_use_owner_user_identity_and_withhold_removal_when_someone_is_unmapped(self):
         """L2-1-FGS-005: 加人、拉 bot 全部用 owner 的 user 身份（succeed_type=1）；Carol 映射不到时，分不清她和群里的外人，所以不移人。"""
@@ -2026,6 +2383,135 @@ class RoundIdentity(TmpCase):
         gets = [c["args"] for c in w.buzz_calls if tuple(c["args"][:2]) == ("messages", "get")
                 and c["args"][c["args"].index("--kinds") + 1] == FGS.MIRROR_KINDS]
         self.assertEqual(int(gets[-1][gets[-1].index("--since") + 1]), ts(NOW) + 1800 - FGS.BUZZ_OVERLAP_SECONDS)
+
+    def test_buzz_edit_updates_the_existing_feishu_card_in_place(self):
+        """L2-1-FGS-006A: kind 40003 replaces the already mirrored card through the original agent bot; it neither sends a
+        second Feishu message nor changes the original Buzz->Feishu mapping."""
+        w = FakeWorld(self.tmp)
+        w.events = [event(eid(70), AGENT_PK, "RED baseline")]
+        env = Env(self.tmp, message_format="card")
+        env.round(w)
+        original_mid = env.state()["b2f"][eid(70)]
+        sends_before = len(w.lark_sends())
+
+        edit = edit_event(1, AGENT_PK, eid(70), "GREEN updated", created_at=T0 + 90)
+        w.events.append(edit)
+        report = env.round(w, now=NOW + timedelta(minutes=2))
+
+        self.assertEqual(len(w.lark_sends()), sends_before)
+        self.assertEqual(len(w.message_updates), 1)
+        self.assertEqual((w.message_updates[0]["method"], w.message_updates[0]["message_id"], w.message_updates[0]["app"]),
+                         ("PATCH", original_mid, AGENT_APP))
+        card = json.loads(w.message_updates[0]["data"]["content"])
+        self.assertEqual(card["header"]["title"]["content"], "GREEN updated")
+        self.assertTrue(card["config"]["update_multi"])
+        self.assertEqual(env.state()["b2f"][eid(70)], original_mid)
+        self.assertEqual(env.state()["e2f"][edit["id"]], original_mid)
+        self.assertEqual(report["messages_updated"], 1)
+
+    def test_same_second_compact_edits_finish_on_the_highest_revision(self):
+        """L2-1-FGS-006G event id 是哈希；同秒 overlay 必须按 rev 结束在较新的飞书卡片。"""
+        w = FakeWorld(self.tmp)
+        w.events = [event(eid(79), AGENT_PK, "baseline")]
+        env = Env(self.tmp, message_format="card")
+        env.round(w)
+        created = T0 + 90
+        lower = edit_event(
+            9, AGENT_PK, eid(79),
+            "📝 **Draft**\n[gitlab-notify:v1][object:mr][state:opened][draft:yes]"
+            "[change:lifecycle][transition:none][project:481][mr:31][reaction:draft][rev:1]",
+            created_at=created,
+        )
+        higher = edit_event(
+            10, AGENT_PK, eid(79),
+            "👀 **可评审**\n[gitlab-notify:v1][object:mr][state:opened][draft:no]"
+            "[change:lifecycle][transition:reviewable][project:481][mr:31][reaction:review][rev:2]",
+            created_at=created,
+        )
+        lower["id"], higher["id"] = "f" * 64, "0" * 64  # old (created_at,id) ordering was wrong
+        w.events += [lower, higher]
+
+        report = env.round(w, now=NOW + timedelta(minutes=2))
+
+        self.assertEqual(report["messages_updated"], 2)
+        final = json.loads(w.message_updates[-1]["data"]["content"])
+        self.assertEqual(final["header"]["title"]["content"], "👀 可评审")
+        self.assertEqual(env.state()["e2f"][higher["id"]], env.state()["b2f"][eid(79)])
+
+    def test_buzz_edit_fetches_an_original_that_has_left_the_overlap_window(self):
+        """L2-1-FGS-006B: an edit is self-contained for discovery but not rendering; when its original is older than the
+        900-second overlap, the bridge reads that exact thread and still updates the existing Feishu message."""
+        w = FakeWorld(self.tmp)
+        w.events = [event(eid(71), ALICE_PK, "old content")]
+        env = Env(self.tmp, message_format="card")
+        env.round(w)
+        original_mid = env.state()["b2f"][eid(71)]
+        env.round(w, now=NOW + timedelta(minutes=20))  # advance the cursor until the original is outside its overlap
+        edit = edit_event(2, ALICE_PK, eid(71), "new after overlap", created_at=ts(NOW) + 30 * 60)
+        w.events.append(edit)
+
+        report = env.round(w, now=NOW + timedelta(minutes=30))
+
+        self.assertEqual(report["messages_updated"], 1)
+        self.assertEqual(w.message_updates[0]["message_id"], original_mid)
+        self.assertTrue(any(c["args"][c["args"].index("--event") + 1] == eid(71) for c in w.thread_calls()))
+
+    def test_buzz_edit_replaces_a_text_message_with_put(self):
+        """L2-1-FGS-006C: text mode uses Feishu's ordinary edit endpoint and preserves the human signature."""
+        w = FakeWorld(self.tmp)
+        w.events = [event(eid(72), ALICE_PK, "before")]
+        env = Env(self.tmp, message_format="text")
+        env.round(w)
+        original_mid = env.state()["b2f"][eid(72)]
+        edit = edit_event(3, ALICE_PK, eid(72), "after", created_at=T0 + 90)
+        w.events.append(edit)
+
+        report = env.round(w, now=NOW + timedelta(minutes=2))
+
+        update = w.message_updates[0]
+        self.assertEqual((update["method"], update["message_id"], update["app"]), ("PUT", original_mid, AGENT_APP))
+        self.assertEqual(update["data"]["msg_type"], "text")
+        self.assertEqual(json.loads(update["data"]["content"]), {"text": "Alice（Buzz）：after"})
+        self.assertEqual(report["messages_updated"], 1)
+
+    def test_buzz_edit_rejects_foreign_and_ambiguous_targets(self):
+        """L2-1-FGS-006D: an author cannot overwrite somebody else's Feishu copy, and an edit with two targets is not
+        guessed. Both are policy skips and create no Feishu write."""
+        w = FakeWorld(self.tmp)
+        w.events = [event(eid(73), ALICE_PK, "alice"), event(eid(74), BOB_PK, "bob")]
+        env = Env(self.tmp, message_format="card")
+        env.round(w)
+        w.events += [edit_event(4, BOB_PK, eid(73), "foreign", created_at=T0 + 90),
+                     event(eid(0xb005), ALICE_PK, "ambiguous", kind=40003, created_at=T0 + 91,
+                           tags=[("e", eid(73)), ("e", eid(74))])]
+
+        report = env.round(w, now=NOW + timedelta(minutes=2))
+
+        self.assertEqual(w.message_updates, [])
+        self.assertEqual(report["skipped"].get("edit_foreign"), 1)
+        self.assertEqual(report["skipped"].get("edit_no_single_target"), 1)
+
+    def test_buzz_edit_retries_a_definite_refusal_without_sending_another_message(self):
+        """L2-1-FGS-006E: a definite Feishu edit refusal is retried from the edit ledger; it never falls back to sending a
+        replacement message, and the successful retry settles on the original message ID."""
+        w = FakeWorld(self.tmp)
+        w.events = [event(eid(75), AGENT_PK, "before")]
+        env = Env(self.tmp, message_format="card")
+        env.round(w)
+        original_mid = env.state()["b2f"][eid(75)]
+        sends_before = len(w.lark_sends())
+        edit = edit_event(6, AGENT_PK, eid(75), "after retry", created_at=T0 + 90)
+        w.events.append(edit)
+        w.message_update_fail = ["rate_limited"]
+
+        first = env.round(w, now=NOW + timedelta(minutes=2))
+        second = env.round(w, now=NOW + timedelta(minutes=3))
+
+        self.assertEqual((first["errors"], first["messages_updated"]), (1, 0))
+        self.assertEqual(second["messages_updated"], 1)
+        self.assertEqual(len(w.lark_updates()), 2)
+        self.assertEqual(len(w.lark_sends()), sends_before)
+        self.assertEqual(env.state()["e2f"][edit["id"]], original_mid)
 
     def test_feishu_thread_reply_maps_to_buzz_reply(self):
         """L2-1-FGS-007: 飞书话题里的回复，用 --reply-to 挂到话题根对应的 Buzz 事件下，发送身份仍是镜像。"""
@@ -2167,18 +2653,20 @@ class RoundIdentity(TmpCase):
         self.assertTrue(all(len(k) <= 50 for k in keys))
 
     def test_membership_failure_does_not_stop_message_sync(self):
-        """L2-1-FGS-017: 某个 bot 被飞书拒绝（invalid_id_list）或一次加人请求报错，都只计数，消息照常双向同步。"""
+        """L2-1-FGS-017: Desk bot 被拒时整轮失败，不借 owner bot 代发。"""
         w = self.world()
+        w.bots.pop(AGENT_APP)
         w.reject_ids = {AGENT_APP}
-        env, report = self.run_round(w)
-        self.assertEqual(report["member_failures"], 1)
-        self.assertEqual(report["added_bots"], 0)
-        self.assertGreater(report["to_feishu"] + report["to_buzz"], 0)
+        with self.assertRaisesRegex(FGS.GroupSyncError, "Desk bot"):
+            self.run_round(w)
+        self.assertEqual(w.lark_sends(), [])
+        self.assertFalse([c for c in w.member_ops() if c["args"][1] in ("POST", "DELETE")])
         w2 = self.world()
         w2.member_error_once = True
         other = self.tmp / "second"
         other.mkdir(mode=0o700)
         w2.agent_dirs = {str(other / "agent-cfg"): AGENT_APP}
+        w2.bots[AGENT_APP] = AGENT_BOT_MEMBER
         report = Env(other).round(w2)
         self.assertEqual(report["errors"], 1)
         self.assertGreater(report["to_buzz"], 0)
@@ -2210,14 +2698,12 @@ class RoundGuards(TmpCase):
         return RoundIdentity.world(self)
 
     def test_agent_profile_mismatch_is_not_delivered_or_proxied(self):
-        """L2-1-FGS-030: agent 的 lark-cli profile 不是配置里的应用时：它的话不投、不拉它的 bot，也绝不由 owner bot 代发。"""
+        """L2-1-FGS-030: Desk 的 lark-cli profile 不匹配时整轮失败。"""
         w = self.world()
         w.agent_dirs[str(self.tmp / "agent-cfg")] = "cli_somethingelse001"
-        env, report = RoundIdentity.run_round(self, w)
-        self.assertFalse(any("已完成" in text_of(c) for c in w.lark_sends()))
-        self.assertNotIn(AGENT_APP, w.bots)
-        self.assertEqual(report["skipped"].get("agent_profile_mismatch"), 1)
-        self.assertGreaterEqual(report["errors"], 1)
+        with self.assertRaisesRegex(FGS.GroupSyncError, "Desk"):
+            RoundIdentity.run_round(self, w)
+        self.assertEqual(w.lark_sends(), [])
 
     def test_owner_profile_mismatch_refuses(self):
         """L2-1-FGS-031: owner 的 lark-cli 登录的不是配置里的应用或 owner 时整轮拒绝。"""
@@ -2249,10 +2735,12 @@ class RoundGuards(TmpCase):
         self.assertIn("[飞书] Gina：guest in feishu", [e["content"] for e in w.mirrored()])
 
     def test_state_holds_no_people_at_all_and_bindings_are_read_every_round(self):
-        """L2-1-FGS-034: state 里没有邮箱，也没有任何 pubkey→id 的缓存（只有「本应用 open_id → union_id」这种 id 对，谁是谁不落盘）：
-        每一轮都向 bridge 取一次最新的绑定关系；bridge 应用的 open_id 更是一个字都不会进来。"""
+        """L2-1-FGS-034: state 里没有邮箱，bridge 应用的 open_id 一个字都不会进来；每一轮都向 bridge 取一次最新的绑定关系。
+        单向（membership_sync "buzz_to_feishu"）时也没有任何 pubkey→id 的对应（谁是谁不落盘，只有「本应用 open_id → union_id」这种 id 对）。
+        双向（缺省，ADR-0020）要把离开频道的人移出群、把被拉回群的老成员认出来，只为**本频道的成员**（现在的和 30 天内的）记下 pubkey ↔ 飞书 id，
+        见 L2-1-FGS-034b；频道外的人（OUTSIDER 有绑定、不在频道）照样不进 state。"""
         w = self.world()
-        env, _ = RoundIdentity.run_round(self, w)
+        env, _ = RoundIdentity.run_round(self, w, env=Env(self.tmp, membership_sync="buzz_to_feishu"))
         raw = (env.state_dir / FGS.STATE_FILE).read_text()
         self.assertNotIn("@a4x.io", raw)
         for gone in ("open_ids", "misses", "people_digest", ALICE_PK, BOB_PK, OWNER_PK,
@@ -2263,16 +2751,35 @@ class RoundGuards(TmpCase):
         env.round(w)
         self.assertEqual(len(w.api_requests), 3)
 
-    def test_blocked_bots_are_reported(self):
-        """L2-1-FGS-035: 群里已有 14 个外部 bot、agent bot 进不去时，报告 blocked_bots 并视为需要关注。"""
+    def test_two_way_state_keeps_only_this_channels_members(self):
+        """L2-1-FGS-034b: 双向（缺省）的 state 里，pubkey 只出现在成员快照（buzz_seen）和本频道见过的人（people_seen）里，而且只有本频道的成员；
+        群成员快照（feishu_seen）只有飞书 id，没有 pubkey；邮箱和 bridge 应用的 open_id 照样没有；绑定关系照样每轮重取。"""
         w = self.world()
+        w.users.add(OUTSIDER_OPEN)
+        env, _ = RoundIdentity.run_round(self, w)
+        env.round(w)
+        state = env.state()
+        raw = json.dumps(state)
+        self.assertNotIn("@a4x.io", raw)
+        for gone in (OUTSIDER_PK, bridge_open_of(ALICE_OPEN), bridge_open_of(OUTSIDER_OPEN)):
+            self.assertNotIn(gone, raw)
+        self.assertEqual(set(state["feishu_seen"].values()), {""})
+        rest = {k: v for k, v in state.items() if k not in ("buzz_seen", "people_seen")}
+        for pk in (ALICE_PK, BOB_PK, OWNER_PK):
+            self.assertNotIn(pk, json.dumps(rest))
+        self.assertIn(ALICE_PK, state["buzz_seen"])
+        self.assertEqual(len(w.api_requests), 2)
+
+    def test_blocked_bots_are_reported(self):
+        """L2-1-FGS-035: 群已满且 Desk bot 进不去时整轮失败。"""
+        w = self.world()
+        w.bots.pop(AGENT_APP)
         for i in range(14):
             app = f"cli_foreign{i:08d}"
             w.bot_members[app] = f"ou_foreignbot{i:020d}"
             w.bots[app] = w.bot_members[app]
-        env, report = RoundIdentity.run_round(self, w)
-        self.assertEqual(report["blocked_bots"], 1)
-        self.assertTrue(FGS.needs_attention(report))
+        with self.assertRaisesRegex(FGS.GroupSyncError, "Desk bot"):
+            RoundIdentity.run_round(self, w)
 
     def test_mirror_must_be_a_bot_member(self):
         """L2-1-FGS-036: 镜像身份不是频道的 bot 成员时整轮拒绝。"""
@@ -2319,8 +2826,7 @@ class RoundGuards(TmpCase):
         self.assertFalse((self.tmp / "elsewhere").exists())
 
     def test_a_leaving_agent_bot_makes_room_for_a_new_one_in_the_same_round(self):
-        """L2-1-FGS-064: 群里 bot 已满 15 个、其中一个登记的 agent 离开了频道、另一个新 agent 进来：同一轮先移出旧的再加新的，
-        不会因为暂时超过上限而失败。"""
+        """L2-1-FGS-064: 配置的 Desk 离开频道时拒绝切换，不能借另一个 Agent 的 bot。"""
         w = self.world()
         (self.tmp / "agent2-cfg").mkdir(mode=0o700)
         (self.tmp / "agent2-data").mkdir(mode=0o700)
@@ -2338,14 +2844,12 @@ class RoundGuards(TmpCase):
         raw["agents"][AGENT2_PK] = {"app_id": agent2_app, "lark_config_dir": str(self.tmp / "agent2-cfg"),
                                     "lark_data_dir": str(self.tmp / "agent2-data")}
         write_owner_only(env.config, json.dumps(raw))
-        report = env.round(w)
-        self.assertNotIn(AGENT_APP, w.bots)
-        self.assertIn(agent2_app, w.bots)
-        self.assertEqual((report["member_failures"], report["blocked_bots"]), (0, 0))
+        with self.assertRaisesRegex(FGS.GroupSyncError, "Desk"):
+            env.round(w)
+        self.assertEqual(w.lark_sends(), [])
 
     def test_new_bot_is_blocked_not_failed_when_removals_are_withheld(self):
-        """L2-1-FGS-065: 群里 bot 已满、要移出的成员因一次超过 10 个被暂缓时，新 agent 的 bot 报告为 blocked_bots，
-        而不是去加然后被飞书拒绝。"""
+        """L2-1-FGS-065: 已指定的 Desk 离开 Buzz Channel 时，即使成员对账有待处理也拒绝发送。"""
         w = self.world()
         (self.tmp / "agent2-cfg").mkdir(mode=0o700)
         (self.tmp / "agent2-data").mkdir(mode=0o700)
@@ -2364,10 +2868,9 @@ class RoundGuards(TmpCase):
         raw["agents"][AGENT2_PK] = {"app_id": agent2_app, "lark_config_dir": str(self.tmp / "agent2-cfg"),
                                     "lark_data_dir": str(self.tmp / "agent2-data")}
         write_owner_only(env.config, json.dumps(raw))
-        report = env.round(w)
-        self.assertEqual(report["removals_withheld"], "bulk_removal")
-        self.assertEqual((report["blocked_bots"], report["member_failures"]), (1, 0))
-        self.assertIn(AGENT_APP, w.bots)
+        with self.assertRaisesRegex(FGS.GroupSyncError, "Desk"):
+            env.round(w)
+        self.assertEqual(w.lark_sends(), [])
 
 
 class RoundThreads(TmpCase):
@@ -2516,29 +3019,31 @@ class RoundRetriesAndScale(TmpCase):
         self.assertEqual(len(got), 1)
 
     def test_agent_profile_failure_leaves_its_bot_alone(self):
-        """L2-1-FGS-047: agent profile 核对失败（例如 auth status 暂时出错）时，它已在群里的 bot 不被移出，也不投它的话。"""
+        """L2-1-FGS-047: Desk profile 核对失败时整轮失败，成员对账和消息发送均无副作用。"""
         w = self.world()
         w.bots[AGENT_APP] = AGENT_BOT_MEMBER
         w.agent_dirs[str(self.tmp / "agent-cfg")] = "cli_somethingelse001"
         w.events = [event(eid(90), AGENT_PK, "agent says")]
+        w.users = {OWNER_OPEN, EXTRA_OPEN}
         env = Env(self.tmp)
-        report = env.round(w)
+        with self.assertRaisesRegex(FGS.GroupSyncError, "Desk"):
+            env.round(w)
         self.assertIn(AGENT_APP, w.bots)
-        self.assertEqual(report["removed_bots"], 0)
-        self.assertFalse(any("agent says" in text_of(c) for c in w.lark_sends()))
+        self.assertEqual(w.lark_sends(), [])
+        self.assertFalse([c for c in w.member_ops() if c["args"][1] in ("POST", "DELETE")])
+        self.assertEqual(env.state()["binding"], "")
 
     def test_registered_agent_with_a_human_role_is_not_a_human(self):
-        """L2-1-FGS-048: 配置里登记的 agent 即使在频道里不是 bot 角色，也不当成人：不由 owner bot 转述，也不算映射不到的人。"""
+        """L2-1-FGS-048: Desk 在频道里失去 bot 角色时整轮失败。"""
         w = self.world()
         for m in w.members:
             if m["pubkey"] == AGENT_PK:
                 m["role"] = "member"
         w.events = [event(eid(91), AGENT_PK, "i am an agent")]
         w.users = {OWNER_OPEN, EXTRA_OPEN}
-        report = Env(self.tmp).round(w)
-        self.assertFalse(any("i am an agent" in text_of(c) for c in w.lark_sends()))
-        self.assertEqual(report["unmapped_members"], 0)
-        self.assertNotIn(EXTRA_OPEN, w.users)
+        with self.assertRaisesRegex(FGS.GroupSyncError, "Desk"):
+            Env(self.tmp).round(w)
+        self.assertEqual(w.lark_sends(), [])
 
     def test_one_failing_thread_does_not_stop_the_round(self):
         """L2-1-FGS-049: 某个话题持续报错只计 errors，其余话题与两个方向照常同步。"""
@@ -2654,7 +3159,7 @@ class RoundRetriesAndScale(TmpCase):
         w.events = [event(eid(97), AGENT2_PK, "parent"),
                     event(eid(98), BOB_PK, "child", created_at=T0 + 1, tags=[("e", eid(97), "", "reply")])]
         w.lark_send_fail = ["timeout", "network_envelope"]
-        env = Env(self.tmp)
+        env = Env(self.tmp, buzz_unmanaged_agents="skip")  # AGENT2 stands for a parent that is never mirrored (ADR-0019 relays by default)
         env.round(w)
         state = env.state()
         state["b2f"][eid(97)] = "om_parent_arrived_later"
@@ -2763,7 +3268,8 @@ class RoundPeopleApi(TmpCase):
     def test_a_binding_that_changes_shows_in_the_next_round(self):
         """L2-1-FGS-071: 绑定会变，这正是不用静态文件的原因：Bob 解绑后下一轮他就映射不到（群里不删他：有人映射不到时不移人）；新同事绑定并进频道后，下一轮就被拉进群。"""
         w = self.world()
-        env, _ = RoundIdentity.run_round(self, w)
+        # 「有人映射不到时不移人」这道闸只在单向对账里有用武之地：双向（ADR-0020）首轮之后本来就不清理「多余」成员
+        env, _ = RoundIdentity.run_round(self, w, env=Env(self.tmp, membership_sync="buzz_to_feishu"))
         self.assertIn(BOB_OPEN, w.users)
         del w.bindings[BOB_PK]
         report = env.round(w, now=NOW + timedelta(minutes=1))
@@ -3008,11 +3514,16 @@ class IdentityContract(TmpCase):
         self.assertEqual(report["identity_conflicts"], 0)
         self.assertEqual(set(report), {  # 文档里列出的全部字段：多一个或少一个都要改文档
             "added_users", "removed_users", "added_bots", "removed_bots", "blocked_bots", "member_failures", "removals_withheld",
-            "unmapped_members", "identity_conflicts", "backlog_skipped", "to_feishu", "to_buzz", "unknown", "failed", "errors",
+            "unmapped_members", "identity_conflicts", "backlog_skipped", "to_feishu", "to_buzz", "messages_updated",
+            "unknown", "failed", "errors",
             "skipped", "reactions_added", "reactions_removed", "reactions_failed",
             "images_to_feishu", "images_to_buzz", "images_failed", "images_skipped", "thread_roots_backfilled",
             "thread_root_unavailable", "thread_root_failed", "thread_roots_deferred", "cards_sent", "cards_fallback_text",
-            "relayed_agents"})
+            "relayed_agents", "directory_agents", "directory_failed", "directory_conflicts",
+            "members_to_buzz", "members_removed_from_buzz", "members_refused", "members_protected", "members_unresolved",
+            "people_cache_failed", "member_events_blocked", "reactions_to_buzz", "reactions_withdrawn_in_buzz",
+            "approvals_to_buzz", "agent_intros_sent", "agent_intros_relayed", "agent_intro_failures",
+            "agent_intro_unknown", "agent_intro_stopped"})
         self.assertFalse(FGS.needs_attention(report))
         self.assertTrue(FGS.needs_attention(dict(report, identity_conflicts=1)))
 
@@ -3314,15 +3825,14 @@ class UnionMode(TmpCase):
                               tags=[("p", BOB_PK), ("p", CAROL_PK), ("p", AGENT_PK)]))
         self.go(w)
         texts = [text_of(c) for c in w.lark_sends()]
-        want = (f'Alice（Buzz）：cc @Bob @Carol @helper-agent <at user_id="{union_of(BOB_OPEN)}">Bob</at> '
-                f'<at user_id="{AGENT_BOT_MEMBER}">helper-agent</at>')
+        want = "Alice（Buzz）：cc @Bob @Carol @helper-agent"
         self.assertIn(want, texts)
         for text in texts:
             for pk, local in ((ALICE_PK, ALICE_OPEN), (BOB_PK, BOB_OPEN)):
                 self.assertNotIn(bridge_open_of(local), text)
                 self.assertNotIn(local, text)
         sent = next(m for m in w.messages if m["sender"]["sender_type"] == "app" and "cc @Bob" in m["content"])
-        self.assertEqual([m["id"] for m in sent["mentions"]], [BOB_OPEN, AGENT_BOT_MEMBER])  # 飞书把 union_id 解析回了人
+        self.assertEqual(sent.get("mentions", []), [])  # owner 应用的 id 不带进 Desk 发出的消息
 
     def test_senders_and_mentions_from_feishu_are_paired_by_the_message_itself(self):
         """L2-1-FGS-117: 飞书消息列表里发信人和被 @ 的人是 owner 应用的 open_id（列表接口忽略 user_id_type）。不在缓存里的，就对
@@ -3690,7 +4200,7 @@ class EmailMode(TmpCase):
             self.assertNotIn("--member-id-type", call["args"])
         self.assertEqual((w.message_gets(), [c for c in w.lark_calls if c["args"][:3] == ["api", "GET", "/open-apis/authen/v1/user_info"]]), ([], []))
         texts = [text_of(c) for c in w.lark_sends()]
-        self.assertIn(f'Alice（Buzz）：cc @Bob <at user_id="{BOB_OPEN}">Bob</at>', texts)
+        self.assertIn("Alice（Buzz）：cc @Bob", texts)
         self.assertEqual({e["content"]: [t[1] for t in e["tags"] if t[0] == "p"] for e in w.mirrored()}["[飞书] Alice：＠Bob 看下"], [BOB_PK])
         blob = json.dumps([c["args"] for c in w.lark_calls if tuple(c["args"][:2]) != ("contact", "+search-user")])
         for local in (ALICE_OPEN, BOB_OPEN, OWNER_OPEN):
@@ -4047,7 +4557,7 @@ class SharedIdentity(TmpCase):
         texts = [text_of(c) for c in w.lark_sends()]
         towards = next(t for t in texts if t.startswith("Alice2（Buzz）："))
         self.assertNotIn(ALICE_OPEN, towards)
-        self.assertEqual(towards.count("<at "), 1)  # 只有 Bob（唯一的）产生 @，分不清的账号不产生
+        self.assertEqual(towards.count("<at "), 0)  # owner 应用的 id 不交给 Desk
 
     def test_two_keys_bound_to_one_union_id_are_both_unmapped(self):
         """L2-1-FGS-147: union_id 模式：两个 pubkey 的 union_id 相同（绑到同一个飞书账号）：都算映射不到——不进群、不认他在飞书里的发言
@@ -4266,9 +4776,9 @@ class ReactionRouting(unittest.TestCase):
 
     def test_agent_emoji_map_to_feishu_emoji_types(self):
         """L1-FGS-081: agent 的 reaction 经它自己的应用 bot 落成相近的飞书表情：👀→GLANCE、💬→Typing（agent 收到请求时打的两个）、
-        ✅→DONE、👍 与 + →THUMBSUP、👌→OK、🙏→THANKS、💪→MUSCLE。"""
+        ✅→DONE、👍 与 + →THUMBSUP、👌→OK、🙏→THANKS、💪→MUSCLE；ADR-0020 加了 ❌→CrossMark（回答入群申请用，与 ✅ 成对）。"""
         expected = {"👀": "GLANCE", "💬": "Typing", "✅": "DONE", "👍": "THUMBSUP", "+": "THUMBSUP", "👌": "OK",
-                    "🙏": "THANKS", "💪": "MUSCLE"}
+                    "🙏": "THANKS", "💪": "MUSCLE", "❌": "CrossMark"}
         self.assertEqual(FGS.DEFAULT_REACTION_MAP, expected)
         for emoji, emoji_type in expected.items():
             self.assertEqual(self.route(reaction_event(1, AGENT_PK, eid(1), emoji)), (AGENT_APP, emoji_type), emoji)
@@ -4384,7 +4894,7 @@ class ReactionPlumbing(TmpCase):
         self.assertTrue(ctx.exception.definite)
 
     def test_buzz_messages_can_read_other_kinds(self):
-        """L1-FGS-089: BuzzCli.messages 默认仍只读 9,45001,45003；读 reaction 时传 kinds=7,5，其余（翻页、上限、--since）不变。"""
+        """L1-FGS-089: BuzzCli.messages 默认读普通消息和 40003 编辑；读 reaction 时传 kinds=7,5，其余不变。"""
         seen = []
 
         def runner(argv, **kw):
@@ -4393,7 +4903,7 @@ class ReactionPlumbing(TmpCase):
         buzz = FGS.BuzzCli(BUZZ_CLI, {}, runner=runner)
         buzz.messages(CHANNEL, 7)
         buzz.messages(CHANNEL, 7, kinds=FGS.REACTION_KINDS)
-        self.assertEqual(seen[0][seen[0].index("--kinds") + 1], "9,45001,45003")
+        self.assertEqual(seen[0][seen[0].index("--kinds") + 1], "9,45001,45003,40003")
         self.assertEqual(seen[1][seen[1].index("--kinds") + 1], "7,5")
         self.assertEqual(FGS.REACTION_KINDS, "7,5")
         for args in seen:
@@ -4481,9 +4991,9 @@ class ReactionSync(TmpCase):
         self.assertEqual(len(env.state()["r2f"]), 1)
 
     def test_humans_reactions_are_not_synced(self):
-        """L2-1-FGS-079: 人在 Buzz 上打的 reaction 不同步（PO 决定：只同步 agent 的）：没有任何飞书 reactions 调用，计数记在
-        skipped.reaction_human 里。"""
-        w, env, target, copy = self.start()
+        """L2-1-FGS-079: `reaction_sync: "agents_only"`（ADR-0020 之前的行为）：人在 Buzz 上打的 reaction 不同步：没有任何飞书 reactions
+        调用，计数记在 skipped.reaction_human 里。缺省的双向见 test_buzz_feishu_group_sync_two_way_reactions.py。"""
+        w, env, target, copy = self.start(reaction_sync="agents_only")
         w.events += [reaction_event(1, ALICE_PK, eid(1), "👍", created_at=ts(NOW) + 20),
                      reaction_event(2, BOB_PK, target, "👀", created_at=ts(NOW) + 21)]
         report = env.round(w, now=self.at(5))
@@ -4521,6 +5031,25 @@ class ReactionSync(TmpCase):
         env.round(w, now=self.at(20))
         self.assertEqual(len(w.reaction_calls()), n)
         self.assertEqual(w.reaction_set(), set())
+
+    def test_same_second_status_reaction_removes_old_before_adding_new(self):
+        """L2-1-FGS-099 同秒旧 reaction 撤销与新 reaction 添加按 delete→add，最终表情不被旧删除抹掉。"""
+        w, env, target, _ = self.start()
+        old = reaction_event(1, AGENT_PK, target, "👀", created_at=ts(NOW) + 20)
+        w.events.append(old)
+        env.round(w, now=self.at(5))
+        created = ts(NOW) + 400
+        deletion = deletion_event(1, AGENT_PK, old["id"], created_at=created)
+        replacement = reaction_event(2, AGENT_PK, target, "👀", created_at=created)
+        deletion["id"], replacement["id"] = "f" * 64, "0" * 64
+        w.events += [deletion, replacement]
+
+        report = env.round(w, now=self.at(10))
+
+        self.assertEqual(w.reaction_set(), {("om_in1", "GLANCE", AGENT_APP)})
+        calls = [call["args"][2] for call in w.reaction_calls()[-2:]]
+        self.assertEqual(calls, ["delete", "create"])
+        self.assertEqual((report["reactions_removed"], report["reactions_added"]), (1, 1))
 
     def test_reaction_added_and_withdrawn_before_a_round_never_appears(self):
         """L2-1-FGS-082: 同一批里既有 reaction 又有撤销它的 kind 5：飞书上根本不出现（不闪一下），也不产生任何 reactions 调用。"""
@@ -4638,8 +5167,9 @@ class ReactionSync(TmpCase):
         self.assertEqual(env.state()["react_since"], ts(self.at(10)))
 
     def test_agent_without_a_bot_in_the_chat_does_not_react_by_proxy(self):
-        """L2-1-FGS-090: 没配飞书应用的 agent 在 Buzz 上打的 reaction 不由任何别的 bot 代打：跳过，计入 agent_bot_unavailable。"""
-        w, env, target, _ = self.start()
+        """L2-1-FGS-090: `reaction_sync: "agents_only"` 时，没配飞书应用的 agent 在 Buzz 上打的 reaction 不由任何别的 bot 代打：跳过，
+        计入 agent_bot_unavailable。缺省的双向（ADR-0020）由 owner bot 代打，见 L2-1-FGS-872。"""
+        w, env, target, _ = self.start(reaction_sync="agents_only")
         w.events.append(reaction_event(1, AGENT2_PK, target, "👀", created_at=ts(NOW) + 20))
         report = env.round(w, now=self.at(5))
         self.assertEqual(w.reaction_calls(), [])
@@ -4792,21 +5322,17 @@ class ReactionSync(TmpCase):
         self.assertEqual(env.state()["react_since"], ts(self.at(20)))
 
     def test_withdrawal_by_an_agent_that_left_the_config_is_settled_without_any_call(self):
-        """L2-1-FGS-101: 配置里已经删掉了这个 agent（它的 profile 不在了）：它的撤销没人能替它执行，不调用任何飞书接口（更不会改由
-        别的应用去删），账本标 removed，不报错、不再重试；飞书上那个表情留着。"""
+        """L2-1-FGS-101: Desk 被删出配置时配置直接拒绝，不由 owner bot 处理旧表情。"""
         w, env, target, _ = self.start()
         w.events.append(reaction_event(1, AGENT_PK, target, "👀", created_at=ts(NOW) + 20))
         env.round(w, now=self.at(5))
         calls = len(w.reaction_calls())
         gone = Env(self.tmp, agents={})
         w.events.append(deletion_event(1, AGENT_PK, eid(0x9001), created_at=ts(NOW) + 400))
-        report = gone.round(w, now=self.at(10))
-        self.assertEqual((report["errors"], report["reactions_removed"], report["reactions_failed"]), (0, 0, 0))
+        with self.assertRaisesRegex(FGS.GroupSyncError, "desk_pubkey"):
+            gone.round(w, now=self.at(10))
         self.assertEqual(len(w.reaction_calls()), calls)
-        self.assertEqual(gone.state()["r2f"][eid(0x9001)], FGS.REMOVED)
         self.assertEqual(w.reaction_set(), {("om_in1", "GLANCE", AGENT_APP)})
-        gone.round(w, now=self.at(15))
-        self.assertEqual(len(w.reaction_calls()), calls)
 
     def test_retry_counters_are_gone_once_a_reaction_is_settled(self):
         """L2-1-FGS-102: 重试计数只记还在进行中的：飞书拒了一两次、之后成功 → 计数清掉；拒满三次放弃 → 计数清掉，只留账本终态。
@@ -4964,6 +5490,8 @@ class ThreadRootUnits(unittest.TestCase):
 
 class RoundThreadRoots(TmpCase):
     """回复在飞书上没有可挂的父消息时，先把话题根补发到飞书，再把回复发在它下面（skills#110）。"""
+    # AGENT2（频道里本机没配置的 agent）在这组用例里代表「发言不会镜像的作者」：ADR-0019 起缺省代发，所以这里显式写 "skip"。
+    SKIP = {"buzz_unmanaged_agents": "skip"}
     OLD = ts(NOW) - 3600  # 比绑定起点（首轮时间 - 120 秒）早
 
     def world(self, sub=None):
@@ -4975,7 +5503,7 @@ class RoundThreadRoots(TmpCase):
         """另起一个世界和 state（subTest 用）。"""
         sub = self.tmp / name
         sub.mkdir(mode=0o700)
-        return self.world(sub), Env(sub)
+        return self.world(sub), Env(sub, **self.SKIP)
 
     @staticmethod
     def key_of(event_id):
@@ -4999,7 +5527,7 @@ class RoundThreadRoots(TmpCase):
         return out
 
     def start(self, w, env=None):
-        env = env or Env(self.tmp, feishu_unmapped_senders="skip")
+        env = env or Env(self.tmp, feishu_unmapped_senders="skip", **self.SKIP)
         env.round(w)  # the binding starts here
         return env
 
@@ -5037,7 +5565,7 @@ class RoundThreadRoots(TmpCase):
         root_mid = w.sent_keys[self.key_of(eid(1))]
         self.assertEqual((sent[1]["text"], sent[1]["key"], sent[1]["parent"]), ("Bob（Buzz）：回复一", self.key_of(eid(2)), root_mid))
         self.assertIn("--reply-in-thread", sent[1]["args"])
-        self.assertEqual([c["app"] for c in w.lark_sends()], [OWNER_APP, OWNER_APP])
+        self.assertEqual([c["app"] for c in w.lark_sends()], [AGENT_APP, AGENT_APP])
         state = env.state()
         self.assertEqual(state["b2f"][eid(1)], root_mid)
         self.assertEqual(state["b2f"][eid(2)], w.sent_keys[self.key_of(eid(2))])
@@ -5055,7 +5583,7 @@ class RoundThreadRoots(TmpCase):
         self.go(env, w)
         sent = self.sent(w)
         self.assertEqual([(s["verb"], s["app"], s["text"]) for s in sent],
-                         [("+messages-send", AGENT_APP, "构建完成"), ("+messages-reply", OWNER_APP, "Bob（Buzz）：收到")])
+                         [("+messages-send", AGENT_APP, "构建完成"), ("+messages-reply", AGENT_APP, "Bob（Buzz）：收到")])
         self.assertEqual(sent[0]["call"]["env"]["LARKSUITE_CLI_CONFIG_DIR"], str(self.tmp / "agent-cfg"))
         self.assertEqual(sent[1]["parent"], w.sent_keys[self.key_of(eid(1))])
 
@@ -5067,7 +5595,7 @@ class RoundThreadRoots(TmpCase):
         self.go(env, w)
         sent = self.sent(w)
         self.assertEqual([(s["verb"], s["app"], s["text"]) for s in sent],
-                         [("+messages-send", OWNER_APP, "Alice（Buzz）：请看下"), ("+messages-reply", AGENT_APP, "已处理")])
+                         [("+messages-send", AGENT_APP, "Alice（Buzz）：请看下"), ("+messages-reply", AGENT_APP, "已处理")])
         self.assertEqual(sent[1]["parent"], w.sent_keys[self.key_of(eid(1))])
 
     def test_a_mirrored_intermediate_parent_wins_over_the_root(self):
@@ -5308,11 +5836,18 @@ class RoundThreadRoots(TmpCase):
         self.assertEqual(env.state()["floor"], floor)
 
     def test_state_written_before_this_change_keeps_working(self):
-        """L2-1-FGS-316: 没有新增任何 state 字段：本次改动之前写出的 state 原样可用。之前按顶层发出、结果未知的回复重试时仍是顶层
-        （不去取话题）；同一话题的新回复补发根，其余账本项不动。"""
+        """L2-1-FGS-316: 旧版未记录发送应用的未决回复停止重试，新回复仍补发根并进入话题。"""
         legacy = ["binding", "floor", "buzz_since", "feishu_since", "buzz_floor", "feishu_floor", "b2f", "f2b", "attempts", "threads",
                   "polled", "tried", "unresolved", "f_unresolved", "r2f", "react_since", "idmap", "emailmap",
-                  "images", "img_unresolved"]  # 最后两个是图片同步加的，话题根补发本身没有新增字段
+                  "images", "img_unresolved",  # 这两个是图片同步加的，话题根补发本身没有新增字段
+                  "b2f_modes", "b2f_senders", "e2f", "edit_unresolved",  # 编辑同步与发送身份账本
+                  # ADR-0020 的成员快照与表情账本：旧 state 缺它们时按「还没记过基线」读入（L1-FGS-802）
+                  "members_synced", "feishu_seen", "buzz_seen", "member_notes", "member_events", "member_event_stream",
+                  "member_event_seq", "member_event_blocks", "people_seen", "rwatch", "f2r",
+                  # 成员同步失败状态的 Buzz 根、飞书 fallback、最近正文和 active 标志（L1-FGS-051B）
+                  "member_notice_event", "member_notice_feishu", "member_notice_sender", "member_notice_content", "member_notice_active",
+                  # Agent 入群介绍：升级基线和每个 binding 只发一次的幂等账本
+                  "agent_intros_initialized", "agent_intros", "agent_intro_senders"]
         w = self.world()
         env = self.start(w)
         state = env.state()
@@ -5326,10 +5861,11 @@ class RoundThreadRoots(TmpCase):
         self.go(env, w)
         sent = self.sent(w)
         self.assertEqual([(s["verb"], s["text"]) for s in sent],
-                         [("+messages-send", "Bob（Buzz）：旧回复"), ("+messages-send", "Alice（Buzz）：话题根"),
+                         [("+messages-send", "Alice（Buzz）：话题根"),
                           ("+messages-reply", "Alice（Buzz）：新回复")])
         self.assertEqual(len(w.thread_calls()), 1)
-        self.assertEqual(sent[2]["parent"], w.sent_keys[self.key_of(eid(1))])
+        self.assertEqual(sent[1]["parent"], w.sent_keys[self.key_of(eid(1))])
+        self.assertEqual(env.state()["b2f"][eid(2)], FGS.UNKNOWN)
 
     def test_reports_and_stderr_carry_no_message_text_or_event_ids(self):
         """L2-1-FGS-317: 取话题失败也好、补发根成功也好：报告只有计数，stderr 里没有正文，也没有事件 id。"""
@@ -5384,7 +5920,7 @@ class RoundThreadRoots(TmpCase):
         w = self.world()
         w.events = [event(eid(0x50), ALICE_PK, "话题根", created_at=T0),
                     event(eid(0x10), BOB_PK, "回复", created_at=T0, tags=[("e", eid(0x50), "", "reply")])]
-        env = Env(self.tmp)
+        env = Env(self.tmp, **self.SKIP)
         report = env.round(w)
         sent = self.sent(w)
         self.assertEqual([(s["verb"], s["text"]) for s in sent], [("+messages-send", "Alice（Buzz）：话题根"), ("+messages-reply", "Bob（Buzz）：回复")])
@@ -5473,7 +6009,7 @@ class RoundThreadRoots(TmpCase):
         w.events = [event(eid(0x30), ALICE_PK, "话题根", created_at=T0),
                     event(eid(0x20), AGENT2_PK, "没 bot 的中间回复", created_at=T0, tags=[("e", eid(0x30), "", "reply")]),
                     event(eid(0x10), BOB_PK, "回复", created_at=T0, tags=[("e", eid(0x20), "", "reply")])]
-        env = Env(self.tmp)
+        env = Env(self.tmp, **self.SKIP)
         report = env.round(w)
         self.assertEqual(self.thread_args(w), [["messages", "thread", "--channel", CHANNEL, "--event", eid(0x20), "--depth-limit", "0"]])
         sent = self.sent(w)
@@ -5489,7 +6025,7 @@ class RoundThreadRoots(TmpCase):
         w.events = [event(eid(0x50), ALICE_PK, "话题根", created_at=T0),
                     event(eid(0x10), BOB_PK, "回复", created_at=T0, tags=[("e", eid(0x50), "", "reply")])]
         w.lark_send_fail = ["timeout"]
-        report = Env(self.tmp).round(w)
+        report = Env(self.tmp, **self.SKIP).round(w)
         self.assertEqual([(s["verb"], s["text"]) for s in self.sent(w)], [("+messages-send", "Alice（Buzz）：话题根")])
         self.assertEqual((report["unknown"], report["to_feishu"]), (1, 0))
 
@@ -5814,9 +6350,9 @@ class ImagesToFeishu(TmpCase):
         self.assertEqual(len(w.lark_sends()), 2)
         text, image = w.lark_sends()
         self.assertEqual(text_of(text), "Alice（Buzz）：看这个")
-        self.assertEqual((image["app"], image["as"]), (OWNER_APP, "bot"))
-        self.assertNotIn("LARKSUITE_CLI_CONFIG_DIR", image["env"])
-        self.assertEqual(w.image_sends[0]["app"], OWNER_APP)
+        self.assertEqual((image["app"], image["as"]), (AGENT_APP, "bot"))
+        self.assertEqual(image["env"]["LARKSUITE_CLI_CONFIG_DIR"], str(self.tmp / "agent-cfg"))
+        self.assertEqual(w.image_sends[0]["app"], AGENT_APP)
 
     def test_an_image_of_a_reply_goes_into_the_same_thread(self):
         """L2-1-FGS-154: 文字是话题回复时，图也是回复（同一个父消息、--reply-in-thread），落在同一个话题里；话题登记为要轮询的。"""
@@ -5899,13 +6435,14 @@ class ImagesToFeishu(TmpCase):
     def test_images_of_events_that_are_not_delivered_are_never_downloaded(self):
         """L2-1-FGS-160: 事件本身不投递（没有飞书 bot 的 agent、已离开频道的人、镜像身份自己发的回声）时，它的图片一张也不下载、不发。"""
         w = self.w
+        env = Env(self.tmp, buzz_unmanaged_agents="skip")  # the agent case needs the old default: ADR-0019 relays it
         w.events = [image_event(1, AGENT2_PK, "没有 bot", [self.put(photo(9))]),
                     image_event(2, OUTSIDER_PK, "不在频道里", [self.put(photo(10))], created_at=T0 + 1),
                     image_event(3, MIRROR_PK, "[飞书] 张三：回声", [self.put(photo(11))], created_at=T0 + 2)]
-        report = self.env.round(w)
+        report = env.round(w)
         self.assertEqual((w.lark_sends(), w.media_reads, w.image_sends), ([], [], []))
         self.assertEqual(report["skipped"], {"agent_bot_unavailable": 1, "not_channel_human": 1, "echo": 1})
-        self.assertEqual((self.env.state()["images"], report["images_skipped"], report["images_to_feishu"]), ({}, {}, 0))
+        self.assertEqual((env.state()["images"], report["images_skipped"], report["images_to_feishu"]), ({}, {}, 0))
 
 
 # ================================ 图片同步 S3：Buzz → 飞书的失败、重试、跳过与状态兼容 ================================
@@ -6083,20 +6620,16 @@ class ImagesToFeishuFailures(TmpCase):
         self.assertEqual((w.media_reads, w.image_sends), ([], []))
 
     def test_an_image_left_over_when_the_sender_is_gone_is_skipped_once(self):
-        """L2-1-FGS-170: 文字发出后、图还没发完时，发送者不能再发了（agent 的 profile 与配置不符，不投递、也绝不改由 owner bot 代发）：
-        剩下的图按原因（agent_bot_unavailable）计一次、记 skipped，不再下载。"""
+        """L2-1-FGS-170: Desk profile 失效时整轮停止，未发图片不借 owner bot 补发。"""
         w = self.w
         sha = self.put(photo(55))
         w.events = [image_event(1, AGENT_PK, "x", [sha])]
         w.media_fail = ["network"]
         self.env.round(w)
         w.agent_dirs[str(self.tmp / "agent-cfg")] = "cli_somethingelse001"
-        report = self.env.round(w, now=NOW + timedelta(minutes=1))
-        self.assertEqual(report["images_skipped"], {"agent_bot_unavailable": 1})
-        self.assertEqual(self.env.state()["images"], {self.item(1, 0): "skipped", f"{eid(1)}:thread": "-"})
-        self.assertEqual(self.env.state()["img_unresolved"], {})
+        with self.assertRaisesRegex(FGS.GroupSyncError, "Desk"):
+            self.env.round(w, now=NOW + timedelta(minutes=1))
         self.assertEqual((len(w.media_reads), w.image_sends), (0, []))
-        self.assertEqual(self.env.round(w, now=NOW + timedelta(minutes=2))["images_skipped"], {})
 
     def test_dropping_a_buzz_backlog_on_purpose_closes_open_images_too(self):
         """L2-1-FGS-171: `--skip-backlog` 丢弃 Buzz 积压时，悬着的图和悬着的文字一样关掉：结果不确定的记 unknown，等重试的记 failed，
@@ -6659,7 +7192,7 @@ class ImageRoundGaps(TmpCase):
         self.assertEqual((w.media_reads, w.image_sends), ([], []))
 
     def test_dropping_the_rest_of_an_event_keeps_the_images_that_already_went_out(self):
-        """L2-1-FGS-183: 两张图，第一张已经发出、第二张下载失败还在重试，这时发送者不能再发了：第一张的账本（飞书消息 id）不动、不计数，只有第二张记 skipped、计一次。"""
+        """L2-1-FGS-183: Desk 失效时旧图账本保留，剩余图片不再发送。"""
         w = self.w
         a, b = self.put(photo(80)), self.put(photo(81))
         w.events = [image_event(1, AGENT_PK, "两张", [a, b])]
@@ -6668,9 +7201,10 @@ class ImageRoundGaps(TmpCase):
         sent = self.env.state()["images"][self.item(1, 0)]
         self.assertTrue(sent.startswith("om_"))
         w.agent_dirs[str(self.tmp / "agent-cfg")] = "cli_somethingelse001"
-        report = self.env.round(w, now=NOW + timedelta(minutes=1))
-        self.assertEqual(report["images_skipped"], {"agent_bot_unavailable": 1})
-        self.assertEqual(self.env.state()["images"], {self.item(1, 0): sent, self.item(1, 1): "skipped", f"{eid(1)}:thread": "-"})
+        with self.assertRaisesRegex(FGS.GroupSyncError, "Desk"):
+            self.env.round(w, now=NOW + timedelta(minutes=1))
+        self.assertEqual(self.env.state()["images"][self.item(1, 0)], sent)
+        self.assertEqual(w.image_sends[0]["app"], AGENT_APP)
 
     def test_every_format_feishu_takes_goes_out_with_its_own_extension(self):
         """L2-1-FGS-184: 飞书接受的六种格式都能发（含 Buzz 那边没法去元数据的 bmp、tiff）：内容是什么就用什么扩展名上传，jpeg → .jpg、tiff → .tiff。"""
@@ -6872,7 +7406,9 @@ class ImageSurvivorRounds(TmpCase):
 
     def nested_reply_world(self):
         """根 R（人发的）、A（没有飞书 bot 的 agent 回复 R，不镜像）、B（agent 对 A 的嵌套回复，带一张图）：B 的直接父 A 在飞书上没有副本，
-        文字挂在话题根 R 的副本下面（话题根补发的规则）；图必须跟着文字进同一个话题。"""
+        文字挂在话题根 R 的副本下面（话题根补发的规则）；图必须跟着文字进同一个话题。
+        A 不镜像靠的是 `buzz_unmanaged_agents: "skip"`（ADR-0019 起缺省代发）。"""
+        self.env = Env(self.tmp, buzz_unmanaged_agents="skip")
         w = self.w
         sha = self.put(photo(90))
         w.events = [event(eid(1), ALICE_PK, "根"),
@@ -7099,8 +7635,7 @@ class ImageSurvivorRoundsTwo(TmpCase):
         return FakeWorld(path), Env(path)
 
     def test_the_overflow_is_counted_once_however_often_the_rest_is_dropped(self):
-        """L2-1-FGS-203: 发送者不能再发了，事件有 11 张图（9 张加多出的 2 张）：每一轮读到它都会处理剩下的图，多出的 2 张只计一次
-        （账本 `<事件 id>:over` 记着），其余的每张也只计一次。"""
+        """L2-1-FGS-203: Desk 失效时即使积压图片也整轮失败。"""
         w = self.w
         w.events = [image_event(1, AGENT_PK, "很多张", [self.put(photo(110 + i)) for i in range(11)])]
         w.media_fail = ["network"] * 20
@@ -7109,10 +7644,8 @@ class ImageSurvivorRoundsTwo(TmpCase):
         state.update(images={}, img_unresolved={}, attempts={})
         write_owner_only(self.env.state_dir / FGS.STATE_FILE, json.dumps(state))
         w.agent_dirs[str(self.tmp / "agent-cfg")] = "cli_somethingelse001"
-        first = self.env.round(w, now=NOW + timedelta(minutes=1))
-        self.assertEqual(first["images_skipped"], {"agent_bot_unavailable": 11})
-        for minutes in (2, 3):
-            self.assertEqual(self.env.round(w, now=NOW + timedelta(minutes=minutes))["images_skipped"], {})
+        with self.assertRaisesRegex(FGS.GroupSyncError, "Desk"):
+            self.env.round(w, now=NOW + timedelta(minutes=1))
 
     def test_a_human_event_with_more_than_nine_images_counts_the_overflow_too(self):
         """L2-1-FGS-204: 人发的事件超过 9 张也一样：前 9 张发出，多出的按 over_limit 计（人与 agent 走同一条判断，不因为发送者不同而丢掉这个数）。"""
@@ -7153,15 +7686,15 @@ class ImageSurvivorRoundsTwo(TmpCase):
             self.assertEqual(w.lark_send_fail, [], second)
 
     def test_images_of_an_event_whose_text_can_no_longer_be_routed_are_dropped_with_it(self):
-        """L2-1-FGS-207: 文字被拒（还在重试）时发送者不能再发了（agent 的 profile 与配置不符，路由跳过）：文字关掉（failed），图也不发、按 text_not_sent 计一次。"""
+        """L2-1-FGS-207: Desk 失效时待重试文字和图片都暂停，不能回退 owner bot。"""
         w = self.w
         sha = self.put(photo(160))
         w.events = [image_event(1, AGENT_PK, "被拒的文字", [sha])]
         w.lark_send_fail = ["rate_limited"]
         self.env.round(w)
         w.agent_dirs[str(self.tmp / "agent-cfg")] = "cli_somethingelse001"
-        report = self.env.round(w, now=NOW + timedelta(minutes=1))
-        self.assertEqual((report["failed"], report["images_skipped"]), (1, {"text_not_sent": 1}))
+        with self.assertRaisesRegex(FGS.GroupSyncError, "Desk"):
+            self.env.round(w, now=NOW + timedelta(minutes=1))
         self.assertEqual((w.media_reads, w.image_sends), ([], []))
 
 

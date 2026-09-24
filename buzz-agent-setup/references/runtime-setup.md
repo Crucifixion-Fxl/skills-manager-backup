@@ -153,6 +153,8 @@ CLI 创建的 Agent 不会自动发 30177。用 [references/scripts](scripts/REA
 BUZZ_RELAY_URL=https://buzz-sg.addx.live
 BUZZ_PRIVATE_KEY=nsec1...
 BUZZ_AUTH_TAG='["auth","<owner_pub>","","<sig>"]'
+BUZZ_ACP_BINARY=<readlink -f 后的绝对 buzz-acp 路径>
+BUZZ_ACP_BINARY_SHA256=<该文件的 64 位 sha256>
 BUZZ_ACP_AGENT_COMMAND=<absolute-path>/acp-media-proxy/<sha256>/claude-agent-acp
 BUZZ_ACP_MEDIA_ADAPTER_COMMAND=<absolute-path>/node_modules/.bin/claude-agent-acp
 BUZZ_ACP_MEDIA_BUZZ_CLI=<absolute-path>/buzz
@@ -166,7 +168,9 @@ BUZZ_ACP_CHANNELS=<CH>
 BUZZ_ACP_AGENT_OWNER=<owner_pub>
 ```
 
-图片代理默认启用，且 shim basename 必须与真实 adapter 相同；安装、能力协商、限制、L4 和回滚见 [acp-media-proxy.md](acp-media-proxy.md)。显式恢复 stock text-only 行为时，把 `BUZZ_ACP_AGENT_COMMAND` 改回 `BUZZ_ACP_MEDIA_ADAPTER_COMMAND` 的值并删除两个 `BUZZ_ACP_MEDIA_*` 键。
+`BUZZ_ACP_BINARY`／`BUZZ_ACP_BINARY_SHA256` 固定最终启动的 `buzz-acp` ELF，不从 `PATH` 猜版本；升级前先对 canonical regular executable 执行 `file`（必须是 ELF）和 `sha256sum`，把路径和摘要一起原子写进 0600 env，再让审计器用 launcher 的同一 fd 复核并执行。二者缺一、摘要不匹配或脚本/shebang 入口都会拒绝启动，避免另有未固定的解释器链。
+
+图片代理默认启用，且 shim basename 必须与真实 adapter 相同；安装、能力协商、限制、L4 和回滚见 [acp-media-proxy.md](acp-media-proxy.md)。显式恢复 stock text-only 行为时，把 `BUZZ_ACP_AGENT_COMMAND` 改回 `BUZZ_ACP_MEDIA_ADAPTER_COMMAND` 的值，删除两个代理用的 `BUZZ_ACP_MEDIA_ADAPTER_COMMAND`／`BUZZ_ACP_MEDIA_BUZZ_CLI` 键，并写入 `BUZZ_ACP_MEDIA_MODE=stock_text_only`。没有这个显式标记，缺图片代理是升级失败，不会以 N/A 混过去。
 
 `BUZZ_AUTH_TAG` 的**单引号不能省**：`mint-agent.py` 输出的 `auth_tag` 是裸 JSON，`source` 会吃掉里面的双引号，背书损坏后表现为 `Auth failed: restricted: not a relay member` 重启循环，见 [troubleshooting.md](troubleshooting.md)。
 
@@ -206,43 +210,19 @@ Harness 必须用官方 `@agentclientprotocol/claude-agent-acp`；Codex 用 `@ag
 
 ## 5. 凭据清白启动
 
-私钥、`BUZZ_AUTH_TAG`、GitLab／SaaS token 不进 Git、消息、日志或 argv。启动必须从 `env -i` 开始，不用 `unset` 黑名单：
+私钥、`BUZZ_AUTH_TAG`、GitLab／SaaS token 不进 Git、消息、日志或 argv。所有持久 agent 只使用 [canonical `run-agent.py`](scripts/run-agent.py)：由固定 `/usr/bin/python3` 直接执行，不经过 shell，也不读取父进程的 `HOME`、`PATH`、`BASH_ENV` 或其它环境。launcher 从 OS 账号数据库取得 home/uid，用 `O_NOFOLLOW` 打开 owner 0600 env，在同一 fd 上验证类型、owner、mode、大小和读前后稳定性；env 值按 literal shell word 解析，绝不执行 `source` 或展开 `$VAR`，然后从空字典构造 buzz-acp 环境。
 
 ```bash
-ENVFILE="$HOME/.config/buzz/agents/<name>.env"
-WORKDIR="/absolute/project/clone"
-SAFE_PATH="$HOME/.nvm/versions/node/v24.14.0/bin:/usr/local/bin:/usr/bin:/bin"
-# 任何 agent 要 shell 出去调用某个全局 npm 装的 CLI（比如 lark-cli）之前，先 `which <cli>` 确认它实际装在哪个 nvm
-# 版本下——`npm install -g` 不一定落在上面这条 SAFE_PATH 已经列出的版本里，另一个版本的 bin 目录要单独追加进 SAFE_PATH
-# （放在已有条目之后，不要提前，避免 node/npm 本身的版本解析被改变）。这条不用去猜，因为 `which` 会直接给出答案。
-
-test ! -L "$ENVFILE"
-ENVFILE_REAL="$(realpath -e -- "$ENVFILE")"
-test "$ENVFILE_REAL" = "$ENVFILE"
-test -f "$ENVFILE_REAL"
-test "$(stat -c %u -- "$ENVFILE_REAL")" -eq "$(id -u)"
-test "$(stat -c %a -- "$ENVFILE_REAL")" = 600
-
-WORKDIR_REAL="$(realpath -e -- "$WORKDIR")"
-test -d "$WORKDIR_REAL"
-test "$(stat -c %u -- "$WORKDIR_REAL")" -eq "$(id -u)"
-test -e "$WORKDIR_REAL/.git"
-
-mapfile -t KEYS < <(grep -oE '^[[:space:]]*(export[[:space:]]+)?[A-Za-z_][A-Za-z0-9_]*=' "$ENVFILE_REAL" |
-  sed -E 's/^[[:space:]]*(export[[:space:]]+)?//; s/=$//' | sort -u)
-set -a; source "$ENVFILE_REAL"; set +a
-PASS=(); for k in "${KEYS[@]}"; do PASS+=("$k=${!k-}"); done
-cd -- "$WORKDIR_REAL"
-exec env -i HOME="$HOME" USER="$USER" LOGNAME="$LOGNAME" SHELL=/bin/bash \
-  PATH="$SAFE_PATH" LANG="${LANG:-en_US.UTF-8}" TERM=dumb PWD="$WORKDIR_REAL" \
-  "${PASS[@]}" buzz-acp --relay-url wss://buzz-sg.addx.live
+REL=<immutable-release>
+install -m 0500 "$REL/references/scripts/run-agent.py" ~/.config/buzz/agents/run-agent.py
+/usr/bin/python3 -I -m py_compile "$REL/references/scripts/run-agent.py"
 ```
 
-`source` 会执行 shell，因此必须先硬性确认 env 是当前用户所有、regular、非 symlink、权限恰为 0600，并只 source 校验后的 realpath。`env -i` 自然去掉 `CLAUDECODE`／`CLAUDE_CODE_ENTRYPOINT`／`CLAUDE_CODE_SSE_PORT`；Node ≥20 的 bin 必须在 `SAFE_PATH`。只设置 `PWD` 不会改变内核工作目录，所以必须先校验 realpath／ownership／Git checkout，再真实 `cd` 到项目 clone；这样仓内 `CLAUDE.md`／`AGENTS.md` 才会被正确加载。
+env 的 `AGENT_WORKDIR` 必须是 `~/buzz-agent-work/` 下的 canonical、当前用户所有且组/其他人不可写的 Git checkout。`BUZZ_AGENT_SAFE_PATH` 每一段必须是绝对 canonical 目录、可信 owner 且组/其他人不可写；任何 agent 要调用全局 npm CLI（如 lark-cli），先用 owner shell 的 `which <cli>` 找到真实版本目录，再把该目录追加在既有条目之后。launcher 同样回读 proxy、真实 adapter、Buzz CLI、Claude wrapper 和最终 buzz-acp 的 canonical owner/mode；Claude 的 `HARNESS_CLAUDE_WRAPPER` 与 `CLAUDE_CODE_EXECUTABLE` 必须解析到同一文件，并显式提供与 wrapper 对应的 canonical `CLAUDE_CONFIG_DIR`（`claude-buzz` 只能用 `~/.claude-buzz`，`claude-glm` 只能用 `~/.claude-glm`）。只设置 `PWD` 不算切换目录，launcher 会在 exec 前真实 `chdir` 到已校验 checkout。
 
 ### 白名单只管启动那一刻：`~/.bashrc` 会把个人密钥灌回 agent 的 Bash 工具
 
-上面的 `env -i`／变量白名单**只决定 buzz-acp 进程启动那一刻的环境**。Claude Code／ACP 类 agent 每次调 Bash 工具，都会另起一个 login／interactive shell，这个 shell 要读 `~/.profile`、`~/.bashrc`。如果 `~/.bashrc`（或它 source 的文件）里有 `source ~/.bash_secrets` 这类「加载人的个人密钥文件」的行，owner 私钥、云服务 token、个人 SaaS 密码就在**每一次** Bash 调用里被重新灌进 agent 的 shell：启动器的白名单形同虚设，`/proc/<pid>/environ` 上看不出来，agent 自己 `env` 一下却全在。agent 与 owner 通常是同一个 Unix UID，文件权限（0600）也拦不住它直接读那个文件。这个洞是一次真实的隔离事故里发现的（泛称：owner 私钥、云服务 token、个人 SaaS 密码进了 agent 的 shell），不是理论风险。
+上面的 canonical launcher／空环境白名单**只决定 buzz-acp 进程启动那一刻的环境**。Claude Code／ACP 类 agent 每次调 Bash 工具，都会另起一个 login／interactive shell，这个 shell 要读 `~/.profile`、`~/.bashrc`。如果 `~/.bashrc`（或它 source 的文件）里有 `source ~/.bash_secrets` 这类「加载人的个人密钥文件」的行，owner 私钥、云服务 token、个人 SaaS 密码就在**每一次** Bash 调用里被重新灌进 agent 的 shell：启动器的白名单形同虚设，`/proc/<pid>/environ` 上看不出来，agent 自己 `env` 一下却全在。agent 与 owner 通常是同一个 Unix UID，文件权限（0600）也拦不住它直接读那个文件。这个洞是一次真实的隔离事故里发现的（泛称：owner 私钥、云服务 token、个人 SaaS 密码进了 agent 的 shell），不是理论风险。
 
 **不要再要求 agent「调 shell 工具时设 `login: false`」**：Claude Code／ACP 的 Bash 工具入参只有 `command` 和 `description`，没有 `login` 参数，这条要求根本做不到，写进 prompt 或 skill 只会制造已防护的错觉。防线必须放在主机侧（下面的门禁），并配合 owner 声明的预期身份变量（如 `SUPERSET_EXPECTED_USER`）做运行时比对。
 
@@ -277,7 +257,7 @@ if [ -z "${BUZZ_PRIVATE_KEY:-}" ] && [ -z "${BUZZ_ACP_AGENT_OWNER:-}" ] && [ -r 
 
 ### 用持久用户单元托管 Agent 进程
 
-把上面的清白启动脚本存成 `~/.config/buzz/agents/run-<name>.sh`（0700，最后 `exec` 进 buzz-acp），再交给一个**持久的 systemd 用户单元**托管。不要用 `systemd-run` 起：它创建的是瞬时单元，重启机器后不会自动恢复，agent 悄悄离线。
+把同一份 canonical launcher 装成 `~/.config/buzz/agents/run-agent.py`（0500），再让每个 agent 的**持久 systemd 用户单元**由固定 `/usr/bin/python3` 直接执行。不要创建 per-agent shell wrapper，也不要用 `systemd-run` 起：后者创建瞬时单元，重启机器后不会自动恢复，agent 悄悄离线。
 
 瞬时单元还有**安全后果**：单元文件写在 `/run/user/<uid>/systemd/transient/`（目录 0755，文件 0644），里面是起单元时带进去的**整份环境**（私钥、token、密码都在），同机其它用户都读得到。有密钥的 agent 一律用下面的**持久单元 + 0600 env 文件**。**例外**是确需继承会话环境的个人助手（见 [personal-channel.md](personal-channel.md)）：要评估同机其它用户的风险（多用户主机不要这样做），必要时轮换里面出现过的密钥。证据：2026-09-21 审计发现个人助手的瞬时单元文件是 0644，内含 owner 私钥、云服务 token 和 Superset 密码（值不写进任何文档或 issue）。自查只看文件名与权限，不打印内容：`stat -c '%a %n' /run/user/$(id -u)/systemd/transient/*.service`。
 
@@ -288,7 +268,10 @@ Description=Buzz agent <name>
 
 [Service]
 Type=exec
-ExecStart=%h/.config/buzz/agents/run-<name>.sh
+UMask=0077
+NoNewPrivileges=yes
+UnsetEnvironment=LD_PRELOAD LD_AUDIT LD_LIBRARY_PATH PYTHONHOME PYTHONPATH PYTHONINSPECT PYTHONSTARTUP BASH_ENV ENV NODE_OPTIONS PERL5OPT RUBYOPT GLIBC_TUNABLES GCONV_PATH LOCPATH NLSPATH MALLOC_TRACE RES_OPTIONS HOSTALIASES TZDIR
+ExecStart=/usr/bin/python3 -I %h/.config/buzz/agents/run-agent.py <name>
 Restart=on-failure
 RestartSec=5s
 StandardOutput=append:%h/.config/buzz/agents/<name>.log
@@ -304,7 +287,7 @@ systemctl --user enable --now buzz-local-<name>.service
 systemctl --user restart buzz-local-<name>.service   # 改 env／prompt 后重启，并核对启动日志
 ```
 
-- 单元文件不含 secret，也不用 `EnvironmentFile=`：secret 只在 `run-<name>.sh` 校验并 source 的 0600 env 里，仍走上面的 `env -i` 白名单。
+- 单元文件不含 secret，也不用 `EnvironmentFile=`：`UnsetEnvironment=` 在解释器／dynamic loader 启动前清掉高风险继承变量，固定解释器的 `-I` 再忽略 Python user site；secret 只由 canonical `run-agent.py` 从同一 fd 读取 0600 env，并放进它从空字典构造的白名单环境。
 - 无人登录的主机也要让用户单元开机即起，需要开了 linger：`loginctl enable-linger <user>`（本机已开）。
 - 日志固定追加到 `~/.config/buzz/agents/<name>.log`，排查命令见 [troubleshooting.md](troubleshooting.md)。
 - 退役时对应停止、`disable` 并删除该单元，见「9. 退役 Agent」。
@@ -417,6 +400,8 @@ helper 只接受 `people_file` 里的唯一 pubkey 且仍为**当前 Channel hum
 | Codex，`codex-buzz` | `~/.codex-buzz`，`CODEX_HOME` | `CODEX_HOME=~/.codex-buzz codex plugin marketplace upgrade addx` |
 | Grok | `~/.grok` | `grok plugin update` |
 
+`codex-acp` 的同一份 0600 agent env 还必须写入 canonical `CODEX_PATH`（先用 `readlink -f -- "$(command -v codex)"` 解析）和 canonical `CODEX_HOME`。本机完整审计会校验这两个路径和该 agent 的 `AGENT_WORKDIR`／`BUZZ_AGENT_SAFE_PATH`，但绝不执行 Codex。它只读 `CODEX_HOME/config.toml` 的 `plugins."addx@addx".enabled` 与 canonical Git marketplace，再要求 `plugins/cache/addx/addx/` 只有一个安装目录并核对静态 metadata／完整 Skill tree；不能用审计进程 PATH 里碰巧找到的另一个 Codex，也不能从多份 cache 猜实际版本。
+
 **marketplace 源必须是 git 远端**（`git@gitlab.addx.ai:engineering/skills.git`），或一个专用的、只跟 `origin/main` 的 detached worktree；**不能指向开发者的工作树目录**（例如把 marketplace 指到 `~/skills` 这样的本地目录）。`plugin update` 装的是源目录的**当前 HEAD**，工作树停在哪个功能分支就装哪个：2026-09-21 `~/.claude-glm` 就这样被「更新」到工作树当时停着的 09-11 旧功能分支，比更新前还旧。检查：`claude-buzz plugin marketplace list` 里 `addx` 的 `Source:` 应是 `Git (…)`。
 
 不更新的代价：同日发现 `~/.claude-buzz` 停在 09-18 的 `a74b604b`，落后 main 342 个提交，缺 Issue 先行、ADR-0014、Desk 职能边界和 `gitlab-pipeline-health`；7 个 `-dev` 已在报 `Unknown skill: gitlab-pipeline-health`。skill 合并进 main 后 agent 不会自动跟上，要按上表更新，并纳入[本机升级清单](local-upgrade-runbook.md)。
@@ -434,7 +419,7 @@ python3 skills/buzz-agent-setup/scripts/resolve_plugin_install.py \
 
 receipt 里的 `git_commit_sha` 要等于你要的 `origin/main` 提交。
 
-解析器也提供 `resolve_codex_install()`：输入 `codex plugin list --json` 的对象和 Codex cache root，用唯一 `installed=true, enabled=true` 记录定位版本，再读取该记录的 local marketplace snapshot，要求其上游类型为 Git、tracked worktree 干净且 HEAD 是完整 40 位 revision，并逐字比较必需 Skill 的 snapshot／cache 文件；安装目录带 `.codex-marketplace-install.json` 时还要与 snapshot revision 一致。两条路径都会要求真实且非 symlink 的绝对目录，并校验每个 `SKILL.md` 的 frontmatter `name`。不能拿 Claude registry 验收 `codex-acp`，不能拿 Codex cache 猜 Claude runtime，也不能拿 marketplace checkout 代替已安装产物；同名 local marketplace 遮蔽 Git marketplace 时必须 fail closed，不能把旧 clone 误报成新版本。
+交互式升级／诊断仍可单独使用 `resolve_codex_install()`：输入操作者显式取得的 `codex plugin list --json` 对象和 Codex cache root，用唯一 `installed=true, enabled=true` 记录定位版本，再读取该记录的 local marketplace snapshot，要求其上游类型为 Git、tracked worktree 干净且 HEAD 是完整 40 位 revision，并逐字比较必需 Skill 的 snapshot／cache 文件；安装目录带 `.codex-marketplace-install.json` 时还要与 snapshot revision 一致。这个 resolver 不在 P1 只读审计进程中执行。两条路径都会要求真实且非 symlink 的绝对目录，并校验每个 `SKILL.md` 的 frontmatter `name`。不能拿 Claude registry 验收 `codex-acp`，不能拿 Codex cache 猜 Claude runtime，也不能拿 marketplace checkout 代替已安装产物；同名 local marketplace 遮蔽 Git marketplace时必须 fail closed，不能把旧 clone 误报成新版本。
 
 ## 6. Session 与并行
 
@@ -457,7 +442,7 @@ Workflow 负责主动唤醒，不做权限决策：
 "$BUZZ_CLI" workflows create --channel <CH> --yaml "$(cat wf.yaml)"
 ```
 
-可复用方法、基线选择、判据和报告骨架写在对应 Skill；项目、领域背景、时区、默认指标与长期基线政策写在 Canvas；Workflow 保留 Agent mention、Skill 名，以及复盘对象、复盘周期、分析时点、业务日历切点、对比窗口、full refresh 等 Workflow 专属信息，不重复 Channel ID、project、权限或通用方法；Agent prompt 只放身份、安全边界、凭据状态和项目／数据出口 allowlist。Prompt 必须说明“唤醒消息正文就是本次任务指令”。定时 Workflow 缺少适用的运行参数时，配置验收必须失败，不能让 Agent 临场猜测。任何统计都必须拉全分页，报告总数可追到 `total`／`hasMore`；拉不全时明确样本数／总数。
+可复用方法、基线选择、判据和报告骨架写在对应 Skill；项目、领域背景、时区、默认指标与长期基线政策写在 Canvas；Workflow 保留 Agent mention、Skill 名，以及复盘对象、复盘周期、分析时点、业务日历切点、对比窗口、full refresh 等 Workflow 专属信息，不重复 Channel ID、project、权限或通用方法；Agent prompt 只放身份、安全边界、凭据状态和项目／数据出口 allowlist。所有已部署 prompt 必须逐字包含 [agent-prompt-contract.md](agent-prompt-contract.md) 的 common 与对应角色片段；该文件是漂移审计直接读取的 SSOT，不得另抄一份检查表。定时 Workflow 缺少适用的运行参数时，配置验收必须失败，不能让 Agent 临场猜测。任何统计都必须拉全分页，报告总数可追到 `total`／`hasMore`；拉不全时明确样本数／总数。
 
 如果 Agent 要把内部分析结果发回 Buzz，owner prompt 必须显式写出数据出口 allowlist：允许的脱敏聚合内容、受控链接类型、固定 Channel 和同 Thread 约束。该窄路径可以写明不需要逐次披露审批；实际读者仍由 Channel ACL 决定，prompt 不复制成员名单。其它 Channel、私信、外部系统、原始行、标识符、secret 与未受控链接仍然 fail closed。Workflow 不能授予披露权限，消息正文也不能扩大这项 standing authorization。正向 L4 必须证明完整合规报告能自动回帖，负向 L4 必须证明越界目的地或敏感内容仍被拦截。
 
@@ -523,7 +508,7 @@ python3 skills/buzz-agent-setup/scripts/run_offline_tests.py
    ```
 
    然后用 REQ `{kinds:[30177],authors:[<owner>]}` 回读，确认该 agent 的策略已消失，而不是只看 `OK true`。
-5. **删本机配置与 state**：agent 的 env、prompt、日志、启动脚本 `run-<name>.sh`、systemd 单元文件（`~/.config/systemd/user/buzz-local-<name>.service`，删后 `systemctl --user daemon-reload`）、责任人 helper 配置里它的条目，以及它的 state 目录。env 里有私钥和旧 token，删前不要打印内容。
+5. **删本机配置与 state**：agent 的 env、prompt、日志、systemd 单元文件（`~/.config/systemd/user/buzz-local-<name>.service`，删后 `systemctl --user daemon-reload`）、责任人 helper 配置里它的条目，以及它的 state 目录；共享启动脚本 `run-agent.py` 仅在最后一个持久 agent 删除后才移除。env 里有私钥和旧 token，删前不要打印内容。
 6. **删工作目录**：先在里面 `git status`、`git log --branches --not --remotes`，确认没有未提交改动和未推送提交；有就先处理（推送或另存），再删。
 7. **清掉别处对它的引用**：Channel Canvas 的 Agent 表、频道描述、其它 agent prompt 里写的转交对象、同步路由配置（`route.json` 里的 role→mention）。漏了这一步，别人会继续 @ 一个已经不存在的 agent，或让 route gate 把消息路由给它。
 

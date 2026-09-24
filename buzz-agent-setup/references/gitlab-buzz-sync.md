@@ -7,7 +7,7 @@
 
 适用场景：GitLab 项目 webhook 能推送的每一类变更都同步到业务频道。
 - 每个 Issue 对应唯一一个 Thread；MR 的事实只发进 binding 指向的一个 Thread（closes 的 Issue → 分支名白名单 Issue → 第一条 origin → 分支族 → 自开门牌，[ADR-0015](../../../docs/05-adr/0015-deliver-an-mr-to-one-thread-and-cross-link-the-others.md)），其他关联的 Issue／origin 只在 MR 首次出现时各收一条交叉链接；未关联的 MR 按分支族共用 Thread（同源分支，或同一改动的 `<base>-<target>` 扇出，2026-09-18 起）；存量已绑定的 per-MR Thread 不搬迁，按旧规则多发出去的消息也不清理；状态变化回到原 Thread，由 Desk 的确定性本地 route gate 按当前可信 Canvas 规则指派角色 Agent。
-- Thread 的顶层 root 是**门牌**（纯主题卡，无机器 header，issue #78 起）：Issue 📋 / MR 🔀 / 分支 🌿 / 里程碑 🎯，首条及后续事实都 reply 门牌；存量 Thread（root 即首条事实）不搬迁。
+- 新 Issue 的首条状态事实就是 Thread root（只发一条，不写「首次同步」），后续状态卡与评论归入该 Thread；MR 🔀 / 分支 🌿 / 里程碑 🎯仍使用纯主题门牌。已有 Issue 门牌 Thread 不搬迁；见 [ADR-0021](../../../docs/05-adr/0021-use-the-first-issue-fact-as-the-thread-root.md)。
 - **通知政策（2026-09-18，频道 owner 确认，同日两次修订）**：Buzz 承载 Issue / MR / milestone 三类主题 Thread，加上**发布类**即时通知（tag 建删、新 Release——13:16 owner 确认恢复）、**失败类**即时通知（部署失败或受阻、默认分支流水线失败）与项目 access token 7 天内到期提醒。push、feature flag、wiki、成员变化、commit/snippet 评论、流水线与部署的 happy path **一律不通知**（见「顶层通知」）。MR 的交叉链接（`change:xref`，见「MR Thread」）是 Issue／origin Thread 里的一条 Desk 回帖，不是顶层通知，不在这份清单里，也不受 `mute_events` 影响。
 
 依据与相关文件：
@@ -71,19 +71,25 @@ timer 入口 ──template_summary → gitlab_buzz_summary_publish（不变的 
 
 **事实消息**（Thread 内的快照、活动回帖与顶层即时通知）机器 header 在**最后一行**，字段顺序固定、整行完整匹配；人读正文（图标 + 变化短语 + 标题链接，issue #78 起）在 header 之前。GitLab 来源的文本不能占据末行。存量消息（2026-09-18 及更早发出的）仍认物理首行 header，解析器双读。脚本要比较的字段保持机器可读，详见各节。
 
-脚本专用字段挂在 header **必填段之后**的可选 trailer，不进人文读正文：`[desc:<12 位 hex 或 ->]`（描述指纹）、`[note:<id>]`（评论去重）、`[events:<key,key>]`（活动去重）。顺序固定为 desc → note → events，缺项整段省略。Canvas 路由仍按必填段前缀匹配，trailer 在末尾不破坏 prefix。存量消息把 `desc` / `note:` / `events:` 写在正文；读回去重时 header trailer 优先，正文页脚仍双读。
+脚本专用字段挂在 header **必填段之后**的可选 trailer，不进人文读正文：`[desc:<12 位 hex 或 ->]`（描述指纹）、`[note:<id>]`（评论去重）、`[events:<key,key>]`（活动去重）；紧凑状态 overlay 还可带 `[reaction:<token>]`（可恢复的当前 reaction）、`[rev:<正整数>]`（同秒因果顺序）和 `[route:skip]`（只追加历史，不触发 Role）。顺序固定为 desc → note → events → reaction → rev → route，缺项整段省略；后三项只由紧凑状态覆盖层写入。Canvas 路由仍按必填段前缀匹配，trailer 在末尾不破坏 prefix。存量消息把 `desc` / `note:` / `events:` 写在正文；读回去重时 header trailer 优先，正文页脚仍双读。
 
-**门牌（plaque，issue #78 起）**是 Thread 的顶层 root：纯主题卡，**没有 header**——`<图标> **<#iid 标题>**` / 项目 `path_with_namespace` / 末行裸对象 URL。末行 URL 是门牌唯一的机器身份（确定性正则识别对象），用于崩溃恢复找回与频道窗口扫描；可变字段（state、labels）不上门牌（门牌冻结，活状态只在事实里）；Nostr 消息不可编辑，门牌标题是创建时刻快照，改名后续标题出现在事实里。2026-09-18 之前的存量 Thread（root 即首条事实）不搬迁、行为不变。
+**门牌（plaque，issue #78 起）**用于 MR、分支、里程碑和旧 Issue Thread 的顶层 root：纯主题卡，**没有 header**——`<图标> **<#iid 标题>**` / 项目 `path_with_namespace` / 末行裸对象 URL。末行 URL 是门牌唯一的机器身份，用于崩溃恢复找回与频道窗口扫描；可变字段不上门牌，门牌本身不覆盖。新 Issue 自 [ADR-0021](../../../docs/05-adr/0021-use-the-first-issue-fact-as-the-thread-root.md) 起直接用带机器 header 的首条状态事实作 root；其 id 同时是 binding 的 `root_event_id` 与紧凑状态卡的编辑目标。旧门牌与更早的事实 root 都照常回读，不迁移。
 
-**work_items URL（engineering/skills#101）**：新版 GitLab 给部分 Issue（含 Task）的 `web_url` 是 `<项目>/-/work_items/<iid>`。识别时 `/-/issues/<iid>` 与 `/-/work_items/<iid>` 都是 issue；新发的 issue 门牌末行统一写规范的 `/-/issues/<iid>`（事实里的链接保持 GitLab 给的原样），已经按 work_items 形式发出的门牌继续可读，不搬迁。此前门牌末行是 work_items 形式的 issue 会被判成「bound root is not a readable Desk root」，整轮报错。
+**紧凑状态卡（`compact_status_updates: true`）**：Issue/MR 第一个事实仍发一条 kind `9`；新 Issue 的这条就是 root。之后的 Git 状态、字段、提交、批准和 MR 流水线结果不再各发一份完整状态回复，而是向这条事实发布 kind `40003` 完整替换层。Buzz 0.5.23 的 `messages thread --event <root>` 不能单独证明每条 edit，因此同步器还必须从该 Thread 最早 GitLab 事实的时间起，分页执行 `messages get --channel <channel> --kinds 40003`，只合入指向本 Thread publisher-authored GitLab kind `9` 的覆盖层；不能只依赖 thread 查询。adapter 对所有 publisher-authored GitLab kind `9` 候选和每条入选 kind `40003` 强制核对 exact Channel、canonical NIP-01 id 与 BIP-340 signature，relay 不能靠伪造 `pubkey` / 高 `rev` 劫持编辑目标。可读正文末尾追加精确到秒的 UTC `状态记录`（按时间排序，最多最近 100 条，内容超限时优先保留最近记录），当前 Git 状态从首条事实开始就同时以 Desk reaction 表示；字段内容变化不覆盖已有状态 reaction。overlay header 用 `reaction` 明确记录当前 reaction，重启自愈不从可能保留的旧 headline 猜；同秒 edit 由单调 `rev` 排序，不拿 event id 哈希推断因果；只追加旧流水线等历史而保留当前 headline 的 overlay 带 `route:skip`，不会把当前 Role 再唤醒。若旧发布器曾为当前层与 `route:skip` 历史层写出相同 `rev`，读取器只在“恰好一个非 skip 层”时恢复该当前层；同 target、同 rev 且替换正文逐字相同的多个已签名事件也收敛为同一状态；其余 revision 冲突仍失败关闭。旧事实没有样式标题时，迁移记录其有界单行摘要，不拖停整个 Channel。edit、reaction 和所需提醒在写入前作为一组落 durable outbox，严格回读；未尝试的 continuation 可在重启后安全执行，已尝试但结果未知的写入仍失败关闭。存量 Thread 升级后以该对象最新的非评论状态事实为主卡，已有旧回复不删除。
+
+Comment 不是状态：Issue/MR comment 始终继续作为 canonical Thread 中独立的 kind `9` 回复发送，不写进主卡的 `状态记录`，也不改变 reaction。飞书桥把 kind `40003` 映射成原飞书消息的 update，而 comment 仍映射成新消息；状态记录位于折叠区之外、GitLab 导航按钮之前。
+
+唯一的状态类新回复例外是**真实注意力提醒**：pinned Buzz CLI 的 `messages edit` 不能给 kind `40003` 新增 `p` tag；当一次状态变化确实要通知责任人时，同步器另发一条带真实 `p` tag、UTC 时间和唯一变更标识的极简 `🔔 Git 状态需要你关注` 回复。它不是重复状态正文，飞书也会把它显示为一条极简提醒；没有收件人时不发。
+
+**work_items URL（engineering/skills#101）**：新版 GitLab 给部分 Issue（含 Task）的 `web_url` 是 `<项目>/-/work_items/<iid>`。识别时 `/-/issues/<iid>` 与 `/-/work_items/<iid>` 都是 issue；新事实 root 的标题链接保持 GitLab 给的原样，header 提供机器身份。旧门牌末行按当时规则可能是规范的 `/-/issues/<iid>`，也可能是 `/-/work_items/<iid>`，两种都继续可读，不搬迁。此前门牌末行是 work_items 形式的 issue 会被判成「bound root is not a readable Desk root」，整轮报错。
 
 ### Issue Thread
 
-- header：`[gitlab-notify:v1][object:issue][type:<t>][status:<s>][state:<opened|closed>][change:<routing|content|activity>][project:<id>][issue:<iid>]`，可选 trailer `[desc:…][note:…][events:…]`。
+- header：`[gitlab-notify:v1][object:issue][type:<t>][status:<s>][state:<opened|closed>][change:<routing|content|activity>][project:<id>][issue:<iid>]`，可选 trailer 固定顺序为 `[desc:…][note:…][events:…][reaction:…][rev:…][route:skip]`（各段均可省略；后三段仅紧凑状态 overlay）。
 - type/status 取自 `type::` / `status::` 单值 label，缺失或多值记为 `unknown`。
-- **Thread root 是门牌**（issue #78 起）：📋 Issue 门牌（见「消息协议」开头），首个事实（`change:routing`、`首次同步` 短语）reply 门牌；binding note 绑门牌 id。描述或人类评论带 origin（见 MR「origin 绑定」）且尚未绑定的新 Issue / Task 不另开门牌，事实 reply 那些 Thread（Desk 门牌／事实，或人发的顶层消息，第一条作 binding；ADR-0014）。人的话题里不伪造门牌：首个事实的标题行已带 `[#N 标题](URL)`。存量 Thread 不变。
+- **新 Issue 的首个事实就是 root**（ADR-0021）：一条 kind `9` 状态卡含 `change:routing` header、标题链接和当前字段，binding note 绑它的 id；没有第二条“首次同步”回复。之后状态变化按配置回复 root 或以 kind `40003` 原位更新 root，评论仍回复 root。描述或人类评论带 origin（见 MR「origin 绑定」）且尚未绑定的新 Issue / Task 不另开 root，首个事实回复那个已有 Thread（Desk 门牌／事实，或人发的顶层消息，第一条作 binding；ADR-0014）。已有门牌 Thread 不搬迁。
 - 快照正文（issue #78 起的样式，依次）：
-  1. `<图标> **<变化短语>** · [#<iid> <标题>](<url>)`：短语由 change 分类查固定映射表（首次同步 / 状态流转 → 已打开|已关闭 / 归类变更 / 标题描述更新 / 字段更新），无 LLM；标题里的 `[ ] \` 转义，GitLab 标题无法伪造 markdown 链接；
+  1. `<图标> **<变化短语>** · [#<iid> <标题>](<url>)`：首条为 `📋 **已打开**` 或 `📋 **已关闭**`，后续短语由 change 分类查固定映射表（状态流转 → 已打开|已关闭 / 归类变更 / 标题描述更新 / 字段更新），无 LLM；标题里的 `[ ] \` 转义，GitLab 标题无法伪造 markdown 链接；
   2. `labels <a,b> · assignees <x> · milestone <m>`：只列非空项，全空整行省略。描述指纹在 header `[desc:…]`，不进人读行。
 - 列表或值为空时视为 `-`（回读缺省）；名字恰好是 `-` 的 label 写成全角 `－`，否则每轮都会被判成 label 变化重发。label、milestone 值里的 `·` 写成 `•`（MR 同理），分隔符不会被拆开或伪造。
 - 上一版从 Desk 在该 Thread 里的最新快照消息还原：新样式解析器优先，2026-09-18 之前的旧 `key: value` 长格式仍能读回，不会因格式变化多发 update。
@@ -101,7 +107,7 @@ timer 入口 ──template_summary → gitlab_buzz_summary_publish（不变的 
 
 ### MR Thread
 
-- header：`[gitlab-notify:v1][object:mr][state:<opened|merged|closed|locked>][draft:<yes|no>][change:<lifecycle|update|activity>][transition:<reviewable|none>][project:<id>][mr:<iid>]`，可选 trailer `[desc:…][note:…][events:…]`。
+- header：`[gitlab-notify:v1][object:mr][state:<opened|merged|closed|locked>][draft:<yes|no>][change:<lifecycle|update|activity>][transition:<reviewable|none>][project:<id>][mr:<iid>]`，可选 trailer 固定顺序为 `[desc:…][note:…][events:…][reaction:…][rev:…][route:skip]`（各段均可省略；后三段仅紧凑状态 overlay）。
 - **MR 的事实只发进一个 Thread（2026-09-21 决策，[ADR-0015](../../../docs/05-adr/0015-deliver-an-mr-to-one-thread-and-cross-link-the-others.md)；取代 2026-09-17「归并」把事实各发一份进关联 Issue 的 Thread 的做法，那条规则从未写成 ADR）**：MR 的事实——首条事实、生命周期／更新回帖、评论、流水线与批准活动、kind 40008 Diff——**只发进 binding 指向的一个 Thread**。落点顺序：GitLab `closes_issues`（第一个）→ 分支名白名单（`<word>-<iid>-<slug>`／`<iid>-<slug>`）→ 第一条 origin → 分支族 → 自开 🔀 门牌；Issue 需存在，被 exclude（如 confidential）或 Thread 读不到／已满的跳过并计入 `skipped.excluded`，改用下一个候选；关联的 Issue 全被跳过又没有 origin 的 MR 不发布（也不自开门牌）。落点是 origin 而它的 Thread 已满（500 回帖）时，该 MR 按对象级隔离停摆（不写 binding、不发任何消息），不改投别处。首条事实 reply-to 落点 Thread 的根，后续事实 reply-to 该 MR 在此 Thread 的上一条（子链成组，多 MR 互不穿插）；binding note 绑 `(project, mr, iid) → 落点 root`，且在发出 MR 事实**之前**写入，崩溃重跑走 update 路径、不会另开 per-MR root。人类 @、`unmapped` 行与 `transition:reviewable` 只出现在这个 Thread，所以 Canvas route gate 只指派一次评审，发 Diff 不唤醒 Review Role。无关联或存量已绑定的 MR 维持 per-MR root（或走 origin／分支族），Diff 也留在绑定 Thread。
 - **`related_merge_requests` 反查只用来生成链接**（ADR-0015）：反查命中的 Issue（Issue 文本里提到 MR 号就算）不再决定 MR 落在哪个 Thread，也不写 binding；它出现在首条事实的 `issues:` 行里，并收到一条交叉链接。只有反查命中的 MR 自开门牌（或进 origin／分支族）。反查命中但还没有 Thread 的 Issue（早于 `since` 的存量、停摆中）不会为了一条链接被建出 Thread：没有交叉链接，也不进 `issues:` 行；被 exclude 的跳过并计入 `skipped.excluded`。没有 binding 的存量 MR 出现流水线等活动时，反查命中同样不会让它绑进 Issue Thread，活动计入 `unbound`。
 - **交叉链接（`change:xref`，ADR-0015）**：落点 Thread 之外的每个关联 Thread——第二个及之后的 closes／白名单 Issue、反查命中的 Issue（与前者合计最多 3 个 Issue）、第二条及之后的 origin——在 MR **首次出现**（新 MR 的那一轮）各收**一条**交叉链接，reply 在该 Thread 的根下。
@@ -121,10 +127,10 @@ timer 入口 ──template_summary → gitlab_buzz_summary_publish（不变的 
   - 注释键集合固定；JSON 非法或字段不合法（**格式非法**）fail closed（该对象 stall，见「对象级隔离」）；同一文本里多条有效 origin 去重后**都回复**，不再因指向不同 Thread 而整轮失败；
   - `channel_id` 必须等于本同步频道；
   - **标记指向的根**必须是：kind 9、恰好一个 `h` 标签且等于本频道 UUID、**没有 `e` 标签**（顶层，不是回帖）、`buzz messages thread --channel <本频道> --event <root>` 读得到。**作者不限**（人、Feishu 镜像身份、别的 Agent）；Desk 自己发的消息只认门牌（末行是 GitLab Issue / MR / 里程碑 URL）或带合法同步 header 的事实，Desk 的普通发言（它也在讨论里说话）不是根。人的顶层消息只按结构判断，内容不当门牌／header 去解析。标记点名一条回帖时：Desk 的事实回帖、以及 Desk 门牌 Thread 里任何人的回帖，先走到该 Thread 的根（老规则）；根不是 Desk 的，点名的回帖不算顶层，见下一条；
-  - **失败模式：回退，不停摆**（ADR-0014）。格式合法的标记指向的根不可用——读不到（被删或退出码 1）、是回帖（根也不是 Desk 的）、`channel_id` 不符、不是顶层 kind 9 频道消息、是 Desk 的普通发言——等同没有 origin：对象照常同步，**自开门牌并写 binding**，同步报告的 `origin_fallbacks` 记一条 `{project, object, iid, reason}`（每个对象每个原因一条，`status` 仍是 `ok`，对象没有落后）。仍按老办法的：标记**格式非法**（JSON 非法、键集合不对、`channel_id` 不是 UUID、`root_event_id` 不是 64 位 hex）只让**该对象**停摆（`stalled`，不写 binding、不发任何消息，见「对象级隔离」，ADR-0009），其余对象照常同步；CLI 退出码 2+（relay／认证失败）不是数据问题，仍整轮失败；裸深链不可用一律忽略。回退原因带对象编号，形如 `issue 81 origin root cannot be read (…)`、`issue 81 origin root is a reply, not a top-level message in this channel`：修复方法是把那个对象描述（或评论）里的标记改成话题的**顶层根**（不是话题中间的回帖 id），或直接删掉；binding 已写的对象不会因此搬家；
+  - **失败模式：回退，不停摆**（ADR-0014）。格式合法的标记指向的根不可用——读不到（被删或退出码 1）、是回帖（根也不是 Desk 的）、`channel_id` 不符、不是顶层 kind 9 频道消息、是 Desk 的普通发言——等同没有 origin：对象照常同步，**自开 root 并写 binding**（Issue 是事实卡，MR / milestone 是门牌），同步报告的 `origin_fallbacks` 记一条 `{project, object, iid, reason}`（每个对象每个原因一条，`status` 仍是 `ok`，对象没有落后）。仍按老办法的：标记**格式非法**（JSON 非法、键集合不对、`channel_id` 不是 UUID、`root_event_id` 不是 64 位 hex）只让**该对象**停摆（`stalled`，不写 binding、不发任何消息，见「对象级隔离」，ADR-0009），其余对象照常同步；CLI 退出码 2+（relay／认证失败）不是数据问题，仍整轮失败；裸深链不可用一律忽略。回退原因带对象编号，形如 `issue 81 origin root cannot be read (…)`、`issue 81 origin root is a reply, not a top-level message in this channel`：修复方法是把那个对象描述（或评论）里的标记改成话题的**顶层根**（不是话题中间的回帖 id），或直接删掉；binding 已写的对象不会因此搬家；
   - 系统 note、internal／confidential 评论、bot 评论和 binding note 不认 origin；
-  - MR 落点优先级（ADR-0015）：GitLab `closes_issues`（第一个）→ 分支名白名单 → **第一条** origin → 分支族 → 自开门牌，`related_merge_requests` 反查不参与；MR 描述里指向多个 Thread 时，只有第一条 origin（binding）收事实，其余各收一条交叉链接。Issue / Task / milestone 在尚未绑定且有 origin 时绑到**第一条** origin Thread，否则自开门牌，其余有效 origin 每轮各投一份本轮新事实（独立去重，mention / `transition:reviewable` 只在 binding 指向的第一条；这条只适用于 Issue / Task / milestone）；
-  - **人的顶层消息作根**：binding note 的 `root_event_id` 就是那条消息，事实**回复在该话题里**，不再另开门牌线程；不在人的消息下伪造门牌行，人的消息不会被编辑——首个事实（`首次同步`／`新建`／里程碑事实）的标题行本来就带 `[#N 标题](URL)`，话题里的人第一眼就能看到这个对象的标题和链接。一个话题里可以有多个对象（Issue、MR），每个对象的事实按各自 header 分开去重；`transition:reviewable` 每个话题仍只指派一次评审；话题里参与者写的、看起来像 header 的文字不算 Desk 事实（只认 Desk 发的）；绑定了人的话题的对象，话题回帖到 500 条上限时该对象 stall（沿用上限）。绑定根之后每轮都要读得到：话题根被删，该对象 stall（`bound root cannot be read`）；
+  - MR 落点优先级（ADR-0015）：GitLab `closes_issues`（第一个）→ 分支名白名单 → **第一条** origin → 分支族 → 自开门牌，`related_merge_requests` 反查不参与；MR 描述里指向多个 Thread 时，只有第一条 origin（binding）收事实，其余各收一条交叉链接。Issue / Task / milestone 在尚未绑定且有 origin 时绑到**第一条** origin Thread，否则自开 root（Issue / Task 为首条事实，milestone 为门牌），其余有效 origin 每轮各投一份本轮新事实（独立去重，mention / `transition:reviewable` 只在 binding 指向的第一条；这条只适用于 Issue / Task / milestone）；
+  - **人的顶层消息作根**：binding note 的 `root_event_id` 就是那条消息，事实**回复在该话题里**，不再另开对象 root；不在人的消息下伪造门牌行，人的消息不会被编辑——首个事实的标题行本来就带 `[#N 标题](URL)`，话题里的人第一眼就能看到这个对象的标题和链接。一个话题里可以有多个对象（Issue、MR），每个对象的事实按各自 header 分开去重；`transition:reviewable` 每个话题仍只指派一次评审；话题里参与者写的、看起来像 header 的文字不算 Desk 事实（只认 Desk 发的）；绑定了人的话题的对象，话题回帖到 500 条上限时该对象 stall（沿用上限）。绑定根之后每轮都要读得到：话题根被删，该对象 stall（`bound root cannot be read`）；
   - 已有 binding 的对象不因后来加上 origin 而搬家（例如已绑在门牌线程的对象不会被挪进讨论话题）；Issue / Task / milestone 后来评论里的 origin 仍会各收一份本轮事实，**MR 不会**：已绑定 MR 后来评论里的 origin 既不收事实也不收交叉链接（ADR-0015）。
   Buzz Agent 从频道话题开 Issue / Task / Milestone / 未关联 MR 时，`gitlab-issue-sop` / `gitlab-mr` 在通过下面「origin 写入前检查」（根是本频道顶层 kind 9 消息，人的也行）时写这两行，包括话题根是人类消息；读不到、是回帖、别的 Agent 的无关发言或核对不了就省略两行。GitLab 网页是否把 `buzz://` 自动成链尚未验证（L4），但桌面端和 CLI 能打开。
 - **分支族分组（2026-09-18 决策，issue #77）**：未关联 Issue 的 MR 按「分支族」共用一个 Thread。组键有两个：MR 的**源分支全文**（同分支必同组，不限作者）与**去后缀键**——源分支以 `-<目标分支名>` 结尾且该后缀恰等于此 MR 自己的目标分支时，去掉后缀的基名也是组键（`fix/x-staging`→`staging` 与 `fix/x-master`→`master` 归并为 `fix/x`）；去后缀键仅**同作者**命中，防误合。组内最早开出 per-MR root 的 MR 是组锚点（先到先得，槽位不迁移；历史 per-MR root 会被幂等补登记为锚点，之后的 sibling 直接加入）：sibling 的 binding note 绑 `(project, mr, iid) → 组 root`，事实在组 Thread 内自成子链（机制同 merge-in），组 Thread 读不到／已满时退回自开 root。`transition:reviewable` 每个组 Thread 只指派一次（同「只指派一次评审」决策；单 MR 独占 Thread 的既有行为不变）。
@@ -143,7 +149,7 @@ timer 入口 ──template_summary → gitlab_buzz_summary_publish（不变的 
 - `transition:reviewable` 是 Bridge 根据上一条已确认快照计算的转移事实，只用于非 draft 新建、draft→ready、closed→opened 且非 draft；其余包括 `locked`→`opened`、update 和 activity 都是 `transition:none`。Desk route gate 不根据当前 state 猜测上一状态。
 - **活动回帖的格式**：
   - 评论：快照之后是 `by:`、空行、Markdown 正文，末行 header 带 `[note:<id>]`；没有 `events` trailer，按 note id 去重。
-  - 流水线与批准：快照标题已经说明通过/失败/已批准，不再重复 `event:` 行；知道操作人时加 `by:`，流水线失败时加 `jobs: <失败 job 名,…>`，去重键在 header `[events:<key>]`。MR Thread 里按整个 Thread 的 events 去重，所以流水线重试后以同一终态结束不会再发。
+  - 流水线与批准：快照标题已经说明通过/失败/已批准，不再重复 `event:` 行；流水线标题固定为 `<图标> **#<pipeline_id> <通过／失败／取消>** · …`，ID 紧跟图标、位于事件描述之前；知道操作人时加 `by:`，流水线失败时加 `jobs: <失败 job 名,…>`，去重键在 header `[events:<key>]`。MR Thread 里按整个 Thread 的 events 去重，所以流水线重试后以同一终态结束不会再发。
 - **活动回帖不是快照**。判断 lifecycle/update 时，只和 Thread 里最新一条 root、lifecycle 或 update 消息比较。活动回帖用本轮读到的 MR 快照渲染，所以同一轮里 draft→ready 加流水线结束，也不会吞掉 lifecycle 回帖和它的 @。
 - **MR 流水线**只指 merge request pipeline（ref 为 `refs/merge-requests/<iid>/head`），全部终态进 MR Thread。同一源分支上的 branch pipeline 不通知（2026-09-18 政策）；默认分支失败是即时通知。
 - MR 未绑定时，流水线和批准活动计入 `unbound`，不发。
@@ -167,10 +173,10 @@ origin 的正确性是**写入方**（`gitlab-issue-sop`、`gitlab-mr`、里程�
    - 读得到：`buzz messages thread --channel <本频道 UUID> --event <root>`（也可以 `--link <buzz://message 链接>`）返回的事件里有 `id` 等于该根的那条；
    - 作者若是本频道 Desk（`pubkey` 等于同步配置里的 `publisher_pubkey`），内容必须是门牌（最后一行是 GitLab Issue / MR / 里程碑的 URL）或以 `[gitlab-notify:v1]` header 开头的同步事实；Desk 的普通发言不是根。人、Feishu 镜像身份、别的 Agent 发的顶层消息不看内容。
 
-   这与同步里的 `origin_top_level_root`（人和别的 Agent）、`origin_canonical_root`（Desk 自己的、以及裸深链）是同一条规则。**写话题的顶层根**（读 `messages thread` 返回的、没有 `e` 标签的那条），不要写话题中间某条回帖的 id：人的话题里点名回帖会被当作「不是顶层」而回退成自开门牌。
+   这与同步里的 `origin_top_level_root`（人和别的 Agent）、`origin_canonical_root`（Desk 自己的、以及裸深链）是同一条规则。**写话题的顶层根**（读 `messages thread` 返回的、没有 `e` 标签的那条），不要写话题中间某条回帖的 id：人的话题里点名回帖会被当作「不是顶层」而回退成自开 root（Issue 为首条事实）。
 2. **省略。** 不是在当前话题里被要求开的（批量导入、无来源）、根读不到、是回帖、是别的 Agent 的无关发言，或者上面任何一条核对不了——**两行都省略**，包括没有 HTML 注释的裸链接。同步会给这个对象自己建门牌并在 GitLab 里写 binding，人从门牌就能回到 Buzz。批量创建时对每个对象各自检查，不要把同一个未核实的根复制到一批对象。
 3. **裸 `buzz://message?…` 链接只是提示**（ADR-0011）：完整且指向本频道 Desk 门牌／事实的会被当作 origin，不需要 HTML 注释，放进反引号、括号或引用块也一样会被识别；指向人类消息、读不到或占位符／省略号写法的会被忽略，不会让对象停摆，也不会把对象绑到那个话题（要绑到话题，只有 HTML 标记可以）。仍不要在描述或评论里为了「引用一下」贴人类消息的 `buzz://message` 链接；要引用就写频道名加一句话描述。
-4. **已经写错或想撤回**：格式非法的标记（JSON 坏了、键不对）会让**该对象**停摆，修法是改对或删掉标记，下一轮自动恢复；格式合法但根不可用的标记不会停摆，对象照常自开门牌并在报告的 `origin_fallbacks` 里留一条，把标记改成话题的顶层根或删掉即可（binding 已写的对象不会搬家）。想让已绑到话题的对象改回自己的门牌：删掉描述里的标记，再删掉 GitLab 里同步 bot 写的 binding note，下一轮会新开门牌。
+4. **已经写错或想撤回**：格式非法的标记（JSON 坏了、键不对）会让**该对象**停摆，修法是改对或删掉标记，下一轮自动恢复；格式合法但根不可用的标记不会停摆，对象照常自开 root 并在报告的 `origin_fallbacks` 里留一条，把标记改成话题的顶层根或删掉即可（binding 已写的对象不会搬家）。想让已绑到话题的对象改回自己的 Thread：删掉描述里的标记，再删掉 GitLab 里同步 bot 写的 binding note，下一轮会新开对象 root（Issue 为首条事实，MR／里程碑为门牌）。
 
 
 ### 顶层通知
@@ -190,7 +196,7 @@ origin 的正确性是**写入方**（`gitlab-issue-sop`、`gitlab-mr`、里程�
 
 - **不再通知的类型**（2026-09-18 政策砍掉，历史版本发过）：`feature_flag`（开关变化）、push / 分支 pipeline / 部署的 happy path、wiki、成员变化、commit/snippet 评论、每轮摘要（`object:activity digest`）。tag 与 Release 曾在当日上午版本被砍、13:16 经 owner 确认恢复（发布信号）。被砍类型的渲染与路由代码保留在脚本里（可回滚），但 live 数据不再进入。
 - **即时通知**正文依次是（issue #78 起样式化）：
-  - `<图标> **<短语>** · <标题>`（如 `🔴 **部署失败** · pages-publisher`；短语查固定映射表）；
+  - pipeline 固定为 `<图标> **#<pipeline_id> <短语>**`（如 `❌ **#224905 主分支流水线失败**`），ID 紧跟图标、位于事件描述之前且不在末尾重复；其他类型仍是 `<图标> **<短语>** · <标题>`（如 `🔴 **部署失败** · pages-publisher`）；短语查固定映射表；
   - 裸 URL 行（自动成链）；
   - `ref:`（有分支或 tag 时）、`by:`（知道操作人时）、`commits:`（push 类带提交数时）；
   - 去重键在 header `[events:<key>]`（存量消息仍可能在正文有 `events:` 行，读回双读）。
@@ -265,6 +271,7 @@ origin 的正确性是**写入方**（`gitlab-issue-sop`、`gitlab-mr`、里程�
 | `since` | 是 | 起始时间（UTC）。早于它创建且没有绑定的对象不回灌 |
 | `audience` | **已废除（ADR-0006）** | 频道成员身份本身即受众授权；配置中不得再出现 `audience`（含 `audience.allowed_pubkeys`），出现即被 `validate_config` 拒绝，owner 需删除该块 |
 | `include_confidential` | 否，默认 `false` | 是否同步 confidential Issue |
+| `compact_status_updates` | 否，默认 `false` | `true` 时把 Issue/MR 后续状态、字段、提交、批准和 MR 流水线原位编辑到同一事实卡并追加带 UTC 时间的「状态记录」，reaction 表示当前 Git 状态；comment 仍发独立消息。生产 Channel 推荐开启；默认关闭只为兼容尚未升级 edit/reaction 消费端的部署 |
 | `exclude` | 否，默认 `[]` | 每项是 `{"assignee_username": "…"}` 或 `{"label": "…"}`；命中的 Issue/MR 整个跳过 |
 | `mute_events` | 否，默认不屏蔽 | 本频道不要的**顶层即时通知**，每项 `"<object>:<event>"` 或 `"<object>:*"`。可屏蔽的只有脚本真会发的组合：`pipeline:failed`（默认分支失败）、`deployment:failed` / `deployment:blocked`、`access_token:expiring`、`tag:tag_created` / `tag:tag_deleted` / `tag:pushed`、`release:created`（Release 删除通知目前只有 webhook 路径会产出，轮询不发，所以不能屏蔽）；object 或事件名写错、写了 issue/mr/note/milestone/sync 等线程与系统记录，整份配置被 `validate_config` 拒绝（`status: error`，零发送），不会悄悄什么都没屏蔽。命中的记录在产出时丢弃，不发也不占去重键；**取消屏蔽后不会回补屏蔽期间的通知**（cursor 只看扫描时间；例外：`access_token:expiring` 是当日快照，取消屏蔽后下一轮会发当天仍在 0–7 天到期窗口内的 token 通知）。MR 流水线结果是 MR Thread 里的事实，不受 `pipeline:*` 影响。例：`["deployment:blocked"]`（手动部署 job 在等人点，pipeline 状态是 `manual`，每次 main 推送来一条）。注意手动 job 失败时 pipeline 仍是 `manual`，不会有「主分支流水线失败」，屏蔽 `deployment:failed` 就等于没人收到这类部署失败。只对轮询路径生效：webhook 归一化目前没有生产调用方，将来接上发送方时需要一并接 mute |
 | `diff` | 否 | `{"enabled": false, "private": false}`。非 public（private、internal）项目还需要 `private: true` |
@@ -422,7 +429,7 @@ Buzz CLI 子进程只继承白名单变量（`HOME`、`PATH`、`LANG`、`BUZZ_RE
   - 存游标（本轮扫描起点 − 60 秒）以及绑定的频道、`since`、项目集合。
   - 频道、`since`、项目集合任一与配置不符，或游标晚于 GitLab 服务器时间，就忽略整个缓存，从 `since` 扫。
   - 本轮 `status: error`、`locked` 或 dry-run 时不推进。缓存丢失只会从 `since` 多读；去重仍依赖 binding、频道证据与 outbox。
-- **outbox** `gitlab-buzz-sync-<摘要>.outbox.json`：Buzz message、Buzz diff、GitLab binding note 的完整确定性 payload 在动作前写为 `PENDING`，严格 readback 后转为 `ACKED`。重启先恢复 PENDING；Buzz 写入无法证明完成时整轮停止，确定性 binding note 可重试并在严格回读后 ACK。ACK 记录最多保留 1000 条。
+- **outbox** `gitlab-buzz-sync-<摘要>.outbox.json`：Buzz message、edit、status reaction、diff 与 GitLab binding note 的完整确定性 payload 在动作前写为 `PENDING`，严格 readback 后转为 `ACKED`。同一紧凑状态变更的 edit、reaction、注意力提醒先一次原子落盘；`attempted:false` 表示崩溃前明确还未调用外部写入，可安全续跑，已尝试但无法证明完成的 message/edit/diff 继续失败关闭。reaction 与 binding note 可幂等补偿；明确的本地/relay 拒绝会清掉对应 pending，edit 的明确零写入拒绝会原子取消整组未执行 continuation。ACK 记录最多保留 1000 条。
 - **summary request**（同文件，`kind: summary_request`）：`PENDING` → runner 认领 → `SUMMARIZING` → publisher 绑定 prose 后 → `PUBLISHING`（`publication` 含 `content`、`content_sha256`、`phase`）→ 严格 readback 后 `ACKED`。`phase: bound` 表示尚未证明发出：明确被拒的发送只重发该绑定内容；一旦发送结果未知（超时、accepted 但不可读）转 `phase: unproven`，之后只允许 readback 证明，绝不重发。存在任何 pending summary request 时，本轮扫描提前返回，cursor 不推进。**2026-09-18 政策后不再产生新 request**；升级前遗留的 pending 会被 publisher 按模板排空。
 - **branch bindings** `branch-bindings-<project_id>.json`（每 project 一份）：feature 分支 Thread 的 `规范化分支名 → root` 缓存（归因梯子专用；政策后梯子不投喂，文件不再被读取，保留以防回滚）。
 - **milestone bindings** `milestone-bindings-<project_id>.json`（每 project 一份，2026-09-18 政策新增）：`milestone iid → 🎯 门牌 root` 缓存。恢复梯子是「绑定文件 → 按门牌 URL 全频道搜索（`messages search`，同 Issue/MR root 找回）→ 新建门牌」；找到后重新锚定，不开重复 Thread。文件丢失只触发一次找回；读不出或损坏（非法 JSON、schema 不符）时整轮 fail-closed 退出，不静默重建，人工移走坏文件后下一轮恢复。
@@ -455,7 +462,7 @@ stdout 只有一个 JSON 对象，不含 Issue 标题，也不含任何 secret�
 | `degraded` | 本轮发生过的降级信号（去重），形如 `<project>:related_query:HTTP 500`、`<project>:milestone_identity:N unresolved`、`<project>:issue:<iid>:stalled`。非空时 `status` 为 `degraded`，退出码仍为 0 |
 | `diffs` / `diff_skipped` | 发出的 diff 文件数；跳过的文件数 |
 | `stalled` | 本轮被 stall 的 Issue／MR：`[{project, object, iid, reason}]`。`reason` 已中和 `@` 与 `nostr:`，带对象编号；只有 `project/object/iid` 会写进 cache（事件驱动分组另存记录，见「对象级隔离」），下一轮据此重读这些对象 |
-| `origin_fallbacks` | 本轮因格式合法的 origin 标记指向的根不可用（读不到、回帖、channel 不符、不是顶层消息、Desk 的普通发言）而**回退成自开门牌**的对象：`[{project, object, iid, reason}]`（每个对象每个原因一条，`reason` 已中和 `@` 与 `nostr:`）。不改变 `status`，对象照常同步；没有时是空列表。Desk runner 只把条数带进自己的结果（`origin_fallbacks: N`，没有回退时没有这个键），原因文本留在 sync 子进程的报告里。`--dry-run` 同样会列出（ADR-0014） |
+| `origin_fallbacks` | 本轮因格式合法的 origin 标记指向的根不可用（读不到、回帖、channel 不符、不是顶层消息、Desk 的普通发言）而**回退成自开 root**的对象：`[{project, object, iid, reason}]`（每个对象每个原因一条，`reason` 已中和 `@` 与 `nostr:`）。不改变 `status`，对象照常同步；没有时是空列表。Desk runner 只把条数带进自己的结果（`origin_fallbacks: N`，没有回退时没有这个键），原因文本留在 sync 子进程的报告里。`--dry-run` 同样会列出（ADR-0014） |
 
 退出码：
 - `ok`、`degraded`、`locked` 为 0，`error` 为 1。
@@ -495,7 +502,7 @@ private／internal 项目在整轮预检以及每个 Buzz message/diff 和 GitLa
 
 ### 去重与恢复
 
-- **Issue/MR**：binding note 是跨系统绑定事实。root 已发、note 未写时，按「Bridge 作者 + 频道 + 对象 URL 路径尾」全文搜索 root 找回（issue #78 起：门牌没有 header，URL 是门牌与旧事实 root 共同携带的唯一确定性文本；命中上限按首错停轮），只看该对象 `created_at` − 15 分钟之后的 publisher 消息。候选顶层消息按「header 的 (project, object, iid) 或门牌末行 URL 精确相等（work_items 与 issues 形式视为同一 issue URL）」判定，多于一个候选拒绝恢复；Issue 在规范 URL 没有命中时，会在同一时间窗内再按 work_items 形式搜一次，找回旧门牌。**搜索词是 URL 的路径尾**（`/-/issues/N`、`/-/merge_requests/N`、`/-/milestones/N`）：relay 0.2.1 全文搜索对完整 URL 命不中（engineering/skills#106），路径尾能命中，命中后再在本地按精确 URL 过滤；「命中上限」看的是 relay 的原始命中数。outbox 同时约束 crash recovery：PENDING 的 Buzz 消息按同样证据证明已发布后 ACK；门牌投递在 outbox payload 里显式带 `project_id`（无 header 可解析），投递闸门的可见性复查以此为准。
+- **Issue/MR**：binding note 是跨系统绑定事实。root 已发、note 未写时，按「Bridge 作者 + 频道 + 对象 URL 路径尾」全文搜索 root 找回（新 Issue 事实 root 按 header 核对，旧门牌按末行 URL 核对；命中上限按首错停轮），只看该对象 `created_at` − 15 分钟之后的 publisher 消息。候选顶层消息按「header 的 (project, object, iid) 或门牌末行 URL 精确相等（work_items 与 issues 形式视为同一 issue URL）」判定，多于一个候选拒绝恢复；Issue 在规范 URL 没有命中时，会在同一时间窗内再按 work_items 形式搜一次，找回事实 root 或旧门牌。**搜索词是 URL 的路径尾**（`/-/issues/N`、`/-/merge_requests/N`、`/-/milestones/N`）：relay 0.2.1 全文搜索对完整 URL 命不中（engineering/skills#106），路径尾能命中，命中后再在本地按精确 URL 过滤；「命中上限」看的是 relay 的原始命中数。outbox 同时约束 crash recovery：PENDING 的 Buzz 消息按同样证据证明已发布后 ACK；无 header 的门牌投递在 outbox payload 里显式带 `project_id`，投递闸门的可见性复查以此为准。
 - **Thread 内**：评论按 header `[note:<id>]`（存量正文 `note:` 行）去重，MR 活动按 header `[events:<key>]`（存量正文 `events:` 行）去重，Diff 按「同 commit + file 的 kind 40008」去重。只认 Bridge 发的、带合法同步 header 的消息；新消息读 header trailer，存量（header 在首行）仍扫正文全部 `note:` / `events:` 行。
 - **MR 交叉链接**（ADR-0015）：发之前读目标 Thread，已有 Desk 发的、同 project 同 MR iid 的 `change:xref` 消息（header 里有 `xref`，`mr_xref_posted`）就不再发；参与者写的、看起来像 header 的文字不算。交叉链接先于 binding 写入，所以崩溃重跑既不重发也不丢；binding 备注丢失、MR 重新走「新 MR」路径时同样不重发。它没有 `note`／`events` trailer，不参与评论与活动的去重，也不算「上一版事实」。
 - **摘要 request**：prose 摘要没有 header 和 `events:` 行，频道回读永远无法证明它已发布；去重只依赖 owner state——按 project 的无界 acked journal，加上 state 目录内所有 outbox 的 ACK 行并集（含旧 scope）。runner 认领时同一个全局固定清单里出现两个已认领 request、或已认领者不是全局最早，都会按首错失败。
@@ -571,7 +578,7 @@ python3 <SKILL_DIR>/scripts/gitlab_buzz_route_reply.py \
   --config <ROUTE_CONFIG> --state-dir <ROUTE_STATE_DIR> --scan-once
 ```
 
-本地配置从 `references/scripts/gitlab-buzz-route-writer.example.json` 复制。`scan_since` 固定启用边界；`sender_pubkey` 和 `publisher_pubkey` 都是 Desk；每个 Channel 配置可信 Canvas admin pubkeys 和稳定 `roles`。脚本用固定 digest 的 Buzz CLI 执行 `messages get --kinds 40100`，因为 `canvas get` 只返回 content，无法核验 author/envelope；然后扫描 Desk facts，并用 `--reply-to` 和显式 Role `p` tag 回复原 Thread。
+本地配置从 `references/scripts/gitlab-buzz-route-writer.example.json` 复制。`scan_since` 固定启用边界；`sender_pubkey` 和 `publisher_pubkey` 都是 Desk；每个 Channel 配置可信 Canvas admin pubkeys 和稳定 `roles`。脚本用固定 digest 的 Buzz CLI 执行 `messages get --kinds 40100`，因为 `canvas get` 只返回 content，无法核验 author/envelope；再扫描 Desk 的 kind `9,40003` facts：kind `40003` 以 edit id 作为幂等 source、验证其签名与唯一原事件，并回到原事实所在 canonical Thread；最后用 `--reply-to` 和显式 Role `p` tag 回复。因此状态原位更新由 kind `40003` scan 触发，不能只监听 `message_send`；带 `route:skip` 的纯历史 overlay 明确不触发。
 
 每个 source+route+policy 使用 owner-only durable operation：先 `PENDING`，CLI accepted 后保存 event id，严格 readback 后 `ACKED`。send 附近退出或 relay 暂时读不到时，只能按 Desk 签名 marker、精确 Channel/root/Role tag 恢复，不能自动重发；路由 cursor 仅在全轮成功后推进。Canvas 修改只影响之后扫描到的事实，不追溯 `scan_since` 或 durable cursor 之前的历史。
 
@@ -581,6 +588,8 @@ python3 <SKILL_DIR>/scripts/gitlab_buzz_route_reply.py \
 `scripts/gitlab_buzz_route_reply.py`，配置从
 `references/scripts/gitlab-buzz-route-reply.example.json` 复制。它保留相同的 Desk publisher 作者 + 完整 header 行
 前缀判断，但用 `call_webhook` 只把 `channel_id`、`message_id` 和固定 `route_id` 交给服务；服务端仍回读最新可信 Canvas，把 `route_id` 解析到 Canvas 的完整 header 前缀与 code-owned Role mention/pubkey，再用 Buzz CLI 的 `--reply-to` 回到 canonical Thread。
+
+这个旧 Workflow 只有 `message_posted` trigger，不把 kind `40003` edit 当成新消息；因此启用它的同步配置必须保持 `compact_status_updates: false`。紧凑状态模式只能使用上面的默认本地 scanner，除非将来另一个 edit trigger 已完成真实 L4。模板用 `str_contains(trigger_text, "\n[gitlab-notify:v1]…")` 匹配当前格式末行 header；旧的 `str_starts_with(header)` 对当前首行人读 headline 永远不成立。
 
 这不是把信任交给 HTTP 请求：服务回读 relay 事件，验证 Channel、publisher pubkey、kind、完整路由
 前缀和 canonical root；请求不能选择 Role、reason 或 pubkey。配置拒绝 executor Role，发送时显式传入并回读核对唯一 `p` tag，不能依赖可重名的显示名解析。HTTP sender 不能拿 GitLab token，也不能改 binding 或同步游标。Role Agent 的 `respond_to` 必须明确允许该 sender；不能靠降级服务绕过 owner policy。
@@ -622,13 +631,13 @@ Canvas 路由按 header 里的 `type` / `status` 匹配，缺失的 `status` 记
 
 - **这是 SKILL.md Rule 8（自动路由只由 Desk 的确定性 gate 指派）的一个窄例外**：Workflow 不经过 Desk 的路由 gate，所以要自己守住 gate 原本守的东西。`<role-agent>` 必须是非 Desk、非 executor 的角色 Agent；它的 kind:30177 `respond_to` 要允许 Workflow 发送者（否则唤醒被静默丢弃）；Canvas 里保留下面那条永远不命中的占位路由，两条路径不会同时唤醒。
 - **匹配串来自同步脚本自己的渲染**：
-  - 「首次同步」锚在消息**第一行开头**（`str_starts_with(trigger_text, "📋 **首次同步")`）。评论镜像消息以 💬 开头，评论正文（Zendesk 客户写的文字）进不了消息开头，所以伪造不出首条事实；只用 `str_contains` 的话，评论里原样写出那几个字符串就能反复唤醒（已用真实渲染验证）。
+  - 首条已打开状态锚在消息**第一行开头**（`str_starts_with(trigger_text, "📋 **已打开**")`）。后续状态流转以 🔄 开头，评论镜像消息以 💬 开头；评论正文（Zendesk 客户写的文字）进不了消息开头，所以伪造不出首条事实；只用 `str_contains` 的话，评论里原样写出那几个字符串就能反复唤醒（已用真实渲染验证）。
   - type／state／project 匹配 header（在消息**末行**，只能 `str_contains`）。
   - 标签匹配是整条消息的**子串**匹配，标题里写了同样的字、或标签是它的前缀（`source::x-v2`）也会命中：不是安全边界，Agent 处理前回 GitLab 核对标签。标签文字必须是渲染后的写法（`·`→`•`、`,`→`，`、`@`→`＠`、连续空白折成一个空格，含 `"` 会破坏过滤串），标签名避开这些字符。
   - 两个 `type::` 标签、大写 `type::Bug`、创建时已关闭的 Issue 都不匹配（前两者渲染成 `unknown`，后者 `state:closed`）。
   - 过滤串由 `tests/test_issue_first_sync_wake_template.py` 拿真实渲染结果整条求值回归（含评论伪造的负例）；没有在真实 relay 上回归 `str_starts_with` 对 emoji 前缀的处理时，以第一条真实唤醒是否出现为准。
 - **必须带 `trigger_author == "<Desk pubkey>"`**：既校验来源，也防循环（Workflow 自己的唤醒消息和 Agent 的回复都不是 Desk 发的）。
-- **唤醒消息是顶层消息**（relay 0.2.1 的 Workflow 没有 `reply_in_thread`），挂在它下面的回复没人看得到。Agent 的回帖（含失败说明）必须 `--reply-to <触发消息所在 Thread 的根>`：用 `buzz messages thread --event {{trigger.message_id}}` 读出，最早且没有 e tag 的那条就是门牌。**这条要同时写进 Agent prompt 和唤醒文本**，只写通用模板时实测 Agent 会回到唤醒消息的 Thread。`{{trigger.message_id}}` 在 0.2.1 上会渲染成完整事件 id（2026-09-20 实测）；`buzz workflows runs` 的列表始终为空，以唤醒消息是否出现为准。
+- **唤醒消息是顶层消息**（relay 0.2.1 的 Workflow 没有 `reply_in_thread`），挂在它下面的回复没人看得到。Agent 的回帖（含失败说明）必须 `--reply-to <触发消息所在 Thread 的根>`：用 `buzz messages thread --event {{trigger.message_id}}` 读出，最早且没有 e tag 的那条就是 root（新 Issue 是首条事实，旧 Issue 或 MR 可能是门牌）。**这条要同时写进 Agent prompt 和唤醒文本**，只写通用模板时实测 Agent 会回到唤醒消息的 Thread。`{{trigger.message_id}}` 在 0.2.1 上会渲染成完整事件 id（2026-09-20 实测）；`buzz workflows runs` 的列表始终为空，以唤醒消息是否出现为准。
 - **产出写回 GitLab 评论**（评论首行带 marker 做幂等），同步会把评论镜像进该 Issue 的 Thread；Agent 先查 marker，已处理就不重复。
 - **runner manifest 仍要求 `route`**，Canvas 路由表至少要有一条规则。不用 Canvas 路由时放一条**永远不会命中**的占位规则：`trigger_prefix` 必须是**完整**的支持前缀（不是 `[status:route-disabled]` 这种片段，片段会让整轮路由 fail closed），`role` 是真实的非 executor 角色，`status` 用本仓不存在的值：
 

@@ -53,7 +53,7 @@ CONFIG_ENV = "GITLAB_TODO_CONFIG"
 STATE_FILE = "todo-state.json"
 HEADER_VERSION = "gitlab-todo:v1"
 
-CONFIG_KEYS = frozenset({"version", "channel_id", "publisher_pubkey", "owner_pubkey", "done_authors",
+CONFIG_KEYS = frozenset({"version", "channel_id", "publisher_pubkey", "owner_pubkey", "done_authors", "desk_pubkey",
                          "buzz", "gitlab", "todo", "state_dir"})
 GITLAB_KEYS = frozenset({"base_url", "username", "token_env"})
 TODO_KEYS = frozenset({"actions", "since", "max_per_run", "mark_done", "done_emojis"})
@@ -162,6 +162,9 @@ def validate_config(config: Any) -> None:
         _hex64(author, "config.done_authors[]")
     if publisher in authors:
         raise sync.SyncError("config.publisher_pubkey must not be a done author")
+    desk = _hex64(config.get("desk_pubkey"), "config.desk_pubkey")
+    if desk in {config["owner_pubkey"], publisher, *authors}:
+        raise sync.SyncError("config.desk_pubkey must be a distinct bot identity")
     buzz = config.get("buzz")
     if not isinstance(buzz, dict) or set(buzz) != {"cli_path", "cli_sha256"}:
         raise sync.SyncError("config.buzz must have exactly cli_path and cli_sha256")
@@ -589,7 +592,10 @@ def check_gates(config: dict[str, Any], gitlab: Any, buzz: Any) -> None:
         raise sync.SyncError("personal Channel must have exactly one human member: the owner")
     if members.get(config["publisher_pubkey"]) != "bot":
         raise sync.SyncError("todo publisher must be a bot member of the personal Channel")
-    allowed = {config["owner_pubkey"], config["publisher_pubkey"], *config["done_authors"]}
+    desk = config["desk_pubkey"]
+    if members.get(desk) != "bot":
+        raise sync.SyncError("personal Channel Desk must be a bot member")
+    allowed = {config["owner_pubkey"], config["publisher_pubkey"], desk, *config["done_authors"]}
     if set(members) - allowed:
         raise sync.SyncError("personal Channel has a member outside the owner, the publisher and the trusted done authors")
 
