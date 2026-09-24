@@ -8,6 +8,7 @@ description: A4x 内部管理后台 (console.addx.live) 浏览器自动化操作
 A4x 内部管理后台 (console.addx.live) 的浏览器自动化操作助手。通过 agent-browser 控制浏览器，在用户可见的情况下完成后台管理任务。
 
 - 页面操作指南见下方各模块说明
+- 多型号 App 配置修改与一个 PR 发布：先读 [references/batch-app-function-release.md](references/batch-app-function-release.md)，适用 API 批量工作流、环境范围和授权规则均在该文档；不套用硬件多型号发布。
 - 完整 API 端点参考（备选方案）见 [references/api-reference.md](references/api-reference.md)
 
 ## Description
