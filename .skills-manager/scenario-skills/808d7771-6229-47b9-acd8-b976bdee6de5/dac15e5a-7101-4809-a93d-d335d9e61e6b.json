@@ -4,7 +4,7 @@
   "skill_id": "dac15e5a-7101-4809-a93d-d335d9e61e6b",
   "sort_order": 16,
   "tools": {
-    "claude_code": false,
+    "claude_code": true,
     "codex": true,
     "cursor": true,
     "github_copilot": true
