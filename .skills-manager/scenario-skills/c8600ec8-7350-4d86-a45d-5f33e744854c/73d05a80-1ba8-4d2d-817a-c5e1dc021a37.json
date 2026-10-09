@@ -6,6 +6,7 @@
   "tools": {
     "claude_code": true,
     "codex": true,
-    "cursor": true
+    "cursor": true,
+    "github_copilot": true
   }
 }
