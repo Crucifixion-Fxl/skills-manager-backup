@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "f8a6d928-328a-440a-a287-158640f4d7cd",
+  "path": "audience-sync",
+  "path_key": "audience-sync",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/experimentation/audience-sync",
+    "branch": null
+  }
+}

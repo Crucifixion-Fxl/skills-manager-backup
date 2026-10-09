@@ -1,0 +1,45 @@
+{
+  "status": "passed",
+  "engine": "OpenCLI 1.8.8 / Node24.14.0",
+  "commands": [
+    "add-to-collection",
+    "collection",
+    "create",
+    "create-collection",
+    "download",
+    "fields",
+    "metadata",
+    "resource",
+    "search",
+    "status",
+    "types",
+    "update-field",
+    "upload"
+  ],
+  "resource_ref": 6,
+  "collection_ref": 4,
+  "search_pagination": true,
+  "download_sha256": true,
+  "scope": "authorized local PoC synthetic assets only",
+  "production_verified": false,
+  "date": "2026-10-09",
+  "deployment": "ResourceSpace11.0 SVN r29860, local PoC",
+  "fixture_tests": 10,
+  "opencli_validate": {
+    "commands": 13,
+    "errors": 0,
+    "warnings": 0
+  },
+  "unverified": [
+    "production roles",
+    "large file throughput",
+    "external NAS/CDN downloads",
+    "API versions other than 11.0"
+  ],
+  "source_sha256": {
+    "cli.mjs": "943cbc45d195c298306232064a567c6570c71cde5bd79912f27c8a3a9d678f39",
+    "client.mjs": "b152929c949589a2b081c7aaac19a170ebc7e27bd48f771e7e0237999c37e35f",
+    "install.mjs": "8fdce18a81dbcb8f2374d5c342949809d55c7a6ddd49e9c1f1582b258e1de1cf"
+  },
+  "company_structure_scan_tests": 19
+}

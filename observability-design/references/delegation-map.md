@@ -6,7 +6,7 @@ observability-design 自己做方法论和审计，具体工具链的操作委�
 
 | 步骤 | 调用的 skill | 类型 | input | output |
 |------|-------------|------|-------|-------|
-| 注册埋点 schema | `tracker-manager` | 交互式工作流 | 事件名 + schema JSON | schema version + iglu uri |
+| 注册埋点 schema | `tracking-lifecycle` | 交互式工作流 | 事件名 + schema JSON | schema version + iglu uri |
 | 创 Sentry project | `sentry-onboarding` | 交互式工作流 | project name + team + environments | project slug + DSN（入 Vault） |
 | 创 issue 群（追踪 gap） | `gitlab-issue-sop` | SOP（无交互） | gap 列表 + 标签体系 + 优先级 | issue iids + board 映射 |
 | 创 MR | `gitlab-mr` | SOP（无交互） | branch + commits + 关联 issue | MR url + pipeline status |
@@ -18,7 +18,7 @@ observability-design 自己做方法论和审计，具体工具链的操作委�
 
 ## 每个委派的详细说明
 
-### tracker-manager
+### tracking-lifecycle
 
 **何时调用：** `:design` 工作流第 5 步产出设计文档后，需要把链路①的埋点 schema 落到公司埋点平台。
 
@@ -76,7 +76,7 @@ observability-design 自己做方法论和审计，具体工具链的操作委�
 
 **input：**
 - gap 列表 / 实施项列表（至少含：标题、说明、优先级、关联文档链接）
-- labels：引用 [GitLab Label 治理规范](../../../docs/standards/gitlab-label-governance.md)，通常使用 `type::maintenance` + `priority::pN` + `status::*` + `area/observability`，不自行扩展一套模型
+- labels：引用 [GitLab Label 治理规范](../../../../docs/collaboration/standards/gitlab-label-governance.md)，通常使用 `type::maintenance` + `priority::pN` + `status::*` + `area/observability`，不自行扩展一套模型
 - 项目 id（GitLab project id）
 - 父 issue（可选，用于 linked items）
 
@@ -88,7 +88,7 @@ observability-design 自己做方法论和审计，具体工具链的操作委�
 - 把 issue iid 回填到设计文档 / launch-checklist
 - MR 创建时关联这些 iid（`Closes #NN`）
 
-详见 [gitlab-issue-sop SKILL.md](../../gitlab-issue-sop/SKILL.md)。
+详见 [gitlab-issue-sop SKILL.md](../../../collaboration/gitlab-issue-sop/SKILL.md)。
 
 ### gitlab-mr
 
@@ -212,7 +212,7 @@ observability-design 自己做方法论和审计，具体工具链的操作委�
 flowchart TD
     A[observability-design 产出] --> B{产物类型?}
     B -->|设计文档| C[自己写]
-    B -->|埋点 schema 要注册| D[tracker-manager]
+    B -->|埋点 schema 要注册| D[tracking-lifecycle]
     B -->|Sentry project 要创建| E[sentry-onboarding]
     B -->|Issue 要开| F[gitlab-issue-sop]
     B -->|MR 要创建| G[gitlab-mr]

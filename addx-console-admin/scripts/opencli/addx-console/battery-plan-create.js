@@ -1,0 +1,4 @@
+import {cli,Strategy} from '@jackwener/opencli/registry';
+import {ArgumentError} from '@jackwener/opencli/errors';
+import {runProductionOffline} from './battery-plan-offline-core.mjs';
+cli({site:'addx-console',name:'battery-plan-create',access:'write',description:'Offline source-contract simulation of production-plan creation; submission unavailable',strategy:Strategy.LOCAL,browser:false,args:[{name:'simulation-file',required:true,valueRequired:true,help:'Synthetic proposed/context JSON only; no credentials'},{name:'mode',valueRequired:true,choices:['dry-run'],default:'dry-run'}],columns:['status','action','scope','before','payload','diff','planProductNumber','startSn','endSn','sideEffect','hash','submissionImplemented'],func:async args=>{try{return await runProductionOffline('create',args);}catch(e){throw new ArgumentError(e.message);}}});

@@ -7,13 +7,13 @@ import unittest
 from pathlib import Path
 
 SKILL_DIR = Path(__file__).resolve().parent.parent
-REPO = SKILL_DIR.parents[1]
+REPO = SKILL_DIR.parents[2]
 TWO_WAY = SKILL_DIR / "references" / "feishu-two-way-sync.md"
 GROUP_SYNC = SKILL_DIR / "references" / "feishu-group-sync.md"
 JOIN = SKILL_DIR / "references" / "agent-channel-join.md"
 README = SKILL_DIR / "references" / "scripts" / "README.md"
 SKILL = SKILL_DIR / "SKILL.md"
-ADR = REPO / "docs" / "05-adr" / "0020-sync-feishu-group-membership-and-reactions-both-ways.md"
+ADR = REPO / "docs" / "agent-harness" / "adr" / "0020-sync-feishu-group-membership-and-reactions-both-ways.md"
 
 
 def _read(path: Path) -> str:
@@ -156,7 +156,7 @@ class ReviewFixes(unittest.TestCase):
     """!1003 CI code-review：文档与实现一致（ADR-0019 不再说目录 agent 的 bot 不移出、reaction 跳过；README 不再说只同步 agent 的 reaction、
     只认 Buzz 里 owner 的签名）；同意走带标签的回复、同表情共用一个镜像 reaction、重试不重发、helper 一次一个。"""
 
-    ADR19 = REPO / "docs" / "05-adr" / "0019-publish-agent-feishu-app-ids-in-kind-30177-and-relay-by-default.md"
+    ADR19 = REPO / "docs" / "agent-harness" / "adr" / "0019-publish-agent-feishu-app-ids-in-kind-30177-and-relay-by-default.md"
 
     def test_stale_statements_are_gone(self):
         """L1-DOC-TW12: 过时的说法都改掉，并指向 ADR-0020。"""

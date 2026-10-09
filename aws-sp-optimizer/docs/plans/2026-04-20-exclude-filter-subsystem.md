@@ -138,7 +138,7 @@ Then: `effective_per_hour = compute_commitment × util × share`. When `filter.i
 
 Run:
 ```bash
-cd ~/claude-home/gitlab/engineering/skills/skills/aws-sp-optimizer && \
+cd ~/claude-home/gitlab/engineering/skills/skills/infrastructure/aws-sp-optimizer && \
   git status -sb && \
   python -m pytest tests/ -x --tb=short 2>&1 | tail -20
 ```
@@ -159,7 +159,7 @@ Expected: new branch created from current tip.
 
 ```bash
 cd ~/claude-home/gitlab/engineering/skills && \
-  git add skills/aws-sp-optimizer/docs/plans/2026-04-20-exclude-filter-subsystem.md && \
+  git add skills/infrastructure/aws-sp-optimizer/docs/plans/2026-04-20-exclude-filter-subsystem.md && \
   git commit -m "docs(aws-sp-optimizer): add exclude-filter subsystem plan"
 ```
 
@@ -168,8 +168,8 @@ cd ~/claude-home/gitlab/engineering/skills && \
 ## Task 1: `TagExclusion` dataclass
 
 **Files:**
-- Create: `skills/aws-sp-optimizer/scripts/exclude_filter.py`
-- Create: `skills/aws-sp-optimizer/tests/test_exclude_filter_dataclass.py`
+- Create: `skills/infrastructure/aws-sp-optimizer/scripts/exclude_filter.py`
+- Create: `skills/infrastructure/aws-sp-optimizer/tests/test_exclude_filter_dataclass.py`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -198,7 +198,7 @@ def test_tag_exclusion_rejects_list_values():
 - [ ] **Step 2: Run test to confirm failure**
 
 ```bash
-cd ~/claude-home/gitlab/engineering/skills/skills/aws-sp-optimizer && \
+cd ~/claude-home/gitlab/engineering/skills/skills/infrastructure/aws-sp-optimizer && \
   python -m pytest tests/test_exclude_filter_dataclass.py -v 2>&1 | tail -10
 ```
 
@@ -257,8 +257,8 @@ git commit -m "feat(aws-sp-optimizer): add TagExclusion dataclass"
 ## Task 2: `ExcludeFilter` dataclass
 
 **Files:**
-- Modify: `skills/aws-sp-optimizer/scripts/exclude_filter.py`
-- Modify: `skills/aws-sp-optimizer/tests/test_exclude_filter_dataclass.py`
+- Modify: `skills/infrastructure/aws-sp-optimizer/scripts/exclude_filter.py`
+- Modify: `skills/infrastructure/aws-sp-optimizer/tests/test_exclude_filter_dataclass.py`
 
 - [ ] **Step 1: Extend the failing test**
 
@@ -347,8 +347,8 @@ git commit -m "feat(aws-sp-optimizer): add ExcludeFilter dataclass"
 ## Task 3: Input validators (injection-safe)
 
 **Files:**
-- Modify: `skills/aws-sp-optimizer/scripts/exclude_filter.py`
-- Create: `skills/aws-sp-optimizer/tests/test_exclude_filter_validators.py`
+- Modify: `skills/infrastructure/aws-sp-optimizer/scripts/exclude_filter.py`
+- Create: `skills/infrastructure/aws-sp-optimizer/tests/test_exclude_filter_validators.py`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -499,8 +499,8 @@ git commit -m "feat(aws-sp-optimizer): add injection-safe validators + tag colum
 ## Task 4: SQL clause builder — usage_type & account_id axes
 
 **Files:**
-- Modify: `skills/aws-sp-optimizer/scripts/exclude_filter.py`
-- Create: `skills/aws-sp-optimizer/tests/test_exclude_filter_sql.py`
+- Modify: `skills/infrastructure/aws-sp-optimizer/scripts/exclude_filter.py`
+- Create: `skills/infrastructure/aws-sp-optimizer/tests/test_exclude_filter_sql.py`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -610,8 +610,8 @@ git commit -m "feat(aws-sp-optimizer): build SQL clauses for usage_type & accoun
 ## Task 5: SQL clause builder — tag axis with column discovery awareness
 
 **Files:**
-- Modify: `skills/aws-sp-optimizer/scripts/exclude_filter.py`
-- Modify: `skills/aws-sp-optimizer/tests/test_exclude_filter_sql.py`
+- Modify: `skills/infrastructure/aws-sp-optimizer/scripts/exclude_filter.py`
+- Modify: `skills/infrastructure/aws-sp-optimizer/tests/test_exclude_filter_sql.py`
 
 - [ ] **Step 1: Extend the failing test**
 
@@ -721,8 +721,8 @@ git commit -m "feat(aws-sp-optimizer): add tag-axis SQL clauses with column-pres
 ## Task 6: Tag column discovery via information_schema
 
 **Files:**
-- Modify: `skills/aws-sp-optimizer/scripts/exclude_filter.py`
-- Create: `skills/aws-sp-optimizer/tests/test_exclude_filter_tag_columns.py`
+- Modify: `skills/infrastructure/aws-sp-optimizer/scripts/exclude_filter.py`
+- Create: `skills/infrastructure/aws-sp-optimizer/tests/test_exclude_filter_tag_columns.py`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -850,8 +850,8 @@ git commit -m "feat(aws-sp-optimizer): discover CUR tag columns via information_
 ## Task 7: Thread filter through `discover_workload_regions`
 
 **Files:**
-- Modify: `skills/aws-sp-optimizer/scripts/cur_query.py:12-74`
-- Modify: `skills/aws-sp-optimizer/tests/test_discover_workload_regions.py`
+- Modify: `skills/infrastructure/aws-sp-optimizer/scripts/cur_query.py:12-74`
+- Modify: `skills/infrastructure/aws-sp-optimizer/tests/test_discover_workload_regions.py`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1009,8 +1009,8 @@ git commit -m "feat(aws-sp-optimizer): thread ExcludeFilter through discover_wor
 ## Task 8: Thread filter through `build_hourly_series`
 
 **Files:**
-- Modify: `skills/aws-sp-optimizer/scripts/cur_query.py:76-193`
-- Modify: `skills/aws-sp-optimizer/tests/test_cur_query.py`
+- Modify: `skills/infrastructure/aws-sp-optimizer/scripts/cur_query.py:76-193`
+- Modify: `skills/infrastructure/aws-sp-optimizer/tests/test_cur_query.py`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1127,7 +1127,7 @@ git commit -m "feat(aws-sp-optimizer): thread ExcludeFilter through build_hourly
 ## Task 9: Thread filter through `compute_edp_factors` (OD side only)
 
 **Files:**
-- Modify: `skills/aws-sp-optimizer/scripts/cur_query.py:196-311`
+- Modify: `skills/infrastructure/aws-sp-optimizer/scripts/cur_query.py:196-311`
 
 **Rationale:** `_EDP_OD_SQL` computes e_od = EDP discount on OD Usage rows. This rate should reflect the **retained** workload, because d_calibrated = f(d_raw, e_sp, e_od) must be consistent with the filtered X. The SP fee query `_EDP_SP_SQL` does NOT get the filter — SP fee rows don't have a usage_type/instance_type/tag dimension in CUR (they are org-level recurring fees), so filter is a no-op there.
 
@@ -1250,8 +1250,8 @@ git commit -m "feat(aws-sp-optimizer): apply ExcludeFilter to e_od query (SP fee
 ## Task 10: Thread filter through `compute_untagged_fraction`
 
 **Files:**
-- Modify: `skills/aws-sp-optimizer/scripts/_common.py:772-830`
-- Modify: `skills/aws-sp-optimizer/tests/test_compute_untagged_fraction.py`
+- Modify: `skills/infrastructure/aws-sp-optimizer/scripts/_common.py:772-830`
+- Modify: `skills/infrastructure/aws-sp-optimizer/tests/test_compute_untagged_fraction.py`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1357,8 +1357,8 @@ git commit -m "feat(aws-sp-optimizer): apply ExcludeFilter to compute_untagged_f
 ## Task 11: New helper `compute_sp_coverage_share` (CUR query)
 
 **Files:**
-- Modify: `skills/aws-sp-optimizer/scripts/_common.py`
-- Create: `skills/aws-sp-optimizer/tests/test_sp_coverage_share.py`
+- Modify: `skills/infrastructure/aws-sp-optimizer/scripts/_common.py`
+- Create: `skills/infrastructure/aws-sp-optimizer/tests/test_sp_coverage_share.py`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1557,9 +1557,9 @@ git commit -m "feat(aws-sp-optimizer): compute_sp_coverage_share attenuator help
 ## Task 12: Wire `sp_coverage_share` into `get_existing_sp_effective`
 
 **Files:**
-- Modify: `skills/aws-sp-optimizer/scripts/newsvendor.py:33-100` (approx)
-- Modify: `skills/aws-sp-optimizer/scripts/_common.py` (SPAudit dataclass)
-- Modify: `skills/aws-sp-optimizer/tests/test_get_existing_sp_effective.py`
+- Modify: `skills/infrastructure/aws-sp-optimizer/scripts/newsvendor.py:33-100` (approx)
+- Modify: `skills/infrastructure/aws-sp-optimizer/scripts/_common.py` (SPAudit dataclass)
+- Modify: `skills/infrastructure/aws-sp-optimizer/tests/test_get_existing_sp_effective.py`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1671,7 +1671,7 @@ git commit -m "feat(aws-sp-optimizer): attenuate C_existing_effective by sp_cove
 ## Task 13: d_raw consistency regression test
 
 **Files:**
-- Modify: `skills/aws-sp-optimizer/tests/test_compute_d_blended.py`
+- Modify: `skills/infrastructure/aws-sp-optimizer/tests/test_compute_d_blended.py`
 
 **Rationale:** `compute_d_blended` reads only from `series.data[h]["mix"]`, which is already populated from filtered CUR rows. So d_raw consistency is automatic — but verify with an explicit test so a future refactor doesn't regress.
 
@@ -1717,9 +1717,9 @@ git commit -m "test(aws-sp-optimizer): regression — d_raw stays filter-transpa
 ## Task 14: `ExcludeFilter` in `OrgConfig`
 
 **Files:**
-- Modify: `skills/aws-sp-optimizer/scripts/_common.py` (OrgConfig)
-- Modify: `skills/aws-sp-optimizer/scripts/config_loader.py`
-- Modify: `skills/aws-sp-optimizer/tests/test_config_loader.py`
+- Modify: `skills/infrastructure/aws-sp-optimizer/scripts/_common.py` (OrgConfig)
+- Modify: `skills/infrastructure/aws-sp-optimizer/scripts/config_loader.py`
+- Modify: `skills/infrastructure/aws-sp-optimizer/tests/test_config_loader.py`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1910,8 +1910,8 @@ git commit -m "feat(aws-sp-optimizer): parse exclude: block in orgs.yaml"
 ## Task 15: CLI flags for exclude axes
 
 **Files:**
-- Modify: `skills/aws-sp-optimizer/scripts/aws_sp_optimizer.py` (parse_args)
-- Modify: `skills/aws-sp-optimizer/tests/test_parse_args.py`
+- Modify: `skills/infrastructure/aws-sp-optimizer/scripts/aws_sp_optimizer.py` (parse_args)
+- Modify: `skills/infrastructure/aws-sp-optimizer/tests/test_parse_args.py`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2006,8 +2006,8 @@ git commit -m "feat(aws-sp-optimizer): CLI flags for exclude axes"
 ## Task 16: Merge CLI flags with config-level filter
 
 **Files:**
-- Modify: `skills/aws-sp-optimizer/scripts/aws_sp_optimizer.py`
-- Create: `skills/aws-sp-optimizer/tests/test_merge_cli_filter.py`
+- Modify: `skills/infrastructure/aws-sp-optimizer/scripts/aws_sp_optimizer.py`
+- Create: `skills/infrastructure/aws-sp-optimizer/tests/test_merge_cli_filter.py`
 
 **Rule:** CLI is **additive** on top of config. Both config and CLI axes combine with set-union. `include_untagged` from CLI wins if either flag is explicitly passed (default preserves config).
 
@@ -2184,7 +2184,7 @@ git commit -m "feat(aws-sp-optimizer): merge CLI flags into config ExcludeFilter
 ## Task 17: Wire filter through `run_optimizer` orchestrator
 
 **Files:**
-- Modify: `skills/aws-sp-optimizer/scripts/aws_sp_optimizer.py` (run_optimizer)
+- Modify: `skills/infrastructure/aws-sp-optimizer/scripts/aws_sp_optimizer.py` (run_optimizer)
 
 **Pattern:** At the top of run_optimizer, resolve the effective filter (config ∪ CLI), discover tag columns once, then thread `(filter, tag_columns)` into every CUR-touching call. Compute `sp_coverage_share` once and pass into `get_existing_sp_effective`.
 
@@ -2283,8 +2283,8 @@ git commit -m "feat(aws-sp-optimizer): thread ExcludeFilter through run_optimize
 ## Task 18: Output reflection — `applied_exclude_filter` in context
 
 **Files:**
-- Modify: `skills/aws-sp-optimizer/scripts/output_builder.py` (context builder)
-- Modify: `skills/aws-sp-optimizer/tests/test_build_context_baseline.py` or `test_build_output.py`
+- Modify: `skills/infrastructure/aws-sp-optimizer/scripts/output_builder.py` (context builder)
+- Modify: `skills/infrastructure/aws-sp-optimizer/tests/test_build_context_baseline.py` or `test_build_output.py`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2388,7 +2388,7 @@ git commit -m "feat(aws-sp-optimizer): reflect applied filter in context + cover
 ## Task 19: End-to-end integration test (all 3 axes together)
 
 **Files:**
-- Create: `skills/aws-sp-optimizer/tests/test_end_to_end_with_filters.py`
+- Create: `skills/infrastructure/aws-sp-optimizer/tests/test_end_to_end_with_filters.py`
 
 - [ ] **Step 1: Write the integration test**
 
@@ -2481,7 +2481,7 @@ git commit -m "test(aws-sp-optimizer): end-to-end integration with all 3 exclude
 ## Task 20: Update `references/usage.md`
 
 **Files:**
-- Modify: `skills/aws-sp-optimizer/references/usage.md`
+- Modify: `skills/infrastructure/aws-sp-optimizer/references/usage.md`
 
 - [ ] **Step 1: Add CLI flag documentation**
 
@@ -2548,7 +2548,7 @@ git commit -m "docs(aws-sp-optimizer): document exclude filter CLI flags + YAML 
 ## Task 21: Update `references/output-interpretation.md`
 
 **Files:**
-- Modify: `skills/aws-sp-optimizer/references/output-interpretation.md`
+- Modify: `skills/infrastructure/aws-sp-optimizer/references/output-interpretation.md`
 
 - [ ] **Step 1: Add `applied_exclude_filter` section**
 
@@ -2598,7 +2598,7 @@ git commit -m "docs(aws-sp-optimizer): document applied_exclude_filter in output
 ## Task 22: Update `SKILL.md`
 
 **Files:**
-- Modify: `skills/aws-sp-optimizer/SKILL.md`
+- Modify: `skills/infrastructure/aws-sp-optimizer/SKILL.md`
 
 - [ ] **Step 1: Add exclude-filter mention to overview + Step 2 instructions**
 
@@ -2619,7 +2619,7 @@ git commit -m "docs(aws-sp-optimizer): document exclude-filter triggers in SKILL
 ## Task 23: Update `references/failure-handling.md`
 
 **Files:**
-- Modify: `skills/aws-sp-optimizer/references/failure-handling.md`
+- Modify: `skills/infrastructure/aws-sp-optimizer/references/failure-handling.md`
 
 - [ ] **Step 1: Add tag-column-missing guidance**
 
@@ -2655,7 +2655,7 @@ git commit -m "docs(aws-sp-optimizer): add tag-column-missing failure handling"
 ## Task 24: Update presentation template
 
 **Files:**
-- Modify: `skills/aws-sp-optimizer/references/presentation-template.md`
+- Modify: `skills/infrastructure/aws-sp-optimizer/references/presentation-template.md`
 
 - [ ] **Step 1: Extend §3 metadata table to include filter**
 
@@ -2699,7 +2699,7 @@ git commit -m "docs(aws-sp-optimizer): surface applied filter in §3 of report t
 - [ ] **Step 1: Run full test suite**
 
 ```bash
-cd ~/claude-home/gitlab/engineering/skills/skills/aws-sp-optimizer && \
+cd ~/claude-home/gitlab/engineering/skills/skills/infrastructure/aws-sp-optimizer && \
   python -m pytest tests/ --tb=short 2>&1 | tail -30
 ```
 

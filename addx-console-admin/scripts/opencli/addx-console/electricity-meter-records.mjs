@@ -1,0 +1,10 @@
+import {ArgumentError,CommandExecutionError,EmptyResultError} from '@jackwener/opencli/errors';
+import {boundedPage,pageRows} from './expansion-records.mjs';
+function fail(){throw new CommandExecutionError('Console electricity meter contract changed');}
+function integer(v){if(v===null||v===undefined)return null;if(!Number.isSafeInteger(v)||v<0)fail();return v;}
+function text(v){if(v===null||v===undefined)return null;if(typeof v!=='string')fail();return v;}
+export function meterListBody(args){const body=boundedPage(args);if(args.code!==undefined&&args.code!==null&&args.code!==''){if(typeof args.code!=='string'||args.code.length>128||args.code.trim()!==args.code)throw new ArgumentError('code must be an exact battery code, at most 128 characters');body.batteryCode=args.code;}return body;}
+export function meterId(args){const id=Number(args.id);if(!Number.isSafeInteger(id)||id<1)throw new ArgumentError('id must be an existing positive electricity meter ID');return id;}
+function basic(v){if(!v||typeof v!=='object'||Array.isArray(v)||!Number.isSafeInteger(v.id)||v.id<1)fail();return{id:v.id,code:text(v.batteryCode),type:text(v.voltameterType),capacity:integer(v.battery),version:integer(v.versionTime),releaseStatus:integer(v.releaseStatus),updatedAt:text(v.lastModifyTime)};}
+export function meterRows(data,limit){return pageRows(data,limit,'electricity-meters').map(v=>({...basic(v),suppliers:text(v.supplierName),status:text(v.releaseStatusStr),total:data.total}));}
+export function meterDetail(v,id){if(v===null||v===undefined||(typeof v==='object'&&!Array.isArray(v)&&(v.id===undefined||v.id===null)))throw new EmptyResultError('addx-console electricity-meter','No visible meter for the selected ID');const row=basic(v);if(row.id!==id)fail();const suppliers=v.supplierIds??[];if(!Array.isArray(suppliers)||suppliers.length>1000)fail();const ids=suppliers.map(x=>{if(!Number.isSafeInteger(x)||x<0)fail();return x;}).sort((a,b)=>a-b);return{...row,releasedCode:text(v.releaseBatteryCode),releasedType:text(v.releaseVoltameterType),releasedCapacity:integer(v.releaseBattery),supplierIds:JSON.stringify(ids)};}

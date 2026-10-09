@@ -46,6 +46,7 @@ npm run test:e2e:contract
 | capability | All Plans、trial reminder、purchase target 等 manifest 声明行为 |
 | 支付 | 开始、取消、失败、成功、校验失败和结果 UI |
 | 平台 | iOS 与 Android viewport、安全区、长文案 |
+| 多语言 | 全 locale 的 key / 命名占位符与英文源一致、语言别名、非支持语言英文回退、`ar` / `he` RTL 方向、代表语种长文案无横向裁切 |
 | 可访问性 | role、label、键盘 / 焦点、稳定 UI 自动化标识 |
 
 模板测试要断言用户可见行为和 Template Kit 语义动作，不测试或复制内部支付状态机实现。
@@ -68,7 +69,7 @@ npm run test:e2e:contract
 Staging 部署后至少完成：
 
 1. CMS 已发布内容可被目标 paywall key 读取，templateKey 和商品矩阵正确。
-2. iOS 与 Android 真机打开正确页面，字体、图片、滚动、安全区和关闭行为正常。
+2. iOS 与 Android 真机打开正确页面，字体、图片、滚动、安全区和关闭行为正常。App 切换到目标语言后，模板固定文案显示对应语言，RTL 语种方向正确。
 3. Native 返回真实本地化价格，选择不同商品时 provider sheet 与购买 payload 一致。
 4. 对每个启用支付渠道验证取消不扣款、不发权益；成功支付只发生一次并能读回权益。
 5. 支付失败和网络失败可恢复，不产生重复订单或重复成功 UI。

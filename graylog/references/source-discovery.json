@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "tool": "graylog",
+  "owner": "graylog",
+  "repo": "https://gitlab.addx.ai/DATA/audit-service",
+  "researchCommit": "e7b4b4d7507cc567c525b18ca9805bb3c4d5ad9e",
+  "routeEntries": [
+    "k8s/graylog/overlays/staging-us/ingress-shared.yaml",
+    "k8s/graylog/base/statefulset-server.yaml",
+    "k8s/graylog/base/deployment-server.yaml"
+  ],
+  "verification": "source-verified",
+  "deploymentConsistency": "pending",
+  "officialReferences": [
+    "https://go2docs.graylog.org/current/setting_up_graylog/rest_api_access_tokens.htm",
+    "https://go2docs.graylog.org/current/setting_up_graylog/rest_api.html",
+    "https://go2docs.graylog.org/current/setting_up_graylog/rest_api_use_cases.htm"
+  ],
+  "needsResearch": [
+    "runtime image digest and declared 7.0 consistency",
+    "staging ingress and cutover destination",
+    "subject/role and stream permissions",
+    "deployment/API version matching"
+  ],
+  "apiDiscovery": {
+    "method": "源码声明Graylog 7.0，尚未核验实际镜像；先在官方文档版本选择器选择部署对应7.0，再路由部署的 `/api` API browser与官方REST文档，不复制公开API。只读`GET /api/system`核验版本/节点，`GET /api/users/{已核验用户名}`核验subject及role，再对目标stream做最小可见性探针；无role权限时停止，不改用root。非GET必须满足写授权且带`X-Requested-By`，变更stream/input/pipeline、删除数据等需回读/恢复计划。",
+    "coverage": "official route or fork entry located; deployed runtime not verified"
+  },
+  "deploymentEvidence": {
+    "repo": "https://gitlab.addx.ai/DEV/argocd-apps",
+    "researchCommit": "b9173bec59b0a81c76bf4ace95302bc6a4edddc6",
+    "path": "aws-002497567426-us-tech-service/graylog-staging-us.yaml",
+    "serviceRepo": "https://gitlab.addx.ai/DATA/audit-service",
+    "serviceRevision": "staging",
+    "servicePath": "k8s/graylog/overlays/staging-us"
+  }
+}

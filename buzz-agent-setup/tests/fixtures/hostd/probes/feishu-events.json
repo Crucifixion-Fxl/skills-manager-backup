@@ -1,0 +1,29 @@
+{
+  "bot_added_receivers": [
+    "hostd-test-b"
+  ],
+  "checks": {
+    "P0-1_every_bot_received_a_group_message": true,
+    "P0-1_receive_lag_under_2s": true,
+    "P0-2_three_connections_delivered": true,
+    "P0-3_card_callback_received": true,
+    "P0-3_card_operator_has_union_id": true,
+    "P0-3_card_value_roundtrip": true,
+    "P0-4_added_bot_got_bot_added": true,
+    "P0-4_sync_bot_got_no_bot_added": true,
+    "P0-5_reaction_on_bot_message_seen_by_all": true,
+    "P0-6_bot_mention_carries_mentioned_type_bot": true
+  },
+  "event_counts": {
+    "card.action.trigger": 1,
+    "im.chat.member.bot.added_v1": 1,
+    "im.chat.member.bot.deleted_v1": 1,
+    "im.message.reaction.created_v1": 3,
+    "im.message.receive_v1": 9
+  },
+  "failed_checks": [],
+  "ok": true,
+  "probe": "hostd-feishu-events",
+  "receive_lag_s_max": 0.144,
+  "recorder": "lark-oapi 1.7.3 ws, one process per bot (module-level event loop)"
+}

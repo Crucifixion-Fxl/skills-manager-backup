@@ -4,12 +4,12 @@
 ## 运行时启动
 
 优先使用宿主提供的具名 Audience 操作。Skill 根目录是当前 `SKILL.md` 所在目录。
-完整安装的 `skills/audience-sync` 或完整 Skill clone 均可用 Python 3.9+ 运行随附适配器，
+完整安装的 `skills/experimentation/audience-sync` 或完整 Skill clone 均可用 Python 3.9+ 运行随附适配器，
 无需另行 Git clone；分发时必须保留根目录下的 `scripts/`、`src/` 和 `contracts/`：
 
 ```bash
 python3 --version
-python3 /absolute/path/to/skills/audience-sync/scripts/api.py summarize_project_keys
+python3 /absolute/path/to/skills/experimentation/audience-sync/scripts/api.py summarize_project_keys
 ```
 
 适配器只依赖 Python 标准库，无需安装运行时 pip 包，也无需另写客户端。

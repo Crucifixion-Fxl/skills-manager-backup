@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "804531a5-8c0f-481d-a518-723061d22de9",
+  "path": "troubleshooting",
+  "path_key": "troubleshooting",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/observability/troubleshooting",
+    "branch": null
+  }
+}

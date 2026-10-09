@@ -24,6 +24,9 @@
 #   - 公网 ingress + 业务侧无 SSO → 必须挂 WAF（alb.ingress.kubernetes.io/wafv2-acl-arn）
 #   - DNS 解析申请前必须核查 Ingress 真的不裸奔（SG / WAF / SSO 至少其一）
 #
+# gRPC（HTTP/2）要对外时：独立 `-grpc` host + 同一 Ingress 第二条 rule + 独立 gRPC Service
+# （Service 上注解 alb.ingress.kubernetes.io/backend-protocol-version: GRPC），见 workflows/add-ingress.md Step 3。
+#
 # ⚠️ 飞书 webhook 必须 **独立** Ingress + **独立** ALB，**不能** 跟主入口共享 ALB
 # （详见 workflows/add-ingress.md 的飞书 webhook 独立 ALB 门禁）
 
@@ -81,17 +84,12 @@ spec:
 # 4. 飞书 webhook 回调（飞书国内服务器 32 IP）
 #    labels:   ingress.addx.io/sg: feishu-webhook
 #    scheme:   internet-facing
-#    Kyverno:  自动注入 feishu-webhook SG（每 AWS 账号 + TKE 都预置）
+#    Kyverno:  仅在已核验的目标 AWS 集群注入 feishu-webhook SG；先验证 mutation 与实际 SG，不能假定预置
 #    DNS:      申请 *.addx.live 解析
 #    ⚠️ 必须独立 Ingress + 独立 ALB，不能共享主入口 ALB
 #
 # ============================================================
-# TKE 集群（cn-k8s）的额外要求
+# 非 AWS 目标
 # ============================================================
-# 腾讯云 qcloud Ingress 必填 spec.tls 字段（即使 80 端口也是）。
-# workflow 检测目标集群是 TKE 时，加：
-#   spec:
-#     tls:
-#       - hosts:
-#           - {{hostname}}
-#         secretName: <wildcard-cert-secret-name>   # 集群预设 wildcard cert
+# 此 recipe 仅适用于 AWS ALB。当前 CN 为 Tencent TKE，不能加 TLS 后直接使用。
+# 必须先有目标 controller/CLB/证书/SG/WAF 的专用受审 recipe，否则 STOP + Ops Todo。

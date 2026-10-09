@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "53fa5bc9-8c8d-49ca-8af3-6ea624881594",
+  "path": "sla-metric",
+  "path_key": "sla-metric",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/observability/sla-metric",
+    "branch": null
+  }
+}

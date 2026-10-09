@@ -1,0 +1,19 @@
+{
+  "acp": "buzz-acp 0.5.23",
+  "acp_running": true,
+  "failed_checks": [],
+  "human_p_tag_wakes_agent_control": true,
+  "mirror_p_tag_wakes_agent": true,
+  "mirror_without_p_tag_wakes": false,
+  "ok": true,
+  "probe": "hostd-wake",
+  "prompt_contains_mirror_text": true,
+  "relay_image": "ghcr.io/block/buzz:0.2.1",
+  "self_authored_wakes": false,
+  "teardown": [
+    "bsls-3efd2506-relay",
+    "bsls-3efd2506-redis",
+    "bsls-3efd2506-postgres",
+    "bsls-3efd2506-net"
+  ]
+}

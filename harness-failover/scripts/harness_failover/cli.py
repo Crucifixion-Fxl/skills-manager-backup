@@ -244,6 +244,26 @@ def claude_lines(profile, cutoff):
             continue
 
 
+def codex_events(profile, sigs, cutoff):
+    """Quota/ok events for this profile's model from its codex rollouts, newest file first. Cheap enough for the
+    5-minute timer: only files written since `cutoff`, only the tail of each, and it stops at the first file last
+    written before the newest event already found (such a file cannot hold a later one)."""
+    files = []
+    for f in glob.glob(f"{profile.home}/sessions/*/*/*/rollout-*.jsonl"):
+        try:  # a rollout can be pruned between the listing and the stat
+            mtime = dt.datetime.fromtimestamp(os.path.getmtime(f), UTC)
+        except OSError:
+            continue
+        if mtime >= cutoff:
+            files.append((mtime, f))
+    events = []
+    for mtime, f in sorted(files, reverse=True):
+        if events and mtime < max(e[0] for e in events):
+            break
+        events += D.codex_quota_events(tail_lines(f), sigs, cutoff, profile.model)
+    return sorted(events, key=lambda e: e[0])
+
+
 def account_of(profile):
     if profile.harness == "claude":
         try:
@@ -275,7 +295,9 @@ def gather_health(ctx: Ctx, probe: bool) -> dict:
         elif p.harness == "claude":
             h = D.family_health(D.quota_events(claude_lines(p, ctx.now - HISTORY), ctx.sigs, ctx.now - HISTORY, provider=p.provider), ctx.now)
         else:
-            h = D.codex_health(ctx.ops.codex_logged_in(p.home), ctx.now)
+            logged_in = ctx.ops.codex_logged_in(p.home)
+            events = codex_events(p, ctx.sigs, ctx.now - HISTORY) if logged_in else []
+            h = D.codex_health(logged_in, ctx.now, events)
         health[p.id] = merge_probe(ctx, p, h) if probe else h
     return health
 

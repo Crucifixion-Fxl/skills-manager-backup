@@ -7,6 +7,8 @@ description: 通过 OCI CLI 管理 Oracle Cloud 资源。当用户提到 Oracle 
 
 ## Description
 
+首次接入/变更扫描与日常认证入口见 [SaaS 接入](references/saas-access.md)；已有平台业务契约与授权门禁仍在本 Skill 维护。
+
 通过 OCI CLI 协助管理 Oracle Cloud Infrastructure 资源。覆盖 Compute、Object Storage、VCN、Usage/Cost 等核心服务的读操作，写操作需用户确认。
 
 ## 账户体系

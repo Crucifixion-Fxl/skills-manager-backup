@@ -1,6 +1,6 @@
 # 配网与本地访问：代码审查执行摘要
 
-正本：[固件配网与本地访问安全审查规范](../../../public/dev-standards/firmware/device-access-security.html)。
+正本：[固件配网与本地访问安全审查规范](../../../../docs/development/standards/reference-pages/firmware/device-access-security.html)。
 固件产品提交审查时主动核验目标版本的安全实现；即使只改业务逻辑，也必须查未改动的基线缺口。B/F 是检查项索引，风险仍关联 S1–S10 和既有 RL，不另造产品专属红线。
 
 ## 0. 提交时主动检查缺失实现

@@ -5,6 +5,16 @@ description: 给现有服务加 DB schema migration（建表 / 加列 / 改索�
 
 # Workflow：add-db-migration
 
+## CN 迁移能力门禁
+
+当前 CN 路由见 `references/cn-tencent-migration.md`：prod 为 `cn-k8s`（100014919455），
+staging/tech-service 为 `cn-tke-staging` / `cn-tke-tech-service`（100052802231）。
+AWS CN 已退役。下文 AWS shared-middleware 的已上线证明不能覆盖新 TKE；生成 `Database` /
+`KafkaScramCredential` 前必须核验精确目标的 served API、Composition/ProviderConfig、共享实例、
+Vault writer/reader 和 per-app 凭据交付，缺任一证据则 STOP + Ops Todo。消费策略仍适用，
+不得回退到旧 AWS broker/ARN、共享 root 或 app-owned/self-hosted staging 数据库。
+AWS 托管资源 recipe 仅用于 `cloud=aws`；腾讯云请求转对应原生能力或 Ops Todo。
+
 ## 目的
 
 给微服务加数据库 schema 升级流程：
@@ -23,9 +33,10 @@ description: 给现有服务加 DB schema migration（建表 / 加列 / 改索�
 - 应用已有数据库连接来源：
   - 非 shared-middleware 集群（真 prod `*-eks-prod` / dev）/ legacy：已有 app-owned RDS / Aurora
     （跑过 `workflows/add-rds.md` 或 `workflows/add-aurora.md`）
-  - 新部署 **shared-middleware 集群**（6 个：`{us,eu,cn}-eks-staging` + `{us,eu,cn}-eks-tech-service`；
-    **按 cluster 名判别非 env**——tech-service env=prod，见 hard-rule #29）：通过 `kind:Database` 申请
-    per-app database/user。开发者在自己 app ns 用 `recipes/k8s/shared-database-claim.yaml.tmpl`
+  - 新部署 **shared-middleware 集群**（当前 US/EU EKS staging/tech-service + CN TKE staging/tech-service；
+    **按 cluster 名判别非 env**——tech-service env=prod，见 hard-rule #29）：仅对 AWS US/EU 已支持且满足对应前置条件的目标，
+    或已完整通过上述 CN TKE 能力门禁的目标，才可通过 `kind:Database` 申请 per-app database/user；
+    CN TKE 缺任一能力证据仍 STOP + Ops Todo，不生成该目标的 claim/凭据流程。开发者在自己 app ns 用 `recipes/k8s/shared-database-claim.yaml.tmpl`
     生成 `platform.addx.io/v1alpha1 kind: Database`：canonical kebab `app-slug` 写 annotation，
     `spec.app = app-slug.replace('-', '_')`（即 `$database_app = $app.replace('-', '_')`），
     禁止手填拼接式多词名；再填 `spec.env/spec.engine`
@@ -34,14 +45,15 @@ description: 给现有服务加 DB schema migration（建表 / 加列 / 改索�
     路径（`secret/{env}/{platform}/application/{database_app}/{key}`，platform 映射：RDS MySQL/PostgreSQL→rds、
     ElastiCache/Redis→redis、DocumentDB→mongodb、ScyllaDB→scylla、ClickHouse→clickhouse；MSK
     SCRAM 凭据走 KafkaScramCredential，不属于 DB migration），app 通过
-    ExternalSecret 读取（secretStoreRef = cluster vault_css；store 由 env 决定：staging→vault-builder-backend、
-    prod→vault-backend），须提供 `DB_HOST` / `DB_PORT` / `DB_USER` / `DB_PASSWORD` / `DB_NAME`。
+    ExternalSecret 读取（`secretStoreRef = cluster.vault_css`，须与该目标 producer 的实例/路径合同一致；
+    AWS staging 为 `vault-builder-backend`，新 CN staging 为 `vault-backend`，不能仅按 env 推断），须提供 `DB_HOST` / `DB_PORT` / `DB_USER` / `DB_PASSWORD` / `DB_NAME`。
 - 应用代码已经有 migration 工具（Go / Java / Python / Rust binary），且主应用 image 内包含该 binary；如使用独立 migrate image，必须先补 CI build target 和 ArgoCD Image Updater alias
 - 该 binary 符合 5 条契约（见 Step 1 验证）
 
-⚠️ **READINESS GATE（按引擎分流）**：**engine=mysql / postgres / redis 的 kind:Database 自助已上线 6 集群**
-（staging + tech-service），migration 直接消费 per-app 凭据，**不 STOP**。**engine=aurora / mariadb /
-documentdb / scylla / clickhouse**：kind:Database 消费 Composition 未落地 → STOP 产 Ops Todo（其中 documentdb/
+⚠️ **READINESS GATE（按引擎与目标分流）**：engine=mysql / postgres / redis 的 `kind:Database` 自助已在 AWS US/EU staging + tech-service 上线。
+**只有 AWS US/EU 已支持且满足对应前置条件的目标，或已完整通过上述 CN TKE 能力门禁的目标，才能继续消费 per-app 凭据；CN TKE 缺任一能力证据仍 STOP + Ops Todo。**
+这里的“继续”不豁免下文的 Secret 字段、migration binary 与同步时序检查。
+**engine=aurora / mariadb / documentdb / scylla / clickhouse**：kind:Database 消费 Composition 未落地 → STOP 产 Ops Todo（其中 documentdb/
 clickhouse 共享实例已部署、仅消费层未落地），**不要**手搓 shared-root 或 `staging-{region}/shared-middleware/` 路径。
 
 ## Step 1. 验证 migration binary 契约
@@ -81,8 +93,8 @@ clickhouse 共享实例已部署、仅消费层未落地），**不要**手搓 s
       provisioning 拿到 per-app database credential，由 ExternalSecret 从 region-less per-app 路径
       （`secret/{env}/{platform}/application/{database_app}/{key}`）生成 `<app>-db-secret`；
       必须包含 `DB_NAME`，且 cd-requirements.md 记录 per-app database/user 授权来源。
-      engine=mysql/postgres/redis 已上线直接用；其它引擎 `kind:Database` 消费尚不可用（见进入条件
-      READINESS GATE），STOP 产 Ops Todo
+      engine=mysql/postgres/redis 仅对 AWS US/EU 已支持且满足前置条件的目标，或已完整通过 CN TKE 能力门禁的目标继续；
+      CN TKE 缺证据、或其它引擎 `kind:Database` 消费尚不可用（见进入条件 READINESS GATE）时，仍 STOP + Ops Todo
   - 用 `recipes/k8s/external-secret.yaml.tmpl` 写出来的就是模式 B（推荐——单一职责）
   - cd-requirements.md 记录选用了哪个模式
 
@@ -101,9 +113,9 @@ clickhouse 共享实例已部署、仅消费层未落地），**不要**手搓 s
   - Step 2 完成
 
 [action]
-  - **决策 `{{service_account_name}}`**：检查 `crossplane-infra/{$target.cluster_dir}/{$app}-irsa.yaml` 是否存在（应用是否跑过 add-irsa-role）：
-      - 存在 → 填 `$app`（Job 复用 IRSA 凭证，跟主应用一致）
-      - 不存在 → 填 `default`（应用纯 envFrom DB 凭据，不需要 IRSA）
+  - **决策 `{{service_account_name}}`**：读取精确 target 渲染后主应用 Pod template 的 `spec.serviceAccountName`，Job 复用同一个有效 ServiceAccount：
+      - 主应用显式指定名称 → 填该名称；AWS IRSA 与 TKE 自定义身份都不能靠文件名推断。
+      - 主应用未指定或显式为 `default` → 才填 `default`。缺少 AWS IRSA 文件不代表主应用使用 `default`；无法确定主应用身份时 STOP，不猜测。
   - 用 `recipes/db-migration/presync-hook.yaml.tmpl`，填槽：
       `{{app}}=$app`、`{{namespace}}=$target.namespace`、
       `{{service_account_name}}=$sa_name`（上面决策结果）、
@@ -122,7 +134,7 @@ clickhouse 共享实例已部署、仅消费层未落地），**不要**手搓 s
       （`BeforeHookCreation` 让下次 sync 自动删上次的 Job；
        不加 `HookSucceeded`，否则 ArgoCD 会在成功后立刻删 Job，`ttlSecondsAfterFinished: 86400` 无法保留日志）
   - Job container 默认 `image: $app`，除非本 MR 同时证明独立 migrate image 的 CI 和 Image Updater alias 已配置
-  - Job spec `serviceAccountName` 跟主应用一致（IRSA target: `$app`；non-IRSA target: `default`）
+  - Job spec `serviceAccountName` 跟精确 target 渲染后主应用的有效 ServiceAccount 一致；未指定时按 Kubernetes 的 `default` 语义比较，不按云厂商或 IRSA 文件存在性推断
 
 [output]
   - k8s/overlays/{$target.env_keyword}/migration-job.yaml

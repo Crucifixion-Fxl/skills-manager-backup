@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "tool": "apify",
+  "owner": "apify",
+  "status": "source-reviewed-runtime-pending",
+  "contract": "saas-access.md",
+  "notes": "现有VOC使用宿主APIFY_TOKEN。官方Console API & Integrations提供API token；只检查是否已注入，不输出值或读.env。官方hosted MCP https://mcp.apify.com 支持OAuth或Bearer token；OAuth与现有脚本token是独立消费路径，未连接验证。不得沿用消费者token query/echo示例；请求凭据放受保护header，且不记录header。账号/组织、token权限、有效期、轮换/撤销均pending。",
+  "runtimeCallsPerformed": false,
+  "credentialHandling": "No login, credential reads, token issuance, global installation or SaaS business calls performed.",
+  "credentialEnv": "APIFY_TOKEN"
+}

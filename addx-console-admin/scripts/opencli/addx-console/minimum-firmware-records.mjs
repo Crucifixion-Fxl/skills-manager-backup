@@ -1,0 +1,7 @@
+import {ArgumentError,CommandExecutionError,EmptyResultError} from '@jackwener/opencli/errors';
+import {pageRows} from './expansion-records.mjs';
+function fail(){throw new CommandExecutionError('Console minimum firmware contract changed');}
+function nullableText(v){if(v===null||v===undefined)return null;if(typeof v!=='string')fail();return v;}
+export function minimumFirmwareRows(data,limit){return pageRows(data,limit,'minimum-firmwares').map(v=>{if(!v||typeof v.modelNo!=='string'||!v.modelNo.length)fail();return{model:v.modelNo,minimumFirmware:nullableText(v.firmwareId),total:data.total};});}
+export function historyArgs(args){if(typeof args.model!=='string'||!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(args.model))throw new ArgumentError('model must be an exact existing model number, 1 to 128 safe characters');const limit=Number(args.limit);if(!Number.isSafeInteger(limit)||limit<1||limit>20)throw new ArgumentError('limit must be 1 to 20; backend history has no pagination');return{model:args.model,limit};}
+export function historyRows(data,model,limit){if(!Array.isArray(data)||data.length>1000)fail();if(!data.length)throw new EmptyResultError('addx-console minimum-firmware-history','No visible history for the selected existing model');const rows=data.map(v=>{if(!v||!Number.isSafeInteger(v.id)||v.id<1||v.modelNo!==model)fail();return{id:v.id,model:v.modelNo,operatedAt:nullableText(v.operateTime),returnedTotal:data.length,truncated:data.length>limit};});return rows.slice(0,limit);}

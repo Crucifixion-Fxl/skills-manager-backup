@@ -1,0 +1,11 @@
+import {cli,Strategy} from '@jackwener/opencli/registry';
+import {ArgumentError,CommandExecutionError,EmptyResultError} from '@jackwener/opencli/errors';
+import {identity,request} from './native.mjs';
+cli({site:'addx-console',name:'cloud-bill-detail',access:'read',description:'Read a bounded month of bill order details without personal identifiers',strategy:Strategy.LOCAL,browser:false,args:[{name:'tenant',type:'string',required:true,help:'One known application tenant'},{name:'month',type:'string',required:true,help:'YYYY-MM'},{name:'page',type:'int',default:1,help:'Positive page number'},{name:'limit',type:'int',default:10,help:'Page size, 1 to 20'}],columns:['tenant','product','app','orderedAt','createdAt','tier','orderType','total'],func:async(args)=>{
+ const page=Number(args.page),size=Number(args.limit);if(typeof args.tenant!=='string'||!/^[-A-Za-z0-9_]{1,128}$/.test(args.tenant)||typeof args.month!=='string'||!/^\d{4}-(0[1-9]|1[0-2])$/.test(args.month)||!Number.isInteger(page)||page<1||!Number.isInteger(size)||size<1||size>20)throw new ArgumentError('tenant must be one application, month YYYY-MM, page positive, limit 1 to 20');
+ const [year,month]=args.month.split('-').map(Number);if(year<1970||year>9999)throw new ArgumentError('month year must be 1970 to 9999');const days=new Date(Date.UTC(year,month,0)).getUTCDate();
+ await identity();const d=await request('/cloud/oem/order/info','POST',{tenantId:args.tenant,startDate:args.month+'-01',endDate:args.month+'-'+String(days).padStart(2,'0'),product:'',pageIndex:page,pageSize:size});
+ if(!d||!Array.isArray(d.list)||!Number.isSafeInteger(d.total)||d.total<0||d.list.length>size)throw new CommandExecutionError('Cloud bill detail pagination contract changed');
+ if(!d.list.length)throw new EmptyResultError('addx-console cloud-bill-detail','No visible bill details on this page');
+ return d.list.map(x=>{if(x.tenantId!==args.tenant||![x.productName,x.appName,x.orderType].every(v=>typeof v==='string'))throw new CommandExecutionError('Cloud bill detail record contract changed');return{tenant:x.tenantId,product:x.productName,app:x.appName,orderedAt:x.orderTime,createdAt:x.createTime,tier:x.tierName,orderType:x.orderType,total:d.total};});
+}});

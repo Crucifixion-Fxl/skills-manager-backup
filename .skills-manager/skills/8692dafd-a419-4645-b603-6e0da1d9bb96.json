@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "8692dafd-a419-4645-b603-6e0da1d9bb96",
+  "path": "superset-periodic-report",
+  "path_key": "superset-periodic-report",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/data/superset-periodic-report",
+    "branch": null
+  }
+}

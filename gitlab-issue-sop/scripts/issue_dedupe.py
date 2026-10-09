@@ -42,6 +42,14 @@ DEFAULT_REPOS = (
 )
 
 LEXICON_PATH = Path(__file__).resolve().parents[1] / "references" / "lexicon.json"
+GITLAB_INSTANCE_PATH = Path(__file__).resolve().parents[1] / "references" / "gitlab-instance.json"
+
+
+def gitlab_base_url() -> str:
+    """Read the configured instance URL without embedding it in executable code."""
+    return os.environ.get("GITLAB_BASE_URL") or json.loads(
+        GITLAB_INSTANCE_PATH.read_text(encoding="utf-8")
+    )["base_url"]
 
 
 @functools.cache
@@ -87,6 +95,13 @@ def detect_platform() -> str:
     raise SystemExit("Neither glab nor gh is available.")
 
 
+def gitlab_repo_ref(repo: str) -> str:
+    """Use a host-qualified ref so glab does not resolve a bare path on gitlab.com."""
+    if repo.startswith(("https://", "http://", "git@", "ssh://")):
+        return repo
+    return f"{gitlab_base_url().rstrip('/')}/{repo.lstrip('/')}"
+
+
 def fetch_gitlab(repo: str | None, state: str, per_page: int) -> list[dict[str, Any]]:
     command = ["glab", "issue", "list", "--output", "json", "--per-page", str(per_page)]
     if state == "all":
@@ -94,7 +109,7 @@ def fetch_gitlab(repo: str | None, state: str, per_page: int) -> list[dict[str, 
     elif state == "closed":
         command.append("--closed")
     if repo:
-        command.extend(["--repo", repo])
+        command.extend(["--repo", gitlab_repo_ref(repo)])
     return json.loads(run(command))
 
 

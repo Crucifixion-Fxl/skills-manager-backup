@@ -6,12 +6,12 @@ Use the one transport the host actually provides:
 
 - Hermes and other tool-only hosts use their registered named Audience operations. The Hermes Skill bundle does not
   install this repository's `scripts/` or `src/`, so it must not attempt a Python CLI fallback.
-- Any Agent running a complete canonical Skill clone can use the repository's standard-library Python client from any
+- Any Agent running a complete Skill installation can use the package's standard-library Python client from any
   working directory:
 
 ```bash
-python3 /absolute/path/to/skills/audience-user-research/scripts/preflight.py
-python3 /absolute/path/to/skills/audience-user-research/scripts/api.py capabilities
+python3 /absolute/path/to/skills/product/audience-user-research/scripts/preflight.py
+python3 /absolute/path/to/skills/product/audience-user-research/scripts/api.py capabilities
 ```
 
 The complete bundle includes `SKILL.md`, `references/`, `scripts/`, `src/` and `contracts/`. Do not install a second
@@ -72,6 +72,11 @@ JSON
 ```
 
 Path and body types follow the bundled OpenAPI. CLI query values are strings, including numeric pagination values.
+The complete-clone transport accepts at most 1 MiB for a JSON request body and for the CLI stdin envelope;
+larger input fails with `request_too_large` before network access. A JSON API response is capped at 4 MiB
+(`response_too_large`) so a native form definition can include both `body` and `put_body`.
+The local `.env.local` loader remains capped separately at 64 KiB (`invalid_env_file`); these are finite
+client limits, not a promise that the provider accepts every payload below them.
 The client uses literal routes, validates schemas and response Project binding, rejects redirects, and returns one
 safe JSON object. CSV is a host attachment response: the host saves or forwards bytes outside model context; do not
 print or base64 them into chat. Every JSON CLI result drops email, uid, profile, provider payload, survey URLs and

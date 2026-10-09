@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "tool": "pagerduty",
+  "owner": "pagerduty",
+  "provider": "delegated",
+  "origin": "https://addx-oncall.pagerduty.com",
+  "authContract": "saas-access.md",
+  "verification": "source-verified",
+  "runtimeVerification": "pending",
+  "deploymentVersion": "unknown"
+}

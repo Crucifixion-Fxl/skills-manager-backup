@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "d42967e8-ae6e-4ebe-84a3-53b9fdc0d1d5",
+  "path": "ai-paper-visual-storytelling",
+  "path_key": "ai-paper-visual-storytelling",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/product/ai-paper-visual-storytelling",
+    "branch": null
+  }
+}

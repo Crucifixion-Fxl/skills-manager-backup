@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "da18a364-8a3a-4e6d-a8c6-b02a36f412af",
+  "path": "worktime",
+  "path_key": "worktime",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/collaboration/worktime",
+    "branch": null
+  }
+}

@@ -1,6 +1,6 @@
 ---
 name: k8s-ops
-description: Manage A4x Kubernetes resources via kubectl. Use when the user needs to view, troubleshoot, configure kubeconfig/context access, or carefully modify workloads across the managed 16-cluster AWS/GCP/Tencent fleet, including staging OIDC access and GitOps-managed live-change safety checks.
+description: Manage A4x Kubernetes resources via kubectl. Use when the user needs to view, troubleshoot, configure kubeconfig/context access, or carefully modify workloads across the managed AWS/GCP/Tencent fleet, including staging OIDC access and GitOps-managed live-change safety checks.
 ---
 
 # k8s-ops
@@ -22,7 +22,7 @@ description: Manage A4x Kubernetes resources via kubectl. Use when the user need
 
 ## 集群信息
 
-当前受管 fleet 以 `k8s/clusters/`、`crossplane-infra/`、`argocd-fleet-scanner/k8s/overlays/sg-devops/configmap.yaml` 为准，共 16 个集群。`argocd-apps/aws-584949097249-us-tech-service` 是历史 legacy 目录，不属于当前 16 集群 inventory；不要把 `us-tech-legacy-584` 当成默认目标。
+当前受管 fleet 以 `argocd-apps` 当前引用、`k8s/clusters/`、live root Application 和已核验的 scanner inventory 交叉确认。旧目录、旧 kubeconfig 和旧 scanner 配置都可能残留，不能只按目录数量推断活跃集群。`argocd-apps/aws-584949097249-us-tech-service` 是历史 legacy 目录，不要把 `us-tech-legacy-584` 当成默认目标。
 
 开发者自助接 staging kubectl 的 kubeconfig 渲染以 `DEV/addx-cluster-login` 的 `clusters/*.yaml` 为准；本 skill 只记录稳定入口和操作契约。
 
@@ -40,20 +40,17 @@ description: Manage A4x Kubernetes resources via kubectl. Use when the user need
 
 ### CN 区域
 
-| Fleet 名称 | 平台 / 账号 / Region | 首选 Context | k8s 仓库目录 | ArgoCD |
+AWS CN 集群已弃用；当前 CN 全部使用腾讯云 TKE。账号分工和证据见 [CN 腾讯云环境事实与核验入口](references/cn-tencent-inventory.md)。
+
+| Fleet 名称 | 平台 / 账号 / Region | Context 选择 | k8s 仓库目录 | ArgoCD |
 |------|------|------|------|------|
-| CN Tech Service | AWS China `589899215075` / `cn-north-1` | `cn-eks-tech-589-admin` | `clusters/aws-589899215075-cn-tech-service/` | `argocd-cn-tech-service.addx.live` |
-| CN Prod | AWS China `741924744516` / `cn-north-1` | `cn-eks-prod-admin` | `clusters/aws-741924744516-cn-prod/` | `argocd-cn.addx.live` |
-| CN Staging | AWS China `801447536674` / `cn-north-1` | `cn-eks-staging` | `clusters/aws-801447536674-cn-staging/` | `argocd-cn-staging.addx.live` |
-| CN Dev | AWS China `801447536674` / `cn-north-1` | `cn-eks-dev` | `clusters/aws-801447536674-cn-dev/` | `argocd-cn-dev.addx.live` |
-| CN Main TKE | Tencent `100014919455` / `ap-beijing` | `tke-cn-k8s` | `clusters/tencent-100014919455-cn-main/` | `argocd-cn-k8s.addx.live` |
+| CN Prod / cn-main | Tencent `100014919455` / `ap-beijing` | `tke-cn-k8s`（仍需核验实际集群） | `clusters/tencent-100014919455-cn-main/` | `argocd-cn-k8s.addx.live` |
+| CN Staging | Tencent `100052802231` / `ap-beijing` | 本机核验后设 `CN_STAGING_CONTEXT` | `clusters/tencent-100052802231-cn-staging/` | `argocd-cn-staging.addx.live` |
+| CN Tech Service | Tencent `100052802231` / `ap-beijing` | 本机核验后设 `CN_TECH_CONTEXT` | `clusters/tencent-100052802231-cn-tech-service/` | `argocd-cn-tech-service-tke.addx.live`（目标，待切换） |
 
-常见别名：
+CN tech-service 的新域名均为 `pending-cutover`，执行前按 [目标域名与迁移前声明](references/cn-tencent-inventory.md#cn-tech-service-目标域名待切换) 核对 live 服务归属、DNS/TLS 和认证。名称更新不代表入口已可用；未核实就暂停，不自动使用旧 AWS CN 或迁移前域名。
 
-- CN Tech Service: `cn-tech`, `arn:aws-cn:eks:cn-north-1:589899215075:cluster/cn-eks-tech-service`
-- CN Prod: `cn-eks-data-ops`, `arn:aws-cn:eks:cn-north-1:741924744516:cluster/cn-eks`
-- CN Staging: `cn-eks-staging-admin`, `cn-eks-staging-audit`
-- CN Dev: `cn-eks-dev-admin`, `arn:aws-cn:eks:cn-north-1:801447536674:cluster/cn-eks-dev`
+不再默认连接 `cn-eks-*` / `arn:aws-cn:eks:*`，也不把旧 CN Dev 视作仍在使用的集群。新 TKE 的本机别名须由 `kubectl config get-contexts` 和云端身份/集群信息核验，不凭目录名生成。遗留应用的实际归属按 Application 的当前 source/destination 查证，不能仅按 overlay 后缀迁移。
 
 ### EU 区域
 
@@ -111,11 +108,11 @@ kubectl config get-contexts -o name
 
 如果目标 context 未配置：
 
-- AWS EKS: 引导用户执行 `aws eks update-kubeconfig --name <eks-cluster-name> --region <region> --alias <preferred-context>`。AWS China 使用正确的 `aws-cn` 凭据和 `cn-north-1`。不要从 fleet 名称猜 EKS cluster name，使用下表。
+- AWS EKS: 引导用户执行 `aws eks update-kubeconfig --name <eks-cluster-name> --region <region> --alias <preferred-context>`。当前 CN 应改走 TKE；只有用户明确查询历史 AWS China 资源时才使用相应凭据。不要从 fleet 名称猜 EKS cluster name，使用下表。
 - GCP GKE: 在 WSL 中不要运行 `gcloud auth login`。`gcloud` 只装在 Windows host，使用：
   - `cmd.exe /c "gcloud container clusters get-credentials us-tech-service-east4-gke --region us-east4 --project a4xcloud-tech-service-us"`
   - `cmd.exe /c "gcloud container clusters get-credentials us-prod-east4-gke --region us-east4 --project a4xcloud-p-us"`
-- Tencent TKE: 使用已配置的 `tke-cn-k8s` context；缺失时通过腾讯云控制台或团队既有 kubeconfig handoff 获取，不要猜测凭据。
+- Tencent TKE: 先按上表确定账号和集群，再使用已核验的本机 context。prod、staging 和 tech-service 是三个不同目标，不能全部使用 `tke-cn-k8s`。缺失时使用对应账号已有登录态及支持的 kubeconfig 获取流程；不要猜测凭据或退回 AWS CN。
 
 AWS EKS cluster name 速查：
 
@@ -129,10 +126,6 @@ AWS EKS cluster name 速查：
 | EU Prod | `eu-eks` | `eu-central-1` | `eu-eks-prod-admin` |
 | EU Data | `eu-prod-data` | `eu-central-1` | `eu-eks-data-admin` |
 | EU Staging | `eu-eks-staging` | `eu-central-1` | `eu-eks-staging` |
-| CN Tech Service | `cn-eks-tech-service` | `cn-north-1` | `cn-eks-tech-589-admin` |
-| CN Prod | `cn-eks` | `cn-north-1` | `cn-eks-prod-admin` |
-| CN Dev | `cn-eks-dev` | `cn-north-1` | `cn-eks-dev` |
-| CN Staging | `cn-eks-staging` | `cn-north-1` | `cn-eks-staging` |
 | SG DevOps | `sg-eks` | `ap-southeast-1` | `sg-devops` |
 
 开发者 staging 访问优先走 `addx-cluster-login`，不是云厂商 admin kubeconfig：
@@ -141,10 +134,10 @@ AWS EKS cluster name 速查：
 addx-cluster-login --list
 addx-cluster-login us-staging
 addx-cluster-login eu-staging
-addx-cluster-login cn-staging
+# CN wrapper 当前为 pending-verification；未通过下方完整接入合同前，不运行 cn-staging
 ```
 
-`addx-cluster-login` 只覆盖 staging，默认 namespace 分别是 `staging-us`、`staging-eu`、`staging-cn`，权限契约是业务 namespace 内只读 + `logs` / `exec` / `attach` / `port-forward` 调试。不要建议开发者用它读取 Secret、写资源、删 Pod、访问 `kube-system` / `argo-cd` / cluster-scoped 资源。
+`addx-cluster-login` 只覆盖 staging。CN 接入必须遵循 [staging kubectl 接入合同](../../delivery/cicd-developer/references/cluster-access/staging-kubectl.md)：目标在其 `clusters.yaml` 中为 `status: enabled`，且新账号 wrapper、OIDC issuer、RBAC 和 kubeconfig 均已核验后，才能使用获准的 alias。当前 CN 仍为 `pending-verification`，应停止该 wrapper 登录流程；仅 `--list` 或配置文件指向 `100052802231` 不代表接入已完成，旧 AWS endpoint/kubeconfig 不得复用。已核验配置的默认 namespace 分别是 `staging-us`、`staging-eu`、`staging-cn`，权限契约是业务 namespace 内只读 + `logs` / `exec` / `attach` / `port-forward` 调试。不要建议开发者用它读取 Secret、写资源、删 Pod、访问 `kube-system` / `argo-cd` / cluster-scoped 资源。
 
 ### Step 2: 确认操作目标
 
@@ -344,7 +337,7 @@ cmd.exe /c "gcloud container clusters get-credentials us-prod-east4-gke --region
 ```
 用户：把 CN Staging 的 ArgoCD 配置永久改掉
 
-AI：这是 GitOps 管理的集群组件，我会改 `k8s/clusters/aws-801447536674-cn-staging/...` 并走 MR；只有紧急恢复才做 live patch，并在恢复后补回 GitOps。
+AI：这是 GitOps 管理的集群组件，我会改 `k8s/clusters/tencent-100052802231-cn-staging/...` 并走 MR；只有紧急恢复才做 live patch，并在恢复后补回 GitOps。
 ```
 
 #### 5. Crossplane v2 全量验收
@@ -363,6 +356,6 @@ kubectl --context us-eks-prod get buckets.s3.aws.upbound.io -o json
 | 场景 | 条件 |
 |------|------|
 | 紧急故障恢复 | 用户明确说明紧急情况、目标和允许跳过常规确认；仍需在结果中报告实际命令 |
-| 非公司集群 | 用户提供的 context 不在上述 16 集群表中；按普通 kubectl 操作处理，但仍遵守安全规则 |
+| 非公司集群 | 用户提供的 context 不在上述当前活跃集群表中；按普通 kubectl 操作处理，但仍遵守安全规则 |
 
 豁免方式：`/override skill=k8s-ops reason="紧急故障恢复"`

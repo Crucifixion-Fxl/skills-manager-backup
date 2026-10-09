@@ -116,7 +116,7 @@ Attempt `BLOCKED`。
 
 该对象证明当前 Skill 的执行身份和模式，不是二次调用或自我 review。Artifact 不得再为 `addx:root-cause-analysis` 生成 `skill_reviews` 记录，也不得把 Skill 名称或模型自报当作 package proof。
 
-package digest 基于整个 `skills/root-cause-analysis` package-tree manifest：每个 regular file 记录 normalized relative path、size 和 per-file SHA-256，按 path 排序后编码为 canonical JSON，再计算 SHA-256。symlink、超出 package root 的路径、读取期间发生变化的文件或不可解释的文件类型都使 proof 失败。
+package digest 基于整个 `skills/observability/root-cause-analysis` package-tree manifest：每个 regular file 记录 normalized relative path、size 和 per-file SHA-256，按 path 排序后编码为 canonical JSON，再计算 SHA-256。symlink、超出 package root 的路径、读取期间发生变化的文件或不可解释的文件类型都使 proof 失败。
 
 `proof_verified=false` 时 status 必须为 `BLOCKED`，`package_sha256` 可以为 `null`，且 failure 字段和至少一个 failure evidence ref 必填。`ROOT_CAUSE_CONFIRMED` 要求 `proof_verified=true`、有效 package digest、`mode=ROOT_CAUSE_INVESTIGATION`，并且全部 `methodology_proof.evidence_refs` 都属于 `quality_gate.gate_evidence_ids`。
 

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "a7762bb5-3e89-473f-81c1-8bd5cad0196d",
+  "path": "gitlab-mr",
+  "path_key": "gitlab-mr",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/delivery/gitlab-mr",
+    "branch": null
+  }
+}

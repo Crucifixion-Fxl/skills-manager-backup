@@ -4,8 +4,8 @@
 # WebUI 自助 SQL 查询 / schema 变更。**provider-ninedata + ProviderConfig
 # 已由运维在每集群预置**，开发者只关心写 CR。
 #
-# ⚠️ **仅海外集群可用**（US + EU 6 集群）：cn-tech-service / cn-prod / cn-dev
-# 还没 NineData CN license，**STOP** 这些集群跑 ninedata workflow。
+# ⚠️ **本 recipe 仅海外 AWS 数据源可用**：当前 CN 为腾讯云，不能复用此 AWS
+# cloudProfile/ProviderConfig。CN workflow STOP，先验证本账号 provider/license/原生契约。
 #
 # ⚠️ **50 slot 商业配额硬限制**：整 org 共 50 slots。提交前找运维（qlv）确认剩余。
 # 失败 create 也会留 orphan record，需要运维 DB DELETE 清。

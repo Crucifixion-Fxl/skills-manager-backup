@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "tool": "rerun-hub",
+  "owner": "rerun-hub",
+  "status": "source-reviewed-runtime-pending",
+  "contract": "../../../data/rerun-hub-data/references/connection.md",
+  "notes": "实例地址由connection.md链接环境表提供；办公网预览、staging集群内、prod未上线是历史事实待刷新；个人project token，viewer只读，/hub/v1/me探针，SDK固定0.38.1另核对server；预签名URL敏感。",
+  "credentialHandling": "No login, secret reads, token issuance, or SaaS business calls performed.",
+  "referenceBase": "owner-skill-root for SKILL.md/contractEntrypoints/referenceSources paths; contract field resolves from this JSON directory; upstream repository entrypoints stay repository-relative"
+}

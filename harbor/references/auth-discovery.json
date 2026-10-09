@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "tool": "harbor",
+  "owner": "harbor",
+  "instance": {
+    "selection": "Use target/environment mapping in owner SKILL; never enumerate unrelated profiles or silently fall back.",
+    "contract": "SKILL.md",
+    "currentVersion": "unknown; historical values are not runtime evidence",
+    "addressEvidence": "Owner SKILL.md environment tables are the address SSOT; credential variables and exceptions in auth.nativeCredentialPath are selected-instance constraints."
+  },
+  "auth": {
+    "nativeCredentialPath": "HARBOR_HOST + HARBOR_USERNAME/PASSWORD Basic for API; scoped robot credentials for registry, exact host-specific Docker auth. CN canonical /service/token realm may use -pub while registry is private.",
+    "missingCredentialWorkflow": "Have authorized admin issue project/system robot with intended scopes; use docker login --password-stdin only when authorized. Do not print robot secret as old business example suggests.",
+    "subjectAndResourcePermissionVerification": "GET /api/v2.0/users/current for human account where supported; target project/repository read plus registry Bearer challenge realm/service/scope. Robot identity comes from robot metadata, not assumed human endpoint.",
+    "issuanceConsumptionRevocation": "Robot creation/refresh/disable/delete per supported version; expires_at and project/system scopes differ. Push automation also needs pull for HEAD manifest; token realm endpoint consumes account credential.",
+    "credentialHandling": "Private injection only; never print/store secrets in repository, command arguments, chat or receipts. Discovery itself performs no login/token creation."
+  },
+  "nativeRoute": {
+    "business": "Owner SKILL + version-matched official CLI/API documentation",
+    "loginRecovery": "web-access for human web interaction; official CLI only where explicitly documented",
+    "refresh": "platform-onboarding only for concrete auth/version/interface drift",
+    "runtimeProvider": "delegated",
+    "adapterStatus": "delegated contract only; no new runnable provider or full API mirror implemented"
+  },
+  "referenceSources": [
+    {
+      "kind": "owner-contract",
+      "path": "SKILL.md"
+    },
+    {
+      "kind": "primary-official",
+      "url": "https://goharbor.io/docs/2.14.0/administration/robot-accounts/",
+      "checkedOn": "2026-10-07",
+      "use": "authentication discovery; match actual deployed version before business calls",
+      "status": "retrieved",
+      "limitation": "Official documentation does not prove instance compatibility."
+    }
+  ],
+  "versionPolicy": {
+    "probe": "GET /api/v2.0/systeminfo harbor_version; CN registry/token realm/domain aliases retained exactly per SKILL deployment evidence, no automatic host migration.",
+    "compatibility": "Unknown deployment version requires non-mutating capability evidence before business usage; do not promote latest upstream docs to deployed compatibility."
+  },
+  "verification": {
+    "source": "source-verified",
+    "fixture": "not-run: reference-only changes",
+    "runtime": "pending",
+    "sourceCandidate": "8d736bd81ab8500e51cf6be3d71d1ffa70937cae",
+    "scope": "Owner repository contract and primary documentation research only. No credential inspection, login, token issuance/revocation or online business calls.",
+    "pendingReasons": [
+      "Target deployment version, selected subject and exact resource permissions have not been runtime verified.",
+      "Token/login workflow needs independently authorized selected-instance validation; no runnable unified provider is claimed."
+    ]
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "tool": "n8n",
+  "owner": "n8n",
+  "provider": "delegated",
+  "origin": "https://n8n.addx.live",
+  "authContract": "saas-access.md",
+  "verification": "source-verified",
+  "runtimeVerification": "pending",
+  "deploymentVersion": "unknown"
+}

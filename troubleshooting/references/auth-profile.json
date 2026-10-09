@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "tool": "troubleshooting",
+  "provider": "bearer-env",
+  "owner": "troubleshooting",
+  "authContract": "references/auth_flow.md",
+  "verification": "source-verified",
+  "runtimeVerification": "pending",
+  "origin": "https://troubleshooting-us.addx.live",
+  "tokenEnv": "TROUBLESHOOTING_TOKEN",
+  "identity": {
+    "path": "/api/current",
+    "subjectPath": "result.data.userid"
+  },
+  "response": {
+    "successPath": "success",
+    "successValue": true
+  },
+  "operations": {
+    "me": {
+      "effect": "read",
+      "path": "/api/current"
+    }
+  },
+  "sourceCommit": "48bc0106f1a5945a17968a6eec5e3064c8016124",
+  "sourceEvidence": [
+    "backend/troubleshooting/api/auth.py",
+    "backend/tests/test_api_auth.py"
+  ],
+  "fixtureVerification": "../../web-access/runtime/tests/owner-profiles.test.js",
+  "runtimeScope": "current identity only; business operations remain in Troubleshooting native Skill and OpenAPI contracts",
+  "authDiscovery": "references/auth-discovery.json",
+  "sourceDiscovery": "references/source-discovery.json"
+}

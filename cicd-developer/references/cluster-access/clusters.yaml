@@ -65,11 +65,13 @@ clusters:
     kubectl_smoke: "kubectl get pods -n staging-eu"
 
   cn-staging:
-    status: enabled
-    cloud: aws
-    aws_account_id: "801447536674"
-    aws_region: cn-north-1
-    eks_cluster_name: cn-eks-staging
+    status: pending-verification
+    cloud: tencent
+    account_id: "100052802231"
+    region: ap-beijing
+    cluster_id: cls-riukakjb
+    argocd_apps_dir: tencent-100052802231-cn-staging
+    reason: 旧 wrapper revision 指向已退役 AWS CN；新 TKE OIDC/RBAC/kubeconfig 合同未核验，禁止直接运行该 alias
     default_namespace: staging-cn
     wrapper_config: clusters/cn-staging.yaml
     onboarding_date: "2026-05-23"

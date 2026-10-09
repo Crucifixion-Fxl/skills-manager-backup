@@ -1,14 +1,32 @@
 # Endpoints & Domains — All Regions
 # 端点与域名 — 全区域
 
-This is the single source of truth for **where to query**. Re-probe only when a domain in this file stops resolving; do **not** ad-hoc try `thanos-prod-{region}` permutations on every session.
-本文是**查询地址**的事实来源。本文中域名解析失败时再重新探测；**不要**每次会话都现猜 `thanos-prod-{region}` 的排列组合。
+This file records query targets and historical observations. Confirm the target cluster and datasource coverage before querying; DNS resolution alone does not prove that a migrated workload is covered.
+本文记录查询入口和历史观测。查询前先确认目标集群与数据源覆盖范围；域名能解析不代表仍采集迁移后的服务。禁止猜测域名排列组合。
+
+## CN 当前路由（2026-09-28）
+
+AWS CN 集群已弃用；prod 在腾讯云 `100014919455` / `cn-main`，staging 与 tech-service 在 `100052802231` 的两个独立集群，见 [CN 清单](../../../infrastructure/k8s-ops/references/cn-tencent-inventory.md)。
+
+| 查询目标 | 入口 | 使用边界 |
+|----------|------|----------|
+| CN prod（`cn` / `cn-prod`） | 存量 `http://thanos-cn.addx.live`；另有 `http://victoria-metrics-cn.addx.live/select/0/prometheus` | Thanos 与 VictoriaMetrics 迁移共存，按目标 job/时间范围确认；`cn` helper 别名仅指 prod |
+| 新 CN staging（`cn-staging`） | 集群 `victoria-metrics` namespace 的 vmsingle，发现实际 Service 后 port-forward | 用 `PROMETHEUS_CN_STAGING_URL` 指定已确认的本地 API base；不得回退到 prod |
+| 新 CN tech-service（`cn-tech-service`） | **目标，待切换**：`https://victoria-metrics-cn-tech-service-tke.addx.live/select/0/prometheus` | VMCluster API base 必须包含租户路径；域名与租户尚需运行态核验，不是默认可用入口 |
+
+来源：`argocd-apps/tencent-100052802231-cn-staging/victoria-metrics-k8s-stack-application.yaml` 与 `k8s/clusters/tencent-100014919455-cn-main/victoria-metrics-config/`；tech-service 的新目标及固定版本旧声明见 [目标域名与切换证据](../../../infrastructure/k8s-ops/references/cn-tencent-inventory.md#cn-tech-service-目标域名待切换)。Git 声明需与运行态核对，不能把 `cn-*` job 一律送到旧 Thanos。
+
+`query-helpers.py` 支持上述目标。prod 可用 `PROMETHEUS_CN_PROD_URL` 覆盖 API base；staging / tech-service **必须**通过 `PROMETHEUS_CN_STAGING_URL` / `PROMETHEUS_CN_TECH_SERVICE_URL` 显式提供已核实的 API base，缺失时不发网络请求，不回退旧域名、待切换目标或 prod。tech-service 切换前可使用现场核验的现有入口或 port-forward，不能直接把目标清单当作部署证明。新 staging / tech-service 的 Grafana UID 必须从目标实例发现后通过 `GRAFANA_CN_STAGING_DATASOURCE_UID` / `GRAFANA_CN_TECH_SERVICE_DATASOURCE_UID` 提供；没有 UID 时 helper 不会复用 prod。
+
+CN tech-service 的 VMAlert **目标，待切换**：`https://vm-alert-cn-tech-service-tke.addx.live`。VMAlert 评估告警规则并发送至 Alertmanager；它不是 vmselect 的 PromQL 查询 base，不能填入上述 helper URL。规则与通知排查先核对实际 VMAlert、规则选择器、数据源及 Alertmanager 路由，见 [VM 告警链路](../../../delivery/cicd-developer/references/victoriametrics/alerting.md)。目标域名可用性和认证均需另行核验。
+
+下方 job 数量、旧 datasource UID 和版本是 **2026-04-28 历史快照**，不能用作新 CN 集群的容量或路由证据。
 
 ## 1. Thanos (long-term, cross-service per region)
 ## 1. Thanos（每区域长期 + 跨服务）
 
-**HTTP only (no HTTPS), no auth required.** Each Thanos endpoint scrapes only its own region — there is no global Thanos.
-**仅 HTTP（不是 HTTPS），无需认证。** 每个 Thanos 端点只抓自己区域，没有全局 Thanos。
+**Historical Thanos endpoints below used HTTP.** Confirm current access requirements and coverage; this does not apply to the new CN VictoriaMetrics targets above.
+下列存量 Thanos 入口历史上使用 HTTP；先核实当前访问条件与覆盖范围。这不适用于上方新 CN VictoriaMetrics 入口。
 
 | Region | URL | Job count (2026-04-28) | Naming convention |
 |---|---|---|---|
@@ -151,8 +169,8 @@ Used for: discovering which fact table holds what column before writing a Supers
 When a domain in this file stops resolving:
 本文中某域名失效时：
 
-1. Probe candidate variants (eg if `thanos-prod-cn` fails, try `thanos-cn`, `thanos-prod-cn-internal`, `thanos.cn.addx.live`).
-   探测候选变种。
+1. Read the target cluster's current Application source, Ingress/Service and Grafana datasource URL; use only the endpoint found there.
+   读取目标集群实际 Application、Ingress/Service 与 Grafana 数据源 URL，按证据定位，不猜候选域名。
 2. Update this file with the working URL + the date of last verification.
    更新本文为可用 URL + 最近验证日期。
 3. Note the **failed** patterns explicitly so the next person doesn't re-probe them.

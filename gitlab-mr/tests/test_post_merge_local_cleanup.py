@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import json
 import importlib.util
+import json
 import os
 import shutil
 import subprocess
@@ -9,7 +9,6 @@ import sys
 from pathlib import Path
 
 import pytest
-
 
 SCRIPT = Path(__file__).parents[1] / "scripts" / "cleanup_merged_worktree.py"
 MR_IID = 42
@@ -248,13 +247,41 @@ def test_execute_removes_squash_merged_worktree_and_local_branch(
 
 
 @pytest.mark.parametrize(
+    ("target_branch", "default_branch"),
+    [("main", "develop"), ("staging", "main")],
+)
+def test_merged_nondefault_target_allows_cleanup(
+    tmp_path: Path,
+    target_branch: str,
+    default_branch: str,
+) -> None:
+    repo, worktree, _, response, env = setup_repo(tmp_path)
+    for name in {target_branch, default_branch} - {"main"}:
+        git(repo, "branch", name)
+    response["target_branch"] = target_branch
+    update_response(env, response)
+    update_project_response(env, {"default_branch": default_branch})
+
+    preview = run_cleanup(worktree, env)
+    assert preview.returncode == 0, preview.stderr
+    assert json.loads(preview.stdout)["status"] == "ready"
+
+    result = run_cleanup(worktree, env, "--execute")
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["status"] == "cleaned"
+    assert not worktree.exists()
+    assert git(repo, "rev-parse", f"refs/heads/{default_branch}").returncode == 0
+    assert git(repo, "show-ref", "--verify", "refs/heads/feature/cleanup", check=False).returncode != 0
+
+
+@pytest.mark.parametrize(
     ("changes", "reason"),
     [
         ({"state": "opened", "merged_at": None}, "MR is not merged"),
         ({"source_branch": "feature/other"}, "MR source branch does not match"),
         ({"sha": "0" * 40}, "local branch HEAD does not match"),
         ({"target_branch": None}, "target branch is missing or invalid"),
-        ({"target_branch": "staging"}, "not the repository default branch"),
+        ({"target_branch": "feature/cleanup"}, "target branch matches the local branch"),
     ],
 )
 def test_remote_evidence_mismatch_blocks_without_cleanup(
@@ -322,6 +349,17 @@ def test_missing_project_default_branch_blocks_without_cleanup(tmp_path: Path) -
         git(repo, "show-ref", "--verify", "refs/heads/feature/cleanup").returncode
         == 0
     )
+
+
+def test_default_branch_cannot_be_deleted(tmp_path: Path) -> None:
+    repo, worktree, _, _, env = setup_repo(tmp_path)
+    update_project_response(env, {"default_branch": "feature/cleanup"})
+
+    result = run_cleanup(worktree, env, "--execute")
+
+    assert "refusing to delete the repository default branch" in blocked_reason(result)
+    assert worktree.is_dir()
+    assert git(repo, "show-ref", "--verify", "refs/heads/feature/cleanup").returncode == 0
 
 
 @pytest.mark.parametrize(

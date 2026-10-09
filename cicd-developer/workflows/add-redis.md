@@ -5,6 +5,26 @@ description: 给现有服务加 AWS ElastiCache Redis（生产用 ReplicationGro
 
 # Workflow：add-redis
 
+## CN 迁移能力门禁
+
+当前 CN 路由见 `references/cn-tencent-migration.md`：prod 为 `cn-k8s`（100014919455），
+staging/tech-service 为 `cn-tke-staging` / `cn-tke-tech-service`（100052802231）。
+AWS CN 已退役。下文 AWS shared-middleware 的已上线证明不能覆盖新 TKE；生成 `Database` /
+`KafkaScramCredential` 前必须核验精确目标的 served API、Composition/ProviderConfig、共享实例、
+Vault writer/reader 和 per-app 凭据交付，缺任一证据则 STOP + Ops Todo。消费策略仍适用，
+不得回退到旧 AWS broker/ARN、共享 root 或 app-owned/self-hosted staging 数据库。
+AWS 托管资源 recipe 仅用于 `cloud=aws`；腾讯云请求转对应原生能力或 Ops Todo。
+
+## Application 与渲染入口前置
+
+raw 数据面分支先执行 [资源职责拆分合同](../references/application-resource-split.md)：
+登记 `$target.infra_source_path` 和 `$target.runtime_source_path`，分别绑定共享
+`app-data-plane` / `app-runtime`。infra 的 kustomization 不得被 runtime root 引用；
+每次生成后独立构建两份 render，核对唯一资源管理者。缺少准确合同先交付 Ops Todo，
+不能把混合 Application 整体迁入数据面或新建 owner Project。已批准的高层 claim 分支保持原合同。
+以下原有 app overlay 路径仅用于 runtime 消费文件，raw 与生产链使用明确的 infra 路径；
+跨 Application 的依赖以实际生产/消费 Ready 证据验收，不靠资源 sync-wave 推断。
+
 ## 目的
 
 通过 Crossplane GitOps 给现有服务开 Redis（**默认引擎 Valkey 9.1**，非 Redis OSS），让 app 从 K8s Secret 读 `REDIS_HOST` / `REDIS_PORT` 等。末态：
@@ -15,7 +35,9 @@ description: 给现有服务加 AWS ElastiCache Redis（生产用 ReplicationGro
 
 ## 进入条件
 
-- 应用已 `k8s/base/` + 一个 overlay 就绪
+- shared claim 分支沿用已有 `k8s/base/` + `k8s/overlays/{env_keyword}/` 标准入口；
+  raw 分支以已核验的 `$target.runtime_source_path` / `$target.infra_source_path` 为准，
+  允许获批自定义入口，不因缺少标准目录拒绝该分支。
 - cd-requirements.md 列了 Redis 需求
 - `$delivery_phase` 默认为 `runtime`；只有 `new-service` 显式调用时使用 `candidate`。
   candidate 完成配置和离线校验，登记准确 target、workflow、待验收项到
@@ -28,7 +50,7 @@ description: 给现有服务加 AWS ElastiCache Redis（生产用 ReplicationGro
   Secret 归一成 `address` + `port`；没装产 ops-todo）。共享 target 按现有 Composition 的
   producer/PushSecret readiness 验收，不要求为消费方另建 patcher/实例权限。
 - 若包含 staging（或 tech-service）target：**不要走本 app-owned workflow，改走 `kind: Database`
-  自助——已上线**（2026-06-03，6 集群 us/eu/cn-staging + tech-us/eu/cn）。开发者在自己 app ns 用
+  自助——已上线**（2026-06-03，当前 us/eu/cn staging + tech-service；CN 腾讯云能力须独立验证）。开发者在自己 app ns 用
   `recipes/k8s/shared-database-claim.yaml.tmpl` 从 canonical kebab app slug 生成
   `platform.addx.io/v1alpha1 kind: Database`：annotation 保留 slug，`spec.app` 把 `-` 机械替换为 `_`
   （`$database_app = $app.replace('-', '_')`），
@@ -52,7 +74,7 @@ description: 给现有服务加 AWS ElastiCache Redis（生产用 ReplicationGro
     - `$unsupported_targets[]`：`$target.cloud != aws`。不解析 AWS 成本、ARN 或
       ProviderConfig，只产 Ops Todo；不能把 AWS 契约套到 TKE 或 GCP。
     - `$shared_middleware_targets[]`：AWS 且 `$target.cluster` 属于
-      `{us,eu,cn}-eks-staging` + `{us,eu,cn}-eks-tech-service` 这 6 个集群。
+      `{us,eu}-eks-staging` + `{us,eu}-eks-tech-service`。CN TKE 虽受共享策略约束，仍进入上述 unsupported 分支；缺腾讯目标实现时 STOP。
       **按 cluster 名判，不用 `$target.env`**；tech-service 的 env=prod 仍消费共享实例。
     - `$managed_targets[]`：其余 cloud=aws target，或已明确批准的 AWS legacy/迁移例外。
       后续 Step 2 起只处理这组。
@@ -77,7 +99,7 @@ description: 给现有服务加 AWS ElastiCache Redis（生产用 ReplicationGro
     已有消费者迁移必须先验证 producer，再切换到新路径。
   - 只对 `$managed_targets[]` 解析以下 app-owned 配置：
     - **默认引擎 = Valkey（非 Redis OSS），默认 engineVersion `9.1`**（app-owned CR 由 recipe 模板
-      固定 engine:valkey / engineVersion:"9.1"；已验证 us/cn 可用、CRD engine 字段接受 redis|valkey）。
+      固定 engine:valkey / engineVersion:"9.1"；AWS US 已验证；旧 AWS CN 版本记录不适用于当前 TKE，CRD engine 字段接受 redis|valkey）。
       用户明确要 Redis OSS 或其它版本时，在 cd-requirements.md 记录理由后再改模板值。
     - 查 `references/cost-tiering/redis.yaml -> $target.env` 取 kind / nodeType / numNodes /
       automaticFailoverEnabled / multiAZ / snapshotRetentionLimit_days / atRestEncryption /
@@ -202,13 +224,13 @@ consumer 之后（保留已有更高 wave），避免 workload 等不到下一 w
       `{{at_rest_encryption}}=$target.atRestEncryption`、
       `{{management_policies}}=$target.managementPolicies`、
       `{{region}}=$target.region`、`{{redis_security_group}}=$target.redis_security_group`
-  - 写到应用仓库 `k8s/overlays/{$target.env_keyword}/redis.yaml`，并加入 overlay
+  - 写到应用仓库 `{$target.infra_source_path}/redis.yaml`，并加入独立 infra
     `kustomization.yaml` 的 `resources`。**app-owned Redis CR 放应用仓 overlay，不放
     crossplane-infra**（同 add-rds.md Step 5：crossplane-infra 只收 IAM / IRSA /
     ProviderConfig / WAF/IPSet / 共享 SG 入站规则等权限边界资源；namespaced CR 与 conn Secret 同仓同 namespace）
 
 [validate]
-  - YAML 可解析；`kustomize build k8s/overlays/{$target.env_keyword}/` 成功
+  - YAML 可解析；`kustomize build "{$target.infra_source_path}"` 成功
   - Redis CR `apiVersion` 使用集群已安装的 `elasticache.aws.m.upbound.io/v1beta1`
   - 对目标集群运行 server-side dry-run；v2 `ReplicationGroup` 以
     `metadata.annotations["crossplane.io/external-name"]` 作为 AWS replication group ID，
@@ -217,7 +239,7 @@ consumer 之后（保留已有更高 wave），避免 workload 等不到下一 w
   - `writeConnectionSecretToRef` 不带 `namespace` 子字段；connection Secret 与 Redis CR 同 namespace
 
 [output]
-  - k8s/overlays/{$target.env_keyword}/redis.yaml
+  - {$target.infra_source_path}/redis.yaml
 
 ## Step 5. 写连接信息 PushSecret（每 target 循环）
 
@@ -226,21 +248,21 @@ consumer 之后（保留已有更高 wave），避免 workload 等不到下一 w
 
 [action]
   - 用 `recipes/crossplane/redis-conn-push-secret.yaml.tmpl` 写
-    `k8s/overlays/{$target.env_keyword}/redis-conn-push.yaml`，填
+    `{$target.infra_source_path}/redis-conn-push.yaml`，填
     `{{app}}=$app`、`{{env}}=$target.env`、`{{namespace}}=$target.namespace`、
     `{{cluster_secret_store}}=$target.vault_css`。模板固定 normalized `address` + `port`
     输入、`IfNotExists` 和相对 Vault `remoteKey`；不要改成 `endpoint` 或 inline PushSecret。
-  - 加到 kustomization resources
+  - 只加到 `{$target.infra_source_path}/kustomization.yaml` 的 resources
 
 [validate]
   - YAML 可解析
-  - `kustomize build` 成功
-  - `python3 "$skill_root/validators/check_eso_pushsecret_bug.py" <dir>` PASS
-  - `python3 "$skill_root/validators/check_vault_paths.py" <dir>` PASS；PushSecret `remoteKey`
+  - `kustomize build "{$target.infra_source_path}"` 成功
+  - `python3 "$skill_root/validators/check_eso_pushsecret_bug.py" "{$target.infra_source_path}"` PASS
+  - `python3 "$skill_root/validators/check_vault_paths.py" "{$target.infra_source_path}"` PASS；PushSecret `remoteKey`
     不带字面 `secret/` 前缀
 
 [output]
-  - k8s/overlays/{$target.env_keyword}/redis-conn-push.yaml
+  - {$target.infra_source_path}/redis-conn-push.yaml
 
 ## Step 6. 写 app ExternalSecret（每 target 循环）
 
@@ -263,14 +285,16 @@ consumer 之后（保留已有更高 wave），避免 workload 等不到下一 w
             key: {{vault_remote_key}}
             property: REDIS_PORT
         ```
-  - 写到 `k8s/overlays/{$target.env_keyword}/redis-external-secret.yaml`
-  - 加到 kustomization resources
+  - 写到 `{$target.runtime_source_path}/redis-external-secret.yaml`
+  - 只加到 `{$target.runtime_source_path}/kustomization.yaml` 的 resources；infra 不引用此 consumer。
 
 [validate]
-  - YAML 可解析；`kustomize build` 成功；`python3 "$skill_root/validators/check_vault_paths.py" <dir>` PASS
+  - YAML 可解析；`kustomize build "{$target.runtime_source_path}"` 成功，最终 render 含该
+    ExternalSecret，其 target Secret 名、REDIS_HOST/REDIS_PORT 与 remoteRef 匹配当前连接合同；
+    `python3 "$skill_root/validators/check_vault_paths.py" "{$target.runtime_source_path}"` PASS
 
 [output]
-  - k8s/overlays/{$target.env_keyword}/redis-external-secret.yaml
+  - {$target.runtime_source_path}/redis-external-secret.yaml
 
 ## Step 7. 把连接 Secret 接到应用容器
 
@@ -278,7 +302,10 @@ consumer 之后（保留已有更高 wave），避免 workload 等不到下一 w
   - Step 6 完成
 
 [action]
-  - 每个 managed target 按 Step 1「容器消费连接信息」修改准确 overlay，并渲染到独立临时目录。
+  - 每个 managed target 新建独立临时 `$shared_render_dir`，将本次
+    `kustomize build "{$target.runtime_source_path}"` 写入其中的 `manifest.yaml`；
+    按 Step 1「容器消费连接信息」只修改该 runtime 入口登记的 workload patch，并重新渲染，
+    不复用前一 shared/raw target 的 render。
     不在共享 base 中给未请求 Redis 的 target 注入引用；已有正确 base 引用无需重复添加。
 
 [validate]
@@ -293,7 +320,10 @@ consumer 之后（保留已有更高 wave），避免 workload 等不到下一 w
   - Step 7 完成
 
 [action]
-  - `bash "$skill_root/validators/validate.sh" k8s/` 和每个 crossplane-infra target 目录
+  - 每个 managed target 执行 [两份 render 的执行与验收](../references/application-resource-split.md#两份-render-的执行与验收)，
+    对独立 runtime/infra render 跑 validator 和资源唯一性/完整性对账；Step 7 的精确容器消费检查仍须通过。
+    仓库级 `bash "$skill_root/validators/validate.sh" k8s/` 可补充扫描，不能替代上述 render 验证。
+  - 对每个改动的 crossplane-infra target 目录执行原全量 validator
   - 更新 `cd-requirements.md` Secrets 段
   - `cicd.md` append Redis provisioning 说明
   - Ops Todo + summary

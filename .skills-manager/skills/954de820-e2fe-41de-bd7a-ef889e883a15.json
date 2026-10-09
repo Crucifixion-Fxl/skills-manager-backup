@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "954de820-e2fe-41de-bd7a-ef889e883a15",
+  "path": "firmware-security-compliance",
+  "path_key": "firmware-security-compliance",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/hardware/firmware-security-compliance",
+    "branch": null
+  }
+}

@@ -22,6 +22,10 @@
 
 - [`app-ui-a11y-testability-review.md`](app-ui-a11y-testability-review.md)：当 diff 涉及 app UI 源文件（iOS `*.swift` / Android `layout*.xml`·`*.kt` / Flutter `*.dart`）时触发的双轴增量检查。**可测试性轴（T）硬卡**：交互控件缺稳定测试标识（`accessibilityIdentifier`/`testTag`/`Key`），T1 高置信进红线。**无障碍轴（A）阶段一试跑**（全 ⚠️ 不阻断）：缺可读名、装饰未排除、字号不可缩放、热区过小、输入缺标签；阶段二把 A1/A5 高置信升 🔴。查标注存在性而非质量，读整份文件消跨行误报，区分 `accessibilityIdentifier`(测试) ≠ `accessibilityLabel`(朗读)。
 
+## PRD → observability → 埋点
+
+- [`prd-observability-tracking-review.md`](prd-observability-tracking-review.md)：`[PRD-OBS-TRACK]`。从 MR 关联 issue 的 PRD 核对 observability 是否覆盖本次交付的功能，再核对埋点调用点。日历、跳过条件和证据规则写在该文件。
+
 ## L3 staging / release 分阶段门禁
 
 - [`l3-release-gate.md`](l3-release-gate.md)：L3 分阶段门禁。非 release review 中，只有代码/测试事实证明依赖已部署 staging 的 L3 才可延后且不阻断；release context 必须具备绑定 revision 且执行成功的 L3 report。automation capability 只证明可执行性，未运行时仍以 `RELEASE_L3_EXECUTION_UNVERIFIED` 阻断。

@@ -21,6 +21,10 @@ STATE_VERSION = "native-voc-journey-state.v2"
 _EVIDENCE_ID = re.compile(r"^ev_[a-f0-9]{64}$")
 _EMAIL_ADDRESS = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 STATE_MAX_BYTES = 128 * 1024
+DATASET_ITEMS_MAX_BYTES = 16 * 1024 * 1024
+CLI_JSON_TIMEOUT_SECONDS = 70
+# The attachment client may make two 120-second attempts; allow retry and file-write overhead.
+CLI_ATTACHMENT_TIMEOUT_SECONDS = 255
 
 
 class JourneyError(Exception):
@@ -94,7 +98,9 @@ def cli(
             check=False,
             capture_output=True,
             text=True,
-            timeout=70,
+            timeout=(
+                CLI_ATTACHMENT_TIMEOUT_SECONDS if output is not None else CLI_JSON_TIMEOUT_SECONDS
+            ),
         )
     except subprocess.TimeoutExpired:
         raise JourneyError("cli_timeout") from None
@@ -238,6 +244,56 @@ def approved_report_text(output_dir: Path) -> str:
     return report
 
 
+_METADATA_FIELDS = frozenset(
+    {
+        "author",
+        "reviewer",
+        "user",
+        "username",
+        "handle",
+        "profile",
+        "contact",
+        "metadata",
+        "meta",
+        "rating",
+        "score",
+        "stars",
+        "locale",
+        "language",
+        "name",
+    }
+)
+_METADATA_TOKENS = frozenset(
+    {
+        "id",
+        "uuid",
+        "url",
+        "uri",
+        "link",
+        "href",
+        "email",
+        "phone",
+        "avatar",
+        "timestamp",
+        "date",
+        "created",
+        "updated",
+        "published",
+    }
+)
+
+
+def _metadata_field(key: str) -> bool:
+    """Exclude structural identity/contact fields; unknown Actor fields remain citable."""
+    normalized = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", key)
+    tokens = tuple(part for part in re.split(r"[^a-z0-9]+", normalized.lower()) if part)
+    return (
+        key.lower() in _METADATA_FIELDS
+        or bool(_METADATA_TOKENS.intersection(tokens))
+        or (len(tokens) > 1 and tokens[0] in _METADATA_FIELDS and tokens[1] in {"name", "handle"})
+    )
+
+
 def _string_leaves(value: Any) -> list[str]:
     if isinstance(value, str):
         return [value]
@@ -248,7 +304,9 @@ def _string_leaves(value: Any) -> list[str]:
         return leaves
     if isinstance(value, dict):
         leaves = []
-        for item in value.values():
+        for key, item in value.items():
+            if isinstance(key, str) and _metadata_field(key):
+                continue
             leaves.extend(_string_leaves(item))
         return leaves
     return []
@@ -268,6 +326,13 @@ def citable_leaves(items: Any) -> list[str]:
             continue
         leaves.append(text)
     return leaves
+
+
+def dataset_items_bytes(items: list[Any]) -> bytes:
+    content = (json.dumps(items, ensure_ascii=False, sort_keys=True) + "\n").encode()
+    if len(content) > DATASET_ITEMS_MAX_BYTES:
+        raise JourneyError("native_voc_dataset_items_too_large")
+    return content
 
 
 def _voice_text_is_excerpt(text: str, leaves: list[str]) -> bool:
@@ -769,7 +834,7 @@ def collect() -> dict[str, Any]:
         raise JourneyError("native_voc_dataset_binding_mismatch")
     items = _dataset_items(available, dataset_path, project_id, revision, dataset_id)
     items_path = output_dir / f"native-voc-items-{token}.json"
-    items_bytes = (json.dumps(items, ensure_ascii=False, sort_keys=True) + "\n").encode()
+    items_bytes = dataset_items_bytes(items)
     write_or_verify(items_path, items_bytes)
     excerpt_count = len(citable_leaves(items))
     dataset_output = output_dir / f"native-voc-{token}-{dataset_id}.{export_format}"
@@ -888,7 +953,7 @@ def publish() -> dict[str, Any]:
         state.get("dataset_items_sha256"), str
     ):
         raise JourneyError("invalid_native_voc_state")
-    items_bytes = regular_bytes(items_path, 2 * 1024 * 1024)
+    items_bytes = regular_bytes(items_path, DATASET_ITEMS_MAX_BYTES)
     if hashlib.sha256(items_bytes).hexdigest() != state["dataset_items_sha256"]:
         raise JourneyError("native_voc_items_changed")
     try:

@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "tool": "customer-care",
+  "owner": "customer-care",
+  "status": "source-reviewed-runtime-pending",
+  "contract": "api-reference.md",
+  "notes": "Skill记录旧staging匿名；研究源码SmartPopup SSO由ADMIN_SSO_ENABLED控制，false/unset为no-op；Warranty独立飞书身份/角色gate常开。部署SHA、flag和SpiceDB迁移待核验；prod地址推测不得采用。",
+  "credentialHandling": "No login, secret reads, token issuance, or SaaS business calls performed."
+}

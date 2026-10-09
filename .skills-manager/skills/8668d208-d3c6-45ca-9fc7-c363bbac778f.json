@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "8668d208-d3c6-45ca-9fc7-c363bbac778f",
+  "path": "zendesk",
+  "path_key": "zendesk",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/customer-care/zendesk",
+    "branch": null
+  }
+}

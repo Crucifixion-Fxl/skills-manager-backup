@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "639fc519-000f-422c-86b7-762e9884a6f1",
+  "path": "pagerduty",
+  "path_key": "pagerduty",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/observability/pagerduty",
+    "branch": null
+  }
+}

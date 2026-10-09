@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "2d2dc139-898f-4bff-acc1-29847e266696",
+  "path": "argocd-deploy",
+  "path_key": "argocd-deploy",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/delivery/argocd-deploy",
+    "branch": null
+  }
+}

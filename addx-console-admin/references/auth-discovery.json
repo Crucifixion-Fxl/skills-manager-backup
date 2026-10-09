@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "tool": "console",
+  "owner": "addx-console-admin",
+  "instances": [
+    "https://console.addx.live",
+    "https://revenus-sharing-backend.addx.live"
+  ],
+  "nativeRoute": "Console native browser login → raw Authorization CONSOLE_TOKEN",
+  "loginFlow": {
+    "reuseFirst": true,
+    "steps": "先复用 CONSOLE_TOKEN 并按双域 profile 请求 API；缺失时通过 web-access 复用或由用户完成 console 页面自身登录。userToken 是前端 storage key，不猜为 Casdoor/飞书。",
+    "authorization": "Login, token creation/rotation/revocation and business writes require the current task scope; this discovery performs none."
+  },
+  "tokenMechanism": "Authorization 为 raw token（不添加 Bearer）；页面与 API 分属两域。",
+  "subjectPermission": "POST /api/user/info，code=0，data.userId；角色/菜单可见不等于目标 action 服务端权限。",
+  "expiryRevoke": "code 101/50008/50012/50014 为失效信号；恢复原页面登录；服务端 revoke/expiry 需由 LoginCacheService 与部署配置核实。",
+  "officialRefs": [],
+  "sources": [
+    {
+      "kind": "owner-contract",
+      "path": "../SKILL.md",
+      "status": "contract-recorded"
+    },
+    {
+      "kind": "repository",
+      "repository": "https://gitlab.addx.ai/CLOUD/revenue-sharing",
+      "researchCommit": "67ff74a8feab308a7a60b67275094ba1e7cd3180",
+      "entries": [
+        "src/main/java/com/addx/devide/framework/TokenInterceptor.java",
+        "src/main/java/com/addx/devide/service/LoginCacheService.java",
+        "src/test/java/com/addx/devide/framework/CurrentUserInfoAuthorizationTest.java"
+      ],
+      "status": "source-verified"
+    }
+  ],
+  "versionPolicy": {
+    "researchCommit": "67ff74a8feab308a7a60b67275094ba1e7cd3180",
+    "deployedCommit": null,
+    "deploymentMatch": "unknown",
+    "refreshTriggers": [
+      "authentication contract change",
+      "deployed version change",
+      "reproducible auth failure"
+    ],
+    "rule": "Candidate source and published contracts do not establish deployed compatibility. Verify the target instance version and read-only supported capabilities before enabling an adapter."
+  },
+  "verification": {
+    "source": "source-verified",
+    "fixture": "not-run-in-this-discovery",
+    "runtime": "not-attempted",
+    "scope": "Read-only documentation/repository discovery; no login, token issuance, credential inspection or business API execution."
+  }
+}

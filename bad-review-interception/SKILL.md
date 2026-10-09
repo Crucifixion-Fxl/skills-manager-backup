@@ -21,7 +21,7 @@ description: customer-care 项目差评拦截能力的 data-driven 四步闭环�
  └──── 反向回灌：下调失败 scene 优先级 + 更新 gotchas + 刷新 baseline ◄────┘
 ```
 
-本 skill 不重新实现 API——每一步都委托现成的原子 skill（`datahub-schema-search` / `superset` / `marketing-cms` / `growthbook` / `gitlab-mr` / `tracker-manager`）。它的价值在于**把 4 步用数据工件串起来，并在每一步拦住常见 shortcut**（跳过频次、越过 scene 定义、无视上轮教训等）。
+本 skill 不重新实现 API——每一步都委托现成的原子 skill（`datahub-schema-search` / `superset` / `marketing-cms` / `growthbook` / `gitlab-mr` / `tracking-lifecycle`）。它的价值在于**把 4 步用数据工件串起来，并在每一步拦住常见 shortcut**（跳过频次、越过 scene 定义、无视上轮教训等）。
 
 ---
 
@@ -185,7 +185,7 @@ Step ② 跑频次时必须读 `scene priority weights` 做加权；Step ③ 配
 
 ## Step ② 统计 error_code 级频次
 
-**委托**：`superset`（跑 SQL）+ `tracker-manager`（反查 event_id 和描述）
+**委托**：`superset`（跑 SQL）+ `tracking-lifecycle`（反查 event_id 和描述）
 
 **第 0 步（必做）**：读 `lessons-learned.md` 的 `scene priority weights` 表——这决定了后面排序时用的权重。新 scene 没有记录就默认 weight=1.0。读 `无效 copy 模式` 和 `新发现的 gotcha`，避免本轮重复踩坑。
 
@@ -214,7 +214,7 @@ LIMIT 100
 
 **业务甄别**（必做）：Top 100 里剔除"用户不可感知"的 error_code——safertc 内部重连码、dbt 数据治理码、SDK 初始化临时码等。判断标准：找客服和 App 研发对齐，能否对应到"用户能描述的现象"。对应不上的直接剔除或放"技术监控"池，不进拦截候选池。
 
-**补齐 event_id**：每张 DataHub 表的描述字段里有 `[埋点平台](...spm/edit/?id=X)`，反查或用 `tracker-manager` skill 补到清单。
+**补齐 event_id**：每张 DataHub 表的描述字段里有 `[埋点平台](...spm/edit/?id=X)`，反查或用 `tracking-lifecycle` skill 补到清单。
 
 **产物**：`customer-care/docs/architecture/smart_popup/analysis/error-code-frequency.md` 或对应 Superset Dashboard，含 Top N 排名 + 每条的 `{用户现象, 技术根因, 是否可自助, scene}`。**`scene` 字段对齐 Rule 5 的 Proximal Metric 表**。
 
@@ -303,7 +303,7 @@ Step ②（委托 superset）：
     - (join_live_hi,   4011) "设备离线"       occ=5010   uv=1890  ← 走客服工单兜底，不拦
     ...
   - 给 4002/4005 对齐 scene=live，proximal_metric=live_success_rate
-  - 反查 tracker-manager 拿 event_id=376/377
+  - 反查 tracking-lifecycle 拿 event_id=376/377
   - 输出写到 error-code-frequency.md
 
 Step ③：
@@ -342,7 +342,7 @@ AI：好的，我在 smart_popup_rules 里加一条：只要 live_failed 事件�
 | Step | 委托 | 用途 |
 |---|---|---|
 | ① | `datahub-schema-search` | 列表 + 语义搜索 |
-| ①② | `tracker-manager` | 埋点平台 SSOT，反查 event_id |
+| ①② | `tracking-lifecycle` | 埋点平台 SSOT，反查 event_id |
 | ② ④ | `superset` | SQL 查频次 / A/B 指标（`SUPERSET_USERNAME` / `SUPERSET_PASSWORD`） |
 | ③ | `marketing-cms` | Payload CMS 多语言 copy |
 | ③ ④ | `growthbook` | A/B 实验配置 + 显著性（`GROWTHBOOK_API_KEY`） |

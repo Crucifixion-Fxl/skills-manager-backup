@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "22e0b74a-a574-4120-a990-d272457de1b5",
+  "path": "device-cloud-host-usage",
+  "path_key": "device-cloud-host-usage",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/hardware/device-cloud-host-usage",
+    "branch": null
+  }
+}

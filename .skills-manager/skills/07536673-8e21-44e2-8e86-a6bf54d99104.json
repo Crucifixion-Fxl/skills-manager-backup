@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "07536673-8e21-44e2-8e86-a6bf54d99104",
+  "path": "gitlab-feishu-approval-onboarding",
+  "path_key": "gitlab-feishu-approval-onboarding",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/delivery/gitlab-feishu-approval-onboarding",
+    "branch": null
+  }
+}

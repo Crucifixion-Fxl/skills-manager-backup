@@ -249,7 +249,7 @@ class NotifiedLineDocsTest(unittest.TestCase):
         self.assertIn("可见提示行", doc)
         self.assertIn("🔔 通知 @", doc)
         self.assertIn("name_fallbacks", doc)
-        adr_dir = SKILL.parents[1] / "docs" / "05-adr"
+        adr_dir = SKILL.parents[2] / "docs" / "agent-harness" / "adr"
         adr = adr_dir / "0012-show-who-was-notified-with-a-visible-mention-line.md"
         self.assertTrue(adr.is_file())
         self.assertIn("status: Accepted", adr.read_text(encoding="utf-8"))

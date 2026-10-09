@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "688c24d0-b53d-40b8-ad03-c7cd33bddabc",
+  "path": "device-setting-override",
+  "path_key": "device-setting-override",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/experimentation/device-setting-override",
+    "branch": null
+  }
+}

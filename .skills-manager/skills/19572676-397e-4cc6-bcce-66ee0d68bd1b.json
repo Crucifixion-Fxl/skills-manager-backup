@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "19572676-397e-4cc6-bcce-66ee0d68bd1b",
+  "path": "user-research-coding",
+  "path_key": "user-research-coding",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/product/user-research-coding",
+    "branch": null
+  }
+}

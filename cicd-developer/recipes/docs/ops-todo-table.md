@@ -25,8 +25,9 @@
 #       "TKE 集群跨云访问 AWS [resource_type]：v2 当前无对应 self-serve workflow。
 #        业务确认（a）暂不需要，或（b）改用腾讯云 COS / CDB（等同资源），
 #        或（c）走 AK/SK 长效凭证 + Vault path 规划（运维 case-by-case 决策）"
-#     待业务真实需求出现 + 频率 > 1 次时考虑加 workflow `add-tencent-cos.md` 或
-#     `add-aws-cross-cloud-resource.md`。
+#     TKE 原生 COS 接入已由 `workflows/add-tencent-cos.md` 覆盖应用侧步骤；
+#     开桶、CAM / OIDC 平台配置仍产 Ops Todo，不代表跨云 AWS 自助流程已实现。
+#     长期 AK/SK 只作为平台评估后的例外，不是缺少 AWS IRSA 时的默认方案。
 #
 # - **GCP 集群的 Sentry 自助接入**
 #     add-sentry workflow 在 cloud=gcp 时 STOP；GCP 集群 Sentry 接入 v2 当前无路径。

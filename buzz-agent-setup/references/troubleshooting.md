@@ -103,7 +103,7 @@ Error: Claude Code cannot be launched inside another Claude Code session.
 
 **现象**：MR 关闭（或提到）了几个 Issue，其中一个 Issue 的 Thread 里只有一条 `🔗 **MR 关联 · 事实在别处**`，之后 MR 的新提交、评论、流水线、合并都没有出现在那里。
 
-**根因**：不是丢消息，是规则（[ADR-0015](../../../docs/05-adr/0015-deliver-an-mr-to-one-thread-and-cross-link-the-others.md)，2026-09-21 起）：MR 的事实只发进 binding 指向的一个 Thread，其余关联的 Thread 只在 MR 首次出现时收一条交叉链接（header `change:xref`）。点交叉链接第二行的 `buzz://` 链接，就是 MR 事实所在的 Thread；MR 的 GitLab 页面里同步 bot 写的 binding 备注指向同一处。
+**根因**：不是丢消息，是规则（[ADR-0015](../../../../docs/agent-harness/adr/0015-deliver-an-mr-to-one-thread-and-cross-link-the-others.md)，2026-09-21 起）：MR 的事实只发进 binding 指向的一个 Thread，其余关联的 Thread 只在 MR 首次出现时收一条交叉链接（header `change:xref`）。点交叉链接第二行的 `buzz://` 链接，就是 MR 事实所在的 Thread；MR 的 GitLab 页面里同步 bot 写的 binding 备注指向同一处。
 
 **说明**：
 

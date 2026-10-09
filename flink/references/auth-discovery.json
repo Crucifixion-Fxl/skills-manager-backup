@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "tool": "flink",
+  "owner": "flink",
+  "status": "source-reviewed-runtime-pending",
+  "contract": "../../flink-job-development/references/deployment.md",
+  "notes": "实际Flink session deployment入口已由reference-projects.md指向DATA/flink-addx master；业务源码DATA/flink-jobs main。Ingress身份/权限需源码研究，无认证事实不猜测；不能取Vault密码；提交job/savepoint/cancel为写门禁。",
+  "credentialHandling": "No login, secret reads, token issuance, or SaaS business calls performed.",
+  "referenceBase": "owner-skill-root for SKILL.md/contractEntrypoints/referenceSources paths; contract field resolves from this JSON directory; upstream repository entrypoints stay repository-relative"
+}

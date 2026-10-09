@@ -1,8 +1,8 @@
 """L3 routing: trusted Canvas policy and the Desk gate route Desk sync facts to a real role agent.
 
 Skipped unless BUZZ_SYNC_L3=1. Needs the localstack up with agents on the current prompts:
-  python3 skills/buzz-agent-setup/tests/localstack/stack.py agents --restart desk,role
-  BUZZ_SYNC_L3=1 python3 -m unittest skills/buzz-agent-setup/tests/integration/test_routing_e2e.py -v
+  python3 skills/agent-harness/buzz-agent-setup/tests/localstack/stack.py agents --restart desk,role
+  BUZZ_SYNC_L3=1 python3 -m unittest skills/agent-harness/buzz-agent-setup/tests/integration/test_routing_e2e.py -v
 
 The Desk-owned sync step publishes facts, the deterministic local route script runs with the same Desk identity,
 and the role agent is a real LLM that answers in the same thread. No route Workflow is created.

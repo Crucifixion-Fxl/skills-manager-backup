@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "cf4a30ea-213b-4529-a390-08ba52ae697f",
+  "path": "ios-dev-setup",
+  "path_key": "ios-dev-setup",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/development/ios-dev-setup",
+    "branch": null
+  }
+}

@@ -20,6 +20,7 @@ from release_parity_assertions import (
     coverage_failures,
     gate_declarations,
 )
+from release_parity_branch import load_branch_promotion_provenance
 from release_parity_contract import (
     allow_rules,
     load_contract,
@@ -41,6 +42,13 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--canonical-verification-mr", required=True, type=int)
     result.add_argument("--candidate-mr", required=True, type=int)
     result.add_argument("--staging-branch", default="staging")
+    result.add_argument("--staging-pipeline-id", type=int)
+    result.add_argument("--staging-acceptance-note-id", type=int)
+    result.add_argument(
+        "--branch-promotion",
+        action="store_true",
+        help="require the candidate to equal the verified merge commit of a long-lived staging branch",
+    )
     result.add_argument("--contract")
     result.add_argument("--json", action="store_true", dest="as_json")
     return result
@@ -57,14 +65,32 @@ def release_status(code_status: str, requires_live_gate_audit: bool) -> str:
 def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
     try:
-        refs, provenance = load_gitlab_provenance(
-            args.project_path,
-            args.canonical_verification_mr,
-            args.candidate_mr,
-            args.staging_branch,
-        )
-        require_ancestor(refs["canonical_base"], refs["canonical"], "canonical")
-        require_ancestor(refs["candidate_base"], refs["candidate"], "candidate")
+        if args.branch_promotion:
+            if (
+                args.staging_pipeline_id is None
+                or args.staging_acceptance_note_id is None
+            ):
+                raise InputError(
+                    "branch promotion requires --staging-pipeline-id and --staging-acceptance-note-id"
+                )
+            refs, provenance = load_branch_promotion_provenance(
+                args.project_path,
+                args.canonical_verification_mr,
+                args.candidate_mr,
+                args.staging_branch,
+                args.staging_pipeline_id,
+                args.staging_acceptance_note_id,
+            )
+        else:
+            refs, provenance = load_gitlab_provenance(
+                args.project_path,
+                args.canonical_verification_mr,
+                args.candidate_mr,
+                args.staging_branch,
+            )
+        if not args.branch_promotion:
+            require_ancestor(refs["canonical_base"], refs["canonical"], "canonical")
+            require_ancestor(refs["candidate_base"], refs["candidate"], "candidate")
         contract, contract_metadata = load_contract(args.contract, refs["candidate"])
         rules = allow_rules(contract)
         matched, blocked, allowed, failures = compare(

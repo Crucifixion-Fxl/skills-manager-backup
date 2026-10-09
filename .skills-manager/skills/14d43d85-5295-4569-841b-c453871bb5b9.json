@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "14d43d85-5295-4569-841b-c453871bb5b9",
+  "path": "software-development-guide",
+  "path_key": "software-development-guide",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/development/software-development-guide",
+    "branch": null
+  }
+}

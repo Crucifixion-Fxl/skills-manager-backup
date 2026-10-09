@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "6f42f934-f547-4668-b855-e11f72037b55",
+  "path": "trufflehog-cli",
+  "path_key": "trufflehog-cli",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/security/trufflehog-cli",
+    "branch": null
+  }
+}

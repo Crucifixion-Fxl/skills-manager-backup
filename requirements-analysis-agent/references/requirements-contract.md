@@ -4,6 +4,12 @@
 
 Ready Artifacts use a source-kind discriminated union. Select exactly one profile from the canonical source; never copy transport-only fields between profiles:
 
+The Issue lifecycle gate is stricter than the storage profile: any project/product delivery
+requirement must create or reuse an open, assigned Root Issue before analysis can become ready.
+Inline text and documents are attached as immutable evidence to that Issue. The local/manual ready
+profile is only for explicitly non-project analysis that creates no durable project artifact and
+cannot authorize architecture, test design, coding, MR, deployment, or release work.
+
 | Source kind | Ready profile | Required source fields |
 |---|---|---|
 | `GITLAB_ISSUE_SNAPSHOT` | Buzz/GitLab | stable reference, digest, retrieval time, live project/Issue identity and revision |

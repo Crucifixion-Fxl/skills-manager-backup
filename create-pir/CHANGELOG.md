@@ -51,11 +51,11 @@ clone 时 git 可能做 CRLF/LF 转换破坏二进制内容）。
 **改动**：
 
 - 删除 `scripts/test_videos/.gitattributes`（原 .ts/.mp4 混杂规则）
-- 新增 `skills/create-pir/.gitattributes`（路径限定）：
+- 新增 `skills/quality/create-pir/.gitattributes`（路径限定）：
   - `scripts/test_videos/*.mp4    binary`
   - `scripts/test_images/**/*.jpg  binary`
   - `scripts/test_images/**/*.jpeg binary`
-- 新增 `skills/create-pir/.gitignore`（防御性）：
+- 新增 `skills/quality/create-pir/.gitignore`（防御性）：
   - `scripts/test_videos/*.ts`（防止 ffmpeg 运行时切片意外落入 repo）
 
 **关注点分离**：

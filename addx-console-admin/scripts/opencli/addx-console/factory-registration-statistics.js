@@ -1,0 +1,4 @@
+import {cli,Strategy} from '@jackwener/opencli/registry';
+import {identity,request} from './native.mjs';
+import {statisticsQuery,statisticsRows} from './registration-statistic-records.mjs';
+cli({site:'addx-console',name:'factory-registration-statistics',access:'read',description:'Paged monthly enterprise registration aggregate counts only; no individual devices/SNs/people, exports, initialization or synchronization',strategy:Strategy.LOCAL,browser:false,args:[{name:'page',type:'int',default:1,help:'Positive server page'},{name:'limit',type:'int',default:10,help:'Server page size 1 to 20'},{name:'month',type:'string',help:'Optional one observed month YYYY-MM; omitted matches UI all-month default'}],columns:['month', 'enterprise', 'count', 'customerRegisterCount', 'rangeTotalCount', 'rangeRegisterCount', 'total'],func:async args=>{const q=statisticsQuery(args,1);await identity();return statisticsRows(await request('/register/list','POST',q),q.pageSize,1);}});

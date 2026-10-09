@@ -1,5 +1,6 @@
 # sentry-onboard-config-tke.yaml.tmpl
 #
+# 仅限 100014919455 / cn-main；不适用于 100052802231 staging/tech-service。
 # Sentry 自助接入的 ConfigMap —— **TKE cn-main 专用**。
 # 跟 onboard-config-eks.yaml.tmpl 的差异（references/sentry/README.md TKE 差异表）：
 #   - VAULT_K8S_MOUNT 固定 `jwt-tke-cn-main`（TKE 专用 JWT auth mount）
@@ -10,7 +11,7 @@
 #   {{platform}}         Sentry platform slug（node / java-spring-boot / python-django / go / ...）
 #   {{team}}             Sentry 内真实存在的 team slug；必须按目标 org 查询确认，不能默认 `sentry`
 #   {{sentry_app_type}}  backend / admin / mobile-app / web-frontend
-#   {{env}}              来自 target.env，staging-cn-tke=staging，prod-cn-tke=prod
+#   {{env}}              来自 target.env，历史 cn-main staging=staging，prod-cn/prod-cn-tke=prod；新 staging keyword 已路由独立集群
 #
 # 选填槽位：
 #   {{project_slug}}     Sentry project slug；留空/省略时默认 app，不能用它替换 APP

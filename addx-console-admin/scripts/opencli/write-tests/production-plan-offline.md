@@ -1,0 +1,11 @@
+# Production-plan source-contract simulations
+
+`battery-plan-create` and `battery-plan-edit` are offline planning commands, not production submission commands. Both require a synthetic JSON `simulation-file` with `proposed` and `context`; `context.simulation` must be `true`. No credential is used and no HTTP request is implemented. The only supported mode is `dry-run`, with status `OFFLINE_PLAN_ONLY`. Submitting is deliberately unavailable pending genuine deployment and action-context verification.
+
+The context contains synthetic `customerType` (0 or 1), positive `manufacturerId`, `permissions` including `BatteryProductionPlanningManagement`, nonnegative `maxProductNumber`, `batchPlansComplete: true`, and complete simulated global `batchPlans` entries `{id,batteryPackBatchCode,startNumber,endNumber}`. These are test assumptions, not proofs of permissions or inventory. An edit also needs a matching `current` detail, `scopedPlanIds`, and `editable: true`.
+
+Create proposed fields are `batteryPackModel`, `batteryCellModel`, `batteryCellBatchCode`, `batteryPackBatchCode`, `startSeq`, and `endSeq`. There is no ID. Editing proposed fields are only existing `id`, `startSeq`, and `endSeq`; the adapter preserves model and batch fields conservatively. This restricted edit surface is an adapter choice, not a live UI immutability finding.
+
+The source controller parses equal-width decimal strings as Java int32, preserving width for SN construction. The source service rejects server-role users, rejects plans with completed tests, checks stock capacity and global overlapping intervals, assigns the factory from the current user's manufacturer, and writes operator/time fields. Creation reserves a production SN range; it must never be used as read-only validation. LDAP customer type -1 maps to SERVER; a username alone does not prove the actual current type.
+
+List/detail DTOs lack the numeric factory ID. A client-scoped list does not expose all same-batch intervals across factories, so it cannot prove the server's global overlap condition. A future live adapter needs trustworthy target visibility/scope, exact deployed role/action checks, server-authoritative capacity/overlap checks, human authorization for the resulting range, and post-submit readback. There is no atomic compare-and-swap: a precheck cannot eliminate concurrent changes.

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "e3b117dc-297b-4d02-b5d3-ca5e9e04f2ec",
+  "path": "buildbuddy-deploy",
+  "path_key": "buildbuddy-deploy",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/delivery/buildbuddy-deploy",
+    "branch": null
+  }
+}

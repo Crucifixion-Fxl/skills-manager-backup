@@ -3,6 +3,8 @@ name: dev-infra
 description: 本地开发基础设施方法论（Dev Infrastructure Methodology）— AI Agent 友好的完整本地开发环境方法论。包含服务分层、端口发现、健康探活、热重载、make dev 生命周期、CLAUDE.md 规范固化、多 worktree 并发支持、Flutter Web E2E 等 12 条 Rules。只要用户提到多 worktree 开发、git worktree、端口冲突、并发开发环境、feature 分支隔离、本地环境搭建、多人协作开发冲突等关键词，就应该使用本 Skill。即使用户只是随口说"我们有几个 worktree 在同时开发"，也应触发本 Skill 来引导他们建立合理的分层环境。（曾用名 multi-worktree-dev → tdd-dev-infra → dev-infra；TDD 只是实现/验证方法，本 skill 是完整本地开发基础设施方法论）
 ---
 
+**写入 memory 时**：遵循 [极简写入规约](references/memory-writing.md)：只增量写长期约束与入口，默认≤5条/≤10行/约≤200字，语义去重；保留既有授权边界和安全门禁，详情留文档。此规约不新增写入授权。
+
 # dev-infra
 
 本地开发基础设施方法论（Dev Infrastructure Methodology）— AI Agent 友好的完整本地开发环境方法论。包含服务分层、端口发现、健康探活、热重载、make dev 生命周期、CLAUDE.md 规范固化、多 worktree 并发支持、Flutter Web E2E 等 12 条 Rules。（曾用名 multi-worktree-dev → tdd-dev-infra → dev-infra）
@@ -168,7 +170,7 @@ description: 本地开发基础设施方法论（Dev Infrastructure Methodology�
 
 **Community 服务清单 + Tier 边界**：
 
-详见 [`reference/localstack.md`](./reference/localstack.md)，含：
+详见 [`reference/localstack.md`](reference/localstack.md)，含：
 - §2 Community Edition 完整服务清单（39 个服务，附 OSS 源码目录交叉验证，最后核对 2026-04-30）
 - §2.3 Community 支持但功能受限的"灰色地带"列表
 - §3 Tier 边界查询的官方入口（Base/Ultimate 范围会持续变化，**不要把清单写死**——按需查 `https://docs.localstack.cloud/aws/licensing/` 和 `https://docs.localstack.cloud/aws/services/{service}/` 顶部的 `Included in Plans:` badge）
@@ -617,8 +619,8 @@ docs/deployment/
 
 **做法**：
 - **根 CLAUDE.md**：写**全栈 `make dev`** 规约（根 Makefile 编排所有 Component、全局禁止裸命令、跨 Component 端口/共享通道协议）—— 即上一节的内容
-- **每个 Component 子目录也落一份自己的 CLAUDE.md**（30-50 行，[模板见 architect skill](../architect/SKILL.md#子目录-claudemd-模板)），标注：
-  - 本 Component 的栈（Go / Next.js / Flutter / ...）和当前阶段
+- **每个代码一级 System 子目录落一份自己的 CLAUDE.md**（≤20 行，[模板见 architect skill](../../development/architect/SKILL.md#代码一级目录-claudemd-模板)），更深 Component 不另铺规则，标注：
+  - 指向架构文档、依赖配置和 Makefile，不复制栈、命令或临时阶段
   - 在该子目录工作时**必读的 skill** 列表（如 `server/` 必读 `microservice-integrate`，`admin/` 不直连后端 DB 必走 backend API）
   - 本 Component 的边界（关键 ADR、不准直连的依赖、数据所有权）
 - 每个子 CLAUDE.md 同目录加 `AGENTS.md` 相对路径软链（`ln -s CLAUDE.md AGENTS.md`），让 Codex / Aider 等读 `AGENTS.md` 的工具共享同一份指引
@@ -820,6 +822,6 @@ test-e2e-api:
 
 ## References
 
-- [testing-strategy Skill](../testing-strategy/SKILL.md) — L1/L2/L3/L4 分层测试完整策略，含 CI 质量门禁和 TDD 调试流程
+- [testing-strategy Skill](../../quality/testing-strategy/SKILL.md) — L1/L2/L3/L4 分层测试完整策略，含 CI 质量门禁和 TDD 调试流程
 - [ClawPlex 本地开发环境文档](../../ClawPlex/.claude/worktrees/local-dev/docs/deployment/local-dev.html) — L1/L2/L3 分层的参考实现
 - [ClawPlex 部署架构总览](../../ClawPlex/.claude/worktrees/local-dev/docs/deployment/overview.html) — Mermaid 架构图 + CI/CD 全链路

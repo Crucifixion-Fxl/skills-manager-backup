@@ -1,11 +1,13 @@
 ---
 name: engagement-h5-paywall-creation
-description: Create or update Engagement H5 Paywall template UI from a Figma prototype, prepare the matching Marketing CMS draft, and verify visual, interaction, payment-contract, and framework-owned tracking behavior. Use when product or operations asks to build, redesign, or configure an H5 Paywall. Do not use for only connecting an existing Paywall to a touchpoint.
+description: Create or update Engagement H5 Paywall template UI from confirmed PRD behavior and a Figma prototype, using verified App CMS data before dynamic implementation, and verify visual, interaction, payment-contract, and framework-owned tracking behavior. Use when product or operations asks to build, redesign, or configure an H5 Paywall. Do not use for only connecting an existing Paywall to a touchpoint.
 ---
 
 # Engagement H5 Paywall Creation
 
 ## Description
+
+平台登录与认证 SSOT：[engagement-admin](../engagement-admin/SKILL.md)。本 Skill 保留业务流程与门禁，登录/Token事实只在平台 owner 维护；日常访问调用 `web-access`。
 
 把产品运营提供的 Figma 原型和业务配置转换为可验收的 H5 Paywall。产品运营只需要描述业务，不需要理解支付、Bridge、运行时和埋点实现。
 
@@ -37,7 +39,7 @@ description: Create or update Engagement H5 Paywall template UI from a Figma pro
 3. Paywall 名称或业务 key；没有时可以提出候选，但发布前必须由业务确认。
 4. 商品 ID、Offer 类型 / Offer ID、默认商品；个性化页面还需要目标分群。
 5. 无法从 Figma 判断的行为差异，例如关闭、All Plans、恢复购买、成功后跳转或特殊支付方式。
-6. 英文源文案及需要覆盖的语言；Figma 文案不是最终文案时要明确来源。
+6. 英文源文案及需要覆盖的语言；Figma 文案不是最终文案时要明确来源。该语言清单同时约束 CMS 翻译和模板固定文案的 locale 资源（见「实现 Figma UI」一节）。
 
 不要要求产品运营提供事件名、埋点字段、Bridge 方法、支付 payload、CMS 原始 JSON 或自动生成的 `templateKey`。这些不是业务输入。
 
@@ -59,7 +61,7 @@ description: Create or update Engagement H5 Paywall template UI from a Figma pro
 
 ### 1. 冻结输入与验收面
 
-读取 Figma 的目标 frame、组件属性、布局尺寸、字体、颜色、圆角、间距、素材和交互状态。记录 file key、node ID 和读取时间；无法读取 Figma 时，请用户提供导出的 frame 和原始素材，不根据模糊截图猜完整页面。
+先读 PRD 和用户最新确认的业务规则；Figma 用于 UI，业务冲突记录并按已确认需求处理，不通过硬编码价格掩盖。读取 Figma 的目标 frame、组件属性、布局尺寸、字体、颜色、圆角、间距、素材和交互状态。记录 file key、node ID 和读取时间；无法读取 Figma 时，请用户提供导出的 frame 和原始素材，不根据模糊截图猜完整页面。
 
 形成简短输入表：
 
@@ -101,6 +103,14 @@ locales:
 
 `templateKey` 不自动生成。需要新增时，先创建 Owner 评审 issue；只有 Owner 已确认稳定 key、内容模型、capability 和 CMS 方案后，才继续模板 UI 工作。
 
+### 2.5. 动态数据准备与交接
+
+动态商品、分群和挽留页面实现前，读 [运行时数据输入](references/runtime-data-input.md)，取得目标环境真实 App `cms-content` 及 evaluate / 宿主场景参数。先确认候选、元数据、默认项和报价身份完整；缺字段先定位数据路径，不能拼接本地目录伪装成真实返回。Figma 分析和不依赖数据的准备可并行。
+
+需要建立触点、PE / GB 条件和 Experience 映射时，在同一授权任务中使用 `engagement-touchpoint-integration` 的直接 H5 流程，不要求新建 Agent 窗口。模板组件仍只消费公开 view model / controller，不直接请求 CMS、处理原始 DTO 或调用 Bridge。场景选品 / 导航能力缺失时按既有 Owner 边界处理。
+
+用户已约定逐阶段 review 时，在该节点交付可检查的配置、接口结果或页面预览再推进；沿用当前任务授权，不额外要求所有任务逐阶段审批。
+
 ### 3. 建立安全的实现范围
 
 默认只允许修改：
@@ -109,8 +119,11 @@ locales:
 - `paywall-h5/src/templates/<approved-template>/assets/**`
 - `paywall-h5/src/templates/<approved-template>/model/**` 中纯展示映射
 - 模板目录内的局部样式、单元测试和可访问性 / UI 自动化标识
+- `paywall-h5/src/i18n/<approved-template>LocaleData.ts`、`paywall-h5/src/i18n/generated/<approved-template>LocaleData.ts` 与对应 `.test.ts`（模板固定文案的多语言资源，见「实现 Figma UI」一节）
 
 `template.manifest.ts` 只有在 Owner 已给出准确的 key、content model、schema version 和 capability 后才可按批准内容修改。Figma 基线、共享 E2E harness 和 CMS schema 不属于产品运营的默认写入范围。
+
+在共享的 `paywall-h5/src/i18n/cmsI18n.ts` 中，只允许为上述 locale 资源新增一行数据源注册（`messagesFor()` 合并链里的 spread），不修改语言别名归一、英文回退或 RTL 等解析逻辑。
 
 开始实现前列出 planned changed files。若出现受保护路径，立即停止并进入 Owner 评审，不能用“为了让测试通过”为理由越界。
 
@@ -121,14 +134,17 @@ locales:
 - 不调用 `fetch`、Bridge、TrackingService、全局 state、支付状态机或 Native API。
 - CSS 和素材放在模板目录，避免修改全局样式影响其他模板。
 - 价格、折扣、Offer、商品选择和按钮状态必须来自只读 view model / controller，不能把商店价格写死在 UI。
+- 模板固定正文通过 `template-kit/public` 的 `t(key, fallback)` 取文案，动态值用命名占位符（如 `{eligibleDeviceCount}`、`{targetPrice}`）注入；价格、数量、价差、节省等运行时事实不在文案里写死、翻译或换算。
+- 需要局部强调或样式的语义值（数字、"both"、"one" 等）拆成独立 label token（参照 `dualDeviceLabel` / `onePlanLabel` 模式），不把整段动态短语做成单个 token，避免强调范围失控。
+- 模板含代码侧固定文案时，必须同步建立 locale 资源，不留给后续 MR：`src/i18n/<template>LocaleData.ts` 英文源（`as const` 推导 key 类型）+ `src/i18n/generated/<template>LocaleData.ts` 覆盖 `cmsLocaleData` 的全部 locale + `cmsI18n.ts` 单行注册。沿用 `personalized` / `coverageUpgrade` 的现有结构；语言别名、英文回退和 RTL 由既有机制处理，不新造解析逻辑。机器译文在 Production 开放前需产品 / 本地化复核，不得当作已审批文案。
 - 所有交互控件提供可读名称和稳定测试标识；处理长文案、小屏、安全区、加载、空数据和错误状态。
 - 基础曝光、CTA、支付成功和支付失败埋点由框架语义组件托管。模板不得自行补报或改名。
 
 如果 Figma 需要 Public Template Kit 没有的行为，停止实现该行为并提交 Owner 评审，不得在模板中绕过。
 
-### 5. 准备 Marketing CMS 草稿
+### 5. 核对 Marketing CMS 草稿与发布配置
 
-先在 Staging 操作，使用 `marketing-cms` 完成鉴权和安全写入：
+商品数据准备可以在动态 UI 实现前完成；本节是配置核对，不要求先写完 UI 再创建 CMS。先在 Staging 操作，使用 `marketing-cms` 完成鉴权和安全写入：
 
 - 复用标准模板时，`templateKey` 留空，内容由标准 components 配置。
 - 复用个性化模板时，选择当前已注册的个性化 `templateKey`，按当前 validator 配置完整商品矩阵。
@@ -158,6 +174,7 @@ npm run test:e2e:contract
 - 价格 loading / success / partial / error；
 - 商品默认选中、切换、Offer 与购买参数；
 - CTA、关闭、法律页面、重试及模板声明的其他 capability；
+- locale 资源完整性：全部 locale 的 key 集合、命名占位符集合与英文源一致；语言别名（如 `zh_CN`）、非支持语言英文回退和 `ar` / `he` RTL 方向有用例；代表语种长文案在移动 WebView 无横向裁切；
 - Mock Bridge 的 PV、区域曝光、CTA、支付取消 / 成功 / 失败调用序列。
 
 Mock 结果只证明浏览器 UI 和契约，不证明真实价格、真实支付、权益到账或数仓入库。不得自动覆盖已批准的视觉 baseline；先输出 candidate 和差异报告，等人工确认。
@@ -212,6 +229,7 @@ Issue 内容模板见 [references/template-boundary.md](references/template-boun
 | 模板策略 | 复用 `<key>` / 等待 Owner 批准新模板 |
 | H5 修改 | 仅列业务 UI 文件 |
 | CMS | Draft key、环境、模板、商品与 Offer 摘要 |
+| 多语言 | 固定文案 locale 覆盖（en + N 语种）、占位符一致性结果、译文审批状态 |
 | Figma | 已覆盖 frame 与待确认差异 |
 | 自动化 | lint / unit / build / contract / visual 结果 |
 | 框架能力 | 价格、支付、Bridge、成功失败和基础埋点均复用；无模板侧实现 |

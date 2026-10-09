@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "3e6200f1-a7b1-469f-94b6-ece2d15bb889",
+  "path": "local-security-check",
+  "path_key": "local-security-check",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/security/local-security-check",
+    "branch": null
+  }
+}

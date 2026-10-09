@@ -1,0 +1,4 @@
+import {cli,Strategy} from '@jackwener/opencli/registry';
+import {identity,request} from './native.mjs';
+import {mappingComponent,mappingDetail} from './function-mapping-records.mjs';
+cli({site:'addx-console',name:'function-mapping',access:'read',description:'Read exact existing component function mapping IDs/counts without parameter definitions or values',strategy:Strategy.LOCAL,browser:false,args:[{name:'component',type:'int',required:true,help:'Exact existing componentId from function-mappings'}],columns:['componentId','name','parameterIds','parameterCount','subParameterCount','appFunctionIds','mappedCount'],func:async(args)=>{const id=mappingComponent(args);await identity();return[mappingDetail(await request('/model/component/param/master/master/query','POST',{componentId:id}),id)];}});

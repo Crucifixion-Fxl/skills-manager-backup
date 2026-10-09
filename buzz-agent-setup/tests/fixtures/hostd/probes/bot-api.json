@@ -1,0 +1,38 @@
+{
+  "P0-14_missing_scope": {
+    "code": 99991672,
+    "has_console_url": true,
+    "has_missing_scopes": true
+  },
+  "P0-7_history": {
+    "items": 20,
+    "ok": true,
+    "sender_types": [
+      "",
+      "app",
+      "user"
+    ]
+  },
+  "P0-8_chat_list": {
+    "chat_ref_len": 64,
+    "chat_ref_stable": true,
+    "ok": true,
+    "sees_group_x": true
+  },
+  "P0-9_bot_adds_bot": {
+    "invalid": [],
+    "ok": true
+  },
+  "P0-9_members": {
+    "bots": 3,
+    "bots_have_app_id": true,
+    "bots_have_member_id": true,
+    "ok": true,
+    "test_bot_app_ids_present": true,
+    "users": 1
+  },
+  "failed_checks": [],
+  "ok": true,
+  "probe": "hostd-bot-api",
+  "t": 1791118316
+}

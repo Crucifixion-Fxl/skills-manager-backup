@@ -1,11 +1,12 @@
 # clusters.yaml
 #
-# K8s 路由/历史查表。16 条记录（11 Ops + 4 Builder + 1 CICD 基础设施），
-# 其中 cn-eks-dev 已退役；条目数不是当前可部署集群数，也不是 fleet scanner 巡检数。
-# 部署前必须检查 deployment_status；历史条目只供 Review/Troubleshoot 定位。
-# tier 与 vault 域绑定：所有 tech-service tier（4 集群）一律 ops 域，
+# K8s 路由/历史查表。AWS CN 四个集群均已退役，只保留历史查表。
+# 当前 CN：prod=100014919455/cn-main，staging/tech-service=100052802231。
+# 证据和能力边界见 ../cn-tencent-migration.md；条目数不代表可部署数或巡检数。
+# 部署前必须检查 deployment_status 和 endpoint_status；历史条目只供 Review/Troubleshoot 定位。
+# tier 与 vault 域绑定：所有 tech-service tier一律 ops 域，
 # 不得消费 builder vault；builder dev/staging 集群不得消费 ops vault。
-# TKE cn-k8s 是 ops 域特例：部署在 cn-k8s 的服务即使 env=staging 也使用 ops vault。详见
+# 仅历史 cn-k8s staging 工作负载使用 ops vault；新 staging 指向 cn-tke-staging。详见
 # references/vault-paths/domain-binding.md。
 #
 # 消费方：
@@ -18,8 +19,15 @@
 # Schema：
 #   clusters[]:
 #     name             集群规范名（其他 yaml 引用的 key）
-#     deployment_status allowed | retired；allowed 仅表示路由准入，不代替 live readiness。
-#                       Build 写入前必须为 allowed；retired / 未知 / 缺失均 STOP。
+#     deployment_status allowed | retired | blocked；allowed 仅表示路由准入，不代替 live readiness。
+#                       Build 写入前必须为 allowed；retired / blocked / 未知 / 缺失均 STOP。
+#     endpoint_status  可选：pending-cutover | verified；显式空值/未知值拒绝整个 catalog。
+#                       pending-cutover 表示 URL 是目标命名，切换验收前禁止 Build；
+#                       verified 仅由平台核验并通过源仓库变更登记，不能替代 live readiness。
+#     harbor_public_url 同一 Harbor 的受限公网入口（按需）；不是集群镜像默认值。
+#     vault_builder_url Builder 服务入口说明（按需），不改变 vault/vault_css 应用取密钥绑定。
+#     prometheus_url   Prometheus-compatible API base（按需），VMCluster 含 /select/0/prometheus。
+#     vmalert_url      VMAlert 入口（按需），不作为指标查询 API base。
 #     lifecycle_evidence 退役等状态变更的权威仓库证据链接（按需）
 #     domain           ops | builder | cicd-infra
 #     region           us | eu | cn | sg
@@ -27,7 +35,7 @@
 #     account_id       AWS account id（字符串）| GCP project id | Tencent uin
 #     partition        aws | aws-cn （仅 cloud=aws 时存在；用于 IRSA ARN / S3 ARN 渲染）
 #                      cloud=gcp/tencent 无此字段 —— IRSA / 跨 AWS 资源 workflow 见此字段缺失即 STOP
-#     aws_region       完整 AWS region 名（仅 cloud=aws 时存在）；如 us-east-1 / eu-central-1 / cn-northwest-1 / ap-southeast-1
+#     aws_region       完整 AWS region 名（仅 cloud=aws 时存在）；如 us-east-1 / eu-central-1 / ap-southeast-1；AWS CN region 仅历史记录
 #                      用于 RDS / S3 / KMS Crossplane CR 的 forProvider.region；workflow 不要凭印象推导
 #     argocd_apps_dir  在 argocd-apps 仓库的子目录名（带斜杠结尾）
 #     argocd_url       ArgoCD WebUI URL（null = 当前未配置独立 ArgoCD WebUI）
@@ -40,7 +48,7 @@
 
 clusters:
 
-  # ===== Ops 集群（11 个）-> prod Vault =====
+  # ===== Ops 集群与已退役 AWS CN 历史记录 -> prod Vault =====
 
   - name: us-eks-prod
     deployment_status: allowed
@@ -77,7 +85,9 @@ clusters:
     build_mode: dual-arch
 
   - name: cn-prod
-    deployment_status: allowed
+    deployment_status: retired
+    lifecycle_evidence: references/cn-tencent-migration.md
+    # AWS CN 已弃用；本记录仅供历史排障，禁止新建或扩展部署。
     domain: ops
     region: cn
     cloud: aws
@@ -207,7 +217,9 @@ clusters:
     build_mode: single-arch-amd64
 
   - name: cn-eks-tech-service
-    deployment_status: allowed
+    deployment_status: retired
+    lifecycle_evidence: references/cn-tencent-migration.md
+    # AWS CN 已弃用；本记录仅供历史排障，禁止新建或扩展部署。
     domain: ops                      # tech-service tier 一律 ops 域（见 references/vault-paths/domain-binding.md）
     region: cn
     cloud: aws
@@ -222,12 +234,12 @@ clusters:
     vault_css: vault-backend
     runner_tags: [cn-tech-amd64, cn-tech-arm64]
     build_mode: dual-arch
-    # staging-cn 现已切到独立 builder staging 集群 cn-eks-staging（见 env-keywords.yaml）；
+    # 历史 AWS CN 配置：当时 staging-cn 位于 cn-eks-staging；现均已退役。
     # pre 已废弃。本集群只承载 restricted-admin 的 prod（namespace 前缀 prod-{app}）+
     # 平台栈自身。tech-service 自身平台栈（ArgoCD/Casdoor/Harbor/cicd-portal）的密钥
     # **必须**走 ops vault，不得读 vault-builder。
 
-  # ===== Builder 记录（3 个部署准入 + 1 个退役历史）-> Builder Vault =====
+  # ===== Builder 集群与已退役 AWS CN 历史记录 =====
   #
   # Builder 集群只承载真正的 dev/staging 开发联调流量。
   # tech-service tier（含 cn-eks-tech-service）不在此区——它们是 ops 域。
@@ -235,7 +247,9 @@ clusters:
   - name: cn-eks-dev
     deployment_status: retired
     lifecycle_evidence: https://gitlab.addx.ai/DEV/base-images/-/blob/60387c4dbbbb9a282129883a63b5fc5fbeee4a4f/docs/plans/2026-09-01-retire-cn-dev-image-sync.md
+    replaced_by: cn-tke-staging
     # 保留旧 Harbor/runner/Vault 字段供存量审查；不得据此构建或部署新工作负载。
+    # 2026-10-04 EKS 控制面已删除；CN 开发联调改用 cn-tke-staging（staging-cn）。
     domain: builder
     region: cn
     cloud: aws
@@ -252,7 +266,12 @@ clusters:
     build_mode: dual-arch
 
   - name: cn-eks-staging
-    deployment_status: allowed
+    deployment_status: retired
+    lifecycle_evidence: references/cn-tencent-migration.md
+    replaced_by: cn-tke-staging
+    # AWS CN 已弃用；本记录仅供历史排障，禁止新建或扩展部署。
+    # 2026-10-04 起业务全部在 cn-tke-staging；GitLab runner 4001 已暂停并改名
+    # retired-cn-staging-amd64-4001，cn-staging-amd64 / cn-staging 两个 tag 由 TKE runner 接管。
     domain: builder
     region: cn
     cloud: aws
@@ -301,6 +320,56 @@ clusters:
     vault_css: vault-builder-backend
     runner_tags: [eu-staging-amd64, eu-staging-arm64]
     build_mode: dual-arch
+
+  # 当前 CN tech-service。没有已验证的独立 CI runner，不能复用旧 cn-tech tags。
+  - name: cn-tke-tech-service
+    deployment_status: blocked
+    admission_reason: 目标域名尚待切换；当前仅核验平台 Application，业务 AppProject/部署准入与独立 runner 合同待验证
+    endpoint_status: pending-cutover
+    domain: ops
+    region: cn
+    cloud: tencent
+    account_id: "100052802231"
+    tencent_region: ap-beijing
+    argocd_apps_dir: tencent-100052802231-cn-tech-service/
+    # 以下入口为用户确认的目标命名，尚非已部署事实；见 ../cn-tencent-migration.md。
+    argocd_url: argocd-cn-tech-service-tke.addx.live
+    casdoor_url: casdoor-cn-tech-service-tke.addx.live
+    harbor_url: harbor-02231-cn-tech-service.addx.live
+    harbor_public_url: harbor-02231-cn-tech-service-pub.addx.live
+    vault_builder_url: https://vault-cn.builder.addx.live
+    prometheus_url: https://victoria-metrics-cn-tech-service-tke.addx.live/select/0/prometheus
+    vmalert_url: https://vm-alert-cn-tech-service-tke.addx.live
+    vault: vault-cn-prod
+    vault_css: vault-backend
+    runner_tags: []
+    runner_status: not_verified
+    build_mode: single-arch-amd64
+
+  # 当前 CN staging（唯一 CN dev/staging 目标）：CSS 名称相同不代表使用 ops Vault。
+  # 取代 AWS cn-eks-dev / cn-eks-staging 与旧腾讯 100014919455 staging-cn VPC（cls-i860hdh9）。
+  - name: cn-tke-staging
+    deployment_status: allowed
+    domain: builder
+    region: cn
+    cloud: tencent
+    account_id: "100052802231"
+    tencent_region: ap-beijing
+    tke_cluster_id: cls-riukakjb
+    argocd_apps_dir: tencent-100052802231-cn-staging/
+    argocd_url: argocd-cn-staging.addx.live
+    casdoor_url: casdoor-cn-staging.addx.live
+    harbor_url: harbor-02231-cn-staging.addx.live
+    # 同一 registry 的外部访问/SG 同步入口；在目标 VPC 内也解析到私网。
+    harbor_public_url: harbor-02231-cn-staging-pub.addx.live
+    # 同一实例的兼容入口；runner HARBOR_REGISTRY 与 Image Updater 当前仍使用它，新项目不要作为默认。
+    harbor_compat_url: harbor-cn-staging.addx.live
+    vault: vault-cn-tke-staging
+    vault_css: vault-backend
+    # 新 CI 用 tke-cn-staging-amd64；runner 4542 同时接管存量 cn-staging-amd64 / cn-staging。
+    runner_tags: [tke-cn-staging-amd64]
+    runner_compat_tags: [cn-staging-amd64, cn-staging]
+    build_mode: single-arch-amd64
 
   # ===== CI/CD 基础设施（1 个）-> 不接受业务 app =====
 

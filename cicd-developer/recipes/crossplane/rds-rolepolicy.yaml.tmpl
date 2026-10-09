@@ -3,10 +3,10 @@
 # Required slots:
 #   {{app}}         kebab-case (used in role name + ARN scope)
 #   {{partition}}   aws | aws-cn (from clusters.yaml cluster.partition)
-#                   AWS CN (cn-prod / cn-tech-service / cn-dev / cn-staging) MUST use aws-cn
+#                   aws-cn 仅保留历史 ARN 兼容；公司 AWS CN 已退役，当前 CN TKE 不使用此 recipe
 #                   else IAM 拒收 "MalformedPolicy" 因 ARN partition 不匹配集群
 #   {{region}}      full AWS region name from clusters.yaml cluster.aws_region
-#                   e.g. us-east-1 / eu-central-1 / cn-northwest-1 / ap-southeast-1
+#                   e.g. us-east-1 / eu-central-1 / ap-southeast-1；历史 AWS CN region 仅用于存量诊断
 #   {{account_id}}  AWS account id (12 digits) — from clusters.yaml
 #
 # Split into Describe (Resource: "*") + Manage (Resource: app-scoped ARN) blocks.

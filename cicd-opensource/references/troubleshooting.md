@@ -23,9 +23,9 @@
 
 **现象：** `Failed to pull image "harbor-xxx/base/my-app:1.0.0": unauthorized`
 
-**原因：** overlay 中写了错误的 Harbor 地址（不是目标集群的 Harbor）
+**原因：** overlay 中的 Harbor 地址不属于目标集群，或切换到新 hostname 后 pull secret 缺少精确域名的 auth key；`unauthorized` 本身不能证明 registry 地址错误。
 
-**修复：** 对照 k8s-templates.md 中的 Harbor 地址映射表修正。
+**修复：** 对照 k8s-templates.md 的映射表，核验实际 image ref 与平台同步 Secret 的 Docker `auths` hostname。CN staging 新部署默认使用 `harbor-02231-cn-staging.addx.live`；旧 host 仍兼容，不要自动替换存量。采用内网域名须先由平台补齐其精确 auth key 并验证拉取，同时按 [Harbor 双入口合同](../../harbor/SKILL.md) 排查 registry/token 的 DNS 与网络可达性。
 
 ### CN 集群拉取 Docker Hub 镜像超时
 
@@ -33,7 +33,7 @@
 
 **原因：** CN 集群无法直接访问 Docker Hub，必须使用 Harbor base/ 路径
 
-**修复：** 确保 overlay kustomization.yaml 的 `newName` 使用 CN 集群 Harbor 地址：`harbor-58989-cn-tech.addx.live/base/<name>`
+**修复：** 确保 overlay kustomization.yaml 的 `newName` 使用 CN 集群 Harbor 地址：`harbor-02231-cn-staging.addx.live/base/<name>`（当前 staging 内网入口，先验证上文精确域名认证；prod 用 `harbor-cn.addx.live`，tech-service 用新账号 catalog host）。SG 向 staging 同步用 `harbor-02231-cn-staging-pub.addx.live`；内外网入口共享镜像，无需额外复制。
 
 ## ArgoCD 问题
 
@@ -130,10 +130,7 @@ spec:
 
 **现象：** PVC 状态 `Pending`，Events 显示 `storageclass "xxx" not found`
 
-**修复：** 使用正确的 StorageClass：
-- EKS: `gp3`
-- GKE: `standard-rwo`
-- TKE: `cbs`
+**修复：** 读取精确目标的 StorageClass 与平台 values，确认 CSI/拓扑及可用性后填写；无法确认则停止并交平台处理，不按云类型套默认值。EKS `gp3`、GKE `standard-rwo` 仅是常见候选；新 CN staging 的仓库 values 使用 `cbs`，新 tech-service 使用 `cbs-topo`，不能跨集群复制。
 
 ### StatefulSet 缩容后 PVC 残留
 

@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "tool": "device-settings",
+  "owner": "device-setting-override",
+  "instances": [
+    "https://console-test.addx.live/api"
+  ],
+  "nativeRoute": "revenue-sharing /skill-api LDAP token proxy (default); explicitly authorized AK/SK only",
+  "loginFlow": {
+    "reuseFirst": true,
+    "steps": "优先复用 SKILL_LDAP_TOKEN；缺失由本机安全凭据注入 POST <rs-host>/skill-api/login {ldapCn,password}，不将密码放命令行/聊天。生产 RS host 在 owner 契约中待部署，不能自动切换 AK/SK。",
+    "authorization": "Login, token creation/rotation/revocation and business writes require the current task scope; this discovery performs none."
+  },
+  "tokenMechanism": "raw Authorization LDAP token，3 天；RS 服务端托管 PaasConfig AK/SK 与节点路由；显式 AK/SK 模式 IOT_ADMIN_AK/SK 做 URL HmacSHA1。",
+  "subjectPermission": "login 返回 ldapCn/expiresInSeconds 是申请回执；代理审计归属 LDAP cn；目标 node/environment 和只读设置回读单独验证。稳定独立身份探针尚缺。",
+  "expiryRevoke": "POST /skill-api/logout raw Authorization 幂等撤销；过期重新 LDAP 登录，生产部署与 proxy ACL 需核实。",
+  "officialRefs": [],
+  "sources": [
+    {
+      "kind": "owner-contract",
+      "path": "../SKILL.md",
+      "status": "contract-recorded"
+    },
+    {
+      "kind": "repository",
+      "repository": "https://gitlab.addx.ai/CLOUD/revenue-sharing",
+      "researchCommit": "67ff74a8feab308a7a60b67275094ba1e7cd3180",
+      "entries": [
+        "src/main/java/com/addx/devide/service/SkillTokenService.java",
+        "docs/plans/2026-05-25-skill-api-ldap-auth.md"
+      ],
+      "status": "source-verified"
+    }
+  ],
+  "versionPolicy": {
+    "researchCommit": "67ff74a8feab308a7a60b67275094ba1e7cd3180",
+    "deployedCommit": null,
+    "deploymentMatch": "unknown",
+    "refreshTriggers": [
+      "authentication contract change",
+      "deployed version change",
+      "reproducible auth failure"
+    ],
+    "rule": "Candidate source and published contracts do not establish deployed compatibility. Verify the target instance version and read-only supported capabilities before enabling an adapter."
+  },
+  "verification": {
+    "source": "source-verified",
+    "fixture": "not-run-in-this-discovery",
+    "runtime": "not-attempted",
+    "scope": "Read-only documentation/repository discovery; no login, token issuance, credential inspection or business API execution."
+  }
+}

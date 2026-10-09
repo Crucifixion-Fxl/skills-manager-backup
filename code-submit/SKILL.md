@@ -21,6 +21,12 @@ argument-hint: "--target=<目标分支> [--from=stage1-6] [--type=android|ios|ba
 
 如果未提供 `--target`，**必须询问用户**目标分支后再继续。
 
+## Stage 0.25：Issue binding 门禁
+
+提交项目变更前按 [`gitlab-issue-sop` 生命周期契约](../../collaboration/gitlab-issue-sop/references/lifecycle-binding.md) 实时验证 Root Issue 与当前仓 Work Item。要求 Issue open、有 assignee、Work Item 属于当前仓；分支名、commit message 和裸 `#IID` 仅是线索。缺失或无法核验时停止，不进入 lint、暂存、commit 或 push。
+
+记录完整 Root/Work Item URL，Stage 6 的 MR 描述必须各写一次 `Root Issue:` 与 `Work Item:`。跨仓时还必须验证两者已建立原生 Issue link。
+
 ---
 
 ## Step 0：项目类型检测
@@ -313,6 +319,11 @@ git status --porcelain
 
 ### 4b. 分类文件
 
+先读取项目已有的 Git 大文件政策，并按
+[Git 大文件存储与提交前检查](../gitlab-mr/reference/large-file-storage.md)
+分类本次二进制、制品、运行数据和缓存，避免只靠扩展名自动暂存。
+规则只保存在 skill，不补写项目 memory；保留已有项目阈值和路径例外。
+
 对每个文件根据项目类型进行分类：
 
 #### 自动排除（不暂存）
@@ -375,11 +386,17 @@ git status --porcelain
 
 用户确认后，逐个文件执行 `git add <file>`。**绝不使用 `git add -A` 或 `git add .`**。
 
+暂存后按上述 reference 检查 index 的实际 blob、LFS pointer 及本次新增历史对象。
+不合规时列出路径、大小和存储修复建议，保留用户 index，不直接删除或自动改写历史。
+
 ---
 
 ## Stage 5：干净提交
 
 > 目标：基于目标分支最新代码 rebase，生成干净的 commit
+
+实际提交或推送前必须通过上述大文件检查；即使使用 `--from=stage5` / `stage6`，
+或 rebase 改变了候选内容，也不能跳过。复用的通过证据必须对应未变化的候选内容。
 
 ### 5a. Rebase 到最新目标分支
 
@@ -481,6 +498,8 @@ git push -u origin "$(git branch --show-current)" --force-with-lease
 
 使用 `--force-with-lease`（因为 Stage 5 做了 rebase），比 `--force` 更安全。
 
+推送只证明远端分支存在，不证明生命周期回链完成。若本次 diff 含技术方案，必须先完成 6b 的方案提交，再用稳定 marker 向 Work Item 追加 branch、HEAD SHA 与固定 blob URL，回读内容一致后才能创建/更新 MR；写入未知时先查询，禁止盲目重试。没有技术方案时记录 `design_link=NOT_APPLICABLE`，不得制造空文档过门禁。
+
 ### 6b. 准备 MR 文档
 
 1. 检查 `docs/plans/` 或 `docs/04-user-stories/` 下是否有本次变更相关的文档
@@ -510,6 +529,11 @@ glab mr create \
 ## 相关文档
 
 - 设计文档：<GitLab blob 链接指向 docs/plans/ 下的文档>
+
+## 关联 Issue
+
+Work Item: <当前仓完整 Issue URL>
+Root Issue: <Root Issue 完整 URL>
 
 ## 变更类型
 

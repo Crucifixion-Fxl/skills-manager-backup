@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "b389cfcc-7239-48e0-a499-152b308b3fe6",
+  "path": "marketing-cms",
+  "path_key": "marketing-cms",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/business-operations/marketing-cms",
+    "branch": null
+  }
+}

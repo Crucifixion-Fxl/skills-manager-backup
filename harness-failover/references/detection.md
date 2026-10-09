@@ -16,7 +16,7 @@
 | `glm-1302` | claude/glm | transient | `[1302]` 瞬时并发/速率限流 | — | `verified:false`，措辞未采样 |
 | `claude-usage-limit` | claude | quota | `You've hit your (weekly \|5-hour \|…)limit · resets 12am (UTC)` | 消息内，`resets` 语法 | 2026-09-18 23:06Z，`.claude-buzz` 周限额 |
 | `claude-auth` | claude | auth | `authentication failed … run claude /login` | — | buzz-acp 内置文案；需要人登录 |
-| `codex-usage-limit` | codex | quota | `hit your usage limit` 等 | — | `verified:false`，**未采样** |
+| `codex-usage-limit` | codex | quota | `You’ve hit your usage limit. … try again at Oct 1st, 2026 12:13 AM.`（弯撇号 ’）；结构化 `codex_error_info: usage_limit_exceeded` | 消息内，`try again at <Mon> <D>th, <YYYY> <h>:<mm> AM\|PM`，**主机本地时区**（没有日期的写法不采信） | 2026-09-26 实测（`.codex-buzz`，`gpt-6-astra` 用完，恢复 10-01 00:13Z；同账号 `gpt-5.6-sol` 仍可用） |
 
 三种 429 的 HTTP 状态与 `error.type` 完全相同，**只能靠 `code` 区分**（1302 短冷却 vs 1308/1310 长限额）。`transient` 不触发切换。
 
@@ -24,6 +24,9 @@
 
 - grok：`~/.grok/logs/unified.jsonl`（`billing: fetched credits config` 每 30s 一条，含 `creditUsagePercent`、`billingPeriodEnd`、`onDemandCap/Used`、`prepaidBalance`）。
 - claude / glm：`<home>/projects/*/*.jsonl`，`type=system, subtype=api_error`（`error.status`、message 内 code 与恢复时刻）和 `isApiErrorMessage:true` 的 assistant 记录。
+- codex：`<CODEX_HOME>/sessions/YYYY/MM/DD/rollout-*.jsonl`，每行 `{"timestamp", "type", "payload"}`。`turn_context.payload.model` 是其后各 turn 的模型；
+  一个 turn 以 `event_msg` / `payload.type=task_complete` 结束：带 `error`（`message` + `codex_error_info`）= 失败，无 `error` 且 `last_agent_message` 是非空字符串 = 成功（空串 / 缺失 / 非字符串都不算，免得掩盖更早的额度错误）。
+  `token_count.rate_limits` 另有用量百分比（`limit_id: codex` 的 `primary.used_percent`；premium 用完时 `limit_id: premium`、`credits.has_credits:false`），**目前不参与判定**。
 - 所有 agent 日志 `~/.config/buzz/agents/<name>.log`：`requeueing failed batch … channel_id= attempt= events=` / `dead-lettering batch`（**只有 channel、时间、数量，没有事件 ID**）。
 
 ## 判定要点
@@ -31,6 +34,10 @@
 - 看**最新事件**，不是「窗口内出现过错误」：`.claude-buzz` 09-18 23:06 撞了周限额，00:00 重置后恢复，所以现在是可用。
 - 只有 `quota` 计入；`transient`、`auth` 不算耗尽。
 - grok：`402` 按结构化字段（`ctx.status_code` / 消息）判断，**不是**对整行做子串匹配；比最近一次 billing 快照更新的 402 优先（billing 只在 grok 进程在跑时才刷新）。billing 记录格式异常时判 `unknown`，不崩溃。
+- codex 按**模型**隔离：不同模型额度不同（2026-09-26：钉住的 agent 在 `gpt-6-astra` 上用完，队列的 `codex-buzz`/`gpt-5.6-sol` 同账号仍在 94%），
+  所以只统计前一个 `turn_context.model` 等于 profile 模型的 `task_complete`；`turn_context` 之前的 turn（只读末尾时被截断）不归属任何模型。
+  读取开销：只看 mtime 在 48h 内的 rollout、每个只读末尾 4 MB，从最新文件往回读，遇到「最后写入早于已找到的最新事件」的文件就停
+  （本机 193 个文件时常规约 0.1s，没有本模型记录的最坏情况约 1.3s）。
 - 签名按 provider 隔离：`glm-*` 只用于 `provider: glm` 的 profile。`.claude-buzz` 曾用过 GLM key，那里遗留的 GLM 错误不能让 claude-buzz 显得耗尽。
 - 只有「恢复时刻已知」或「30 分钟内」的额度错误才算耗尽；消息里的恢复时刻解析不了时（例如 `resets 3pm` 没有时区）只在 30 分钟内算数，之后降为 `unknown`。
 - 无恢复时刻的错误只在 30 分钟内算数，之后降为 `unknown`。

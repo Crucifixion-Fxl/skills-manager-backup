@@ -7,6 +7,8 @@ description: A4x CICD 上线单平台（cicd.addx.live）的浏览器自动化�
 
 ## Description
 
+首次接入/变更扫描与日常认证入口见 [SaaS 接入](references/saas-access.md)；已有平台业务契约与授权门禁仍在本 Skill 维护。
+
 通过浏览器操作 `https://cicd.addx.live` 的上线单系统。平台是 Vue + Ant Design SPA，使用 hash 路由；登录入口是 `GitLab 登录`。
 
 本 Skill 只操作上线单平台。部署清单和 CI 接入使用 `cicd-developer`，ArgoCD 日常 sync/rollback 使用 `argocd`，Jenkins 深度排障使用 `jenkins`。

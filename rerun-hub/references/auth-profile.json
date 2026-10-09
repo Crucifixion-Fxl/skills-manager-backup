@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "tool": "rerun-hub",
+  "owner": "rerun-hub",
+  "provider": "delegated",
+  "authContract": "references/saas-access.md",
+  "verification": "source-verified",
+  "runtimeVerification": "pending",
+  "deploymentVersion": "unknown"
+}

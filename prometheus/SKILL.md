@@ -9,23 +9,36 @@ description: 查询 Prometheus 监控指标和告警规则。当用户需要查 
 
 ## Description
 
+首次接入/变更扫描与日常认证入口见 [SaaS 接入](references/saas-access.md)；已有平台业务契约与授权门禁仍在本 Skill 维护。
+
 适用场景：系统资源监控（CPU / 内存 / 磁盘）、服务可用性排查、告警规则审计、容量趋势分析。
 
-> **重要**：Prometheus 使用 HTTP（非 HTTPS），且无需认证。
+> 下方 HTTP / 无认证说明仅适用于已记录的 **US DATA Prometheus**；其他实例的协议与认证按目标环境核验，不能套用到 CN VictoriaMetrics。
 
 | 变量 | 说明 | 必需 |
 |------|------|------|
-| `PROMETHEUS_URL` | `http://prometheus-us-data.addx.live`（注意是 HTTP） | 是 |
+| `PROMETHEUS_URL` | 已核验的完整查询 API base；US DATA 示例：`http://prometheus-us-data.addx.live` | 是 |
 
-认证：无需认证，直接访问。
+US DATA 入口无需认证；其他目标按实际访问配置使用本地已授权认证，不能根据域名推断无需认证。
 
-> Prometheus 版本 2.45.0。API 端点和 PromQL 语法请通过 Context7 MCP 查阅官方文档。
+> US DATA 实例版本记录为 Prometheus 2.45.0。API 端点和 PromQL 语法请通过 Context7 MCP 查阅官方文档。
 
 ## Rules
 
 ### 实例说明
 
-当前 `prometheus-us-data.addx.live` 是 **DATA 团队的 US 区域 Prometheus 实例**，主要监控数据基础设施。其他区域/团队的 Prometheus 实例通过 Grafana 间接访问（Grafana 数据源配置了内部 Prometheus 地址）。
+`prometheus-us-data.addx.live` 是 **DATA 团队的 US 区域 Prometheus 实例**，主要监控数据基础设施。其他区域/团队按 [监控端点与目标选择](../../infrastructure/sre-agent/references/infra/prometheus.md) 选择已核验的直接查询入口或 Grafana 数据源；下方 Job、Target 和指标数量仅描述 US DATA 实例的记录，不代表 CN 集群。
+
+### CN tech-service 目标（待切换）
+
+腾讯云 `100052802231` / `cn-tech-service` 的统一命名已确认，部署切换尚待核验，完整状态见 [CN 域名切换清单](../../infrastructure/k8s-ops/references/cn-tencent-inventory.md#cn-tech-service-目标域名待切换)。
+
+| 用途 | 目标入口（待切换） | 使用边界 |
+|------|-------------------|----------|
+| VictoriaMetrics 指标查询 | `https://victoria-metrics-cn-tech-service-tke.addx.live/select/0/prometheus` | VMCluster API base 保留租户路径，再追加 `/api/v1/query` 或 `/api/v1/query_range`；先核验实际租户、Ingress/Service、认证与采集范围 |
+| VMAlert 告警评估 | `https://vm-alert-cn-tech-service-tke.addx.live` | 评估规则并向 Alertmanager 发送告警；不是 PromQL 查询 base，不能设置为 `PROMETHEUS_URL` |
+
+不能因目标命名已确认就开始查询。先定位并核验实际入口（或 port-forward），再设置 `PROMETHEUS_URL`。使用 [performance query helper](../../quality/performance-preflight/references/query-helpers.py) 时，则必须显式设置 `PROMETHEUS_CN_TECH_SERVICE_URL`；未配置时不发请求，不回退旧域名、新目标或 prod。规则与通知排查按 [VM 告警链路](../../delivery/cicd-developer/references/victoriametrics/alerting.md) 核对实际 evaluator、规则选择器与通知路由。
 
 ### Scrape 目标（11 个 Job，271 个 Target）
 
@@ -92,7 +105,7 @@ sum by (consumergroup, topic) (kafka_consumergroup_lag)
 
 ### 查询注意事项
 
-- **必须使用 HTTP**：`http://prometheus-us-data.addx.live`（HTTPS 端口不可达）
+- **US DATA 入口使用 HTTP**：`http://prometheus-us-data.addx.live`；不要据此改写其他目标的 HTTPS 配置
 - `step` 不要小于抓取间隔（通常 15s-60s），避免无效插值
 - 高基数标签（user_id、request_id）**禁止**用于 `rate()` / `sum by()` 聚合
 - macOS 下用 `date -v-1H +%s` 替代 Linux 的 `date -d '1 hour ago' +%s`

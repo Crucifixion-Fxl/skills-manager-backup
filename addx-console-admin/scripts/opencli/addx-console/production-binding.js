@@ -1,0 +1,4 @@
+import {cli,Strategy} from '@jackwener/opencli/registry';
+import {identity,request} from './native.mjs';
+import {bindingModel,bindingDetail} from './production-binding-records.mjs';
+cli({site:'addx-console',name:'production-binding',access:'read',description:'Read existing model binding-view metadata; server aggregates model across plans and can assemble unsaved defaults',strategy:Strategy.LOCAL,browser:false,args:[{name:'model',type:'string',required:true,help:'Exact existing production-bindings model code'}],columns:['model','modelType','category','artCount','artIds','artNames','groupCounts','groupIds','groupInstanceCount'],func:async(args)=>{const model=bindingModel(args);await identity();return[bindingDetail(await request('/produce-plan/bind-art/manage/get?modelNo='+encodeURIComponent(model),'POST',{}),model)];}});

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "b0237acb-28c2-4b0c-8e54-7396fa3f1fb2",
+  "path": "crowdin",
+  "path_key": "crowdin",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/development/crowdin",
+    "branch": null
+  }
+}

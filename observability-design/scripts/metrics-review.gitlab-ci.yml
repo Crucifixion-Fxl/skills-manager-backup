@@ -5,7 +5,7 @@
 #
 #   include:
 #     - project: engineering/skills
-#       file: skills/observability-design/scripts/metrics-review.gitlab-ci.yml
+#       file: skills/observability/observability-design/scripts/metrics-review.gitlab-ci.yml
 #       ref: main
 #
 # Requires 'opencode-runner' CI image available in your project scope.

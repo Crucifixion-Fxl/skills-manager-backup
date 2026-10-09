@@ -1,14 +1,8 @@
 # Apify Agent Skills Setup
 
-## API Key (MANDATORY — 强制要求)
+## 认证与平台能力
 
-**Apify 是 VOC 分析的核心工具，必须配置后才能开始任何调研工作。**
-
-如果你还没有 API Key：
-
-> **请立即联系 陈敬敏 (Jingmin Chen) 获取 APIFY_TOKEN。**
->
-> **没有 Apify API Key = 无法执行 VOC 分析。** 这不是可选项。请先完成配置再开始调研。
+唯一正本：[Apify owner](../../../data/apify/SKILL.md)。宿主按owner契约私有注入APIFY_TOKEN；缺失时经web-access恢复。VOC采集需授权，采集任务不是只读登录探针。
 
 ## 安装方式
 
@@ -34,19 +28,9 @@ npx skills add apify/agent-skills
 
 **Gemini CLI/Codex：** 指向 `agents/AGENTS.md` 或 `gemini-extension.json`
 
-### 环境变量配置
+### 凭据消费
 
-安装后，需要设置 API Token：
-
-```bash
-# 在 .env 文件中添加
-APIFY_TOKEN=<your-apify-token>
-```
-
-或者在 shell 环境中导出：
-```bash
-export APIFY_TOKEN=<your-apify-token>
-```
+使用平台owner已验证的私有注入，不另配置业务Skill的.env或复制Token申请教程。
 
 **系统要求：**
 - Node.js 20.6+
@@ -74,10 +58,10 @@ export APIFY_TOKEN=<your-apify-token>
 
 ```bash
 # 列出 runs
-curl "https://api.apify.com/v2/actor-runs?token=$APIFY_TOKEN"
+curl -H "Authorization: Bearer $APIFY_TOKEN" "https://api.apify.com/v2/actor-runs"
 
 # 下载 dataset
-curl "https://api.apify.com/v2/datasets/<DATASET_ID>/items?format=json&token=$APIFY_TOKEN" \
+curl -H "Authorization: Bearer $APIFY_TOKEN" "https://api.apify.com/v2/datasets/<DATASET_ID>/items?format=json" \
   -o reference/<scraper_name>/dataset/<DATASET_ID>.json
 ```
 

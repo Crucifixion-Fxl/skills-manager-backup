@@ -11,6 +11,8 @@ Jenkins CI/CD 平台。公司同时保留现代和旧版控制器，操作前必
 
 ## Description
 
+首次接入/变更扫描与日常认证入口见 [SaaS 接入](references/saas-access.md)；已有平台业务契约与授权门禁仍在本 Skill 维护。
+
 适用场景：查看 Pipeline 构建状态与日志、触发构建、查看构建历史与变更记录、管理 Job 配置、查看 Agent 节点状态。
 
 ## Rules
@@ -33,7 +35,7 @@ Jenkins CI/CD 平台。公司同时保留现代和旧版控制器，操作前必
 - API 调用：用户名 + 密码，Basic Auth
 - 凭据来源：优先使用 `JENKINS_USER` / `JENKINS_TOKEN` 环境变量；需要本地文件时用 `${A4X_PASSWORD_FILE:-$HOME/.codex/password}` 或用户显式指定的凭据文件
 - 使用 `curl --config -` 从 stdin 注入 Basic Auth；不要把账号密码放入命令行参数
-- HTTPS 使用 nginx 反代，需加 `-k` 跳过证书验证
+- HTTPS 默认校验证书；不要因旧示例含 `-k` 就自动跳过验证。内部自签实例优先使用已核验的 CA，TLS 异常与登录失败分别记录。
 
 ### Folder 结构（现代控制器）
 
@@ -71,7 +73,7 @@ Job 通过 Folder 插件按业务/环境分组，顶层 4 个 Folder：
 
 ### Agent 节点
 
-26 个节点分布在多个地域，全部在线：
+以下为历史节点名示例；节点数量、在线状态和标签绑定须通过 Jenkins 当前节点 API 核实：
 
 | 地域 | 节点名 | Executors |
 |------|--------|-----------|
@@ -83,6 +85,8 @@ Job 通过 Folder 插件按业务/环境分组，顶层 4 个 Folder：
 | 新加坡 | `sg-firmware-jenkins-node`, `sg-vicotech-agent` | 3 |
 | GCP | `gcp-us-tech-service-jenkins-agent` | 3 |
 | 杭州 | `hz-office-KB-App-mac-mini`, `hz-office-safemo-mac-mini` | 3 |
+
+CN 当前集群在腾讯云：prod `100014919455`，staging / tech-service `100052802231`。Jenkins 节点名或 Job 的 `staging-cn` / `prod-cn` 参数不是云账号证明；触发部署前沿 Job/脚本解析实际 context、registry 和 Application，不能选择退役 AWS CN 目标，也不能因节点名含 `cn-dev` 就认定旧 EKS 仍在线。
 
 Built-In Node 设为 0 executors（仅调度，不执行构建）。
 
@@ -297,3 +301,9 @@ jenkins_curl "$JENKINS_URL/queue/api/json?tree=items[task[name],why,inQueueSince
 4. 轮询构建状态，每 10 秒检查一次
 5. 构建完成，结果 SUCCESS，耗时 3m28s
 ```
+
+### 当前用户探针与匿名边界
+
+`/whoAmI/api/json` 的 `authenticated=true` 不能单独证明本人登录：Jenkins 可能同时返回 `anonymous=true`、`name=anonymous`。必须同时排除匿名身份、匹配预期用户名，并验证目标控制器的 Job/Read 权限，之后才读取指定 Job。匿名探针 200 与业务列表 403 应保留为登录门禁证据，不算只读业务验收通过。
+
+缺少已授权注入的凭据时，准备该控制器的真实登录页；待当前用户操作结束后再将下一登录页置前，避免在用户填表时切走。用户密码不进入聊天，账号密码表单不等于已证明 LDAP/SSO 契约。已登录网页会话、用户名/API Token Basic 和 CLI 登录分别验证，不为读取申请管理员凭据。

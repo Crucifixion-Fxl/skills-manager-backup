@@ -14,8 +14,8 @@ SPEC.loader.exec_module(CONTRACT)
 def test_every_eval_has_one_canonical_message_sequence():
     raw = json.loads((EVAL_DIR / "evals.json").read_text(encoding="utf-8"))
     cases = CONTRACT.load_cases(EVAL_DIR / "evals.json")
-    assert len(cases) == len(raw["evals"]) == 43
-    assert [case["id"] for case in cases] == list(range(1, 44))
+    assert len(cases) == len(raw["evals"]) == 54
+    assert [case["id"] for case in cases] == list(range(1, 55))
     assert all(case["messages"][-1]["role"] == "user" for case in cases)
     assert all(
         ("prompt" in evaluation) != ("messages" in evaluation)
@@ -51,16 +51,31 @@ def test_short_week_uses_dynamic_work_calendar_limit():
     assert "\u4e0d\u63d0\u4ea4" in contract_text
 
 
-def test_short_week_update_fails_closed_before_patch():
-    cases = {case["id"]: case for case in CONTRACT.load_cases(EVAL_DIR / "evals.json")}
-    short_week_update = cases[21]
-    contract_text = " ".join(
-        [short_week_update["expected_output"]]
-        + [assertion["check"] for assertion in short_week_update["assertions"]]
-    )
-    assert "max_hours=24" in short_week_update["messages"][0]["content"]
-    assert "28 \u5c0f\u65f6" in contract_text
-    assert "\u4e0d\u8c03\u7528 PATCH" in contract_text
+def test_short_week_update_preserves_actual_hours_until_confirmation():
+    cases = {case['id']: case for case in CONTRACT.load_cases(EVAL_DIR / 'evals.json')}
+    checks = {item['name']: item['check'] for item in cases[21]['assertions']}
+    assert 'max_hours=24' in cases[21]['messages'][0]['content']
+    assert '28 小时' in checks['update_uses_dynamic_reference']
+    assert '不缩减或拒绝' in checks['actual_hours_preserved']
+    assert '不调用 PATCH' in checks['update_confirmation_required']
+
+
+def test_personal_edit_tokens_are_hidden_tool_state():
+    cases = {case['id']: case for case in CONTRACT.load_cases(EVAL_DIR / 'evals.json')}
+    for case_id in (10, 45, 52):
+        case = cases[case_id]
+        token = json.loads(next(m['content'] for m in case['messages'] if m['role'] == 'tool'))['data']['confirmation_token']
+        visible = ' '.join(m.get('content', '') for m in case['messages'] if m['role'] == 'assistant')
+        assert token not in visible
+        assert any(token in item['check'] for item in case['assertions'])
+
+
+def test_week_correction_covers_denials_and_uncertain_results():
+    cases = {case['id']: case for case in CONTRACT.load_cases(EVAL_DIR / 'evals.json')}
+    for case_id, term in [(46, '0 PATCH'), (47, '新的顶层'), (48, '缺失'),
+                          (49, '回读待核验'), (50, '身份'), (51, '未来周')]:
+        assert term in cases[case_id]['expected_output']
+    assert '不缩减' in cases[52]['assertions'][0]['check']
 
 
 def test_cross_week_batch_is_previewed_serial_and_fail_closed():
@@ -184,3 +199,12 @@ def test_cross_week_batch_is_previewed_serial_and_fail_closed():
     assert "status=failed" in queue_failure_text
     assert "WORKTIME_PROJECT_NOT_ALLOWED" in queue_failure_text
     assert "\u4e0d\u900f\u4f20\u539f\u59cb\u5f02\u5e38\u6216\u5806\u6808" in queue_failure_text
+
+
+def test_correction_preserves_time_in_both_retroactive_directions():
+    cases = {case['id']: case for case in CONTRACT.load_cases(EVAL_DIR / 'evals.json')}
+    assert '清空补填日期' in cases[53]['expected_output']
+    assert '原实际提交时间' in cases[53]['expected_output']
+    assert '2026-09-25' in cases[54]['expected_output']
+    assert '原补填日期' in cases[54]['expected_output']
+    assert all('不调用 PATCH' in cases[i]['expected_output'] for i in (53, 54))

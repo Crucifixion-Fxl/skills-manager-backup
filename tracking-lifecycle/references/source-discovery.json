@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "tool": "tracking",
+  "owner": "tracking-lifecycle",
+  "deployedCommit": null,
+  "match": "unknown",
+  "apiDiscovery": "Follow fixed route/OpenAPI/source entrypoints; catalog is not deployment or all-role evidence",
+  "references": [
+    "references/platform-auth.md",
+    "references/platform-api-catalog.md",
+    "references/base-context-api.md",
+    "references/opencli-access.md",
+    "references/independent-device-host-acceptance.json"
+  ],
+  "repositories": [
+    {
+      "url": "https://gitlab.addx.ai/TRAC/tracker-management",
+      "commit": "d61e1692c3d28224e4d642f7bdf765a6a982ab0d",
+      "entrypoints": [
+        "tracker_management/src/main/java/tracker/management/controller",
+        "tracker_management/src/main/java/tracker/management/param",
+        "tracker_management/src/main/java/tracker/management/vo",
+        "tracker_management/src/main/java/tracker/management/config/ApiTokenAuthFilter.java"
+      ]
+    },
+    {
+      "url": "https://gitlab.addx.ai/TRAC/tracker_manager_frontend",
+      "commit": "b6bf12a13bb809f7569a714a67d245cc8dd24bd4",
+      "entrypoints": [
+        "src/api",
+        "src/views",
+        "src/router"
+      ]
+    }
+  ],
+  "catalog": "references/platform-api-catalog.md",
+  "coverage": "76 backend routes, frontend/menu comparison in website catalog; unavailable endpoints and gated workflows explicit"
+}

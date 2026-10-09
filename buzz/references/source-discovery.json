@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "tool": "buzz",
+  "owner": "buzz",
+  "repo": "https://gitlab.addx.ai/infra/buzz-deploy",
+  "researchCommit": "b190ec1858d83a92ad7212085bd2ad5082dbe503",
+  "routeEntries": [
+    "k8s/overlays/sg-devops/relay-ingress.yaml",
+    "docs/architecture/adrs/0012-use-authentik-as-agent-admin-authority.md"
+  ],
+  "verification": "local-source-reviewed",
+  "deploymentConsistency": "pending",
+  "needsResearch": [
+    "deployment SHA/version and auth configuration",
+    "subject and resource permissions"
+  ],
+  "apiDiscovery": {
+    "method": "Deployment source maps relay; owner protocol references map supported operations",
+    "contracts": [
+      "../../buzz-agent-setup/references/runtime-setup.md",
+      "../../buzz-agent-setup/references/gitlab-buzz-sync.md",
+      "../../buzz-agent-setup/references/personal-channel.md"
+    ],
+    "crossChecks": [
+      "NIP-OA and NIP-42 identity",
+      "channel membership/policy",
+      "single-writer ledger and action guards"
+    ],
+    "coverage": "full relay protocol and version map pending"
+  },
+  "referenceBase": "owner-skill-root for SKILL.md/contractEntrypoints/referenceSources paths; contract field resolves from this JSON directory; upstream repository entrypoints stay repository-relative"
+}

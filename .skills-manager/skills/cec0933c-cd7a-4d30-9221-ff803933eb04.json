@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "cec0933c-cd7a-4d30-9221-ff803933eb04",
+  "path": "embedded-signal-validation",
+  "path_key": "embedded-signal-validation",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/hardware/embedded-signal-validation",
+    "branch": null
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "tool": "troubleshooting",
+  "owner": "troubleshooting",
+  "instances": [
+    "https://troubleshooting-us.addx.live",
+    "https://troubleshooting-eu.addx.live",
+    "https://troubleshooting-staging-us.addx.live",
+    "https://troubleshooting-staging-eu.addx.live"
+  ],
+  "nativeRoute": "TROUBLESHOOTING_TOKEN → get_token.mjs region cache → business Feishu OAuth",
+  "loginFlow": {
+    "reuseFirst": true,
+    "steps": "复用注入变量；缺失时用 owner get_token.mjs us/eu（stdout 仅捕获到进程变量）。它验证区域缓存、打开飞书业务授权，prepare/confirm 换取平台 JWT。普通 lark-cli 不提供此 JWT。",
+    "authorization": "Login, token creation/rotation/revocation and business writes require the current task scope; this discovery performs none."
+  },
+  "tokenMechanism": "Bearer JWT；owner 契约记载 24 小时；缓存 ~/.troubleshooting-token-{region}。跨环境兼容是既有契约，仍按目标环境验证。",
+  "subjectPermission": "GET /api/current，success=true，result.data.userid；业务权限另核对目标 OpenAPI。",
+  "expiryRevoke": "401 后清除失效变量/缓存并恢复一次；JWT 服务端撤销入口未找到，不能把删本地缓存称撤销。",
+  "officialRefs": [],
+  "sources": [
+    {
+      "kind": "owner-contract",
+      "path": "auth_flow.md",
+      "status": "contract-recorded"
+    },
+    {
+      "kind": "repository",
+      "repository": "https://gitlab.addx.ai/DATA/troubleshooting",
+      "researchCommit": "48bc0106f1a5945a17968a6eec5e3064c8016124",
+      "entries": [
+        "backend/troubleshooting/api/auth.py",
+        "backend/tests/test_api_auth.py"
+      ],
+      "status": "source-verified"
+    }
+  ],
+  "versionPolicy": {
+    "researchCommit": "48bc0106f1a5945a17968a6eec5e3064c8016124",
+    "deployedCommit": null,
+    "deploymentMatch": "unknown",
+    "refreshTriggers": [
+      "authentication contract change",
+      "deployed version change",
+      "reproducible auth failure"
+    ],
+    "rule": "Candidate source and published contracts do not establish deployed compatibility. Verify the target instance version and read-only supported capabilities before enabling an adapter."
+  },
+  "verification": {
+    "source": "source-verified",
+    "fixture": "not-run-in-this-discovery",
+    "runtime": "not-attempted",
+    "scope": "Read-only documentation/repository discovery; no login, token issuance, credential inspection or business API execution."
+  }
+}

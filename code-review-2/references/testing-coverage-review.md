@@ -263,7 +263,7 @@ docs/review-YYYY-MM-DD/
 | 只跑 scenarios 链接的 test 文件名 | 漏了 doc 未登记但代码已有的 test | 双向 diff：doc→code + code→doc |
 | 把浅断言当"已测" | 看似覆盖率高 | 抽 test body 看断言类型（write-only? page.goto only?） |
 | 只做静态审查 | 可能漏 "CI 明明跑了但 os.Exit(0) 吞掉失败" | 抽 1-2 个 test 在 worktree 真跑一次验证行为 |
-| Plan 超长 (>600 line) | 无人读 | scenarios 和 plans 拆子文档 + 索引 |
+| Markdown plan 超长 (>600 line；HTML 不限) | 无人读 | scenarios 和 plans 拆子文档 + 索引 |
 
 ---
 

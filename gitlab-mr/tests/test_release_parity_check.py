@@ -142,9 +142,19 @@ def run_check(
         "diff_refs": {"base_sha": candidate_base_sha},
     }
     responses = {
+        f"{mr_path}/{ORIGIN_MR_IID}": origin_mr,
         f"{mr_path}/{VERIFICATION_MR_IID}": verification_mr,
         f"{mr_path}/{CANDIDATE_MR_IID}": candidate_mr,
-        f"{mr_path}?{query}": [origin_mr, verification_mr],
+        # The GitLab list endpoint omits diff_refs even when the detail
+        # endpoint supplies the canonical base needed for parity.
+        f"{mr_path}?{query}": [
+            {key: value for key, value in origin_mr.items() if key != "diff_refs"},
+            {
+                key: value
+                for key, value in verification_mr.items()
+                if key != "diff_refs"
+            },
+        ],
         f"projects/{project}/repository/branches/main": {
             "name": "main",
             "commit": {"id": api_candidate_target_sha or candidate_base_sha},
@@ -888,3 +898,193 @@ def test_external_gate_evidence_must_be_auditable_url(tmp_path: Path) -> None:
 
     assert result.returncode == 2
     assert "must be an auditable HTTPS URL" in result.stderr
+
+
+def run_branch_promotion(
+    tmp_path: Path,
+    *,
+    candidate_extra: bool = False,
+    staging_extra: bool = False,
+    missing_merge_sha: bool = False,
+    main_only_change: bool = False,
+    pipeline_success: bool = True,
+    unauthorized_note: bool = False,
+    rejected_note: bool = False,
+) -> subprocess.CompletedProcess[str]:
+    repo = init_repo(tmp_path)
+    git(repo, "switch", "-c", "develop", "staging")
+    write(repo, "service.txt", "verified feature\n")
+    commit_all(repo, "develop feature")
+    develop_sha = git(repo, "rev-parse", "HEAD")
+    git(repo, "switch", "staging")
+    git(repo, "merge", "--no-ff", "develop", "-m", "verified staging merge")
+    verified_merge_sha = git(repo, "rev-parse", "HEAD")
+    if staging_extra:
+        write(repo, "later.txt", "unverified staging change\n")
+        commit_all(repo, "later staging change")
+    staging_sha = git(repo, "rev-parse", "HEAD")
+
+    git(repo, "switch", "main")
+    if main_only_change:
+        write(repo, "production-only.txt", "existing production change\n")
+        commit_all(repo, "diverged production baseline")
+    else:
+        git(repo, "commit", "--allow-empty", "-m", "diverged production history")
+    target_sha = git(repo, "rev-parse", "HEAD")
+    git(repo, "switch", "-c", "candidate", verified_merge_sha)
+    if candidate_extra:
+        write(repo, "candidate-only.txt", "unverified candidate change\n")
+        commit_all(repo, "candidate-only change")
+    candidate_sha = git(repo, "rev-parse", "HEAD")
+    git(
+        repo,
+        "push",
+        "--force",
+        "origin",
+        f"{candidate_sha}:refs/merge-requests/{CANDIDATE_MR_IID}/head",
+        f"{staging_sha}:refs/heads/staging",
+        f"{target_sha}:refs/heads/main",
+    )
+
+    project = quote(PROJECT_PATH, safe="")
+    mr_path = f"projects/{project}/merge_requests"
+    pipeline_url = "https://gitlab.example.test/group/project/-/pipelines/12345"
+    note_body = (
+        f"<!-- staging-acceptance:PASS:v1:{VERIFICATION_MR_IID}:{verified_merge_sha}:12345 -->\n"
+        f"{'验收未通过' if rejected_note else '验收通过：'} staging pipeline: {pipeline_url}"
+    )
+    responses = {
+        f"{mr_path}/{VERIFICATION_MR_IID}": {
+            "iid": VERIFICATION_MR_IID,
+            "state": "merged",
+            "source_branch": "develop",
+            "target_branch": "staging",
+            "sha": develop_sha,
+            "merge_commit_sha": None if missing_merge_sha else verified_merge_sha,
+            "merged_at": "2026-10-08T01:00:00Z",
+            "web_url": "https://gitlab.example.test/group/project/-/merge_requests/102",
+            "merged_by": {"id": 277, "username": "qlv"},
+        },
+        f"{mr_path}/{CANDIDATE_MR_IID}": {
+            "iid": CANDIDATE_MR_IID,
+            "state": "opened",
+            "source_branch": "candidate",
+            "target_branch": "main",
+            "sha": candidate_sha,
+        },
+        f"projects/{project}/repository/branches/staging": {
+            "commit": {"id": staging_sha}
+        },
+        f"projects/{project}/repository/branches/main": {"commit": {"id": target_sha}},
+        f"projects/{project}/pipelines/12345": {
+            "id": 12345,
+            "sha": verified_merge_sha,
+            "ref": "staging",
+            "status": "success" if pipeline_success else "failed",
+            "web_url": pipeline_url,
+        },
+        f"{mr_path}/{VERIFICATION_MR_IID}/notes/67890": {
+            "id": 67890,
+            "system": False,
+            "noteable_iid": VERIFICATION_MR_IID,
+            "created_at": "2026-10-08T02:00:00Z",
+            "body": note_body,
+            "author": {"id": 278 if unauthorized_note else 277},
+        },
+    }
+    responses_path = repo.parent / "fake-glab-responses.json"
+    responses_path.write_text(json.dumps(responses), encoding="utf-8")
+    env = os.environ.copy()
+    env["FAKE_GLAB_RESPONSES"] = str(responses_path)
+    env["PATH"] = f"{repo.parent / 'fake-bin'}{os.pathsep}{env['PATH']}"
+    return subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--project-path",
+            PROJECT_PATH,
+            "--canonical-verification-mr",
+            str(VERIFICATION_MR_IID),
+            "--candidate-mr",
+            str(CANDIDATE_MR_IID),
+            "--branch-promotion",
+            "--staging-pipeline-id",
+            "12345",
+            "--staging-acceptance-note-id",
+            "67890",
+            "--json",
+        ],
+        cwd=repo,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+
+def test_branch_promotion_passes_with_diverged_main_and_no_old_mr_ref(
+    tmp_path: Path,
+) -> None:
+    result = run_branch_promotion(tmp_path)
+
+    assert result.returncode == 0, result.stderr
+    report = json.loads(result.stdout)
+    assert report["status"] == "pass"
+    assert report["provenance"]["mode"] == "branch-promotion"
+    assert report["refs"]["canonical"] == report["refs"]["candidate"]
+    assert report["refs"]["canonical_base"] == report["refs"]["candidate_base"]
+    assert report["matched_paths"] == ["service.txt"]
+    assert report["provenance"]["merge_result"]["tree_sha"]
+
+
+def test_branch_promotion_rejects_main_only_merge_result(tmp_path: Path) -> None:
+    result = run_branch_promotion(tmp_path, main_only_change=True)
+
+    assert result.returncode == 2
+    assert "production merge result differs" in result.stderr
+
+
+def test_branch_promotion_requires_successful_postmerge_pipeline(
+    tmp_path: Path,
+) -> None:
+    result = run_branch_promotion(tmp_path, pipeline_success=False)
+
+    assert result.returncode == 2
+    assert "staging postmerge pipeline" in result.stderr
+
+
+def test_branch_promotion_rejects_unauthorized_acceptance_note(tmp_path: Path) -> None:
+    result = run_branch_promotion(tmp_path, unauthorized_note=True)
+
+    assert result.returncode == 2
+    assert "authored by the staging merger" in result.stderr
+
+
+def test_branch_promotion_rejects_negative_acceptance_note(tmp_path: Path) -> None:
+    result = run_branch_promotion(tmp_path, rejected_note=True)
+
+    assert result.returncode == 2
+    assert "not bound to the merge and pipeline" in result.stderr
+
+
+def test_branch_promotion_rejects_candidate_only_commit(tmp_path: Path) -> None:
+    result = run_branch_promotion(tmp_path, candidate_extra=True)
+
+    assert result.returncode == 2
+    assert "is not verified staging merge" in result.stderr
+
+
+def test_branch_promotion_rejects_staging_change_after_verification(
+    tmp_path: Path,
+) -> None:
+    result = run_branch_promotion(tmp_path, staging_extra=True)
+
+    assert result.returncode == 2
+    assert "staging branch SHA" in result.stderr
+
+
+def test_branch_promotion_requires_merge_commit_sha(tmp_path: Path) -> None:
+    result = run_branch_promotion(tmp_path, missing_merge_sha=True)
+
+    assert result.returncode == 2
+    assert "canonical verification MR.merge_commit_sha" in result.stderr

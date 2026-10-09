@@ -48,10 +48,10 @@
 #   vault 路径首段由 env-keyword 的 env 段决定（staging/prod）。这与 cn-k8s/TKE
 #   例外同理：env=staging 但读 ops vault，不是 builder vault。
 #
-#   dev-cn 仅保留历史 dev-{app} lookup：cn-eks-dev 已退役，禁止新 Build。
+#   dev-cn 仅保留历史 dev-{app} lookup：cn-eks-dev 已退役，禁止新 Build；替代环境为 staging-cn。
 #   dev- 也不在共享 fluent-bit Lua 日志 gate 白名单。
-#   例外：明确部署到 cn-k8s / TKE 的服务，即使 env=staging，也使用 cn-k8s ops
-#   域与 `vault-backend`。
+#   仅既有 cn-k8s staging 工作负载保留 ops 域；不得把所有 TKE 视作 ops 域。
+#   当前 CN staging=cn-tke-staging（100052802231），CSS vault-backend 指向集群内 staging Vault。
 
 env_keywords:
 
@@ -69,13 +69,14 @@ env_keywords:
     app_types: [c-end, restricted-admin, builder, data, observability]
 
   staging-cn:
-    cluster: cn-eks-staging
+    cluster: cn-tke-staging
     env: staging
     namespace_pattern: "staging-{app}"
     app_types: [c-end, restricted-admin, builder, data, observability]
 
+  # 兼容 keyword；新部署同样进入 100052802231 独立 staging，不再进入 cn-main。
   staging-cn-tke:
-    cluster: cn-k8s
+    cluster: cn-tke-staging
     env: staging
     namespace_pattern: "staging-{app}"
     app_types: [c-end, restricted-admin, builder, data, observability]
@@ -88,7 +89,9 @@ env_keywords:
   # pre 应用使用——那些是文法/策略，不是新部署路由入口。
 
   # ----- dev 历史 lookup（cn-eks-dev 已退役，不再接受新 Build）-----
-  # 用户请求 dev-cn 时先命中 cluster lifecycle STOP；不要猜测替代集群或复活 runner。
+  # 用户请求 dev-cn 时先命中 cluster lifecycle STOP；不要复活 runner 或旧集群。
+  # CN 开发联调统一改用 staging-cn（cn-tke-staging，腾讯云 100052802231 / cls-riukakjb），
+  # namespace 为 staging-{app}；不要把 dev-cn 静默改写成 staging-cn。
   dev-cn:
     cluster: cn-eks-dev
     env: dev
@@ -109,7 +112,7 @@ env_keywords:
     app_types: [c-end, builder]
 
   prod-cn:
-    cluster: cn-prod                 # AWS CN 默认
+    cluster: cn-k8s                  # 腾讯云 100014919455 cn-main
     env: prod
     namespace_pattern: "prod-{app}"
     app_types: [c-end]
@@ -164,7 +167,7 @@ env_keywords:
     app_types: [restricted-admin]
 
   prod-cn-restricted-admin:
-    cluster: cn-eks-tech-service
+    cluster: cn-tke-tech-service
     env: prod
     namespace_pattern: "prod-{app}"
     app_types: [restricted-admin]

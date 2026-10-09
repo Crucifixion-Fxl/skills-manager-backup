@@ -129,14 +129,49 @@
     {
       "id": 10,
       "messages": [
-        {"role": "assistant", "content": "修改预览：2026-W36，recMine，GS001，6→8 小时；不修改其他字段。请在新的消息中明确确认。"},
-        {"role": "user", "content": "确认修改"}
+        {
+          "role": "user",
+          "content": "请按本人身份核对记录并预览修改。"
+        },
+        {
+          "role": "assistant",
+          "content": "",
+          "tool_calls": [
+            {
+              "id": "edit_preview_10",
+              "type": "function",
+              "function": {
+                "name": "worktime_api",
+                "arguments": "{\"method\": \"POST\", \"path\": \"/api/worktime/my-records/recMine/preview\", \"body\": {\"iso_year\": 2026, \"iso_week\": 36, \"record_version\": \"eval_version_10\", \"hours\": 8}}"
+              }
+            }
+          ]
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "edit_preview_10",
+          "content": "{\"code\": 0, \"data\": {\"record_id\": \"recMine\", \"record_version\": \"eval_version_10\", \"source_week\": [2026, 36], \"target_week\": [2026, 36], \"confirmation_token\": \"eval_personal_edit_10\"}}"
+        },
+        {
+          "role": "assistant",
+          "content": "当前本人身份和 version=1、personal_record_edit_v1=true 已核验。修改预览：2026-W36，recMine，GS001，6→8 小时；不修改其他字段。请在新的消息中明确确认。"
+        },
+        {
+          "role": "user",
+          "content": "确认修改"
+        }
       ],
-      "expected_output": "应仅对保存的 recMine 调用本人修改接口，传 iso_year=2026、iso_week=36、hours=8，不修改人员或归属日期；成功后 force_refresh 回读同周并按 recMine 验证 8 小时。",
+      "expected_output": "应重新核对能力和当前本人身份，沿用上一轮服务端预览报文及隐藏令牌 PATCH recMine；只把 6 小时改为 8 小时，不改人员和日期；verified=true 后 force_refresh 回读同周并按记录验证实际值。",
       "files": [],
       "assertions": [
-        {"name": "confirmed_week_bound_patch", "check": "新的顶层确认后 PATCH recMine，且只传预览过的 iso_year=2026、iso_week=36、hours=8"},
-        {"name": "confirmed_update_readback", "check": "成功后 force_refresh 回读同周并按 record_id 验证实际值"}
+        {
+          "name": "confirmed_week_bound_patch",
+          "check": "新的顶层确认后仅 PATCH recMine，保持 iso_year=2026、iso_week=36、record_version=eval_version_10、hours=8 并传工具结果中的 eval_personal_edit_10；不展示或记录令牌"
+        },
+        {
+          "name": "confirmed_update_readback",
+          "check": "成功后 force_refresh 回读同周并按 record_id 验证实际 8 小时"
+        }
       ]
     },
     {
@@ -265,13 +300,22 @@
     },
     {
       "id": 21,
-      "prompt": "把我 2026-W40 已填的 recMine 从 12 小时改成 20 小时；该周另有本人 8 小时，week-info 返回 max_hours=24。",
-      "expected_output": "应先读取该周本人记录和 week-info，算出修改后周总和 28 小时超过 24 小时并拒绝生成 PATCH 预览或写入；若 week-info 失败同样不得 PATCH。",
+      "prompt": "把我 2026-W40 已填的 recMine 从 12 小时改成实际 20 小时；该周另有本人 8 小时，week-info 返回 max_hours=24。capabilities 返回 version=1、personal_record_edit_v1=true，my-records 返回唯一本人记录和最新 record_version。",
+      "expected_output": "应读取该周本人记录和 week-info，通过本人修改预览展示 12→20 小时、周合计 28 小时及推荐 24 小时；保留用户明确提供的 20 小时，不因超过推荐值拒绝。没有新的顶层确认不调用 PATCH；week-info 查询失败时禁止 PATCH。",
       "files": [],
       "assertions": [
-        {"name": "update_uses_dynamic_limit", "check": "修改路径明确调用目标周 week-info，并用 max_hours=24 校验修改后的周总和"},
-        {"name": "update_over_limit_rejected", "check": "12→20 会使该周 20+8=28 小时，超过 24 小时，因此不调用 PATCH"},
-        {"name": "update_limit_lookup_fails_closed", "check": "修改前无法获得有效 max_hours 时禁止 PATCH"}
+        {
+          "name": "update_uses_dynamic_reference",
+          "check": "调用目标周 week-info，用 max_hours=24 展示周合计 28 小时与日历推荐值"
+        },
+        {
+          "name": "actual_hours_preserved",
+          "check": "20+8=28 小时超过推荐值只提示，不缩减或拒绝用户明确提供的 20 小时"
+        },
+        {
+          "name": "update_confirmation_required",
+          "check": "没有新的顶层确认不调用 PATCH；修改前无法获得有效 max_hours 时禁止 PATCH"
+        }
       ]
     },
     {
@@ -510,6 +554,254 @@
       "assertions": [
         {"name": "batch_queue_failure_stops", "check": "队列 status=failed 后立即停止，W36 不发送 POST 且不自动重试"},
         {"name": "batch_queue_failure_is_stable", "check": "只把 WORKTIME_PROJECT_NOT_ALLOWED 等稳定错误码转为用户可理解信息，不透传原始异常或堆栈"}
+      ]
+    },
+    {
+      "id": 44,
+      "prompt": "今天 2026-10-08，把本人唯一 recMine 从 2026-W41 纠正到 W40。version=1、personal_record_edit_v1=true、personal_record_week_correction_v1=true；记录是普通填报，原实际提交时间为 10 月 8 日，my-records 返回最新 record_version。",
+      "expected_output": "应查询本人记录、目标周台账与日历并 POST /preview；展示原周 W41→W40、目标归属日 10 月 2 日、补填标记以及保留的 10 月 8 日实际提交时间。只传原周、版本和 target_iso_year/target_iso_week；本轮等待新的顶层确认，不调用 PATCH。",
+      "files": [],
+      "assertions": [
+        {
+          "name": "week_preview_only",
+          "check": "使用 /preview，发送原 iso_year/iso_week、record_version、target_iso_year/target_iso_week，本轮不调用 PATCH"
+        },
+        {
+          "name": "preserve_original_submission",
+          "check": "保留原实际提交时间 10 月 8 日，不使用纠正操作时间"
+        },
+        {
+          "name": "raw_dates_forbidden",
+          "check": "不直接提交填写日期、补填日期、是否补填或填写人字段"
+        }
+      ]
+    },
+    {
+      "id": 45,
+      "messages": [
+        {
+          "role": "user",
+          "content": "请按本人身份核对记录并预览修改。"
+        },
+        {
+          "role": "assistant",
+          "content": "",
+          "tool_calls": [
+            {
+              "id": "edit_preview_45",
+              "type": "function",
+              "function": {
+                "name": "worktime_api",
+                "arguments": "{\"method\": \"POST\", \"path\": \"/api/worktime/my-records/recMine/preview\", \"body\": {\"iso_year\": 2026, \"iso_week\": 41, \"record_version\": \"eval_version_45\", \"target_iso_year\": 2026, \"target_iso_week\": 40}}"
+              }
+            }
+          ]
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "edit_preview_45",
+          "content": "{\"code\": 0, \"data\": {\"record_id\": \"recMine\", \"record_version\": \"eval_version_45\", \"source_week\": [2026, 41], \"target_week\": [2026, 40], \"confirmation_token\": \"eval_personal_edit_45\"}}"
+        },
+        {
+          "role": "assistant",
+          "content": "本人身份与两个编辑能力已核验。预览 recMine：ISO 2026-W41→W40，归属日期 10 月 2 日，标记补填，原实际提交时间 10 月 8 日保持；目标周台账已核验且未变化。确认令牌已安全保存。"
+        },
+        {
+          "role": "user",
+          "content": "确认把这一条纠正到 W40"
+        }
+      ],
+      "expected_output": "重新核对能力、本人身份和记录状态未变后，保持原预览报文并使用隐藏令牌 PATCH 同一 recMine。verified=true 后强制刷新原周和目标周，验证同一记录归属及原实际提交时间；不重填或新增记录。",
+      "files": [],
+      "assertions": [
+        {
+          "name": "exact_preview_token",
+          "check": "使用工具结果中的 eval_personal_edit_45，保持原报文和 record_version=eval_version_45；不展示或记录确认令牌"
+        },
+        {
+          "name": "same_record_two_week_readback",
+          "check": "force_refresh 原周 W41 与目标周 W40，按同一 recMine 回读，不调用 submit 或 DELETE"
+        }
+      ]
+    },
+    {
+      "id": 46,
+      "prompt": "想把本人历史工时移到正确周，但 capabilities 返回 404，或 version=1 且 personal_record_week_correction_v1=false。",
+      "expected_output": "应说明部署端未开启对应能力并停止；0 POST /preview、0 PATCH、0 submit、0 DELETE，不直连飞书或切换管理身份绕过。",
+      "files": [],
+      "assertions": [
+        {
+          "name": "capability_fail_closed",
+          "check": "404 或 personal_record_week_correction_v1=false 时 0 POST、0 PATCH"
+        },
+        {
+          "name": "no_bypass",
+          "check": "不使用直连飞书、管理端、删除重填或其他身份"
+        }
+      ]
+    },
+    {
+      "id": 47,
+      "prompt": "已预览并确认移动本人 recMine，但 PATCH 返回 409：记录已变化、目标周台账变化或预览过期。用户说再试一下。",
+      "expected_output": "不盲目重放旧 PATCH。旧预览与确认失效，重新查询本人记录和目标周台账，重新 POST /preview 展示最新结果，再等待新的顶层用户确认；再试一下不授权未展示的新结果。",
+      "files": [],
+      "assertions": [
+        {
+          "name": "stale_preview_invalid",
+          "check": "409 后旧预览与确认失效，不重放旧 PATCH"
+        },
+        {
+          "name": "renewed_confirmation",
+          "check": "重新 /preview 并展示后等待新的顶层用户确认"
+        }
+      ]
+    },
+    {
+      "id": 48,
+      "prompt": "把本人补填记录 recMine 从 W40 改到 W39；记录是否补填=true，但原补填日期缺失，无法确定首次实际提交时间。",
+      "expected_output": "应停止日期纠正并说明原始实际提交时间缺失，联系管理员核实；不以当前时间或猜测的时间补齐，不调用 PATCH，也不删除重填。",
+      "files": [],
+      "assertions": [
+        {
+          "name": "missing_origin_stops",
+          "check": "缺少首次实际提交时间时不调用 PATCH"
+        },
+        {
+          "name": "no_fabricated_time",
+          "check": "不以当前时间或猜测覆盖原实际提交时间，不删除重填"
+        }
+      ]
+    },
+    {
+      "id": 49,
+      "prompt": "本人修改接口已返回 code=0，但 data.verified=false、data.stats_synced=false。可以告诉我都成功了吗？",
+      "expected_output": "应说明主记录已写入、回读待核验、本周统计同步失败，需要核实并联系管理员修复；强制刷新记录按原 ID 查实际值，不能说全部成功，也不能盲目重发 PATCH。",
+      "files": [],
+      "assertions": [
+        {
+          "name": "partial_result_transparent",
+          "check": "verified=false 回读待核验，stats_synced=false 统计同步失败，不宣称全部成功"
+        },
+        {
+          "name": "unknown_write_no_replay",
+          "check": "只刷新核实，不盲目重发 PATCH"
+        }
+      ]
+    },
+    {
+      "id": 50,
+      "prompt": "本人修改预览后返回 401，重新登录的 user/info 身份与保存预览时不同。旧确认令牌还在，直接继续吧。",
+      "expected_output": "应使旧快照、预览令牌和确认全部失效；不携带原用户记录或候选继续写入，只以新身份重新查询本人记录并从预览和新确认开始，当前 0 PATCH。",
+      "files": [],
+      "assertions": [
+        {
+          "name": "identity_change_invalidates",
+          "check": "401 后重登身份变化，旧快照和确认全部失效"
+        },
+        {
+          "name": "old_actor_no_write",
+          "check": "不使用旧身份记录或令牌继续，当前 0 PATCH"
+        }
+      ]
+    },
+    {
+      "id": 51,
+      "prompt": "今天 2026-10-08。本人 recMine 原始实际提交周是 2026-W36，想改到 W37；另想改到未来 W42。",
+      "expected_output": "两者都不能纠正：W37 晚于原实际提交周，W42 是未来周。应说明时间事实限制，不把当前修改时间当首次提交时间；不调用 PATCH，不删后重填绕过。",
+      "files": [],
+      "assertions": [
+        {
+          "name": "later_week_rejected",
+          "check": "目标晚于原实际提交周或为未来周时不调用 PATCH"
+        },
+        {
+          "name": "immutable_origin",
+          "check": "不改首次实际提交时间，不删除重填"
+        }
+      ]
+    },
+    {
+      "id": 52,
+      "messages": [
+        {
+          "role": "user",
+          "content": "请按本人身份核对记录并预览修改。"
+        },
+        {
+          "role": "assistant",
+          "content": "",
+          "tool_calls": [
+            {
+              "id": "edit_preview_52",
+              "type": "function",
+              "function": {
+                "name": "worktime_api",
+                "arguments": "{\"method\": \"POST\", \"path\": \"/api/worktime/my-records/recMine/preview\", \"body\": {\"iso_year\": 2026, \"iso_week\": 40, \"record_version\": \"eval_version_52\", \"hours\": 48}}"
+              }
+            }
+          ]
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "edit_preview_52",
+          "content": "{\"code\": 0, \"data\": {\"record_id\": \"recMine\", \"record_version\": \"eval_version_52\", \"source_week\": [2026, 40], \"target_week\": [2026, 40], \"confirmation_token\": \"eval_personal_edit_52\"}}"
+        },
+        {
+          "role": "assistant",
+          "content": "本人身份与编辑能力已核验。recMine 的修改预览：20→实际 48 小时；该周另有 8 小时，合计 56 小时，日历推荐 24 小时，仅提示核对。原始日期不变，台账未变化，确认令牌已安全保存。"
+        },
+        {
+          "role": "user",
+          "content": "确认，实际就是 48 小时"
+        }
+      ],
+      "expected_output": "应保持用户实际 hours=48，使用上一轮隐藏令牌和同一 record_version PATCH 本人记录；推荐 24 小时不构成拒绝或缩减依据。成功后核对 verified 和 stats_synced 并强制刷新回读实际 48 小时，原日期不变。",
+      "files": [],
+      "assertions": [
+        {
+          "name": "actual_hours_confirmed",
+          "check": "PATCH 保持 hours=48 和 record_version=eval_version_52，不缩减至推荐 24 小时"
+        },
+        {
+          "name": "confirmed_token_reused",
+          "check": "使用工具结果中的 eval_personal_edit_52，不展示或记录令牌"
+        },
+        {
+          "name": "actual_hours_readback",
+          "check": "force_refresh 回读实际 48 小时及原始日期不变"
+        }
+      ]
+    },
+    {
+      "id": 53,
+      "prompt": "本人 recMine 原属于 2026-W40，是补填记录，原实际提交时间为 2026-10-08（W41）；想纠正到原实际提交周 W41。version=1 且两个编辑能力均为 true，返回唯一记录与最新版本。",
+      "expected_output": "应先查询本人记录和目标周台账，再 POST /preview 展示 W40→W41：恢复 2026-10-08 的原实际提交时间作为填写日期、清空补填日期、标记正常填报。本轮不调用 PATCH；原始提交时间不能改为当前操作时间。",
+      "files": [],
+      "assertions": [
+        {
+          "name": "retro_to_normal_preview",
+          "check": "回到原实际提交周恢复原填写时间、清空补填日期、标记正常填报"
+        },
+        {
+          "name": "original_time_not_edit_time",
+          "check": "保持原实际提交时间 2026-10-08，不使用当前操作时间；本轮不调用 PATCH"
+        }
+      ]
+    },
+    {
+      "id": 54,
+      "prompt": "本人 recMine 原属于 2026-W40，是补填记录，原补填日期为 2026-10-08 的实际提交时间；想纠正到更早的 W39。version=1 且两个编辑能力均为 true，返回唯一本人记录与最新版本。",
+      "expected_output": "应 POST /preview 展示 W40→W39：填写日期改为 W39 周五 2026-09-25，仍标记补填，原补填日期 2026-10-08 的实际提交时间保持。目标周其他记录总工时、条数和日历推荐值须核对；本轮不调用 PATCH，等待新的顶层确认。",
+      "files": [],
+      "assertions": [
+        {
+          "name": "retro_to_retro_original_time",
+          "check": "目标填写日期为 2026-09-25，原补填日期与实际提交时间保持 2026-10-08"
+        },
+        {
+          "name": "target_aggregate_confirmed",
+          "check": "核对目标周总工时、条数与日历推荐值，本轮不调用 PATCH"
+        }
       ]
     }
   ]

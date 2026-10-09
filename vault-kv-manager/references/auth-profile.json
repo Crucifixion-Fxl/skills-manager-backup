@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "tool": "vault-kv-manager",
+  "provider": "delegated",
+  "owner": "vault-kv-manager",
+  "authContract": "SKILL.md",
+  "verification": "source-verified",
+  "runtimeVerification": "pending",
+  "authDiscovery": "references/auth-discovery.json"
+}

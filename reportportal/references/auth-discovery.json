@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "tool": "reportportal",
+  "owner": "reportportal",
+  "status": "source-reviewed-runtime-pending",
+  "contract": "saas-access.md",
+  "credentialEnv": "RP_API_TOKEN",
+  "notes": "官方UI token与agent API key均使用Bearer；Profile API Keys创建/撤销，个人多个key权限等价。宿主注入RP_API_TOKEN；巡检SMOKE_RP_TOKEN是消费者变量别名，身份与权限不得推断。实际SSO、subject/project角色、key启用/期限/轮换、UI刷新与撤销验证pending。",
+  "runtimeCallsPerformed": false,
+  "credentialHandling": "No login, secret reads, token issuance, or SaaS business calls performed.",
+  "referenceBase": "owner-skill-root for SKILL.md/contractEntrypoints/referenceSources paths; contract field resolves from this JSON directory; upstream repository entrypoints stay repository-relative"
+}

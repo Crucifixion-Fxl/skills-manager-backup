@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "83198a4d-83f9-48e3-99ac-096da9936374",
+  "path": "firmware-build",
+  "path_key": "firmware-build",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/hardware/firmware-build",
+    "branch": null
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "0f2bf385-48d7-4a97-b9e8-28d68d893528",
+  "path": "rerun-hub-data",
+  "path_key": "rerun-hub-data",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/data/rerun-hub-data",
+    "branch": null
+  }
+}

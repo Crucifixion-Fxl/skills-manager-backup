@@ -1,11 +1,17 @@
 ---
 name: clawplex-remote-auth
-description: Handle all authentication in ClawPlex Sandbox — API 407 proxy auth challenges AND browser-interactive login flows (password forms, OTP/MFA, QR code scanning, VNC CAPTCHA fallback, CLI OAuth). Uses vercel/agent-browser for browser automation and Gateway /auth/challenge API for user credential relay. Use this skill whenever you encounter a 407 or 401 response, see "proxy_auth_required", need to log into any website, detect a login page, password field, MFA prompt, QR code, CAPTCHA, or Cloudflare challenge. Also use when curl/fetch/requests gets blocked by authentication, or when a CLI tool needs OAuth login.
+description: >-
+  Authentication only within a confirmed ClawPlex Sandbox with its Gateway.
+  Handle API 407 proxy auth challenges and browser login, MFA, QR and CAPTCHA
+  using the host Gateway challenge and VNC interfaces. Ordinary local or remote
+  development computers use web-access for human browser interaction.
 ---
 
 # ClawPlex Remote Auth
 
 ## Description
+
+仅在已确认存在 ClawPlex Sandbox、Gateway 与其凭据替换/challenge 协议的宿主使用。普通本机/开发机的登录或网页验证使用 [web-access](../web-access/SKILL.md)，日常 SaaS 认证使用 web-access；不根据 401/登录表单猜测存在本 Skill 的 Gateway。通用接管与保留边界见 [接管契约](../web-access/references/handoff-contract.md)。
 
 Handle **all authentication** in Sandbox — both API token challenges and browser login flows. These are complementary: browser login often produces cookies/tokens that enable subsequent API calls.
 

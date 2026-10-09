@@ -16,7 +16,7 @@ from pathlib import Path
 
 
 SKILL = Path(__file__).resolve().parents[1]
-REPO = SKILL.parents[1]
+REPO = SKILL.parents[2]
 REFS = SKILL / "references"
 RUNTIME = REFS / "runtime-setup.md"
 CREDENTIALS = REFS / "agent-credentials.md"

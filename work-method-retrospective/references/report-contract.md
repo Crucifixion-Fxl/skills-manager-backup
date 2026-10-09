@@ -103,7 +103,7 @@ v3 还必须记录触发与输入成本：
 `required-claims.json` 使用对象数组而不是只有 ID，例如 `[{"id":"claim-goal","claim":"任务目标可从报告中还原"}]`。这样 grader 能看到冻结 oracle，而不能把任何 claim 都自报为 supported。用下列 helper 创建只含报告、claim ledger 和 canonical rubric 的匿名输入；`blind-label-map.json` 不能交给 grader：
 
 ```bash
-python3 skills/work-method-retrospective/scripts/build_blind_quality_packet.py \
+python3 skills/agent-harness/work-method-retrospective/scripts/build_blind_quality_packet.py \
   --snapshot <round>/quality/frozen-snapshot.json \
   --baseline-report <round>/quality/baseline-report.md \
   --candidate-report <round>/quality/candidate-report.md \
@@ -117,7 +117,7 @@ grader 输出必须 echo `packet_digest`，且只允许 schema 定义的字段�
 `rerun` 校验和人的质量对比接受完成后，用 `scripts/write_quality_gate.py` 原子创建 receipt。除了已通过 validator 且 `mode=rerun, decision=accept` 的 v3 manifest 与已验证的 `blind-quality-review.json`，还必须传入同一周报 HTML、author/week 和 `addx.weekly_report_approval.v1` receipt；writer 会重新验证 receipt 来自新的顶层用户消息、周报 digest、round、quality-review digest、接受人、有效期与未消费状态。随后创建 `0700` gate 目录和 `0600` 不可覆盖 JSON，保存 snapshot/quality-policy/packet/claim-ledger/label-map/review/report/input/token-receipt digests、baseline/candidate blind labels、required claim IDs、provider/model/request ID、前后 Token/字符成本、claim/privacy/critical gates 与五维质量，并保存原 approval receipt digest、round、author/week、weekly report digest、批准人和原接受时间作为 `approval_provenance`，输出下一轮 `accepted_gate` 所需的 `artifact_ref` 与 `artifact_sha256`。即使原 round 按 TTL 清理，长期 receipt 仍能说明比较的是哪组 claims、A/B 如何解盲、哪两份报告、哪个 grader 请求及谁在何时接受。不得手写、覆盖或在人工确认前生成 receipt。
 
 ```bash
-python3 skills/work-method-retrospective/scripts/write_quality_gate.py \
+python3 skills/agent-harness/work-method-retrospective/scripts/write_quality_gate.py \
   --manifest <round>/review-manifest.json \
   --report <round>/quality/blind-quality-review.json \
   --approval-receipt /tmp/weekly-report-<date>.approval.json \
@@ -150,7 +150,7 @@ v3 的压缩 candidate 必须比 baseline 使用更少的、从实际输入重�
 内环只修正报告：例如删除证据不足的候选、把“新 Skill”降级为“扩展现有 Skill”、补充证据或将结论改为 unverified。所有 checks 通过后运行：
 
 ```bash
-python3 skills/work-method-retrospective/scripts/validate_manifest.py \
+python3 skills/agent-harness/work-method-retrospective/scripts/validate_manifest.py \
   ~/.loongsuite-pilot/work-method-retrospective/<round-id>/review-manifest.json
 ```
 

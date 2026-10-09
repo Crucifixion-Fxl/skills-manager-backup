@@ -1,0 +1,158 @@
+# Copy into a business repository, or include this file at the same immutable
+# engineering/skills commit used by TRACKING_SKILL_REF. Add `tracking` before
+# the production deploy stage. The project supplies only the hooks and YAML.
+.tracking_tdd_setup:
+  before_script: &tracking_tdd_setup
+    - printf '%s' "$TRACKING_SKILL_REF" | grep -Eq '^[0-9a-f]{40}$'
+    - git clone --no-checkout "https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.addx.ai/engineering/skills.git" .tracking-skill-src
+    - git -C .tracking-skill-src cat-file -t "$TRACKING_SKILL_REF" | grep -qx commit
+    - git -C .tracking-skill-src checkout --detach "${TRACKING_SKILL_REF}"
+    - npm ci --ignore-scripts --omit=dev --prefix .tracking-skill-src/skills/observability/tracking-lifecycle
+    - mkdir -p .tracking
+
+.tracking_tdd_protected:
+  rules: &tracking_tdd_protected
+    - if: '$CI_COMMIT_REF_PROTECTED == "true" && $CI_PIPELINE_SOURCE != "merge_request_event" && $CI_COMMIT_BRANCH == $TRACKING_RELEASE_REF'
+
+tracking:local:
+  image: node:20
+  stage: test
+  variables:
+    TRACKING_CLI: .tracking-skill-src/skills/observability/tracking-lifecycle/cli/bin/events-tdd.js
+  before_script: *tracking_tdd_setup
+  script:
+    - node "$TRACKING_CLI" check-contract --baseline=events/baseline.yaml --change-list=events/selected.yaml
+    - node "$TRACKING_CLI" run-hook --config=events/tracking.config.yaml --root=. --hook=usage
+    - node "$TRACKING_CLI" run-hook --config=events/tracking.config.yaml --root=. --hook=local
+    - node "$TRACKING_CLI" run-hook --config=events/tracking.config.yaml --root=. --hook=artifact
+    - node "$TRACKING_CLI" verify-local --baseline=events/baseline.yaml --change-list=events/selected.yaml --scenario=events/scenarios/local.yaml --capture=.tracking/local-capture.json --commit="$CI_COMMIT_SHA" --out=.tracking/local.json
+  artifacts:
+    when: on_success
+    paths:
+      - .tracking/local.json
+      - .tracking/usage.json
+      - .tracking/local-capture.json
+      - .tracking/artifact.bin
+    expire_in: 7 days
+
+tracking:platform-readback:
+  image: node:20
+  stage: tracking
+  rules: *tracking_tdd_protected
+  environment:
+    name: tracking-api
+  needs:
+    - job: tracking:local
+      artifacts: true
+  resource_group: "tracking-${TRACKING_APPLICATION_ID}"
+  variables:
+    TRACKING_CLI: .tracking-skill-src/skills/observability/tracking-lifecycle/cli/bin/events-tdd.js
+  before_script: *tracking_tdd_setup
+  script:
+    - node "$TRACKING_CLI" readback-platform --baseline=events/baseline.yaml --change-list=events/selected.yaml --release-id="$TRACKING_RELEASE_ID" --version="$TRACKING_VERSION" --out=.tracking/platform.lock.yaml
+    - node "$TRACKING_CLI" build-candidate --baseline=events/baseline.yaml --change-list=events/selected.yaml --usage=.tracking/usage.json --commit="$CI_COMMIT_SHA" --artifact-file=.tracking/artifact.bin --release-id="$TRACKING_RELEASE_ID" --version="$TRACKING_VERSION" --out=.tracking/release-candidate.yaml
+  artifacts:
+    when: on_success
+    paths:
+      - .tracking/platform.lock.yaml
+      - .tracking/release-candidate.yaml
+      - .tracking/local.json
+      - .tracking/usage.json
+      - .tracking/artifact.bin
+    expire_in: 7 days
+
+tracking:sandbox:
+  image: node:20
+  stage: tracking
+  rules: *tracking_tdd_protected
+  needs:
+    - job: tracking:platform-readback
+      artifacts: true
+  variables:
+    TRACKING_CLI: .tracking-skill-src/skills/observability/tracking-lifecycle/cli/bin/events-tdd.js
+  before_script: *tracking_tdd_setup
+  script:
+    - export TRACKING_NAMESPACE="ci-${CI_PROJECT_ID}-${CI_PIPELINE_ID}-${CI_JOB_ID}"
+    - node "$TRACKING_CLI" run-hook --config=events/tracking.config.yaml --root=. --hook=sandbox
+    - node "$TRACKING_CLI" verify-sandbox --candidate=.tracking/release-candidate.yaml --lock=.tracking/platform.lock.yaml --scenario=events/scenarios/sandbox.yaml --event-ids=.tracking/sandbox-event-ids.json --namespace="$TRACKING_NAMESPACE" --commit="$CI_COMMIT_SHA" --out=.tracking/sandbox.json
+  artifacts:
+    when: on_success
+    paths:
+      - .tracking/sandbox.json
+      - .tracking/platform.lock.yaml
+      - .tracking/release-candidate.yaml
+      - .tracking/local.json
+      - .tracking/usage.json
+      - .tracking/artifact.bin
+    expire_in: 7 days
+
+tracking:staging:
+  image: node:20
+  stage: tracking
+  rules: *tracking_tdd_protected
+  needs:
+    - job: tracking:sandbox
+      artifacts: true
+  variables:
+    TRACKING_CLI: .tracking-skill-src/skills/observability/tracking-lifecycle/cli/bin/events-tdd.js
+  before_script: *tracking_tdd_setup
+  script:
+    - node "$TRACKING_CLI" run-hook --config=events/tracking.config.yaml --root=. --hook=staging
+    - node "$TRACKING_CLI" verify-staging --candidate=.tracking/release-candidate.yaml --lock=.tracking/platform.lock.yaml --target=events/staging-target.yaml --scenario=.tracking/staging-scenario.yaml --evidence=.tracking/staging-evidence.json --commit="$CI_COMMIT_SHA" --out=.tracking/staging.json
+  artifacts:
+    when: on_success
+    paths:
+      - .tracking/staging.json
+      - .tracking/sandbox.json
+      - .tracking/platform.lock.yaml
+      - .tracking/release-candidate.yaml
+      - .tracking/local.json
+      - .tracking/usage.json
+      - .tracking/artifact.bin
+    expire_in: 7 days
+
+tracking:metric:
+  image: node:20
+  stage: tracking
+  rules:
+    - if: '$CI_COMMIT_REF_PROTECTED == "true" && $CI_PIPELINE_SOURCE != "merge_request_event" && $CI_COMMIT_BRANCH == $TRACKING_RELEASE_REF && $TRACKING_M2_ENABLED == "true"'
+  environment:
+    name: tracking-metric
+  needs:
+    - job: tracking:staging
+      artifacts: true
+  variables:
+    TRACKING_CLI: .tracking-skill-src/skills/observability/tracking-lifecycle/cli/bin/events-tdd.js
+  before_script: *tracking_tdd_setup
+  script:
+    - node "$TRACKING_CLI" run-hook --config=events/tracking.config.yaml --root=. --hook=metric
+    - node "$TRACKING_CLI" verify-metrics --candidate=.tracking/release-candidate.yaml --target=events/staging-target.yaml --staging-report=.tracking/staging.json --metric-list=events/selected-metrics.yaml --evidence=.tracking/metric-evidence.json --out=.tracking/acceptance.json
+  artifacts:
+    when: on_success
+    paths:
+      - .tracking/acceptance.json
+    expire_in: 7 days
+
+tracking:publish:
+  image: node:20
+  stage: tracking
+  rules: *tracking_tdd_protected
+  environment:
+    name: tracking-api
+  needs:
+    - job: tracking:staging
+      artifacts: true
+    - job: tracking:metric
+      optional: true
+      artifacts: true
+  resource_group: "tracking-${TRACKING_APPLICATION_ID}"
+  variables:
+    TRACKING_CLI: .tracking-skill-src/skills/observability/tracking-lifecycle/cli/bin/events-tdd.js
+  before_script: *tracking_tdd_setup
+  script:
+    - node "$TRACKING_CLI" publish --baseline=events/baseline.yaml --change-list=events/selected.yaml --candidate=.tracking/release-candidate.yaml --target=events/staging-target.yaml --usage=.tracking/usage.json --report=.tracking/local.json --report=.tracking/sandbox.json --report=.tracking/staging.json --artifact-file=.tracking/artifact.bin --metric-list=events/selected-metrics.yaml --acceptance=.tracking/acceptance.json --prod-schema-base="$TRACKING_PROD_SCHEMA_BASE" --out=.tracking/release.json
+  artifacts:
+    when: always
+    paths:
+      - .tracking/release.json
+    expire_in: 30 days

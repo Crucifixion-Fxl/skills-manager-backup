@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "ba2bcda9-388c-421b-8bf2-d1462ab14ef0",
+  "path": "firmware-mgr",
+  "path_key": "firmware-mgr",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/hardware/firmware-mgr",
+    "branch": null
+  }
+}

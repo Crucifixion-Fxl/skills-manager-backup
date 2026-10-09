@@ -9,6 +9,8 @@ description: 通过 Stripe REST API 管理商品（Product）和价格（Price�
 
 ## Description
 
+平台登录与认证 SSOT：[stripe](../../experimentation/stripe/SKILL.md)。本 Skill 保留业务流程与门禁，登录/Token事实只在平台 owner 维护；日常访问调用 `web-access`。
+
 Stripe 商品管理涉及两个核心资源：
 
 | 资源 | API 前缀 | 核心功能 |

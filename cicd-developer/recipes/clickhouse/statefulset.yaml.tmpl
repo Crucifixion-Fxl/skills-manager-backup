@@ -14,7 +14,7 @@
 #   {{ephemeral_storage_requests}}  同上；容器日志、临时文件和可写层预算
 #   {{ephemeral_storage_limits}}    同上；必须限制，避免节点磁盘被单实例耗尽
 #   {{pvc_size}}             按容量公式估：qps × bytes × retention × 86400 × 0.1压缩 × 5 headroom
-#   {{storage_class}}        from workflow `$target.pvc_storage_class` (EKS `gp3` / GKE `standard-rwo` / TKE `cbs`)
+#   {{storage_class}}        from workflow `$target.pvc_storage_class`, verified against the exact target StorageClass/CSI/topology
 #   镜像由 clickhouse/kustomization-overlay.yaml.tmpl 的 images 块统一覆盖；
 #   其 name 固定为 clickhouse-server，避免通用 app-name overlay 漏改镜像。
 #
@@ -103,7 +103,7 @@ spec:
     - metadata: { name: data }
       spec:
         accessModes: [ReadWriteOnce]
-        storageClassName: {{storage_class}}        # EKS gp3 / GKE standard-rwo / TKE cbs
+        storageClassName: {{storage_class}}        # Verified exact target StorageClass; never infer from cloud alone
         resources:
           requests:
             storage: {{pvc_size}}                   # 按容量公式估

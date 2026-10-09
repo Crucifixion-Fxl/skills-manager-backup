@@ -305,7 +305,7 @@ def _resolve_skill_git_root() -> str:
     → scripts/ → aws-sp-optimizer/ → skills/ → repo root.
     """
     from pathlib import Path
-    return str(Path(__file__).resolve().parents[3])
+    return str(next(p for p in Path(__file__).resolve().parents if (p / ".codex-plugin" / "plugin.json").is_file()))
 
 
 def _build_cache_refresh_actions(org_alias: str) -> list[dict]:
@@ -319,7 +319,7 @@ def _build_cache_refresh_actions(org_alias: str) -> list[dict]:
                 # Quote the path so spaces / non-ASCII chars don't break `cd`
                 # on users whose repo lives under e.g. /Users/张三/claude-home.
                 f'cd "{skill_git_root}" && git fetch origin main && '
-                "git checkout origin/main -- skills/aws-sp-optimizer/data"
+                "git checkout origin/main -- skills/infrastructure/aws-sp-optimizer/data"
             ),
         },
         {

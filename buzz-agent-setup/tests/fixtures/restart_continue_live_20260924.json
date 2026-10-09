@@ -1,0 +1,120 @@
+{
+  "case_id": "L4-ARC-001",
+  "scope": "one disposable Agent in Buzz×飞书 L4 编辑同步测试; manual restart of same local harness",
+  "channel": "613a9560-d423-4d14-ab3d-f4fc29aecb7a",
+  "agent_name": "l4-visible-continue-tdd-20260924",
+  "agent_pubkey": "a2508a77a5e66fe2c08c696cdb9c180a139311b398be3de8af87c5aab6a9cac6",
+  "root": "a3ddb284abc8bc9c96714ff20d5406d7209c1e666d26d56e34767b30b1dbd58a",
+  "old_pid": 3773993,
+  "new_pid": 3839109,
+  "pre_restart_agent_mentions": 1,
+  "notice_event": {
+    "content": "【TDD 重启提示】Agent 正在重启，任务可能中断。",
+    "created_at": 1790231437,
+    "id": "f032edb62c3005ae087dcff485c20d17072d26ef10db35c51212a2a66a038d7b",
+    "kind": 9,
+    "pubkey": "8a115c31c2c51a0e29bbcd08c02ddc0ca7ff047788f2810ecf2c593ee9d735f6",
+    "sig": "991fbda775a7e26629ed988fb87ccc349295ec750fc2a3d0ae453f94179c778f94519091508fb74beea67648fef2e54fa3658638eb063d8b38c8d34381ad8d32",
+    "tags": [
+      [
+        "h",
+        "613a9560-d423-4d14-ab3d-f4fc29aecb7a"
+      ],
+      [
+        "e",
+        "a3ddb284abc8bc9c96714ff20d5406d7209c1e666d26d56e34767b30b1dbd58a",
+        "",
+        "reply"
+      ]
+    ]
+  },
+  "ready_at": 1790231534,
+  "continue_event": {
+    "content": "@l4-visible-continue-tdd-20260924 continue",
+    "created_at": 1790231535,
+    "id": "66bfb01d40679115102a9517e0130d7074d7f141e5195ae397d4d120a775c1eb",
+    "kind": 9,
+    "pubkey": "8a115c31c2c51a0e29bbcd08c02ddc0ca7ff047788f2810ecf2c593ee9d735f6",
+    "sig": "5d37f158b7b125e7bee1fe8eb96b5ff3bc76753aa74abf9c9bf5d56e73f2d0b9af3433fd4a915c3a292719da98bb3db4104b82189be156c71cab2ab8e684d82c",
+    "tags": [
+      [
+        "h",
+        "613a9560-d423-4d14-ab3d-f4fc29aecb7a"
+      ],
+      [
+        "e",
+        "a3ddb284abc8bc9c96714ff20d5406d7209c1e666d26d56e34767b30b1dbd58a",
+        "",
+        "reply"
+      ],
+      [
+        "p",
+        "a2508a77a5e66fe2c08c696cdb9c180a139311b398be3de8af87c5aab6a9cac6"
+      ]
+    ]
+  },
+  "reaction_target_event_id": "66bfb01d40679115102a9517e0130d7074d7f141e5195ae397d4d120a775c1eb",
+  "reactions_while_running": {
+    "reactions": [
+      {
+        "count": 1,
+        "emoji": "👀",
+        "pubkeys": [
+          "a2508a77a5e66fe2c08c696cdb9c180a139311b398be3de8af87c5aab6a9cac6"
+        ]
+      },
+      {
+        "count": 1,
+        "emoji": "💬",
+        "pubkeys": [
+          "a2508a77a5e66fe2c08c696cdb9c180a139311b398be3de8af87c5aab6a9cac6"
+        ]
+      }
+    ]
+  },
+  "reaction_observation": "buzz reactions get --event <continue ID> returned the above twice while ledger remained A and the resumed 90-second sleep was running; these were transient and after DONE a new query returned reactions: []",
+  "reactions_after_completion": {
+    "reactions": []
+  },
+  "checkpoint_before_stop_lines": [
+    "A"
+  ],
+  "checkpoint_after_restart_before_continue_lines": [
+    "A"
+  ],
+  "checkpoint_while_running_lines": [
+    "A"
+  ],
+  "checkpoint_lines": [
+    "A",
+    "B"
+  ],
+  "checkpoint_sha256": "daee1cd25194ae952d046ad9b9c81d3c07dc5332440b58d6d7461b248be56712",
+  "completion_event": {
+    "content": "DONE",
+    "created_at": 1790231671,
+    "id": "b06a355226b4d3a1c54d371abd0ca7a4ea4ee292d30d75a620f1d973a5ea44a1",
+    "kind": 9,
+    "pubkey": "a2508a77a5e66fe2c08c696cdb9c180a139311b398be3de8af87c5aab6a9cac6",
+    "sig": "324601f77eb68d5779eeddb774eb72dd96a85f5e8047bb27c6948fddcd881cec6b7b678939208fa12f61cdb086fae3ad273484461049e9ede067ac667e804d51",
+    "tags": [
+      [
+        "h",
+        "613a9560-d423-4d14-ab3d-f4fc29aecb7a"
+      ],
+      [
+        "e",
+        "a3ddb284abc8bc9c96714ff20d5406d7209c1e666d26d56e34767b30b1dbd58a",
+        "",
+        "reply"
+      ],
+      [
+        "auth",
+        "8a115c31c2c51a0e29bbcd08c02ddc0ca7ff047788f2810ecf2c593ee9d735f6",
+        "",
+        "921edde721b73462b3bfd72e5b2bfb0eec03b243e52293d5e74d97f888bf1285238207ccea06d7fe7d9f170676661b11631c5903bde08bf2ccf11488b0afc5df"
+      ]
+    ]
+  },
+  "continue_link": "buzz://message?channel=613a9560-d423-4d14-ab3d-f4fc29aecb7a&id=66bfb01d40679115102a9517e0130d7074d7f141e5195ae397d4d120a775c1eb&thread=a3ddb284abc8bc9c96714ff20d5406d7209c1e666d26d56e34767b30b1dbd58a"
+}

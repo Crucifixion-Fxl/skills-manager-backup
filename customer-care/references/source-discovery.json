@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "tool": "customer-care",
+  "owner": "customer-care",
+  "repo": "https://gitlab.addx.ai/services/customer-care",
+  "researchCommit": "09b2cd3e402e93fcd98a152b515c3adc7eb413f8",
+  "routeEntries": [
+    "admin/src/middleware.ts",
+    "admin/src/app/api/facts/route.ts",
+    "admin/src/lib/session.ts"
+  ],
+  "verification": "local-source-reviewed",
+  "deploymentConsistency": "pending",
+  "needsResearch": [
+    "deployment SHA/version and auth configuration",
+    "subject and resource permissions"
+  ],
+  "apiDiscovery": {
+    "method": "Source route inventory",
+    "routeGlob": "admin/src/app/api/**/route.ts",
+    "crossChecks": [
+      "middleware/auth guards",
+      "admin menus and roles",
+      "publish-order state machine, readback, rollback"
+    ],
+    "contract": "api-reference.md",
+    "coverage": "existing contract; complete route/menu equivalence pending"
+  }
+}

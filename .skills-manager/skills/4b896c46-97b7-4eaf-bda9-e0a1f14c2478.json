@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "4b896c46-97b7-4eaf-bda9-e0a1f14c2478",
+  "path": "user-research-report",
+  "path_key": "user-research-report",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/product/user-research-report",
+    "branch": null
+  }
+}

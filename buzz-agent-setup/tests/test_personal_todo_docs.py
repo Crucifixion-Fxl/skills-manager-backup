@@ -15,15 +15,15 @@ import unittest
 
 
 SKILL = Path(__file__).resolve().parents[1]
-REPO = SKILL.parents[1]
+REPO = SKILL.parents[2]
 REFS = SKILL / "references"
-ADR = REPO / "docs" / "05-adr" / "0013-run-personal-todo-sync-with-the-owners-pat.md"
+ADR = REPO / "docs" / "agent-harness" / "adr" / "0013-run-personal-todo-sync-with-the-owners-pat.md"
 RUNBOOK = REFS / "systemd" / "personal-todo-sync.md"
 WORKFLOW = REFS / "workflows" / "personal-todo-wake.yaml"
 GUIDE = REFS / "personal-channel.md"
 EXAMPLE = REFS / "scripts" / "gitlab-todo-sync.example.json"
 SCRIPTS_README = REFS / "scripts" / "README.md"
-HOWTO = REPO / "public" / "work-methods" / "buzz-personal-agent-howto.html"
+HOWTO = REPO / "docs" / "agent-harness" / "guides" / "work-methods" / "buzz-personal-agent-howto.html"
 sys.path.insert(0, str(SKILL / "scripts"))
 
 WHITELIST = {"HOME", "USER", "LOGNAME", "PATH", "LANG", "BUZZ_RELAY_URL", "BUZZ_PRIVATE_KEY",
@@ -117,7 +117,7 @@ class AdrTest(unittest.TestCase):
                        "api", "expir", "allowlist", "revoke", "personal Channel"):
             with self.subTest(needle=needle):
                 self.assertIn(needle, text)
-        readme = read(REPO / "docs" / "05-adr" / "README.md")
+        readme = read(REPO / "docs" / "agent-harness" / "adr" / "README.md")
         self.assertRegex(readme, r"\|\s*0013\s*\|.*0013-run-personal-todo-sync-with-the-owners-pat\.md")
 
     def test_adr_lists_the_member_set_gate_and_the_new_residual_risks(self):
@@ -914,7 +914,7 @@ class SkillGapsFromRealRunTest(unittest.TestCase):
 
 
 class HowtoPageTest(unittest.TestCase):
-    """The how-to page (public/work-methods) mirrors the message layout and the wake text; it must not drift from them."""
+    """The how-to page (docs/development/guides/work-methods) mirrors the message layout and the wake text; it must not drift from them."""
 
     def test_the_chat_mock_and_the_feishu_preview_show_the_new_done_hint(self):
         """L1-PTS-093 howto 页里的 Buzz 聊天示意与飞书卡片预览都用新版式（「标题 · 发起人」并成第 1 行、没有项目路径行、新的完成指引行）；预览 = 压成单行后取前 120 字 + 「…」（按新措辞重取）；不再出现旧措辞。"""

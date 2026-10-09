@@ -10,7 +10,7 @@ description: 将已有应用以 parallel-run 方式扩展到新集群。支持 G
 Move an existing application to another cluster without changing the source
 runtime during target preparation. This workflow covers application manifests,
 target Harbor CI, Vault/ESO contracts, ArgoCD registration, passive validation,
-and the handoff to a separate traffic-switch MR. 本文的主运行态 Application 不代表一仓只能有一个 Application。若权限职责或生命周期需要分离，先提出独立 runtime/infra 渲染与唯一资源管理者方案，再为各 Application登记已有且批准的 Project、source/path/destination 合同；不能隐式多生成一个 Application。平台 claim 可按现有合同留 runtime，owner 专属 Project 未获批准前不可使用。存量资源拆分需独立 ownership/prune/finalizer/回滚评审，不能套用只改 Project 的迁移。详见 [权限与部署划分合同](../references/data/permission-boundaries.yaml)。
+and the handoff to a separate traffic-switch MR. 本文的主运行态 Application 不代表一仓只能有一个 Application。若权限职责或生命周期需要分离，先提出独立 runtime/infra 渲染与唯一资源管理者方案，再为各 Application登记已有且批准的 Project、source/path/destination 合同；不能隐式多生成一个 Application。平台 claim 按合同留 runtime；业务资源分别使用共享 app-runtime/app-data-plane，不新建 owner Project。存量资源拆分需独立 ownership/prune/finalizer/回滚评审，不能套用只改 Project 的迁移。详见 [权限与部署划分合同](../references/data/permission-boundaries.yaml)。
 
 This is a parallel-run workflow. It does not decommission the source workload,
 change the source Service selector, or switch traffic in the same change set.

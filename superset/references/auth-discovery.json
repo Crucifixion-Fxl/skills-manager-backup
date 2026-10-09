@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "tool": "superset",
+  "owner": "superset",
+  "instance": {
+    "selection": "Use target/environment mapping in owner SKILL; never enumerate unrelated profiles or silently fall back.",
+    "contract": "SKILL.md",
+    "currentVersion": "unknown; historical values are not runtime evidence",
+    "addressEvidence": "Owner SKILL.md environment tables are the address SSOT; credential variables and exceptions in auth.nativeCredentialPath are selected-instance constraints."
+  },
+  "auth": {
+    "nativeCredentialPath": "SUPERSET_URL=https://superset-us.addx.live; service account SUPERSET_USER (canonical; SUPERSET_USERNAME only if unset)/SUPERSET_PASSWORD; SUPERSET_EXPECTED_USER enforces selected service identity and mismatch stops before network produces JWT via /api/v1/security/login. login2 service-account browser route is distinct.",
+    "missingCredentialWorkflow": "Service account may use login2 with CSRF/Referer/User-Agent/same cookie jar per local reference. Personal users use SSO; redirect from login2 to /login/ is failure and never automatic fallback.",
+    "subjectAndResourcePermissionVerification": "GET /api/v1/me/ when available and authorized chart/dashboard metadata; target API/page readability verifies session. Confirm roles and database dataset access; CSRF token is not identity.",
+    "issuanceConsumptionRevocation": "JWT expiry from actual response/config; renew only approved service account flow. Session logout and JWT expiry are distinct; no universal JWT revoke endpoint established.",
+    "credentialHandling": "Private injection only; never print/store secrets in repository, command arguments, chat or receipts. Discovery itself performs no login/token creation."
+  },
+  "nativeRoute": {
+    "business": "Owner SKILL + version-matched official CLI/API documentation",
+    "loginRecovery": "web-access for human web interaction; official CLI only where explicitly documented",
+    "refresh": "platform-onboarding only for concrete auth/version/interface drift",
+    "runtimeProvider": "superset-service",
+    "adapterStatus": "delegated contract only; no new runnable provider or full API mirror implemented"
+  },
+  "referenceSources": [
+    {
+      "kind": "owner-contract",
+      "path": "SKILL.md"
+    },
+    {
+      "kind": "owner-contract",
+      "path": "references/login2-session.md"
+    },
+    {
+      "kind": "primary-official",
+      "url": "https://superset.apache.org/docs/api/",
+      "checkedOn": "2026-10-07",
+      "use": "authentication discovery; match actual deployed version before business calls",
+      "status": "retrieved",
+      "limitation": "Official documentation does not prove instance compatibility."
+    }
+  ],
+  "versionPolicy": {
+    "probe": "Deployment image/About/version from owner plus /swagger/v1 instance spec; historical approximate 1-hour expiry not guaranteed.",
+    "compatibility": "Unknown deployment version requires non-mutating capability evidence before business usage; do not promote latest upstream docs to deployed compatibility."
+  },
+  "verification": {
+    "source": "source-verified",
+    "fixture": "not-run: reference-only changes",
+    "runtime": "pending",
+    "sourceCandidate": "8d736bd81ab8500e51cf6be3d71d1ffa70937cae",
+    "scope": "Owner repository contract and primary documentation research only. No credential inspection, login, token issuance/revocation or online business calls.",
+    "pendingReasons": [
+      "Target deployment version, selected subject and exact resource permissions have not been runtime verified.",
+      "Token/login workflow needs independently authorized selected-instance validation; no runnable unified provider is claimed."
+    ]
+  }
+}

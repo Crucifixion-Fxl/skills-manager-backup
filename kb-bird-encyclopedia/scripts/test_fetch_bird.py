@@ -5,7 +5,7 @@ login failure surface, locale fallback skip, pagination ceiling warning,
 and the per-page matcher. All network/IO is mocked — these run offline.
 
 Run from repo root:
-    pytest skills/kb-bird-encyclopedia/scripts/test_fetch_bird.py
+    pytest skills/data/kb-bird-encyclopedia/scripts/test_fetch_bird.py
 or via unittest:
     python -m unittest skills.kb-bird-encyclopedia.scripts.test_fetch_bird
 """

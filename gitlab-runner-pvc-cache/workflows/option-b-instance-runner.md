@@ -57,7 +57,7 @@ Actions:
 Validate:
 
 ```bash
-bash skills/gitlab-runner-pvc-cache/validators/validate.sh <gitlab-runner-dir> /dev/null /dev/null
+bash skills/delivery/gitlab-runner-pvc-cache/validators/validate.sh <gitlab-runner-dir> /dev/null /dev/null
 ```
 
 ## Step 3: Update argocd-apps
@@ -78,7 +78,7 @@ Actions:
 Validate:
 
 ```bash
-bash skills/gitlab-runner-pvc-cache/validators/validate.sh /dev/null <cluster-apps-dir> /dev/null
+bash skills/delivery/gitlab-runner-pvc-cache/validators/validate.sh /dev/null <cluster-apps-dir> /dev/null
 ```
 
 ## Step 4: Update the Business Project
@@ -101,7 +101,7 @@ Actions:
 Validate:
 
 ```bash
-bash skills/gitlab-runner-pvc-cache/validators/validate.sh <gitlab-runner-dir> <cluster-apps-dir> <project-dir>
+bash skills/delivery/gitlab-runner-pvc-cache/validators/validate.sh <gitlab-runner-dir> <cluster-apps-dir> <project-dir>
 ```
 
 ## Step 5: Merge Order

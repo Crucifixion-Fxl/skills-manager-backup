@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "tool": "datahub-schema-search",
+  "owner": "datahub-schema-search",
+  "repo": "https://gitlab.addx.ai/engineering/skills",
+  "researchCommit": "bac8d3ee819650381b8a613a6e8526c153d7b244",
+  "routeEntries": [
+    "skills/datahub-schema-search/SKILL.md"
+  ],
+  "verification": "source-verified",
+  "deploymentConsistency": "pending",
+  "officialReferences": [],
+  "needsResearch": [
+    "Runtime identity, resource permissions and credential lifecycle",
+    "Actual service/installed MCP version, account region and source/runtime consistency"
+  ],
+  "apiDiscovery": {
+    "method": "这是DataHub私有搜索服务，不是DataHub GraphQL/API的同一路径。服务自身/docs为发现入口（本次未在线打开），既有Skill仅证明search/tables/databases和POST sync路由声明。先定位service版本、认证中间件与资源权限，再按其Swagger/源码选择获权读取。POST sync刷新索引是写操作，需明确范围与授权、完成后回读；不为测试可达性自动触发。DataHub底层访问继续调用datahub owner，公开DataHub docs不替代此私有API契约。",
+    "coverage": "Source and public entrypoints located; runtime pending"
+  },
+  "deploymentEvidence": {
+    "repo": "https://gitlab.addx.ai/DEV/k8s",
+    "researchCommit": "47800f690df48d1f46174593809dd67e9773a48e",
+    "path": "docs/plans/2026-07-15-image-updater-fleet-rollout.md",
+    "notes": "Names schema-search sync prod/staging-us applications; service source repo/commit and deployment auth remain pending."
+  }
+}

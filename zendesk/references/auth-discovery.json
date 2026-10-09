@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "tool": "zendesk",
+  "owner": "zendesk",
+  "instance": {
+    "selection": "Use target/environment mapping in owner SKILL; never enumerate unrelated profiles or silently fall back.",
+    "contract": "../zendesk-admin-config/SKILL.md",
+    "currentVersion": "unknown; historical values are not runtime evidence",
+    "addressEvidence": "Owner SKILL.md environment tables are the address SSOT; credential variables and exceptions in auth.nativeCredentialPath are selected-instance constraints."
+  },
+  "auth": {
+    "nativeCredentialPath": "ZENDESK_SUBDOMAIN=neopace; ZENDESK_OAUTH_CLIENT_ID + ZENDESK_OAUTH_CLIENT_SECRET or short-lived ZENDESK_OAUTH_ACCESS_TOKEN. Confidential OAuth client_credentials.",
+    "missingCredentialWorkflow": "Admin Center Apps and integrations APIs Zendesk API API configuration: authorized admin configures confidential client and injects secret. No deprecated API token fallback, no device grant.",
+    "subjectAndResourcePermissionVerification": "scripts/zendesk_admin.py check-auth, users/me.json identity and allowlisted resource read. Client allowed scope must include requested read write; ticket field/form/group permissions also require admin role.",
+    "issuanceConsumptionRevocation": "POST /oauth/tokens client_credentials per existing script; bearer consumes token. Authorized admin revokes OAuth token/client in API configuration; token expiry is response-driven.",
+    "credentialHandling": "Private injection only; never print/store secrets in repository, command arguments, chat or receipts. Discovery itself performs no login/token creation."
+  },
+  "nativeRoute": {
+    "business": "Owner SKILL + version-matched official CLI/API documentation",
+    "loginRecovery": "web-access for human web interaction; official CLI only where explicitly documented",
+    "refresh": "platform-onboarding only for concrete auth/version/interface drift",
+    "runtimeProvider": "delegated",
+    "adapterStatus": "delegated contract only; no new runnable provider or full API mirror implemented"
+  },
+  "referenceSources": [
+    {
+      "kind": "owner-contract",
+      "path": "../zendesk-admin-config/SKILL.md"
+    },
+    {
+      "kind": "primary-official",
+      "url": "https://developer.zendesk.com/api-reference/ticketing/oauth/grant_type_tokens/",
+      "checkedOn": "2026-10-07",
+      "use": "authentication discovery; match actual deployed version before business calls",
+      "status": "retrieved",
+      "limitation": "Official documentation does not prove instance compatibility."
+    }
+  ],
+  "versionPolicy": {
+    "probe": "Managed SaaS v2, no self-hosted version to discover. Use current tenant API docs, preserve existing script contract and reviewed plan/write gates.",
+    "compatibility": "Unknown deployment version requires non-mutating capability evidence before business usage; do not promote latest upstream docs to deployed compatibility."
+  },
+  "verification": {
+    "source": "source-verified",
+    "fixture": "not-run: reference-only changes",
+    "runtime": "pending",
+    "sourceCandidate": "8d736bd81ab8500e51cf6be3d71d1ffa70937cae",
+    "scope": "Owner repository contract and primary documentation research only. No credential inspection, login, token issuance/revocation or online business calls.",
+    "pendingReasons": [
+      "Target deployment version, selected subject and exact resource permissions have not been runtime verified.",
+      "Token/login workflow needs independently authorized selected-instance validation; no runnable unified provider is claimed."
+    ]
+  },
+  "consumerAuthRoutes": [
+    {
+      "consumer": "zendesk-admin-config",
+      "contract": "../../zendesk-admin-config/SKILL.md",
+      "mechanism": "Existing confidential OAuth admin route; source contract unchanged"
+    },
+    {
+      "consumer": "zendesk-helpcenter",
+      "contract": "helpcenter-auth.md",
+      "mechanism": "Existing private runtime helper credential route; not interchangeable with admin OAuth"
+    }
+  ],
+  "referenceBase": "owner-skill-root for SKILL.md/contractEntrypoints/referenceSources paths; contract field resolves from this JSON directory; upstream repository entrypoints stay repository-relative"
+}

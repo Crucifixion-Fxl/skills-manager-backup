@@ -1,8 +1,8 @@
 """L2-3 owner timer: the timer entrypoint syncs under the Desk identity with no LLM in the path (ADR-0008).
 
 Skipped unless BUZZ_SYNC_L3=1. Needs the localstack up with agents on the current prompts:
-  python3 skills/buzz-agent-setup/tests/localstack/stack.py agents --restart desk,role
-  BUZZ_SYNC_L3=1 python3 -m unittest skills/buzz-agent-setup/tests/integration/test_desk_e2e.py -v
+  python3 skills/agent-harness/buzz-agent-setup/tests/localstack/stack.py agents --restart desk,role
+  BUZZ_SYNC_L3=1 python3 -m unittest skills/agent-harness/buzz-agent-setup/tests/integration/test_desk_e2e.py -v
 
 `stack.py timer-run` plays the systemd --user service: it starts the immutable release's
 gitlab_buzz_sync_timer.py once, with no argv and an env -i whitelist of the Desk identity

@@ -3,6 +3,8 @@ name: mylibrary
 description: 搭建「类 EM/library」的个人/团队技术知识库：HTML 单源 + 自动派生 Markdown 供 AI 检索 + pre-commit 构建 + GitLab Pages 发布 + 划词评论。当用户想把零散技术笔记/调试结论沉淀成同事可见、可搜索的文档库，或提到「个人知识库/文档库/知识沉淀/文档站/类似 library」时使用。发布到 Pages 的底层机制见 gitlab-pages-html。
 ---
 
+**写入 memory 时**：遵循 [极简写入规约](../../agent-harness/dev-infra/references/memory-writing.md)：只增量写长期约束与入口，默认≤5条/≤10行/约≤200字，语义去重；保留既有授权边界和安全门禁，详情留文档。此规约不新增写入授权。
+
 # mylibrary — 搭一个「类 [library](https://pages.addx.ai/em/library/)」的知识库
 
 把零散的技术笔记、调试结论、踩坑记录，沉淀成一个**同事可见、可搜索、可划词评论**的在线文档库——参照 `EM/library` 的现成做法，半天就能跑起来。

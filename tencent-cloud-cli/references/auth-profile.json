@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "tool": "tencent-cloud",
+  "provider": "delegated",
+  "owner": "tencent-cloud-cli",
+  "authContract": "SKILL.md",
+  "verification": "source-verified",
+  "runtimeVerification": "pending",
+  "authDiscovery": "references/auth-discovery.json"
+}

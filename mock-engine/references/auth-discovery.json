@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "tool": "mock-engine",
+  "owner": "mock-engine",
+  "instances": [],
+  "nativeRoute": "local Docker Compose infrastructure; no SaaS login",
+  "loginFlow": {
+    "reuseFirst": true,
+    "steps": "复用本地 Docker 权限、已隔离项目 compose 与受控本地配置；检查 docker compose version 与项目 mock/Makefile。没有需要登录的 SaaS 页面，不走飞书/Casdoor。",
+    "authorization": "Login, token creation/rotation/revocation and business writes require the current task scope; this discovery performs none."
+  },
+  "tokenMechanism": "本地 fixture 配置仅限隔离 mock；云端或生产凭据不得导入 mock。",
+  "subjectPermission": "mock-status/容器健康只验证依赖环境；业务应用身份由目标应用自有测试 fixture 验证。",
+  "expiryRevoke": "停止 mock-down；删除 volume/reset 属独立有副作用操作；外部 key 的撤销归原平台。",
+  "officialRefs": [],
+  "sources": [
+    {
+      "kind": "owner-contract",
+      "path": "../SKILL.md",
+      "status": "contract-recorded"
+    },
+    {
+      "kind": "repository",
+      "repository": "https://gitlab.addx.ai/tools/mock-engine",
+      "researchCommit": "10a8e49033b5d6f5bfee29adc0bc13e34d87ab85",
+      "entries": [
+        "core/templates/mock/docker-compose.yml",
+        "core/templates/mock/Makefile",
+        "core/scripts/Makefile.include"
+      ],
+      "status": "candidate-source-verified"
+    }
+  ],
+  "versionPolicy": {
+    "researchCommit": "10a8e49033b5d6f5bfee29adc0bc13e34d87ab85",
+    "deployedCommit": null,
+    "deploymentMatch": "unknown",
+    "refreshTriggers": [
+      "authentication contract change",
+      "deployed version change",
+      "reproducible auth failure"
+    ],
+    "rule": "Candidate source and published contracts do not establish deployed compatibility. Verify the target instance version and read-only supported capabilities before enabling an adapter."
+  },
+  "verification": {
+    "source": "candidate-source-verified",
+    "fixture": "not-run-in-this-discovery",
+    "runtime": "not-attempted",
+    "scope": "Read-only documentation/repository discovery; no login, token issuance, credential inspection or business API execution."
+  }
+}

@@ -30,6 +30,18 @@ The caller must already know the exact worktree created or reused for the
 current session. Do not discover candidates by scanning all local branches or
 worktrees, and do not clean sibling sessions.
 
+## Issue synchronization before deletion
+
+The parent must first complete [associated Issue update/close](issue-sync.md),
+including live merge evidence, per-Issue disposition and note/state readback.
+A verified open disposition with remaining acceptance work satisfies this
+synchronization requirement; Issues need not all be closed to clean local files.
+An unknown or failed write returns `ISSUE_SYNC_UNVERIFIED` and blocks local
+deletion. Preserve the actual merged MR and successful receipts, then reconcile
+and retry only the missing Issue operation. Cleanup being blocked does not
+excuse omitting Issue synchronization. This caller requirement complements the
+helper below; the helper itself only verifies Git/GitLab worktree gates.
+
 ## Deterministic gate
 
 Resolve the absolute directory that contains the loaded `gitlab-mr/SKILL.md`,
@@ -53,13 +65,15 @@ uv run "$GITLAB_MR_SKILL_DIR/scripts/cleanup_merged_worktree.py" \
 - GitLab reports `state=merged` and a non-empty `merged_at`;
 - the MR source branch equals the local branch;
 - the local branch HEAD equals the MR source SHA;
-- the MR target branch equals the repository's GitLab default branch;
-- the default branch is not the branch being removed; and
+- the MR target branch is present, non-empty, and differs from the local source branch;
+- the repository's GitLab default branch is not the branch being removed; and
 - another worktree survives to administer the shared repository.
 
 Matching the MR source SHA is the no-local-new-commit proof. It also makes the
 flow safe for squash merges, where `git branch --merged <target>` may reject a
-feature branch even though GitLab has merged its MR.
+feature branch even though GitLab has merged its MR. The target need not be the
+repository default branch: a repository can use `develop` as its default while
+a verified production promotion merges into `main`.
 
 ## Execute
 

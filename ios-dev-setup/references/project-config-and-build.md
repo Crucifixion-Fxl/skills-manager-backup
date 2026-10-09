@@ -44,7 +44,7 @@ Fastlane 会读取 `AddxAi/AppConfig/fastlane_sign.plist`，其中包含 Apple A
 ## 首次预检
 
 ```bash
-~/.codex/skills/ios-dev-setup/scripts/preflight_ios_env.sh /path/to/IosProjects
+~/.codex/skills/development/ios-dev-setup/scripts/preflight_ios_env.sh /path/to/IosProjects
 ```
 
 预检只输出仓库/环境状态和 `ProjectConfig.plist` 的安全字段，不读取或打印签名 secret，也不修改已有工作区。

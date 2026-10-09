@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "d61c11ef-e1f4-4d41-91a8-176d2d8bde3a",
+  "path": "failure-feedback",
+  "path_key": "failure-feedback",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/agent-harness/failure-feedback",
+    "branch": null
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "b19307f4-43f9-4743-b06e-e379102a6141",
+  "path": "flink-job-development",
+  "path_key": "flink-job-development",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/data/flink-job-development",
+    "branch": null
+  }
+}

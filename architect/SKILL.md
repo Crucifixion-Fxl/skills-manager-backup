@@ -3,6 +3,8 @@ name: architect
 description: Use when designing a new feature or system, making architecture decisions, writing technical design docs, or structuring project documentation. Triggers on "design", "architecture", "technical design", "ADR", "system decomposition", "how should I structure this", "设计方案", "架构设计", "技术方案", "文档体系", "写 US", "写文档". Also use when reviewing existing architecture docs or asking "where should I put this doc?"
 ---
 
+**写入 memory 时**：遵循 [极简写入规约](../../agent-harness/dev-infra/references/memory-writing.md)：只增量写长期约束与入口，默认≤5条/≤10行/约≤200字，语义去重；保留既有授权边界和安全门禁，详情留文档。此规约不新增写入授权。
+
 # Architect
 
 架构师 Skill — 通过苏格拉底式追问驱动设计决策，产出完整的技术文档体系。
@@ -20,6 +22,7 @@ description: Use when designing a new feature or system, making architecture dec
 7. **方案先行**：文档可以描述目标态（设计超前于代码是正常节奏）；但代码已实现的功能必须有对应文档
 8. **代码一级目录留 CLAUDE.md + AGENTS.md 软链**：仓里只两层 CLAUDE.md——**仓根** + **代码一级子目录**（`server/` / `admin/` / `moments/` / `app/` 等，1 个目录 = 1 个 System）。每次架构变更（拆 System、本目录 skill 选型变更、新增 hard boundary、关键 ADR 推翻）同步更新，**不允许漂移**。详细规约 + 模板 + 反模式（不在 docs/ 树写 / 不在 Component 级写 / 极薄 ≤20 行 / 只两节）见 [§ 代码一级目录 CLAUDE.md 模板](#代码一级目录-claudemd-模板)。
 9. **需求驱动设计必须有 accepted Requirements**：对新功能、需求变更或 bug-derived requirement，进入架构 Step 2 前必须读取由 `requirements-analysis-agent` 生成、PO 对精确 `artifact_id + artifact_hash` ACCEPT 的 REQUIREMENTS Artifact。缺失、hash 不匹配、`ATTEMPT_NEEDS_INPUT` 或 Gate pending/rejected 时停止；architect 不得自行补写需求并绕过门禁。豁免只限**只读现状解释或通用技术教育**，且不得形成项目特定目标态、ADR、实现计划或任何持久化设计产物，也不得写入项目 docs/；项目特定设计即使被称为“咨询”也必须经过 Gate。
+10. **设计必须绑定 Issue**：项目特定目标态、ADR、实现计划或持久化设计产物开始前，按 [`gitlab-issue-sop` 生命周期契约](../../collaboration/gitlab-issue-sop/references/lifecycle-binding.md) 实时验证 Root Issue 与当前仓 Work Item；缺失、关闭、无 assignee 或仓库/关系不匹配时停止。设计 accepted 后把固定版本链接、digest、reviewer、未决项与 next gate 幂等写回 Work Item 并回读。
 
 ---
 
@@ -36,6 +39,31 @@ description: Use when designing a new feature or system, making architecture dec
 | dashboard / timeline / flowchart / API reference | 同一 HTML shell + 对应 visual/documentation 模块 |
 
 HTML-first 不是做展示页，而是让面向人的架构正文具备阅读路径、SVG 图、图例、ADR 链接、SSOT 导航和移动端可读性；它不覆盖 ADR 的 Markdown-only 规则。详细模板、图语言、校验 checklist 见 [`references/html-architecture-doc-writing.md`](references/html-architecture-doc-writing.md)。
+
+### md 还是 html：**两者都可以**，按读者选
+
+`docs/design/` 与 `docs/requirements/` 下 **md 和 html 都是合法产物**，不强制其一。下面是选型参考，不是门禁：
+
+| 情形 | 更适合 | 为什么 |
+|---|---|---|
+| 会被 **agent 当输入读**，或需要在 MR 里**看 diff** | md | HTML 的 diff 噪音大，agent 解析也更费劲 |
+| 主要给人读，且**论点依赖图**（时序、状态机、架构） | html（内联 SVG） | 图是论证的一部分，拆出去就散了 |
+
+仓库页面能直接渲染 md；html 要么本地打开要么发到 Pages——**这只影响阅读便利，不影响合规**。
+（`docs/architecture/` 下的架构树仍按上一节 HTML-first 执行。）
+
+### 两棵按「生命周期」切的树
+
+除上面按 system/component 切的架构树外，还有两棵按**粒度与生命周期**切的：
+
+| 树 | 粒度 | 生命周期 | 内容 |
+|---|---|---|---|
+| `docs/design/<模块>/` | 按**模块** | 长期演进 | `README.md` 或 `README.html`（模块是什么·边界·依赖，入口）· `contract.md`（对外契约：接口·事件·数据形状）· `decisions/`（**一次决策一个文件，只增不改**——新决策推翻旧的就再写一个）· `<专题>.html`（需要图的专题） |
+| `docs/requirements/<iid>/plan.md` | 按**需求** | 一次性，做完即归档 | 本次实现计划，见下节 |
+
+两者都**随 feature 分支走完整晋级**，与代码同一条链。
+
+**进仓的文档只写结论。** 争论、澄清、方案比选留在 issue comment 与频道 thread 里——否则 `docs/design/` 会退化成聊天记录的转录，丢掉「可被机器读」这个唯一价值。
 
 ### md 还是 html：**两者都可以**，按读者选
 
@@ -243,7 +271,7 @@ ln -s CLAUDE.md AGENTS.md
 
 **绝对禁止**：技术实现细节（不写类名、API 路径、数据库字段、协议细节）。User Story 是用户视角，不是技术规格。
 
-**怎么写**：从 accepted REQUIREMENTS Artifact 派生；需要生成项目 HTML US 时再委派 [`story-craftsman`](../story-craftsman/SKILL.md)。`story-craftsman` 已在 Step 0 作为 review pass 执行，此处不得重新解释或改变已接受需求。它是 US 文档结构的 SSOT，覆盖：
+**怎么写**：从 accepted REQUIREMENTS Artifact 派生；需要生成项目 HTML US 时再委派 [`story-craftsman`](../../product/story-craftsman/SKILL.md)。`story-craftsman` 已在 Step 0 作为 review pass 执行，此处不得重新解释或改变已接受需求。它是 US 文档结构的 SSOT，覆盖：
 
 - 引导式访谈协议（信息不足时如何向用户挖掘背景 / 目标 / AC）
 - Epic-first 文档结构纪律（Epic 顶级 `##`、US 是 `###`、按 stakeholder 视角切 Epic）
@@ -254,11 +282,11 @@ ln -s CLAUDE.md AGENTS.md
 - 文件按服务 / Component拆分 + 索引表同步规则
 - 向后兼容（旧文档不强制翻新）
 
-architect 不在本节重复 story-craftsman 的规则，避免规范分裂。Review 一份 US 是否合规，对照 [`story-craftsman/SKILL.md`](../story-craftsman/SKILL.md) 即可。
+architect 不在本节重复 story-craftsman 的规则，避免规范分裂。Review 一份 US 是否合规，对照 [`story-craftsman/SKILL.md`](../../product/story-craftsman/SKILL.md) 即可。
 
 **配套 Skill**：`story-craftsman`
 
-**PRD 入 Git 约定（需求 SSOT）**：issue 正文是需求唯一正本；PRD 定稿必须提交 Git（`docs/product/prd/{service}.html`）并在 issue 回链。飞书 PRD 仅作讨论输入/迁移期兼容——用 `feishu-auth` 读取后必须落盘到该路径并回链 issue，**禁止飞书链接作为唯一载体**。（#61 X-3，详见 docs/architecture/skill-artifact-delivery-implementation.html §10）
+**PRD 入 Git 约定（需求 SSOT）**：issue 正文是需求唯一正本；PRD 定稿必须提交 Git（`docs/product/prd/{service}.html`）并在 issue 回链。飞书 PRD 仅作讨论输入/迁移期兼容——用 `feishu-auth` 读取后必须落盘到该路径并回链 issue，**禁止飞书链接作为唯一载体**。（#61 X-3，详见 docs/development/architecture/skill-artifact-delivery-implementation.html §10）
 
 ---
 
@@ -482,7 +510,7 @@ vertical-first 文档的核心风险是同一机制被 `index.html`、`app/`、`
 
 **配套 Skill**：本 skill 的 HTML 方法 + `visual-documentation-skills` 全部五类（architecture / technical doc / flowchart / dashboard / timeline），以及 `superpowers:brainstorming`（方案发散）。
 
-**G2 Gate（方案 → 实施）**：Step 2 产出的架构方案文档必须走 MR，**获得 ≥1 个 approve 后才可作为实现依据**（个人仓豁免 approve 但 MR 照建留痕）。approve 前架构页仅是提案；approve 后在 issue 追加 comment 回链方案 MR。红线：AI 不得自我批准。Gate 完整定义在 `dev-workflow` 的 G2 Gate 一节。（#61 X-2 / G-4，详见 docs/architecture/skill-artifact-delivery-implementation.html §10）
+**G2 Gate（方案 → 实施）**：Step 2 产出的架构方案文档必须走 MR，**获得 ≥1 个 approve 后才可作为实现依据**（个人仓豁免 approve 但 MR 照建留痕）。approve 前架构页仅是提案；approve 后在 issue 追加 comment 回链方案 MR。红线：AI 不得自我批准。Gate 完整定义在 `dev-workflow` 的 G2 Gate 一节。（#61 X-2 / G-4，详见 docs/development/architecture/skill-artifact-delivery-implementation.html §10）
 
 ---
 
@@ -562,7 +590,7 @@ project-root/
 | A/B | `growthbook.yml` / `growthbook/` |
 | 部署 | `.gitlab-ci.yml` / `k8s/` / `apps/preview/` |
 
-**反模式（禁用）**：Grafana UI 手改 dashboard 不同步 JSON；tracker-manager UI 加 schema 不进仓；preview 手 `kubectl apply` 不进 ApplicationSet。
+**反模式（禁用）**：Grafana UI 手改 dashboard 不同步 JSON；tracking-lifecycle UI 加 schema 不进仓；preview 手 `kubectl apply` 不进 ApplicationSet。
 
 **协作 Skill**：`tdd-infra`（待建，编排 TDD 设施建设）；详细设计见 `docs/architecture/tdd-infra/index.html`（或项目兼容导航）。
 
@@ -785,7 +813,7 @@ docs/testing/
 **质量标准**（也是 `code-review` 审查测试的评判标准，详细分层策略参见 `testing-strategy` skill）：
 - **按行为风险选择最小充分验证**：新增关键用户流程、跨服务契约及安全/数据风险须有相关 L3；低风险局部变化可由 L1/L2/组件测试与必要 smoke 验证，不要求每个边界新增 L3。
 - 每条已实现的 US AC 必须追溯到适当测试层级；需要 L3 时，业务 UI 用 UI/app shell，technical vertical 用 public API/harness；**L3 使用真实内部依赖**，不是 stub 内部组件。
-- MR/release 的适用范围、执行阶段与旧报告复用以 [L3 分阶段门禁](../code-review/references/l3-release-gate.md) 为准：release 身份本身不触发全端或全量 L3；只验证受影响链路，未扩大风险的历史欠债单列跟踪。
+- MR/release 的适用范围、执行阶段与旧报告复用以 [L3 分阶段门禁](../../quality/code-review/references/l3-release-gate.md) 为准：release 身份本身不触发全端或全量 L3；只验证受影响链路，未扩大风险的历史欠债单列跟踪。
 - 每个已实现的 API handler 至少有 L2 集成测试（验证接口契约和数据正确性）
 - 状态变更、删除、纠错等核心流程必须有边界场景覆盖
 - 测试场景必须覆盖 US 的所有 AC（追溯到适当层级的用例编号，非适用层级注明原因，不要求 L2/L3 重复覆盖所有局部边界）
@@ -931,7 +959,7 @@ Review 时重点检查：
 | Step 6 | CI Pipeline 配置 | `gitlab-ci` / `embed-ci-setup` / `jenkins` |
 | Step 6 | CD 部署全流程 | `cicd-developer`   |
 | Step 6 | K8s / 镜像 / 密钥 | `k8s-ops` +  `vault-kv-manager` |
-| 全程 | 埋点事件定义与管理 | `tracker-manager` |
+| 全程 | 埋点事件定义与管理 | `tracking-lifecycle` |
 | 全程 | A/B 实验 / Feature Flag | `growthbook` |
 | 全程 | SLA 指标配置 | `sla-metric` |
 | 全程 | 监控 Dashboard / 告警 | `grafana` + `prometheus` |
@@ -954,7 +982,7 @@ Review 时重点检查：
 | §2b 苏格拉底追问中用户给出**非显然偏好**或反驳一个常见做法（"我不要 Outbox"、"先 SSE 不上 WebSocket"） | `feedback` | 偏好 + Why（用户给的理由）+ How to apply（下次遇到同类场景怎么处理） |
 | §2d ADR 收敛后选 A 不选 B 的**深层项目约束**（团队规模 / 合规 / 历史包袱），ADR 正文不便展开的 | `project` | 决策 + 约束 + How to apply（后续同类决策默认按这个倾斜） |
 | §2.0 catalog 拓扑确认时浮出的**该 Domain / System 的边界共识**（"为什么 admin 单独 System 不并入 backend"） | `project` | 决策事实 + Why + How to apply |
-| §2a+ 调 `service-catalog-search` 拿到的**关键外部资源 / 中台位置**（"push 走 notificationPublisher"、"埋点走 tracker-manager"） | `reference` | 资源名 + 用途 + 接入入口 |
+| §2a+ 调 `service-catalog-search` 拿到的**关键外部资源 / 中台位置**（"push 走 notificationPublisher"、"埋点走 tracking-lifecycle"） | `reference` | 资源名 + 用途 + 接入入口 |
 | §4 Component 设计追问中暴露的**hard rule**（"这个 Component 永远不直读 X 表"、"该 ports 不抛 panic，错误码统一 errPlatform"）| `feedback` | rule + Why + How to apply |
 
 ### 不要写
@@ -975,16 +1003,16 @@ Review 时重点检查：
 
 ---
 
-## 公司规范正本（本仓 `public/dev-standards/architecture/`）
+## 公司规范正本（本仓 `docs/development/standards/reference-pages/architecture/`）
 
-本仓 `public/dev-standards/architecture/` 是公司工程架构规范的 **SSOT 正本**（2026-08-11 从 `engineering/architecture` 仓整树迁入，自包含互链 HTML 站，人读版发布在 [Pages](https://pages.addx.ai/engineering/skills/dev-standards/architecture/)）。文档先于 skill：规范正本住在发布树 `public/dev-standards/<域>/`（约束产出物，MR 里能判违规），工作方法住 `public/work-methods/`（约束工作方式，维护于发布分支 `docs/skill-hub`），skill 只承载 AI 面。
+本仓 `docs/development/standards/reference-pages/architecture/` 是公司工程架构规范的 **SSOT 正本**（2026-08-11 从 `engineering/architecture` 仓整树迁入，自包含互链 HTML 站，人读版发布在 [Pages](https://pages.addx.ai/engineering/skills/dev-standards/architecture/)）。文档先于 skill：规范正本住在发布树 `docs/development/standards/reference-pages/<域>/`（约束产出物，MR 里能判违规），工作方法住 `docs/development/guides/work-methods/`（约束工作方式，维护于发布分支 `docs/skill-hub`），skill 只承载 AI 面。
 
-- 入口 [`index.html`](../../public/dev-standards/architecture/index.html)；分层 / 命名 / GitLab 规范：`service-layering.html` / `embedded-layering.html` / `app-layering.html` / `naming-standard.html` / `gitlab-standard.html`
+- 入口 [`index.html`](../../../docs/development/standards/reference-pages/architecture/index.html)；分层 / 命名 / GitLab 规范：`service-layering.html` / `embedded-layering.html` / `app-layering.html` / `naming-standard.html` / `gitlab-standard.html`
 - 服务清单与调用规则：`backend-service-architecture.html`（`microservice-integrate` 的查询正本）
 - catalog 建模 / schema / 术语 / 逐仓归位：`catalog-*.html`（`service-catalog-onboarding` 的规范正本）
 - 公司级 ADR 推理链：`adrs/`；GitLab org 现状快照与全量树：`gitlab-org-*`；架构图设计方法：`system-architecture-diagram-design.html`
 
-**SSOT 纪律**：`public/dev-standards/architecture/` = 正本（人读，讲 why）；`references/` 里的 AI 简洁摘要为待补批次 —— 改规范先改正本再同步摘要；改层名 / 服务名 / Domain 名 = 改正本 → grep 下游同步引用。
+**SSOT 纪律**：`docs/development/standards/reference-pages/architecture/` = 正本（人读，讲 why）；`references/` 里的 AI 简洁摘要为待补批次 —— 改规范先改正本再同步摘要；改层名 / 服务名 / Domain 名 = 改正本 → grep 下游同步引用。
 
 ---
 

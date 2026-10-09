@@ -9,15 +9,18 @@ They must not declare
 centralized permission or platform boundary resources such as IAM/IRSA Roles,
 ProviderConfigs, WAF resources, or shared SecurityGroupIngressRule objects.
 
-DEV/k8s owns reusable platform capabilities, not static desired state for one
-business application. Review callers must pass ``--repo-context k8s`` when
-they copy changed files to a temporary directory, because the temporary path
-cannot identify the source repository.
+DEV/k8s normally owns reusable platform capabilities, not static desired state
+for one business application. The only app request exception is a closed,
+platform-owned PostgreSQL RDS claim at its exact source path. Review callers
+must pass ``--repo-context k8s`` when they copy changed files to a temporary
+directory; a copy without its repository-relative path cannot qualify for the
+exception.
 """
 
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -79,6 +82,16 @@ PROVIDER_SQL_BUSINESS_KINDS = {"Database", "Grant", "Role", "User"}
 PLATFORM_APP_CLAIM_KINDS = {
     KIND_DATABASE_CLAIM,
     KIND_KAFKA_CREDENTIAL_CLAIM,
+}
+APP_RDS_REQUEST_DIR = (
+    "clusters",
+    "aws-302571458622-us-prod",
+    "platform-apis",
+    "app-owned-rds",
+    "requests",
+)
+APP_RDS_REQUEST_ANNOTATIONS = {
+    "argocd.argoproj.io/sync-options": "Prune=false,Delete=false",
 }
 
 PROVIDER_CONFIG_KINDS = {
@@ -358,13 +371,48 @@ def is_business_secret_store(doc: dict[str, Any], group: str, kind: Any) -> bool
     )
 
 
-def k8s_boundary_reason(path: Path, doc: dict[str, Any]) -> str | None:
+def is_reviewed_app_rds_request(path: Path, root: Path, doc: dict[str, Any]) -> bool:
+    """Allow only the closed, platform-owned us-eks-prod PostgreSQL request."""
+    metadata = doc.get("metadata")
+    spec = doc.get("spec")
+    if not isinstance(metadata, dict) or not isinstance(spec, dict):
+        return False
+    app = metadata.get("name")
+    if not isinstance(app, str) or not re.fullmatch(r"[a-z][a-z0-9-]*[a-z0-9]", app):
+        return False
+    if not 2 <= len(app) <= 30:
+        return False
+    if path.relative_to(root).parts != (*APP_RDS_REQUEST_DIR, f"{app}.yaml"):
+        return False
+    if set(doc) != {"apiVersion", "kind", "metadata", "spec"}:
+        return False
+    if doc.get("apiVersion") != "platform.addx.io/v1alpha1" or doc.get("kind") != KIND_DATABASE_CLAIM:
+        return False
+    if metadata != {
+        "name": app,
+        "namespace": "crossplane-system",
+        "annotations": APP_RDS_REQUEST_ANNOTATIONS,
+    }:
+        return False
+    if set(spec) != {"app", "engineVersion", "securityGroupId"} or spec["app"] != app:
+        return False
+    return bool(
+        isinstance(spec["engineVersion"], str)
+        and re.fullmatch(r"16\.[0-9]+", spec["engineVersion"])
+        and isinstance(spec["securityGroupId"], str)
+        and re.fullmatch(r"sg-[0-9a-f]{8,17}", spec["securityGroupId"])
+    )
+
+
+def k8s_boundary_reason(path: Path, root: Path, doc: dict[str, Any]) -> str | None:
     group = api_group(doc)
     kind = doc.get("kind")
 
     if is_per_app_eso_identity_path(path):
         return REASON_K8S_ESO_IDENTITY
     if group == GROUP_PLATFORM and kind in PLATFORM_APP_CLAIM_KINDS:
+        if is_reviewed_app_rds_request(path, root, doc):
+            return None
         return REASON_K8S_APP_CLAIM
     if is_provider_sql_business_resource(group, kind):
         return REASON_K8S_PROVIDER_SQL
@@ -412,7 +460,7 @@ def boundary_failure(
     repo_context: str = REPO_CONTEXT_AUTO,
 ) -> str | None:
     if repo_context == REPO_CONTEXT_K8S:
-        violation_reason = k8s_boundary_reason(path, doc)
+        violation_reason = k8s_boundary_reason(path, root, doc)
         if violation_reason is None:
             return None
         return (

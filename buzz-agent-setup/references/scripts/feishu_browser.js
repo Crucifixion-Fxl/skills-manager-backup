@@ -90,7 +90,13 @@ async function main() {
   const deadline = Date.now() + 30 * 60 * 1000;
   let n = 0;
   while (Date.now() < deadline) {
-    if (!/accounts\.feishu\.cn/.test(page.url())) {
+    // A public open.feishu.cn page is not proof of login. Only the CLI
+    // confirmation page with its application form (or final result) is.
+    const body = await page.evaluate(() => document.body.innerText);
+    const confirmedPage = /^https:\/\/open\.feishu\.cn\/page\/cli(?:\?|$)/.test(page.url())
+      && (await page.locator('input.ud__native-input').count() > 0
+          || body.includes('创建成功') || body.includes('创建失败'));
+    if (confirmedPage) {
       await page.waitForTimeout(3000); await dump();
       fs.writeFileSync('state.txt', 'LOGGED_IN ' + page.url()); log('LOGGED_IN'); break;
     }

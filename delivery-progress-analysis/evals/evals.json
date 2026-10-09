@@ -165,12 +165,64 @@
           "check": "动态责任人来自 GitLab assignee，例外 alias 来自 owner 管理的 Canvas；Workflow 不保存人员名单或 pubkey。"
         }
       ]
+    },
+    {
+      "id": 7,
+      "mode": "offline_fixture",
+      "prompt": "仅用冻结夹具生成无 Milestone 日对日交付进展，禁止实时系统和通知。",
+      "setup": "Use only the bounded feature scope and complete evidence in the frozen fixture.",
+      "files": [
+        "evals/fixtures/no-milestone-daily-progress.md"
+      ],
+      "expected_output": "解释离线提醒验收完成、通知去重集成推进但未验收、提醒恢复退步；不以 open 净数或无 Milestone 替代进展。",
+      "assertions": [
+        {
+          "name": "closed_scope_recovered",
+          "check": "纳入离开当前 open 集合的 #301，以验收 Job 与关闭事件解释能力完成；明确两集合分页覆盖。"
+        },
+        {
+          "name": "merged_not_accepted",
+          "check": "#302 表述集成推进并说明目标 main、生产验收未执行，不声明完成。"
+        },
+        {
+          "name": "semantic_not_activity",
+          "check": "不把重复关闭 #303、错字更新 #304 算作交付推进；不把 type::bug/maintenance 静默纳入功能范围。"
+        },
+        {
+          "name": "intermediate_regression",
+          "check": "#305 起止状态相同仍报告窗口 reopened/复现退步及证据。"
+        },
+        {
+          "name": "no_milestone_still_progress",
+          "check": "给出 (B,T] 时区基线与最多三项能力变化，缺日历仅停止时间风险；正常推进不通知。"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "mode": "offline_fixture",
+      "prompt": "使用冻结夹具无基线变体，输出今天进展。",
+      "setup": "Yesterday snapshot is missing; only timestamped events and current objects are available. Do not infer yesterday states.",
+      "files": [
+        "evals/fixtures/no-milestone-daily-progress.md"
+      ],
+      "expected_output": "披露基线缺失并从有时间事件报告窗口事实，未知时间 merged 不写今天合并，不宣称无变化。",
+      "assertions": [
+        {
+          "name": "missing_baseline_not_fabricated",
+          "check": "无基线时保留 #301/#302 本窗口可证实事件，不捏造昨日状态或完整日对日对比；时间未知 #308 不认定今天合并。"
+        },
+        {
+          "name": "coverage_not_no_progress",
+          "check": "明确基线缺失与可重建范围，不以无快照宣称无变化或停止全部进展分析。"
+        }
+      ]
     }
   ],
   "contract": {
     "version": 1,
     "id_start": 1,
-    "case_count": 6,
+    "case_count": 8,
     "canonical_inputs": true,
     "require_assertions": true,
     "hide_tool_tokens": true

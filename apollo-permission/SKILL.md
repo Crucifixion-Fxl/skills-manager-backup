@@ -9,6 +9,8 @@ description: 管理 Apollo 配置中心的用户权限（授权、回收、查�
 
 ## Description
 
+首次接入/变更扫描与日常认证入口见 [SaaS 接入](references/saas-access.md)；已有平台业务契约与授权门禁仍在本 Skill 维护。
+
 自动化 Apollo 配置中心 CN/US 双实例的用户权限管理，支持授权、回收、查询操作。默认操作 appId=2（iot-camera），授权规则为 ModifyNamespace 全环境 + ReleaseNamespace 仅 FAT。凭据优先从环境变量或用户明确批准的凭据来源获取；Codex 不读取 `~/.claude/references/available-secrets.md`。禁止在输出中包含明文密码。
 
 ### 实例信息
@@ -22,17 +24,11 @@ description: 管理 Apollo 配置中心的用户权限（授权、回收、查�
 
 Apollo Portal 使用 LDAP + Spring Security form login，通过 JSESSIONID cookie 维持会话。
 
-```bash
-curl -s -c <cookie_file> -b <cookie_file> \
-  -X POST '<PORTAL_URL>/signin' \
-  -H 'Content-Type: application/x-www-form-urlencoded' \
-  -H 'Origin: <PORTAL_URL>' \
-  -H 'Referer: <PORTAL_URL>/signin' \
-  -d 'username=<USER>&password=<PASS>' \
-  -o /dev/null -w '%{http_code}'
-```
+用户在本机安全登录页完成 LDAP form login；密码、MFA 或验证码只在页面输入，不发到聊天。已授权任务可辅助正常导航和登录检测，并通过浏览器私有会话／credential provider 将 JSESSIONID Cookie 经私密 stdin、进程内存或加密 SSH stdin 注入 native API 消费者。保留官方 Portal API 和 Cookie 登录，不将 LDAP 宣称为 Casdoor，也不擅自改用 OpenAPI 管理 Token。凭据禁止落入 argv、Cookie 文件、输出、日志或仓库；未授权不主动代持个人凭据。
 
-成功标志：HTTP 302 + Location 为 `/`。失败时 Location 为 `/signin`。
+声明入口若为 HTTP，先核验实际 TLS 入口、可信本机加密转发或经核验的安全传输方式，再携带密码／Cookie；不能自行猜 HTTPS 域名、端口或替换实例。登录跳转只能记录实际状态；302 跳到主页不能替代服务端当前用户核验。
+
+只读候选先匹配部署版本与认证 profile：`GET /user` 在 Spring Security profile 下从当前 principal 返回 `userId`，姓名／邮箱可能为空，核验预期用户名的精确匹配，不能把 `/users/{userId}` 任意用户档案当成当前调用者。`GET /apps/<appId>/permissions/CreateNamespace` 可按当前 principal 返回 `{hasPermission: boolean}`；false 是有效权限读取，不是请求失败，更不是写入授权。先核验身份再读取目标 App 权限元数据，拒绝重定向到登录页／HTML冒充 JSON；只读验收不读取 Namespace 配置值、不触发发布、角色初始化或业务写。正常认证的 session 生命周期与可能存在的部署自定义用户同步副作用分别记录，不能仅由 GET 或 LDAP 名称推断无副作用。
 
 ## Rules
 
@@ -64,17 +60,17 @@ Apollo 权限分两层：
 | `ReleaseNamespace` | 发布配置 |
 | `Master` | App 管理员 |
 
+### 私密 native 请求与清理
+
+Cookie 仅由已授权安全注入器提供；配置 stdin 示例必须使用 shell builtin `printf`，拒绝 CR/LF 并正确转义引号／反斜杠，禁止管道日志、debug/verbose 和 xtrace。固定已核验实例与允许路径，不跨域跟随重定向。HTTP 声明入口的安全传输未核验时，不提交凭据或执行 native 会话请求。任务结束只清理自己的临时内存、SSH资源和独立浏览器 profile，记录实际退出响应，不影响已有会话或假定所有会话均撤销。
+
 ### 授权请求格式
 
 授权 POST 的 body **必须**是纯文本 userId，不是 JSON。
 
 ### LDAP 用户首次授权
 
-LDAP 用户未登录过 Apollo 时，授权 API 返回 500 + `EmptyResultDataAccessException`。解决方法：
-
-1. `POST /apps/2/system/master/<userId>` 临时委派 Master（自动创建本地用户记录）
-2. `DELETE /apps/2/system/master/<userId>` 立即移除
-3. 正常执行授权
+LDAP 用户未在目标实例完成正常登录或用户目录尚未同步时，授权 API 可能返回 `EmptyResultDataAccessException`。先核验版本、目录和用户存在性，由用户完成正常首次登录，或让平台 owner 提供明确的初始化流程。禁止将临时委派 Master 再回收用于只读探针、用户初始化或普通授权的自动 fallback：授予 Master 本身扩大权限，后续回收也不能抹去该副作用。不得因授权失败擅自调用 `/system/master` 或角色初始化接口。
 
 ### 操作流程
 
@@ -95,26 +91,21 @@ LDAP 用户未登录过 Apollo 时，授权 API 返回 500 + `EmptyResultDataAcc
 用户说"给 jzhang 在 application namespace 开权限"：
 
 ```bash
-# 1. 登录 CN
-curl -s -c /tmp/apollo-cn.txt -b /tmp/apollo-cn.txt \
-  -X POST 'http://apollo-cn.addx.live:9070/signin' \
-  -H 'Content-Type: application/x-www-form-urlencoded' \
-  -H 'Origin: http://apollo-cn.addx.live:9070' \
-  -H 'Referer: http://apollo-cn.addx.live:9070/signin' \
-  -d 'username=<USER>&password=<PASS>' -o /dev/null
+# 1. 使用已核验的安全登录页完成 CN 登录；已授权任务私密注入 APOLLO_SESSION_COOKIE
+# 禁用 xtrace/verbose；以下只展示 API 契约，真实消费者在进程内构造 Cookie Header
 
 # 2. 授 ModifyNamespace（app 级，全环境）
-curl -s -b /tmp/apollo-cn.txt -X POST \
+printf 'header = "Cookie: %s"\n' "$APOLLO_SESSION_COOKIE" | curl -s --config - -X POST \
   'http://apollo-cn.addx.live:9070/apps/2/namespaces/application/roles/ModifyNamespace' \
   -H 'Content-Type: text/plain' -d 'jzhang'
 
 # 3. 授 ReleaseNamespace（仅 FAT）
-curl -s -b /tmp/apollo-cn.txt -X POST \
+printf 'header = "Cookie: %s"\n' "$APOLLO_SESSION_COOKIE" | curl -s --config - -X POST \
   'http://apollo-cn.addx.live:9070/apps/2/envs/FAT/namespaces/application/roles/ReleaseNamespace' \
   -H 'Content-Type: text/plain' -d 'jzhang'
 
 # 4. 验证
-curl -s -b /tmp/apollo-cn.txt \
+printf 'header = "Cookie: %s"\n' "$APOLLO_SESSION_COOKIE" | curl -s --config - \
   'http://apollo-cn.addx.live:9070/apps/2/namespaces/application/role_users'
 
 # 5. 对 US 重复步骤 1-4
@@ -155,4 +146,4 @@ curl -X POST '.../apps/2/envs/PRO/namespaces/application/roles/ReleaseNamespace'
 | API 返回 401/403 | session 过期 | 重新登录 |
 | 用户搜索无结果 | 用户未在 LDAP 中 | 确认 userId（通常是姓名拼音缩写） |
 | 授权返回 409 | 用户已有该角色 | 跳过，不是错误 |
-| 授权返回 500 + EmptyResultDataAccessException | 用户未在 Apollo 本地 DB | 用 system/master 临时委派创建记录 |
+| 授权返回 500 + EmptyResultDataAccessException | 用户目录／实例版本需核验 | 走正常首次登录或 owner 明确初始化流程，禁止自动临时 Master fallback |

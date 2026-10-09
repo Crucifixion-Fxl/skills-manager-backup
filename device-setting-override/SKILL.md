@@ -14,6 +14,8 @@ description: 通过 inner-api 在 /deviceMsg/setting 响应中按设备 SN 覆�
 
 ## Description
 
+首次接入/变更扫描与日常认证入口见 [SaaS 接入](references/saas-access.md)；已有平台业务契约与授权门禁仍在本 Skill 维护。
+
 特性后端代码在 `iot-service-cloud/.../service/setting/`,合并语义在 `SettingOverrideMerger`。本 Skill 是运维侧的客户端封装。
 
 ### 鉴权 / Auth

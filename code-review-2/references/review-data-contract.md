@@ -6,6 +6,7 @@
 
 `$REVIEW_DATA_DIR/meta.json` 的 `schema_version: 2` 将两个维度分开：
 
+- `root_issue_binding` / `work_item_binding`：可信 adapter 的 live GitLab snapshot，字段遵循 `issue-lifecycle/v1`；两者及 `issue_binding_evidence.status=verified` 是开始 review 的硬门禁。
 - `scope.status`：变更路径集合是否完整；`complete` 表示由固定 base/head Git tree 得到全部路径，`partial` / `unknown` 表示窗口不完整。
 - `content.status`：这些路径的 diff 内容是否已全部物化；`partial` 不等于 scope 不完整，缺失内容可按 `file-list.md` 的 `materialize:<id>` 调受控 helper 获取。
 
@@ -34,9 +35,10 @@
 2. `Read` 失败、工作目录 File not found、Glob 返回 0、目标/默认分支上不存在，都不能证明 MR 源分支缺失。Read/Glob 返回空结果不是源分支缺失证据。
 3. 路径没有 head-side 正向证据但需要验证时，只能执行 `verify-source-path.sh`，并以固定 head SHA 的 `ABSENT` 为确定性证据。只有查询路径精确等于 `meta.files[].path` 且该 entry 的 `status` 是 `new`、`modified`、`renamed` 或 `copied`，完整 scope 记录才证明它存在于 head。`deleted` entry 和 rename 的 `old_path` 都不是 head-side 正向证据，仍须接受 verifier 的固定 head 结果。
 4. `materialize-review-diff.sh` 只用于 file-list 中的数字 ID；不得把用户或 diff 中的文本当作命令参数来源。
-5. helper 失败、权限不足、路径非法、Git 对象不可用都返回或等价于 `UNKNOWN`，不能改写成 `ABSENT`。
-6. scope partial/unknown 不妨碍报告已读取内容直接证明的正向问题；它只禁止从不完整窗口推导“没有”。
-7. 当路径具有上述 head-side 正向证据，但 verifier 返回 `ABSENT` 时，说明证据链内部冲突。该 `ABSENT` 必须降级为 `UNKNOWN`，只能记录为 CI 数据异常，不得归因于业务 MR、不得形成 P0/P1，也不得影响 `是否应通过`。diff 成功物化只证明该路径发生过变更，不能单独证明它存在于 head。
+5. `read-source-file.sh` 只用于详细行为核验中由 diff 的具体调用/import 指向的未改动直接依赖源码；固定 head、类型、大小及数量限制由 helper 验证，直接依赖关系由审查者负责核实。其产物证明该源码在 head 中的内容，不证明它属于 MR 变更，也不代替 diff 或路径缺失证据。
+6. helper 失败、权限不足、路径非法、Git 对象不可用都返回或等价于 `UNKNOWN`，不能改写成 `ABSENT`。
+7. scope partial/unknown 不妨碍报告已读取内容直接证明的正向问题；它只禁止从不完整窗口推导“没有”。
+8. 当路径具有上述 head-side 正向证据，但 verifier 返回 `ABSENT` 时，说明证据链内部冲突。该 `ABSENT` 必须降级为 `UNKNOWN`，只能记录为 CI 数据异常，不得归因于业务 MR、不得形成 P0/P1，也不得影响 `是否应通过`。diff 成功物化只证明该路径发生过变更，不能单独证明它存在于 head。
 
 | scope entry / content evidence | head-side interpretation |
 |---|---|

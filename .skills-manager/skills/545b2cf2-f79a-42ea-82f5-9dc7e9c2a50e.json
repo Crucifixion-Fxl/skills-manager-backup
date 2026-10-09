@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "545b2cf2-f79a-42ea-82f5-9dc7e9c2a50e",
+  "path": "feishu-issue-context-sync",
+  "path_key": "feishu-issue-context-sync",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/collaboration/feishu-issue-context-sync",
+    "branch": null
+  }
+}

@@ -32,10 +32,16 @@ Trigger on raw ideas, pasted prose, PRD files or URLs, GitLab Issue snapshots, e
 
 Establish one canonical source before analysis:
 
+- for any project/product delivery requirement, first create or reuse an assigned Root Issue through `gitlab-issue-sop`, then live-verify it under the [Issue lifecycle contract](../../collaboration/gitlab-issue-sop/references/lifecycle-binding.md); pasted text or documents become immutable evidence on that Issue, not a substitute identity;
 - record source kind, stable reference, retrieval timestamp, and SHA-256 digest;
 - distinguish user-supplied text from retrieved documents and from Agent inference;
 - keep source text read-only throughout the Requirements Attempt; an explicitly requested rewrite is a separate post-acceptance action and grants no write authority inside this Attempt;
 - if a URL or Issue cannot be read, request an immutable snapshot instead of guessing.
+
+If project identity is known but no open, assigned Root Issue can be verified, return
+`ATTEMPT_NEEDS_INPUT` with `ISSUE_LINK_REQUIRED`; do not produce a ready Artifact, design, test
+plan, branch, or code. Local/manual ready profiles are limited to explicitly non-project analysis
+that creates no project artifact and cannot advance a delivery workflow.
 
 ## Run one bounded Requirements Attempt
 
@@ -71,7 +77,7 @@ Ask one consolidated set of questions, grouped by decision. Include why each ans
 
 ## Produce the typed outcome
 
-For a ready requirement, select the exact source-kind profile in `references/requirements-contract.md`: Buzz-managed GitLab Issues use the Buzz/GitLab profile, while pasted text and documents use the local/manual profile. Never mix profiles and never fabricate GitLab or Buzz identity fields to make a non-GitLab source fit the Buzz writer schema. Every acceptance criterion must have a stable ID and observable Given/When/Then behavior. Keep implementation choices out of acceptance criteria unless the requirement is explicitly technical.
+For a ready requirement, select the exact source-kind profile in `references/requirements-contract.md`: project/product delivery uses the live-verified GitLab Issue profile; pasted text and documents may use the local/manual profile only for explicitly non-project analysis with no durable downstream artifact. Never mix profiles and never fabricate GitLab or Buzz identity fields to make a non-GitLab source fit the Buzz writer schema. Every acceptance criterion must have a stable ID and observable Given/When/Then behavior. Keep implementation choices out of acceptance criteria unless the requirement is explicitly technical.
 
 The ready Artifact must use `requirements-analysis/1.1`. Its structured PRD
 quality review and interpretation confirmations are part of the canonical

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "8e4e84e5-90bf-45d6-a061-e5edf421c560",
+  "path": "clawplex-remote-auth",
+  "path_key": "clawplex-remote-auth",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/agent-harness/clawplex-remote-auth",
+    "branch": null
+  }
+}

@@ -13,7 +13,7 @@ The skill is **read-only on AWS**. Purchase execution is strictly manual via the
 ## Install
 
 ```bash
-cd skills/aws-sp-optimizer
+cd skills/infrastructure/aws-sp-optimizer
 python -m pip install -e ".[test,dev]"
 ```
 
@@ -39,13 +39,13 @@ Full CLI flags: see `references/usage.md`.
 ## Pricing cache
 
 The skill ships with a pre-built pricing cache at
-`skills/aws-sp-optimizer/data/ratios.json.gz` (gzipped) covering common
+`skills/infrastructure/aws-sp-optimizer/data/ratios.json.gz` (gzipped) covering common
 regions (currently `us-east-1` + `eu-central-1`, ~10 MB). On first run,
 the skill loads from this shipped cache rather than downloading 800 MB
 of raw AWS rate sheets per region.
 
 **Cache location**: the skill reads exclusively from
-`skills/aws-sp-optimizer/data/ratios.json.gz` + `data/version.json` —
+`skills/infrastructure/aws-sp-optimizer/data/ratios.json.gz` + `data/version.json` —
 there is no `~/.cache/aws-sp-optimizer/` directory or per-user cache.
 All state lives inside the skill repo and is version-controlled.
 

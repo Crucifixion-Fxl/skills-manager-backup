@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "3ecb24d5-6acf-4581-9290-ac7e0c5b924d",
+  "path": "service-catalog-onboarding",
+  "path_key": "service-catalog-onboarding",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/development/service-catalog-onboarding",
+    "branch": null
+  }
+}

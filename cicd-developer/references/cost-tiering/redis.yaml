@@ -13,14 +13,14 @@ notes: |
   backing DB；如果 app 没做 graceful fallback，必须多副本 HA。
   **默认引擎 = Valkey（不是 Redis OSS）**，默认 engineVersion `9.1`（app-owned CR 由
   recipe 模板硬编码 engine:valkey / engineVersion:"9.1"）。2026-09-15 已验证
-  ElastiCache us-east-1 与 cn-north-1 均提供 valkey 9.1（family valkey9，实际 9.1.0），
+  AWS ElastiCache 的历史版本验证：us-east-1 与 cn-north-1 提供 valkey 9.1；CN AWS 已退役，该版本不能套用 Tencent Redis（family valkey9，实际 9.1.0），
   且集群 elasticache.aws.m.upbound.io/v1beta1 ReplicationGroup/Cluster CRD 的 engine
   字段 schema 明确接受 redis | valkey。用其它引擎/版本需 cd-requirements.md 记录理由。
   **nodeType 规格约定**：默认起步 Graviton t4g 家族（burstable，低流量默认）；高资源
   占用（热点 key / 大内存 / 高吞吐）改用 r8g / m8g 家族——**由用户在 cd-requirements.md
   显式指定**，本表不自动升档。
   自 2026-05-26 起，新部署应用 staging/tech-service 不按本表自建 app-owned Redis，改走 kind:Database 自助。
-  ✅ 共享 Redis 自助 2026-06-03 已上线 6 集群（engine:redis,function-go-templating + provider-kubernetes）：
+  ✅ 共享 Redis 自助 2026-06-03 已在 AWS US/EU staging + tech-service 上线；当前 CN TKE 须先核验目标能力（engine:redis,function-go-templating + provider-kubernetes）：
   写 kind:Database{app,env,engine:redis}，Composition 把共享 ElastiCache endpoint 推 vault
   secret/{env}/redis/application/{app}/connection（host/port），app 走 ExternalSecret 读，不再 Ops Todo、
   不再 configmap 硬编码 endpoint。注:共享实例**无 auth**(无 authToken/TLS/RBAC),Composition 只发 endpoint、

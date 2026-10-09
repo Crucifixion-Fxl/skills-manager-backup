@@ -3,8 +3,8 @@
 ## 安装（本机）
 
 ```bash
-bash skills/harness-failover/scripts/install.sh            # 复制到 ~/.local/lib/buzz-agents/harness-failover/ 并启用定时器
-bash skills/harness-failover/scripts/install.sh --print-units   # 只看 unit 内容
+bash skills/agent-harness/harness-failover/scripts/install.sh            # 复制到 ~/.local/lib/buzz-agents/harness-failover/ 并启用定时器
+bash skills/agent-harness/harness-failover/scripts/install.sh --print-units   # 只看 unit 内容
 ```
 
 为什么复制：插件缓存路径每次更新都变（`~/.claude/plugins/cache/<marketplace>/addx/<rev>/`），定时器不能指向它。

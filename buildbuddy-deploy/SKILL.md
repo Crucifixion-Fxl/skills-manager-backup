@@ -11,6 +11,8 @@ description: 部署和运维 BuildBuddy onprem（Bazel 远程缓存服务端）�
 
 ## Description
 
+平台登录与认证 SSOT：[buildbuddy](../../infrastructure/buildbuddy/SKILL.md)。本 Skill 保留业务流程与门禁，登录/Token事实只在平台 owner 维护；日常访问调用 `web-access`。
+
 ### 三域名入口模型
 
 按角色命名，不按网络形态命名：

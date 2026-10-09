@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "tool": "stripe",
+  "owner": "stripe",
+  "instance": {
+    "selection": "Use target/environment mapping in owner SKILL; never enumerate unrelated profiles or silently fall back.",
+    "contract": "../stripe-product/SKILL.md",
+    "currentVersion": "unknown; historical values are not runtime evidence",
+    "addressEvidence": "Owner SKILL.md environment tables are the address SSOT; credential variables and exceptions in auth.nativeCredentialPath are selected-instance constraints."
+  },
+  "auth": {
+    "nativeCredentialPath": "STRIPE_SECRET_KEY injected environment, HTTP Basic username with empty password; distinguish test/live and restricted key scope.",
+    "missingCredentialWorkflow": "Human Dashboard Developers/API keys provisions minimum restricted/secret key only when authorized; Stripe CLI login is separate test tooling and never silently replaces live account key.",
+    "subjectAndResourcePermissionVerification": "GET /v1/account if allowed by chosen key to validate account plus intended product read in same mode; restricted key may lack account-read, require admin dashboard mapping. No payment write probe.",
+    "issuanceConsumptionRevocation": "Dashboard key rotate/revoke; restricted keys constrain resources and IP where configured. Key expiry/mode/account from settings; never echo even prefix during this work.",
+    "credentialHandling": "Private injection only; never print/store secrets in repository, command arguments, chat or receipts. Discovery itself performs no login/token creation."
+  },
+  "nativeRoute": {
+    "business": "Owner SKILL + version-matched official CLI/API documentation",
+    "loginRecovery": "web-access for human web interaction; official CLI only where explicitly documented",
+    "refresh": "platform-onboarding only for concrete auth/version/interface drift",
+    "runtimeProvider": "delegated",
+    "adapterStatus": "delegated contract only; no new runnable provider or full API mirror implemented"
+  },
+  "referenceSources": [
+    {
+      "kind": "owner-contract",
+      "path": "../stripe-product/SKILL.md"
+    },
+    {
+      "kind": "primary-official",
+      "url": "https://docs.stripe.com/keys",
+      "checkedOn": "2026-10-07",
+      "use": "authentication discovery; match actual deployed version before business calls",
+      "status": "retrieved",
+      "limitation": "Official documentation does not prove instance compatibility."
+    }
+  ],
+  "versionPolicy": {
+    "probe": "Hosted Stripe API version pinned per account/request Stripe-Version; capture actual response/version settings before matching docs, not latest API assumed.",
+    "compatibility": "Unknown deployment version requires non-mutating capability evidence before business usage; do not promote latest upstream docs to deployed compatibility."
+  },
+  "verification": {
+    "source": "source-verified",
+    "fixture": "not-run: reference-only changes",
+    "runtime": "pending",
+    "sourceCandidate": "8d736bd81ab8500e51cf6be3d71d1ffa70937cae",
+    "scope": "Owner repository contract and primary documentation research only. No credential inspection, login, token issuance/revocation or online business calls.",
+    "pendingReasons": [
+      "Target deployment version, selected subject and exact resource permissions have not been runtime verified.",
+      "Token/login workflow needs independently authorized selected-instance validation; no runnable unified provider is claimed."
+    ]
+  },
+  "referenceBase": "owner-skill-root for SKILL.md/contractEntrypoints/referenceSources paths; contract field resolves from this JSON directory; upstream repository entrypoints stay repository-relative"
+}

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "84f22fb7-c927-4f35-9f8d-01b335248b56",
+  "path": "vaultwarden",
+  "path_key": "vaultwarden",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/security/vaultwarden",
+    "branch": null
+  }
+}

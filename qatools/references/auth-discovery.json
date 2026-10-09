@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "tool": "qatools",
+  "owner": "qatools",
+  "instances": [
+    "https://qa-tools-staging.addx.live"
+  ],
+  "nativeRoute": "QA Tools platform API key first; Micro App Feishu JWT fallback",
+  "loginFlow": {
+    "reuseFirst": true,
+    "steps": "复用 QA_TOOLS_TOKEN → password store qatools.staging-api-key → qatools.staging；缺失时管理员在 /api-keys 创建/refresh 30 天 key。JWT 仅无 key 或用户选择时由用户在 Micro App qa-tools-staging 入口登录并本机安全保存，不程序化 SSO。",
+    "authorization": "Login, token creation/rotation/revocation and business writes require the current task scope; this discovery performs none."
+  },
+  "tokenMechanism": "Bearer qatools_ API key 或 SSO JWT；key 30 天，JWT 数小时；不得静默降级凭据类型。",
+  "subjectPermission": "源码 apiKeyAuth/auth 中绑定 key owner 或 JWT user；健康检查不证明 identity。需补部署已支持的只读 identity/permission probe，业务 mutation 不作认证试验。",
+  "expiryRevoke": "API_KEY_INVALID/EXPIRED/REVOKED 停止交管理员更新；refresh key 会撤销旧 key；JWT expiry 由用户重新获取。",
+  "officialRefs": [],
+  "sources": [
+    {
+      "kind": "owner-contract",
+      "path": "authentication-and-environments.md",
+      "status": "contract-recorded"
+    },
+    {
+      "kind": "repository",
+      "repository": "https://gitlab.addx.ai/CLOUD/qa-tools",
+      "researchCommit": "6298016b0cbd4e8a04c4bb6d78d0fb4b8d5b5ddf",
+      "entries": [
+        "server/middleware/apiKeyAuth.ts",
+        "server/middleware/auth.ts",
+        "server/routes/apiKey.ts",
+        "server/__tests__/apiKeyAuthChain.test.ts"
+      ],
+      "status": "source-verified"
+    }
+  ],
+  "versionPolicy": {
+    "researchCommit": "6298016b0cbd4e8a04c4bb6d78d0fb4b8d5b5ddf",
+    "deployedCommit": null,
+    "deploymentMatch": "unknown",
+    "refreshTriggers": [
+      "authentication contract change",
+      "deployed version change",
+      "reproducible auth failure"
+    ],
+    "rule": "Candidate source and published contracts do not establish deployed compatibility. Verify the target instance version and read-only supported capabilities before enabling an adapter."
+  },
+  "verification": {
+    "source": "source-verified",
+    "fixture": "not-run-in-this-discovery",
+    "runtime": "not-attempted",
+    "scope": "Read-only documentation/repository discovery; no login, token issuance, credential inspection or business API execution."
+  }
+}

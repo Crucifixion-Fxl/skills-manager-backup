@@ -147,6 +147,126 @@ def test_codex_not_logged_in_is_unavailable():
 
 def test_codex_logged_in_without_history_is_unknown():
     assert D.codex_health(True, NOW).status == "unknown"
+    assert D.codex_health(True, NOW, []).status == "unknown"
+
+
+# Synthetic codex rollout lines (<CODEX_HOME>/sessions/YYYY/MM/DD/rollout-*.jsonl), same shape as the real ones.
+SOL, ASTRA = "gpt-5.6-sol", "gpt-6-astra"
+CODEX_LIMIT = ("You\u2019ve hit your usage limit. Visit https://example.test/usage to purchase more credits "
+               "or try again at Sep 20th, 2026 3:05 PM.")
+
+
+def rollout(ts, typ, payload):
+    return json.dumps({"timestamp": ts, "type": typ, "payload": payload})
+
+
+def turn_context(ts, model):
+    return rollout(ts, "turn_context", {"turn_id": "t", "cwd": "/work/agent", "model": model})
+
+
+def codex_ok(ts):
+    return rollout(ts, "event_msg", {"type": "task_complete", "turn_id": "t", "last_agent_message": "done",
+                                     "started_at": 0, "completed_at": 0})
+
+
+def codex_err(ts, message=CODEX_LIMIT, info="usage_limit_exceeded"):
+    return rollout(ts, "event_msg", {"type": "task_complete", "turn_id": "t", "last_agent_message": None,
+                                     "error": {"message": message, "codex_error_info": info},
+                                     "started_at": 0, "completed_at": 0})
+
+
+def test_codex_try_again_reset_is_read_as_host_local_time():
+    plus8 = dt.timezone(dt.timedelta(hours=8))
+    assert iso(S.parse_try_again("or try again at Oct 1st, 2026 12:13 AM.", tz=UTC)) == "2026-10-01T00:13:00Z"
+    assert iso(S.parse_try_again("try again at Sep 20th, 2026 3:05 PM.", tz=plus8)) == "2026-09-20T07:05:00Z"
+    assert iso(S.parse_try_again("try again at Nov 2nd, 2026 12:00 PM", tz=UTC)) == "2026-11-02T12:00:00Z"
+    assert iso(S.parse_try_again("try again at Dec 23rd, 2026 9:30 am", tz=UTC)) == "2026-12-23T09:30:00Z"
+    assert S.parse_try_again("Try again at 4:15 PM.", tz=UTC) is None  # no date: not a reset time we trust
+    assert S.parse_try_again("try again at Feb 30th, 2026 1:00 AM", tz=UTC) is None
+    assert S.parse_try_again("nothing here") is None
+
+
+def test_codex_exhausted_with_parsed_reset(sigs, host_tz):
+    host_tz("UTC")
+    lines = [turn_context("2026-09-19T04:00:00.000Z", SOL), codex_ok("2026-09-19T04:01:00.000Z"),
+             turn_context("2026-09-19T04:10:00.000Z", SOL), codex_err("2026-09-19T04:10:07.000Z")]
+    ev = D.codex_quota_events(lines, sigs, CUTOFF, SOL)
+    assert [(iso(e[0]), e[1], iso(e[2]), e[3]) for e in ev] == [
+        ("2026-09-19T04:01:00Z", "ok", None, ""),
+        ("2026-09-19T04:10:07Z", "quota", "2026-09-20T15:05:00Z", "codex-usage-limit")]
+    h = D.codex_health(True, NOW, ev)
+    assert h.status == "exhausted" and iso(h.until) == "2026-09-20T15:05:00Z"
+
+
+def test_codex_success_after_error_is_ok(sigs, host_tz):
+    host_tz("UTC")
+    lines = [turn_context("2026-09-19T04:10:00.000Z", SOL), codex_err("2026-09-19T04:10:07.000Z"),
+             turn_context("2026-09-19T04:50:00.000Z", SOL), codex_ok("2026-09-19T04:50:30.000Z")]
+    assert D.codex_health(True, NOW, D.codex_quota_events(lines, sigs, CUTOFF, SOL)).status == "ok"
+
+
+def test_codex_error_on_another_model_does_not_affect_this_profile(sigs, host_tz):
+    """A pinned agent on a premium model (its own quota) must not flip the fleet profile to exhausted."""
+    host_tz("UTC")
+    lines = [turn_context("2026-09-19T04:00:00.000Z", SOL), codex_ok("2026-09-19T04:01:00.000Z"),
+             turn_context("2026-09-19T04:40:00.000Z", ASTRA), codex_err("2026-09-19T04:40:05.000Z")]
+    assert D.codex_health(True, NOW, D.codex_quota_events(lines, sigs, CUTOFF, SOL)).status == "ok"
+    assert D.codex_health(True, NOW, D.codex_quota_events(lines, sigs, CUTOFF, ASTRA)).status == "exhausted"
+
+
+MISSING = object()
+
+
+@pytest.mark.parametrize("final", ["", "   ", MISSING, 0, [], {"text": "x"}])
+def test_codex_turn_without_a_non_empty_final_message_is_not_a_success(sigs, host_tz, final):
+    """Only a real final reply proves the model answered; an empty/missing/odd message must not mask an earlier
+    quota error (latest event wins)."""
+    host_tz("UTC")
+    payload = {"type": "task_complete", "turn_id": "t", "started_at": 0, "completed_at": 0}
+    if final is not MISSING:
+        payload["last_agent_message"] = final
+    lines = [turn_context("2026-09-19T04:10:00.000Z", SOL), codex_err("2026-09-19T04:10:07.000Z"),
+             turn_context("2026-09-19T04:50:00.000Z", SOL), rollout("2026-09-19T04:50:30.000Z", "event_msg", payload)]
+    ev = D.codex_quota_events(lines, sigs, CUTOFF, SOL)
+    assert [e[1] for e in ev] == ["quota"]
+    assert D.codex_health(True, NOW, ev).status == "exhausted"
+
+
+def test_codex_turns_before_any_turn_context_are_not_attributed(sigs):
+    """A tail read can start mid-file: without a turn_context the model is unknown, so the turn is skipped."""
+    assert D.codex_quota_events([codex_err("2026-09-19T04:10:07.000Z")], sigs, CUTOFF, SOL) == []
+
+
+def test_codex_recent_error_without_reset_is_exhausted_then_goes_stale(sigs):
+    lines = [turn_context("2026-09-19T04:50:00.000Z", SOL),
+             codex_err("2026-09-19T04:50:05.000Z", message="You\u2019ve hit your usage limit.")]
+    ev = D.codex_quota_events(lines, sigs, CUTOFF, SOL)
+    assert ev and ev[-1][2] is None
+    assert D.codex_health(True, NOW, ev).status == "exhausted"
+    assert D.codex_health(True, NOW + dt.timedelta(hours=1), ev).status == "unknown"  # stale, no reset time
+
+
+def test_codex_structured_usage_limit_code_counts_even_if_the_wording_changes(sigs):
+    lines = [turn_context("2026-09-19T04:50:00.000Z", SOL),
+             codex_err("2026-09-19T04:50:05.000Z", message="Quota gone, come back later")]
+    ev = D.codex_quota_events(lines, sigs, CUTOFF, SOL)
+    assert [(e[1], e[3]) for e in ev] == [("quota", "codex-usage-limit")]
+
+
+def test_codex_non_quota_errors_and_old_turns_are_not_events(sigs):
+    lines = [turn_context("2026-09-16T04:00:00.000Z", SOL), codex_err("2026-09-16T04:00:05.000Z"),  # before cutoff
+             turn_context("2026-09-19T04:50:00.000Z", SOL),
+             codex_err("2026-09-19T04:50:05.000Z", message="Servers are busy", info="server_overloaded"),
+             "not json", rollout("2026-09-19T04:51:00.000Z", "event_msg", {"type": "token_count"})]
+    assert D.codex_quota_events(lines, sigs, CUTOFF, SOL) == []
+
+
+def test_codex_not_logged_in_stays_unavailable_whatever_the_history(sigs, host_tz):
+    host_tz("UTC")
+    ev = D.codex_quota_events([turn_context("2026-09-19T04:10:00.000Z", SOL), codex_err("2026-09-19T04:10:07.000Z")],
+                              sigs, CUTOFF, SOL)
+    assert D.codex_health(False, NOW, ev).status == "unavailable"
+    assert D.codex_health(None, NOW, ev).status == "unknown"
 
 
 # ───────── agent logs (also the source of unknown errors) ─────────

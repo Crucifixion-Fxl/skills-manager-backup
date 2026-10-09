@@ -23,7 +23,7 @@
 在仓库根目录运行：
 
 ```bash
-uv run python scripts/validate.py --skill skills/firmware-security-compliance
+uv run python scripts/validate.py --skill skills/hardware/firmware-security-compliance
 ```
 
 这条命令检查 skill 和评测契约结构，不运行模型行为评测、固件测试或实机验证。JSON 解析成功及结构检查通过不能表述为“17 个案例全部通过”或“76 条断言全部通过”。

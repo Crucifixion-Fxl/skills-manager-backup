@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "tool": "graylog",
+  "owner": "graylog",
+  "status": "source-reviewed-runtime-pending",
+  "contract": "saas-access.md",
+  "credentialEnv": "GRAYLOG_TOKEN",
+  "notes": "Graylog官方REST access token采用HTTP Basic，username为`GRAYLOG_TOKEN`内容，password为字面`token`；不是Bearer。用户在 System → Users and Teams 为本人创建限时token，权限继承用户role/stream；撤销在Token管理删除。Session token采用Basic `<session>:session`，与access token不同，默认不自行创建。AGENTS历史`internal.example.com`和Bearer描述均不作为实例事实。宿主消费时在内存组装Authorization，不打印header/Base64或放到argv；不读配置Secret中的root密码。",
+  "runtimeCallsPerformed": false
+}

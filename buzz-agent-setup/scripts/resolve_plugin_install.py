@@ -41,15 +41,23 @@ def _frontmatter_name(path: Path) -> str | None:
     lines = path.read_text(encoding="utf-8").splitlines()
     if not lines or lines[0].strip() != "---":
         return None
+    names: list[str] = []
     for line in lines[1:]:
         if line.strip() == "---":
-            break
+            return names[0] if len(names) == 1 else None
         if line.startswith("name:"):
-            return line.split(":", 1)[1].strip()
+            names.append(line.split(":", 1)[1].strip())
     return None
 
 
-def _validate_install_root(install: Path, required_skills: Sequence[str]) -> list[str]:
+def _validated_skill_paths(
+    install: Path, required_skills: Sequence[str]
+) -> dict[str, Path]:
+    """Resolve only flat or one-category-deep skills inside this exact install.
+
+    Do not use a recursive glob: category/skill ancestors must be checked before
+    traversal, and examples or nested external trees are not plugin entries.
+    """
     if not install.is_absolute():
         raise ValueError("plugin installPath must be absolute")
     if install.is_symlink():
@@ -60,18 +68,63 @@ def _validate_install_root(install: Path, required_skills: Sequence[str]) -> lis
         raise ValueError("registered plugin installPath does not exist") from exc
     if resolved != install or not install.is_dir():
         raise ValueError("plugin installPath must be a real directory without symlinks")
+    for name in required_skills:
+        if not isinstance(name, str) or SKILL_NAME.fullmatch(name) is None:
+            raise ValueError(f"invalid Skill name: {name}")
+    if not required_skills:
+        return {}
 
-    checked: list[str] = []
-    for skill_name in required_skills:
-        if SKILL_NAME.fullmatch(skill_name) is None:
-            raise ValueError(f"invalid Skill name: {skill_name}")
-        skill_file = install / "skills" / skill_name / "SKILL.md"
-        if not skill_file.is_file() or skill_file.is_symlink():
-            raise ValueError(f"missing required Skill: {skill_name}")
-        if _frontmatter_name(skill_file) != skill_name:
-            raise ValueError(f"Skill frontmatter name mismatch: {skill_name}")
-        checked.append(skill_name)
-    return checked
+    def directory(path: Path) -> None:
+        if path.is_symlink() or path.resolve(strict=True) != path:
+            raise ValueError("Skill ancestor must not be a symlink")
+        if not path.is_dir() or PATH_COMPONENT.fullmatch(path.name) is None:
+            raise ValueError("Skill ancestor must be a safe directory")
+
+    skills = install / "skills"
+    if not skills.exists() and not skills.is_symlink():
+        raise ValueError(f"missing required Skill: {required_skills[0]}")
+    directory(skills)
+    found: dict[str, Path] = {}
+
+    def consider(parent: Path) -> bool:
+        skill_file = parent / "SKILL.md"
+        if not skill_file.exists() and not skill_file.is_symlink():
+            return False
+        _regular_non_symlink(skill_file, "Skill file")
+        name = _frontmatter_name(skill_file)
+        if parent.name in required_skills and name != parent.name:
+            raise ValueError(f"Skill frontmatter name mismatch: {parent.name}")
+        if name in required_skills:
+            if parent.name != name:
+                raise ValueError(f"Skill frontmatter name mismatch: {name}")
+            if name in found:
+                raise ValueError(f"ambiguous required Skill: {name}")
+            found[name] = skill_file
+        return True
+
+    for entry in sorted(skills.iterdir()):
+        if entry.is_symlink():
+            raise ValueError("Skill ancestor must not be a symlink")
+        if not entry.is_dir():
+            continue
+        directory(entry)
+        if consider(entry):
+            continue  # Flat skill: its examples are not additional plugin entries.
+        for child in sorted(entry.iterdir()):
+            if child.is_symlink():
+                raise ValueError("Skill ancestor must not be a symlink")
+            if child.is_dir():
+                directory(child)
+                consider(child)
+    for name in required_skills:
+        if name not in found:
+            raise ValueError(f"missing required Skill: {name}")
+    return found
+
+
+def _validate_install_root(install: Path, required_skills: Sequence[str]) -> list[str]:
+    _validated_skill_paths(install, required_skills)
+    return list(required_skills)
 
 
 def resolve_install(
@@ -139,7 +192,8 @@ def resolve_codex_install(
         raise ValueError("Codex plugin install has an invalid cache path component")
     marketplace, name, version = components
     install = cache_root / marketplace / name / version
-    checked = _validate_install_root(install, required_skills)
+    installed_skills = _validated_skill_paths(install, required_skills)
+    checked = list(required_skills)
 
     source_record = record.get("source")
     marketplace_record = record.get("marketplaceSource")
@@ -152,7 +206,7 @@ def resolve_codex_install(
     ):
         raise ValueError("Codex install is not backed by one Git marketplace snapshot")
     source = Path(source_record["path"])
-    _validate_install_root(source, required_skills)
+    source_skills = _validated_skill_paths(source, required_skills)
     try:
         revision = subprocess.run(
             ["git", "-C", str(source), "rev-parse", "HEAD"],
@@ -186,8 +240,8 @@ def resolve_codex_install(
     if tracked_status:
         raise ValueError("Codex marketplace snapshot has tracked changes")
     for skill_name in checked:
-        installed_skill = install / "skills" / skill_name / "SKILL.md"
-        source_skill = source / "skills" / skill_name / "SKILL.md"
+        installed_skill = installed_skills[skill_name]
+        source_skill = source_skills[skill_name]
         if installed_skill.read_bytes() != source_skill.read_bytes():
             raise ValueError(
                 f"installed Skill differs from marketplace snapshot: {skill_name}"

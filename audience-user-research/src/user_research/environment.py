@@ -5,7 +5,9 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from .client import MAX_BYTES, SafeApiError
+from .client import SafeApiError
+
+MAX_ENV_BYTES = 64 * 1024
 
 ALLOWED_LOCAL_KEYS = frozenset(
     {
@@ -28,7 +30,7 @@ def load_local_environment(path: Path) -> None:
         raw = path.read_bytes()
     except OSError:
         raise SafeApiError("invalid_env_file") from None
-    if len(raw) > MAX_BYTES:
+    if len(raw) > MAX_ENV_BYTES:
         raise SafeApiError("invalid_env_file")
     try:
         text = raw.decode("utf-8")

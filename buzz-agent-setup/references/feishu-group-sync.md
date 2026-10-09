@@ -120,6 +120,7 @@ python3 scripts/buzz_feishu_group_sync.py preflight --config <cfg.json> --mode e
 | `owner_profile_mismatch` | lark-cli 登录的应用或用户和配置不一致。改配置，或者换成 owner 本人的登录 |
 | `owner_out_of_app_scope` | bot 查 owner 的通讯录返回 41050，说明 owner 不在个人应用的可用范围内。bot 建群时要把群主设成 owner，范围外会失败。到开放平台后台把 owner 加回可用范围并发版 |
 | `bot_missing_im:chat:create` | 个人应用的 bot 没有建群权限。到后台开通这个 scope 并发版，没有 API 可以加 scope（LCV-11）。建群时会带上 `--set-bot-manager`，让 bot 成为群管理员 |
+| `claimed_by_other_mirror` | 本频道已被别的机器的镜像有效认领（ADR-0022），输出的 `claimed_by` 写明镜像名和 pubkey 前 12 位。先和那台机器的人确认谁来同步；读不到认领时只给警告 `claims_unreadable` |
 
 **关联已有群：阻断项**（依据 `GET /im/v1/chats/{chat_id}` 返回的群信息）
 
@@ -132,6 +133,7 @@ python3 scripts/buzz_feishu_group_sync.py preflight --config <cfg.json> --mode e
 | `cannot_add_members` | 群设成了只有群主或管理员能加人，而 owner 两者都不是 |
 | `cannot_remove_members` | `remove_extras: true`，但 owner 不是群主或管理员，移不了人。可以改成只加不减 |
 | `bot_limit` | 群里现有的 bot 数加上待加入的 bot 数超过 15 |
+| `claimed_by_other_mirror` | 本频道或这个群已被别的机器的镜像有效认领（ADR-0022），`claimed_by` 说明是哪个镜像、`reason` 是同频道还是同群。本机镜像自己的旧认领不算 |
 
 **关联已有群：警告**
 
@@ -139,6 +141,7 @@ python3 scripts/buzz_feishu_group_sync.py preflight --config <cfg.json> --mode e
 |---|---|
 | `extras_stay_and_see_channel_messages` | 只加不减：群里原有的外人会一直看到频道消息 |
 | `moderation_restricted` | 群限制了发言，bot 可能没法说话 |
+| `claims_unreadable` | 读不到 relay 上的绑定认领，没法确认有没有别的机器在同步；首轮 `round` 还会再查 |
 | `share_card_allowed` / `join_without_approval` | 任何人都能分享群名片，或者入群不需要审批。外人进群后，在下一轮对账把他移出之前，能看到频道消息 |
 
 **退出码**：0 表示可以继续；2 表示有阻断项，参数用法错误时 argparse 也返回 2；1 表示运行出错，原因写在 stderr。
@@ -160,7 +163,7 @@ python3 scripts/buzz_feishu_group_sync.py bind --config <cfg.json> --chat-id oc_
 ### 4. 运行：`round`
 
 ```bash
-python3 scripts/buzz_feishu_group_sync.py round --config <cfg.json> --state-dir <dir> [--allow-bulk-removal] [--skip-backlog]
+python3 scripts/buzz_feishu_group_sync.py round --config <cfg.json> --state-dir <dir> [--allow-bulk-removal] [--skip-backlog] [--take-over]
 ```
 
 每次调用跑一轮，由 owner 的 `systemd --user` timer 每分钟触发一次。同一个 state 目录有文件锁、只服务一个 `channel|chat` 绑定；绑定起点只在首次身份核对成功后写入。完整的读取窗口、话题根补发、正文中和、幂等与图片契约见 [feishu-message-sync.md](feishu-message-sync.md)。
@@ -168,6 +171,7 @@ python3 scripts/buzz_feishu_group_sync.py round --config <cfg.json> --state-dir 
 每轮依次执行：
 
 1. 核对 owner、agent 与镜像身份；
+   - 读绑定认领（ADR-0022，缺省开启）：别的机器的有效认领挡在前面时本轮什么都不同步、群里和频道里各提示一次；读不到认领时成员对账暂停这一轮。`--take-over` 立即接管。见 [feishu-two-way-sync.md](feishu-two-way-sync.md)「跨机绑定认领」；
 2. 对账成员。缺省的双向基线、飞书拉人进 Buzz、Buzz 移人、失败状态消息及安全上限见 [feishu-two-way-sync.md](feishu-two-way-sync.md)；
 3. **Buzz → 飞书**：镜像消息、编辑、话题与图片；
 4. **飞书 → Buzz**：`unmapped_sender` 缺省按上下文放行；显式把 `feishu_unmapped_senders` 设为 `"skip"`，或被 `feishu_sender_allowlist` 拦下时计入跳过原因，`sender_not_allowed` 只影响飞书 → Buzz；
@@ -203,6 +207,7 @@ python3 scripts/buzz_feishu_group_sync.py round --config <cfg.json> --state-dir 
 - 成员双向同步（ADR-0020）：`members_to_buzz`（因为在飞书里被拉进群而加进频道的人 / agent 个数）、`members_removed_from_buzz`（因为被移出群而移出频道的个数）、`members_refused`（agent 的 `channel_add_policy` 不让加的次数，群里提示一次）、`members_protected`（在飞书被移出、但频道里不移出的 owner / 同步签名身份，群里提示一次）、`members_unresolved`（被拉进群、但认不出 Buzz 账号的人数，群里提示一次去绑定）、`people_cache_failed`（`people_cache_file` 读写失败的次数）、`member_events_blocked`（为避免重复 9000/9001 而暂停的原因 → 次数）；前六个只是计数，最后一个同时计入 `member_failures` 与 `errors`，令退出码变成 3。双向模式会把目录失败、列表不完整、安全上限、未绑定、bot 名额不足和成员写入失败汇总到同一条频道 / 群状态消息，后续失败与恢复都原地更新；Buzz 暂时不可写时先直接提示飞书，恢复后补建 Buzz 根事件而不重复发群消息。见「成员双向同步」；
 - Agent 入群介绍：`agent_intros_sent`（本轮成功）、`agent_intros_relayed`（其中由群助手按公开资料透明代发）、`agent_intro_failures`（本轮公开资料或发送失败）、`agent_intro_unknown`（超过幂等重试窗口仍无法确认结果）、`agent_intro_stopped`（连续明确失败后停止重试）。后三项会计入 `errors` 并进入同一条成员同步状态消息；正文与状态只使用公开资料，不包含 prompt / instruction。见 [feishu-two-way-sync.md](feishu-two-way-sync.md)「Agent 入群后的自我介绍」；
 - 表情相关：`reactions_added`、`reactions_removed`、`reactions_failed`（放弃的次数）；双向（ADR-0020）另有 `reactions_to_buzz`（镜像把飞书里人打的表情打到 Buzz 的次数）、`reactions_withdrawn_in_buzz`（飞书里撤回、镜像在 Buzz 也撤回的次数）、`approvals_to_buzz`（飞书里的 `/approve` / `/deny JOIN-<id>` 转成镜像在申请上打的 ✅ / ❌ 的次数）；这六个只是计数，**不会**让退出码变成 3；
+- 绑定认领（ADR-0022）：`claim_conflict`（本轮被别的有效认领挡下时是 `{"reason", "mirror", "name"}`，`reason` 为 `same_channel` / `same_chat` / `taken_over`；没有冲突是 `null`；非空需要关注）、`claims_unreadable`（读不到认领，0 或 1：消息和表情照常、成员同步暂停这一轮）、`claim_published`（本轮写了认领或心跳，0 或 1）、`claim_publish_failed`（写认领失败，0 或 1，下一轮重试）、`claim_takeovers`（第一次见到的已过期对手认领个数）；后四个只是计数。见 [feishu-two-way-sync.md](feishu-two-way-sync.md)「跨机绑定认领」；
 - `skipped`：一个对象，键是跳过原因（见上文各处）。
 
 退出码：
@@ -210,7 +215,7 @@ python3 scripts/buzz_feishu_group_sync.py round --config <cfg.json> --state-dir 
 | 退出码 | 含义 |
 |---|---|
 | 0 | 本轮干净 |
-| 3 | 本轮跑完了，但有需要关注的事：`errors`、`unknown`、`failed`、`blocked_bots`、`member_failures`、`removals_withheld`、`identity_conflicts`、`images_failed` 或 `backlog_skipped` 至少一项非零或非空 |
+| 3 | 本轮跑完了，但有需要关注的事：`errors`、`unknown`、`failed`、`blocked_bots`、`member_failures`、`removals_withheld`、`identity_conflicts`、`images_failed`、`backlog_skipped` 或 `claim_conflict` 至少一项非零或非空 |
 | 1 | 运行出错。stdout 仍会输出已完成部分的报告，原因写在 stderr；如果是 lark-cli 登录失效，会提示 owner 重新执行 `lark-cli auth login` |
 
 ### 5. 发使用说明（每配置好一个群都必须做，不能省）
@@ -348,7 +353,7 @@ Buzz 的 `kind:40003` 是编辑覆盖层：正文是替换后的完整内容，�
 }
 ```
 
-- 键是严格校验的：上面列出的每一个键都必须有，不能多；只有 `reaction_map`、`identity`、`message_format`、`feishu_sender_allowlist`、`feishu_unmapped_senders`、`buzz_unmapped_senders`、`buzz_unmanaged_agents`、`membership_sync`、`reaction_sync` 和 `people_cache_file` 可以不写。`chat_id` 由 `create-chat` 或 `bind` 写入，之前保持 `null`。旧版的 `people_export` 和 `email_domain` 已经取消，留着会被拒绝。
+- 键是严格校验的：上面列出的每一个键都必须有，不能多；只有 `reaction_map`、`identity`、`message_format`、`feishu_sender_allowlist`、`feishu_unmapped_senders`、`buzz_unmapped_senders`、`buzz_unmanaged_agents`、`membership_sync`、`reaction_sync`、`people_cache_file` 和 `binding_claim` 可以不写。`chat_id` 由 `create-chat` 或 `bind` 写入，之前保持 `null`。旧版的 `people_export` 和 `email_domain` 已经取消，留着会被拒绝。
 - `desk_pubkey` 必填，必须在 `agents` 中，且该 Agent 的 `app_id` 必须与 `owner_app_id` 不同；它指向该绑定唯一的默认代发者。配置多个平台 Desk 的频道也要明确选一个，不按显示名猜。配置缺失或该 Desk 不在 Buzz Channel／飞书群时整轮失败，不能退回 owner bot。
 
 **存量绑定迁移**：先逐个停用该绑定的 `buzz-feishu-<channel>.timer` 并等正在运行的 service 结束；确认 Desk 已在 Buzz Channel 中为 bot、它的独立 Feishu profile 与 app 已配置在 `agents` 中、bot 已入对应飞书群。用新 release 的脚本执行 `migrate-desk --config <cfg.json> --desk-pubkey <64 hex>` 做只读 dry-run；输出 `status=ready` 才加 `--apply`。应用时脚本先在同目录写 0600 的 `config.json.bak.desk-<UTC>`，再原子写入 `desk_pubkey`；回读 `load_config`、备份与目标文件权限，最后手动跑一轮 `round` 并核对真实发送者和 Thread，成功后才重启 timer。已迁移同一 Desk 再执行只返回 `already_migrated`，不同 Desk、配置无效、备份同名时拒绝。失败时保持 timer 停止；恢复备份也只能在停止状态做，不能重启旧 owner bot 发送策略。正负向行为由 `DeskConfigMigration` 测试覆盖。所有运行中群都逐一执行，不能只迁一个样例。
@@ -359,6 +364,7 @@ Buzz 的 `kind:40003` 是编辑覆盖层：正文是替换后的完整内容，�
 - `buzz_unmapped_senders`（可选）：`"skip"`（缺省）或 `"context"`，校验规则与 `feishu_unmapped_senders` 相同（错误信息各自独立，不共用）。它是反方向：`"context"` 让既不是验证过的频道人类成员、也不是配置的 agent 的 Buzz 作者的消息，以「仅上下文」镜像进飞书。两个方向互相独立，可以只开一个、也可以同时开；不与 `feishu_sender_allowlist` 互斥（那份名单管的是飞书 → Buzz 的方向，不影响这边）。语义和风险见「非成员/非 agent 的 Buzz 消息（仅上下文镜像）」。
 - `buzz_unmanaged_agents`（可选）：`"relay"`（缺省，ADR-0019 起）或 `"skip"`，别的值整份配置被拒、错误里不带值。它管的是**本机配置里根本没有的**频道 agent（别人 owner 的 agent）说的话：`"relay"` 由本频道 Desk bot 代发，`"skip"` 丢弃（`agent_bot_unavailable`，ADR-0019 之前的缺省）。语义见「本机没有凭据的 agent（Desk 代发）」。
 - `membership_sync`（可选）：`"two_way"`（缺省，ADR-0020）或 `"buzz_to_feishu"`（以前的单向对账）；`reaction_sync`（可选）：`"two_way"`（缺省）或 `"agents_only"`（只同步 agent 的 Buzz 表情）；`people_cache_file`（可选）：本机所有群同步共用的人员缓存的绝对路径。别的值整份配置被拒、错误里不带值。成员与表情的双向同步、飞书里同意 agent 入群，见 [feishu-two-way-sync.md](feishu-two-way-sync.md)。**注意**：双向时在飞书群里拉进一个 agent 就会把它加进频道；没设 `BUZZ_ACP_CHANNELS`（订阅全部频道、不走入群申请）、`channel_add_policy` 还是缺省 `anyone` 的 agent 加进来后会**直接开始回复**，不经任何审批。防线是 ADR-0018 已要求的：平台类 agent 设 `owner_only`、executor 设 `nobody`，这样 relay 会拒绝、群里只收到一条提示。
+- `binding_claim`（可选）：`true`（缺省）或 `false`，别的值整份配置被拒。开着时每轮在镜像的 kind:30177 里认领本绑定、读别人的认领判冲突（ADR-0022）；`false` 回到只靠本机防重。见 [feishu-two-way-sync.md](feishu-two-way-sync.md)「跨机绑定认领」。
 - `reaction_map`（可选）：`{"🎉": "Party"}`。键是 Buzz 的 emoji（非空、不超过 16 个字符，变体选择符会被去掉，带不带 U+FE0F 一样），值是飞书 emoji_type（只含字母、数字、下划线，不超过 40 位，取值见 lark-cli 的 `lark-im-reactions.md`）。追加或覆盖上面的默认表，写错就整个配置被拒绝。
 - `people_api` 恰好是 `{base_url, signer_env_file}`：
   - `base_url` 必须恰好是 `https://主机[:端口]`（没有路径、查询、userinfo 和结尾斜杠）。原因是签名里的 URL 是这个 origin 加请求目标，bridge 用它自己配置的 `BIND_PUBLIC_ORIGIN` 来核对，两边差一个字符都会验不过。
@@ -398,6 +404,7 @@ state 目录必须是本人所有、不是符号链接、组和其他人都无�
 | `threads`、`polled`、`tried` | 飞书话题根消息 id → 最近活跃时间、上次完整轮询的时间（该话题自己的游标）、上次失败或没读完的时间（决定轮换顺序） |
 | `members_synced`、`feishu_seen`、`buzz_seen`、`member_notes`、`member_events`、`member_event_stream`、`member_event_seq`、`member_event_blocks`、`people_seen`、`rwatch`、`f2r` | 双向成员与表情同步（ADR-0020）：快照、提示记录、9000/9001 精确重试的完整签名事件、与 signer 解耦的随机事件流、事件顺序高水位、持久暂停原因、本频道见过的人、读表情的消息、镜像打到 Buzz 的表情。`member_events` 最多 256 条，未知项不自动淘汰；达到上限就暂停新写入并提示。双向时 `buzz_seen` / `people_seen` 为**本频道成员**记 pubkey ↔ 飞书 id；单向（`"buzz_to_feishu"`）时不落任何对应。逐项见 [feishu-two-way-sync.md](feishu-two-way-sync.md)「state 与报告」 |
 | `agent_intros_initialized`、`agent_intros` | 入群介绍的升级基线与每个 Agent 的一次性幂等账本；pending/retry 在安全窗口内复用同一个飞书幂等键，成功后保存 message_id |
+| `claim_notes`、`claim_takeovers` | 绑定认领（ADR-0022）：`<feishu\|buzz>:<冲突摘要>` → `sent` / `retry:<首次时间>` / `failed`（停止提示每边只发一次），以及已计入 `claim_takeovers` 的过期对手认领摘要 → 时间（最多 200 条）。认领之前写的 state 缺这两个字段时从空开始 |
 
 state 是有界的：id 映射（含 `r2f` 与 `images`）最多保留 20000 条（`images` 里还有未决项的图片，连同同一事件的 `:thread` / `:over` 记录不裁：它的 45 分钟窗口和重试次数就在账本值里，裁的是最早的、已经有结果的），话题最多保留 200 个，`idmap` 和 `emailmap` 各最多 5000 条（丢的是最早写入的，丢了只是多查一次）。state 文件损坏、字段类型不对或多出字段时整轮拒绝，不会当成空状态，否则会把所有消息重发一遍。
 
@@ -405,7 +412,7 @@ state 是有界的：id 映射（含 `r2f` 与 `images`）最多保留 20000 条
 
 两个坑要先知道（2026-09-20 naturehood 上线时踩到，#110）：
 
-- **脚本要用不可变拷贝，不要指到工作树或临时目录**：定时器每几分钟就跑一次，工作树一切分支、临时目录一清就断。按 [local-upgrade-runbook.md](local-upgrade-runbook.md) 把完整 `skills/buzz-agent-setup` 原子安装到 `~/.local/share/buzz-agent-setup/releases/<40 位 SHA>/` 并 `chmod -R a-w`；单元指向它，升级时换一个新目录，不覆盖旧的。release 根下直接是 `scripts/` 与 `references/`，不再使用 `feishu-group-sync-<短 sha>/skills/buzz-agent-setup/` 旧布局。
+- **脚本要用不可变拷贝，不要指到工作树或临时目录**：定时器每几分钟就跑一次，工作树一切分支、临时目录一清就断。按 [local-upgrade-runbook.md](local-upgrade-runbook.md) 把完整 `skills/agent-harness/buzz-agent-setup` 原子安装到 `~/.local/share/buzz-agent-setup/releases/<40 位 SHA>/` 并 `chmod -R a-w`；单元指向它，升级时换一个新目录，不覆盖旧的。release 根下直接是 `scripts/` 与 `references/`，不再使用 `feishu-group-sync-<短 sha>/skills/agent-harness/buzz-agent-setup/` 旧布局。
 - **`PATH` 必须带上 lark-cli 的 node 目录**：`lark-cli` 是 node 脚本（`#!/usr/bin/env node`），systemd 用户单元的默认 `PATH` 里没有 nvm 的目录，缺了它每一次飞书调用都会失败。脚本只把 `PATH` 等白名单变量传给子进程，所以要在单元里 `Environment=PATH=…` 写明。
 
 ```ini
@@ -518,7 +525,7 @@ content，Buzz Desktop 解析时忽略它不认识的字段）。用 `scripts/bu
 3. 先对新群跑 `preflight --mode existing --chat-id <新群>`（只读），并看一眼新群现状：类型、群主是不是 owner、现有多少人、要拉几个人和几个 bot、群里不在映射里的人有多少（`remove_extras: false` 时他们会留在群里并看到镜像消息）。
 4. 把配置里的 `chat_id` 改成 `null`，跑 `bind --config … --chat-id <新群>`（它会再预检一次，通过才写回 `chat_id`）。
 5. 旧 state 目录改名留档（`mv state state.old-<旧群短 id>`），新建空的 `state`（0700）。新绑定从当下开始，**不补历史消息**；旧群里已经镜像过的消息不会搬过去。
-6. 手动跑一轮 `round` 看报告（拉了几个人、几个 bot、`errors` 为 0），再开 timer。
+6. 手动跑一轮 `round --take-over` 看报告（拉了几个人、几个 bot、`errors` 为 0），再开 timer。旧群那条认领（ADR-0022）还在 30 分钟租期里，不加 `--take-over` 新绑定会等它过期才开始同步；`--take-over` 让新认领指名接管本机镜像的旧条目。
 7. **旧群不会被清理**：里面的同事和 bot 都还在，只是不再同步。要不要退群或解散是群主的事，脚本不做。
 
 ## agent 的飞书身份
@@ -527,16 +534,16 @@ content，Buzz Desktop 解析时忽略它不认识的字段）。用 `scripts/bu
 
 1. 在 agent 自己的目录下，设置 `LARKSUITE_CLI_CONFIG_DIR` 和 `LARKSUITE_CLI_DATA_DIR`，然后运行 `lark-cli config init --new`。
    - **这一步由你自己跑，不要做成待办交给 owner。**这条命令就是给 agent 用的：它阻塞等待，验证 URL 打在输出里。放后台跑，从输出里取 `https://open.feishu.cn/page/cli?user_code=…`，把这个链接交给 owner 点一下确认即可；确认完命令自己返回。一次起一个，确认完再起下一个。
-   - **两种交给 owner 的方式，按现场选：**
+   - **两种交给 owner 的方式，按现场选：** 浏览器必须跑在人看不见的远程开发机上时，使用 `web-access` skill；人就在这台机器前时仍用下面两条。
      - **owner 在自己已登录飞书的浏览器里点链接**：最直接。给他 URL，并说清应用要叫什么名字（见第 2 条）。
      - **agent 用无头浏览器代做，owner 只扫一次码**：适合一次要建好几个（naturehood 一口气建了 5 个）。飞书登录页只给扫码一种方式（没有账号密码 / 短信），所以 owner 要扫一次登录二维码，之后的建应用、填名字全部由 agent 在同一个浏览器 profile 里完成。
    - 用无头浏览器时的要点（2026-09-20 实测，2026-09-21 补充）：
-     - **二维码有效期很短（约 2 分钟）**，而且刷新一次旧码立刻作废。别自动定时刷新，会把 owner 正在扫的码作废；**每次要发码时才刷新，刷完立刻发**。
+     - **二维码有效期很短（约 2 分钟）**，而且刷新一次旧码立刻作废。用 `feishu_login_qr_retry.py` 监测同一个浏览器会话的 `ready.txt` + `state.txt`，只把真正进入 CLI 应用确认页视为登录成功；未成功时等当前码约 95 秒后刷新，发送新码给 owner，并用同一身份回读消息。最多发 10 张，成功立即停止，不能只根据「用户说扫了」或公开 open.feishu.cn 页面判断成功。应用注册全程复用这一次登录态，不为每个 agent 重新扫码。调用时显式传 `--browser-dir`、`--node`、`--cli-entry`、`--profile` 和 `--recipient-user-id`；只使用已授权的 owner user profile。每张二维码的文字与图片分别有发送回执，并用同一 profile 的 `im +messages-mget` 回读。首次启动要先让 `feishu_browser.js` 打开**当前** `config init --new` 的验证 URL；进程打印 `LOGIN_OK` 后，再顺次运行 `feishu_register_agent_apps.sh` 注册所有 agent，期间保持浏览器进程和 profile 不变。二维码达到 10 张仍未登录就停止并报告，不能换身份或默默无限重试；可改由 owner 在自己已登录的浏览器逐个打开验证链接，同一个浏览器会话可复用，但每个应用仍须核对 `app_id` 与准确名称。
      - **发码前先确认 owner 在飞书前**：码约 2 分钟就过期，owner 不在就是白发一张、还得重发（2026-09-21 第一张码发出时 owner 不在，没人扫）。先问一句「现在能扫吗」，等到答复再刷新、发码。**发码前后各配一条文字**（用途、扫哪张、有效期），别让 owner 对着一张没有说明的图猜。
      - **两种发码方式都给**：飞书私聊和终端。私聊用 `cd <二维码所在目录> && lark-cli im +messages-send --as bot --user-id <owner> --image ./qr.png`：`--image` 的路径必须是**当前目录内的相对路径**，绝对路径（以及带 `..` 的路径）会失败（返回 `ok:false`），和图片同步里 `--image` 只收相对路径是同一个限制（见「边界」）。终端要把二维码渲染成半块字符（`▀▄█`），**直接贴在回复正文里，不要折叠在工具输出里**。
      - 无头浏览器用 `playwright-core` + 本机已装的 chromium，`launchPersistentContext` 保持登录态；表单名称框是 `input.ud__native-input`，提交是 `button[type="submit"]`，创建完页面显示「创建成功」。
      - 偶发「创建失败」是常态，别当异常处理：2026-09-21 那一批约三分之一次（两次都是重跑一次即成功），skills#124 记的另一批是每 5–7 个 1 个。手工操作时设备码仍然有效，重新加载同一个 URL、重填、再提交即可（nh-bi 第一次失败，第二次成功）；用脚本时，脚本带着 `创建失败` 非零退出并收掉 lark-cli，**没有自带重试**，重跑同一个 agent 即可（会新起一个 `config init --new`、拿新的 user_code）。
-     - **用完就收**：结束浏览器进程并删掉登录态目录（`~/.cache/feishu-agent-browser*`），不要在本机留着 owner 的飞书会话。
+     - **用完就收**：本批次所有 agent 应用都注册并回读后，结束浏览器进程并删掉登录态目录（`~/.cache/feishu-agent-browser*`），不要在本机长期留着 owner 的飞书会话。
      - **用脚本，别手工拼**：`FEISHU_BROWSER_DIR=<0700 目录> feishu_register_agent_apps.sh <agent 名>`（先让 `feishu_browser.js` 在那个目录里登录好）。脚本只在 app_id 合法、且回读的 `app_name` 与 agent 名逐字相等时才退出 0 并打印成功行；否则非零退出，`stderr` 里有原因（例如「app_name mismatch: expected 'nh-desk', got '陈敬敏的飞书 CLI'」）。**退出码不是 0 就是没成功**，不要凭输出里看到 app_id 就当成功。
      - **符号链接检查的边界**（jchen 已接受这个残余竞态，不再改逻辑，skills#117）：威胁模型：单用户、0700 目录；符号链接检查是检查前 + 创建后复核，不防同 uid 的进程。同一个用户下的其他进程本来就能读写这些目录，脚本不试图防它。
      - **浏览器会话的两个边界**：`quit.txt`（让会话退出的信号，用完不删）启动时先清掉上一次留下的，否则新会话一登录就退出、owner 得重新扫码；`cmd.txt` 不是合法 JSON 只算这一步失败——`result.txt` 写 `ERR <短原因>`（不回显命令内容），会话继续、浏览器不关、`ready.txt` 保留、不用重新扫码，脚本把非 `OK` 的答复一律当失败。
@@ -591,3 +598,19 @@ content，Buzz Desktop 解析时忽略它不认识的字段）。用 `scripts/bu
 - 卡片里的邮箱（`<at email=…>`）和 email 模式的通讯录搜索一样，会出现在 lark-cli 的进程参数里（只有发那张卡片的那一次调用），同机的其他用户能读到；脚本自己不打印、不写进 state。
 - 自动化测试只用 fake runner 和 FakeWorld（它扮演 bridge 并真的验签，也建模飞书的三套 id、群成员列表 / 群信息 / 单条消息的 id 类型、通讯录的模糊搜索、飞书对卡片的态度：30 KB 上限、`<at id=on_…>` 被拒、`<at id=ou_…>` 与 `<at email=…>` 被接受、幂等键按接口一小时），不连真实飞书，也不连生产 relay 或生产 bridge。图片相关的假实现也照实测行为：`buzz media get` 要鉴权、只认 sha256[.ext]、`--file` 会写 imeta 并在正文后加 `![image](url)`、relay 对带元数据的媒体回 422；lark-cli 的 `--image` 与下载都只收相对路径、`--output` 没写扩展名时会补一个、幂等键 ≤ 50 字符并按接口计一小时。
 - 签名头由 Python 生成、由 bridge 的 Go 验签器验证，两边用同一个金标准头做契约测试（本仓 L1-FGS-002 与 infra/buzz-deploy 的 L1-FB-NOSTR-022）。
+
+## hostd agent 报告的 Card 1.0 格式兼容（#244）
+
+hostd 的本机 agent outlet 使用 Card 1.0 的 `div/lark_md` 与末尾 Buzz 可信链接，
+回执校验目前不接受 Card 2.0，不能直接改 schema 来修复 Markdown。
+新 compact agent 卡片在文字中和后，把 ATX 标题转为加粗，把有分隔行且列数一致的
+Markdown 表格转为每条数据一行的“列名：值”列表。列名、空值、具名链接、中文保留；
+代码围栏内原文、普通 pipe 文字、畸形表格不转换。此转换不新增标签、提及或 URL 解析权限。
+其余镜像路径沿用原格式，不能宣称所有 Markdown 均已支持。
+
+投递账本中的旧卡片仍以 `preview_v5` 及更旧格式复原；UNKNOWN 恢复使用原 payload/hash/key，
+不会为了新样式重发或重写已发送报告。新报告才采用新格式；历史报告不因此自动修复。
+长报告/带表格日报继续按 [feishu-doc-report](feishu-doc-report.md) 由原 agent 的 bot 发布文档，
+Buzz Thread 只发摘要与文档链接；缺文档权限是明确阻塞，不借 owner user 身份代发。
+
+测试证据与上线/客户端显示验收是不同门禁；本地测试和 MR CI 不证明真实飞书客户端显示。

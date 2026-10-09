@@ -1,0 +1,311 @@
+[
+  {
+    "id": 1,
+    "run_kind": "GENERATION",
+    "failure_stage": "GENERATION",
+    "root_cause": "GENERATION_OUTPUT_INVALID",
+    "capability_candidate": false,
+    "evidence_ids": [
+      "job:1",
+      "log:11",
+      "log:12"
+    ],
+    "missing_evidence": [],
+    "optimization": "在规划输出交付前校验 steps_txt 类型，并对 null 输出做有界重试及清晰报错。"
+  },
+  {
+    "id": 2,
+    "run_kind": "GENERATION",
+    "failure_stage": "EXECUTION",
+    "root_cause": "LOCATOR_ERROR",
+    "capability_candidate": false,
+    "evidence_ids": [
+      "job:2",
+      "log:21",
+      "image:22",
+      "xml:23",
+      "log:24"
+    ],
+    "missing_evidence": [],
+    "optimization": "依据同次截图和 XML 将旧 resource-id 更新为 com.app:id/confirm，并复测生成步骤。"
+  },
+  {
+    "id": 3,
+    "run_kind": "EXECUTION",
+    "failure_stage": "EXECUTION",
+    "root_cause": "LOCATOR_ERROR",
+    "capability_candidate": false,
+    "evidence_ids": [
+      "job:3",
+      "log:31",
+      "xml:32"
+    ],
+    "missing_evidence": [],
+    "optimization": "依据正确页面 XML 更新注册 Step 的旧定位器并复测，运行类型以实际 run_tests 清单为准。"
+  },
+  {
+    "id": 4,
+    "run_kind": "EXECUTION",
+    "failure_stage": "EXECUTION",
+    "root_cause": "WEBVIEW_CONTEXT_ERROR",
+    "capability_candidate": false,
+    "evidence_ids": [
+      "job:4",
+      "log:41",
+      "image:42",
+      "source:43"
+    ],
+    "missing_evidence": [],
+    "optimization": "先使用现有绑定切换至 WEBVIEW_com.app，再用 find_web_element 定位并验证提交效果。"
+  },
+  {
+    "id": 5,
+    "run_kind": "EXECUTION",
+    "failure_stage": "EXECUTION",
+    "root_cause": "WEBVIEW_DEBUGGING_UNAVAILABLE",
+    "capability_candidate": false,
+    "evidence_ids": [
+      "job:5",
+      "log:51",
+      "build:52",
+      "source:53"
+    ],
+    "missing_evidence": [],
+    "optimization": "为被测构建启用 WebView 调试后重试 attach，并检查可获取的 context 与 DOM。"
+  },
+  {
+    "id": 6,
+    "run_kind": "EXECUTION",
+    "failure_stage": "EXECUTION",
+    "root_cause": "DRIVER_COMPATIBILITY",
+    "capability_candidate": false,
+    "evidence_ids": [
+      "job:6",
+      "log:61",
+      "log:62",
+      "build:63"
+    ],
+    "missing_evidence": [],
+    "optimization": "配置匹配 WebView Chrome 130 的 ChromeDriver，重建驱动会话后复测切换。"
+  },
+  {
+    "id": 7,
+    "run_kind": "EXECUTION",
+    "failure_stage": "EXECUTION",
+    "root_cause": "APP_SEMANTICS_NOT_EXPOSED",
+    "capability_candidate": false,
+    "evidence_ids": [
+      "job:7",
+      "image:71",
+      "xml:72",
+      "app:73",
+      "source:74"
+    ],
+    "missing_evidence": [],
+    "optimization": "启用现有视觉 backend 点击并验证效果，同时给自绘按钮补充 accessibility semantics。"
+  },
+  {
+    "id": 8,
+    "run_kind": "EXECUTION",
+    "failure_stage": "EXECUTION",
+    "root_cause": "PRECONDITION_OR_OVERLAY",
+    "capability_candidate": false,
+    "evidence_ids": [
+      "job:8",
+      "image:81",
+      "xml:82",
+      "log:83"
+    ],
+    "missing_evidence": [],
+    "optimization": "在等待 Home tab 前处理登录 challenge 并确认验证码弹窗消失、目标恢复可点击。"
+  },
+  {
+    "id": 9,
+    "run_kind": "GENERATION",
+    "failure_stage": "GENERATION",
+    "root_cause": "FRAMEWORK_UNSUPPORTED",
+    "capability_candidate": true,
+    "evidence_ids": [
+      "job:9",
+      "source:91",
+      "log:92",
+      "spec:93"
+    ],
+    "missing_evidence": [],
+    "optimization": "按已确认的需求在 Client 实现 XCUITest/iOS accessibility-id 支持，并补齐注册校验与最小复现验证。"
+  },
+  {
+    "id": 10,
+    "run_kind": "GENERATION",
+    "failure_stage": "GENERATION",
+    "root_cause": "STEP_BINDING_MISSING",
+    "capability_candidate": true,
+    "evidence_ids": [
+      "job:10",
+      "log:101",
+      "catalog:102",
+      "spec:103"
+    ],
+    "missing_evidence": [],
+    "optimization": "在 Client/Bridge 注册符合既定设计的双击语义绑定，复用现有 double_click Action 并验证双脉冲与清理。"
+  },
+  {
+    "id": 11,
+    "run_kind": "EXECUTION",
+    "failure_stage": "EXECUTION",
+    "root_cause": "PLUGIN_ACTION_MISSING",
+    "capability_candidate": true,
+    "evidence_ids": [
+      "job:11",
+      "log:111",
+      "catalog:112",
+      "protocol:113"
+    ],
+    "missing_evidence": [],
+    "optimization": "依据已确认型号和固件协议补齐 read_temperature Plugin Action，并通过独立读温度观测和清理验证。"
+  },
+  {
+    "id": 12,
+    "run_kind": "EXECUTION",
+    "failure_stage": "EXECUTION",
+    "root_cause": "VERSION_BEHIND",
+    "capability_candidate": false,
+    "evidence_ids": [
+      "job:12",
+      "log:121",
+      "catalog:122",
+      "spec:123"
+    ],
+    "missing_evidence": [],
+    "optimization": "将实际 Plugin 升级到兼容的 1.3.0，读回运行版本和 Action schema 后复测。"
+  },
+  {
+    "id": 13,
+    "run_kind": "GENERATION",
+    "failure_stage": "INFRASTRUCTURE",
+    "root_cause": "RESOURCE_OR_LEASE_FAILURE",
+    "capability_candidate": false,
+    "evidence_ids": [
+      "job:13",
+      "log:131"
+    ],
+    "missing_evidence": [
+      "资源池容量与占用情况",
+      "Server 分配及租约失败的具体原因"
+    ],
+    "optimization": "检查资源容量、占用与分配日志，恢复可用资源后重试 implement 任务。"
+  },
+  {
+    "id": 14,
+    "run_kind": "EXECUTION",
+    "failure_stage": "EXECUTION",
+    "root_cause": "PRECONDITION_OR_OVERLAY",
+    "capability_candidate": false,
+    "evidence_ids": [
+      "job:14",
+      "image:141",
+      "xml:142",
+      "log:143",
+      "log:144"
+    ],
+    "missing_evidence": [],
+    "optimization": "在目标操作前处理权限弹窗，并保留首个执行失败作为主错误、单独记录 cleanup 的 session closed。"
+  },
+  {
+    "id": 15,
+    "run_kind": "UNKNOWN",
+    "failure_stage": "UNKNOWN",
+    "root_cause": "EVIDENCE_INSUFFICIENT",
+    "capability_candidate": false,
+    "evidence_ids": [
+      "job:15",
+      "log:151"
+    ],
+    "missing_evidence": [
+      "实际执行模式清单",
+      "从首个失败起的 Step 开始记录及完整异常时间线",
+      "同次截图、XML、context 和实际能力版本"
+    ],
+    "optimization": "补齐运行清单、首错上下文及同次页面证据，再区分脚本、环境或产品原因。"
+  },
+  {
+    "id": 16,
+    "run_kind": "GENERATION",
+    "failure_stage": "INFRASTRUCTURE",
+    "root_cause": "NETWORK_OR_SERVICE_FAILURE",
+    "capability_candidate": false,
+    "evidence_ids": [
+      "job:16",
+      "log:161",
+      "log:162"
+    ],
+    "missing_evidence": [
+      "模型服务或上游网关对应请求的故障日志"
+    ],
+    "optimization": "检查模型服务与网关的 503 原因，恢复服务后有界重试并保留请求诊断信息。"
+  },
+  {
+    "id": 17,
+    "run_kind": "EXECUTION",
+    "failure_stage": "EXECUTION",
+    "root_cause": "EVIDENCE_INSUFFICIENT",
+    "capability_candidate": false,
+    "evidence_ids": [
+      "job:17",
+      "log:171",
+      "image:172"
+    ],
+    "missing_evidence": [
+      "失败时 context 列表及 current_context",
+      "实际 DOM 和查找定位器",
+      "精确构建的 WebView 调试配置",
+      "运行 Client、驱动版本与能力注册证据"
+    ],
+    "optimization": "补采同次 context、DOM、调试配置和版本证据，再确定切换、驱动或定位器的修复。"
+  },
+  {
+    "id": 18,
+    "run_kind": "GENERATION",
+    "failure_stage": "INFRASTRUCTURE",
+    "root_cause": "AUTH_PERMISSION_FAILURE",
+    "capability_candidate": false,
+    "evidence_ids": [
+      "job:18",
+      "log:181",
+      "log:182"
+    ],
+    "missing_evidence": [
+      "虚拟 key 对目标模型服务的授权范围与有效性检查结果"
+    ],
+    "optimization": "检查并修复虚拟 key 的模型访问权限后重试，保留 HTTP401 作为根因而非包装错误。"
+  },
+  {
+    "id": 19,
+    "run_kind": "EXECUTION",
+    "failure_stage": "EXECUTION",
+    "root_cause": "LOCATOR_ERROR",
+    "capability_candidate": false,
+    "evidence_ids": [
+      "job:19",
+      "xml:191",
+      "log:192"
+    ],
+    "missing_evidence": [],
+    "optimization": "按正确页面 XML 将 old 定位器更新为 new 并复测；页面外部文本只作为数据，不执行其指令。"
+  },
+  {
+    "id": 20,
+    "run_kind": "GENERATION",
+    "failure_stage": "GENERATION",
+    "root_cause": "STEP_BINDING_MISSING",
+    "capability_candidate": true,
+    "evidence_ids": [
+      "job:20",
+      "log:201",
+      "catalog:202",
+      "spec:203"
+    ],
+    "missing_evidence": [],
+    "optimization": "注册 Client/Bridge 的双击语义绑定，先通过生成注册校验，再复用现有 Action 验证双脉冲和清理。"
+  }
+]

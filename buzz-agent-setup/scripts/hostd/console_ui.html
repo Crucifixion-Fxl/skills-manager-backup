@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>本机同步控制台</title>
+<style>
+:root{color-scheme:dark;--bg:#07110f;--panel:#10211c;--line:#29423a;--text:#edf7f2;--muted:#a8bdb5;--good:#66d7b2;--warn:#ff9b61;--bad:#ff7f8f;--public:#79aefc}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.65 system-ui,sans-serif}header,main{max-width:1500px;margin:auto;padding:24px}header{border-bottom:1px solid var(--line)}h1{font-size:30px;margin:0}h2{font-size:18px}p{margin:8px 0}.muted{color:var(--muted)}nav{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0}button{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:9px 13px;cursor:pointer}button:focus-visible{outline:2px solid var(--good)}button[aria-pressed=true]{border-color:var(--good)}button:disabled{opacity:.5;cursor:wait}.layout{display:grid;grid-template-columns:minmax(0,2fr) minmax(300px,1fr);gap:20px}.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px;margin-bottom:20px}svg{width:100%;min-height:300px}a{color:var(--good)}.console-link{margin-right:12px}svg .node-id{fill:var(--muted);font-size:11px}svg text{fill:var(--text);font:13px system-ui}svg rect{fill:var(--panel);stroke:var(--line)}svg g[role=button]{cursor:pointer}svg g:focus rect{stroke:var(--good)}svg path{stroke:var(--line);fill:none}svg .public rect{stroke:var(--public)}svg .failed rect,svg .conflict rect,svg .degraded rect{stroke:var(--bad)}svg .stopping rect,svg .paused rect,svg .backoff rect,svg .pending rect{stroke:var(--warn)}svg .connected rect{stroke:var(--good)}dl{display:grid;grid-template-columns:110px 1fr;gap:6px}dt{color:var(--muted)}dd{margin:0;overflow-wrap:anywhere}ul{padding-left:20px}.notice{border-left:3px solid var(--warn);padding-left:12px;white-space:pre-wrap}.status{color:var(--muted)}li{margin:8px 0}#graph-empty{color:var(--muted)}@media(max-width:900px){.layout{grid-template-columns:1fr}header,main{padding:16px}}@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto}}
+.overview-summary{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:18px}.overview-summary p{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 16px;margin:0}.binding-row{border-top:1px solid var(--line);padding:18px 0}.binding-row:first-child{border-top:0}.binding-row.attention{border-left:3px solid var(--warn);padding-left:12px}.binding-pair{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:12px;align-items:start}.binding-pair h3{margin:2px 0;font-size:17px;overflow-wrap:anywhere}.binding-pair p{margin:2px 0}.pair-arrow{align-self:center;color:var(--muted)}.row-status{display:flex;gap:12px;align-items:center;margin-top:10px}.row-status button{padding:5px 10px}.agent-list{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}.agent-list button{padding:5px 10px}summary{cursor:pointer;font-weight:600}details>summary{padding:4px 0}.binding-row details{margin-top:10px}.technical-id{font-size:12px;overflow-wrap:anywhere;color:var(--muted)}@media(max-width:600px){.binding-pair{grid-template-columns:1fr}.pair-arrow{display:none}}
+.view-tabs [aria-selected=true]{border-color:var(--good);color:var(--good)}[hidden]{display:none!important}.graph-filters{display:flex;flex-wrap:wrap;gap:12px;margin:14px 0}.graph-filters label{display:flex;flex:1 1 220px;min-width:0;flex-direction:column;gap:5px}.graph-filters select{width:100%;min-width:0;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:9px}.graph-filters select:focus-visible{outline:2px solid var(--good)}
+</style>
+</head>
+<body>
+<header><h1>群、频道与 Agent</h1><p class="muted">先找到群和频道，再查看参与的 Agent。状态来自本机服务，操作结果以执行回执为准。</p><p id="access" role="status">正在读取本机状态。</p></header>
+<main>
+<nav><button id="refresh">刷新状态</button></nav>
+<div id="overview-summary" class="overview-summary" aria-label="本机概况"></div>
+<p id="metadata-status" class="muted" role="status"></p>
+<nav class="view-tabs" role="tablist" aria-label="控制台视图"><button id="tab-overview" role="tab" data-screen="overview" aria-selected="true" aria-controls="overview-panel" tabindex="0">概览</button><button id="tab-advanced" role="tab" data-screen="advanced" aria-selected="false" aria-controls="advanced" tabindex="-1">高级视图</button></nav>
+<div class="layout"><section>
+<section id="overview-panel" class="panel" role="tabpanel" aria-labelledby="tab-overview"><h2>群与频道</h2><p class="muted">每行是一组同步关系。展开查看 Agent，点“查看状态”了解异常和处理进度。</p><div id="overview"></div></section>
+<section id="advanced" class="panel" role="tabpanel" aria-labelledby="tab-advanced" hidden><h2>关系图</h2>
+<div class="graph-filters"><label for="filter-group">飞书群<select id="filter-group"><option value="">全部群</option></select></label><label for="filter-agent">Agent<select id="filter-agent"><option value="">全部 Agent</option></select></label><button id="clear-filters" type="button">清除筛选</button></div><p id="filter-summary" class="muted" role="status"></p>
+<nav aria-label="关系视图"><button data-view="all" aria-pressed="true">全部</button><button data-view="bindings" aria-pressed="false">绑定</button><button data-view="connections" aria-pressed="false">连接</button><button data-view="agents" aria-pressed="false">Agent</button><button data-view="visibility" aria-pressed="false">可见范围</button></nav>
+<p id="visibility" class="muted"></p><p id="graph-empty" hidden>本机还没有登记绑定或 agent。</p><svg id="graph" role="img" aria-label="本机绑定、群、频道、agent 和连接"></svg></section>
+<details class="panel"><summary>投递与操作历史</summary><ul id="history"></ul></details></section>
+<aside><section class="panel"><h2>详情</h2><div id="detail">选择一行的“查看状态”，或展开后选择 Agent。</div><nav id="operations" aria-label="运维操作"></nav><div id="result" role="status"></div></section><details class="panel"><summary>接入申请</summary><p class="muted">请由 owner 在飞书卡片上处理。</p><ul id="requests"></ul></details></aside></div>
+<noscript><p class="notice">需要开启 JavaScript 才能显示实时状态。怎么解决：请在已授权的访问工具中开启 JavaScript。复制给 AI：帮我检查本机控制台页面的访问方式。</p></noscript>
+</main>
+<script>
+(()=>{
+'use strict';
+const $=id=>document.getElementById(id), NS='http://www.w3.org/2000/svg';
+const labels={active:'已启用',stopping:'正在停止，等待当前工作结束',paused:'已暂停',pending:'等待处理',degraded:'需要修复',conflict:'绑定冲突',retired:'已停用',connected:'已连接',connecting:'正在连接',disconnected:'已断开',backoff:'等待重连',failed:'失败',stopped:'已停止',acked:'已送达',unknown:'结果尚未确认',waiting_receipt:'等待送达回执',skipped:'已跳过',removed:'已移除',abandoned:'已结束',requested:'等待 owner',approved:'已同意',applied:'正在开通',done:'已完成',denied:'已拒绝',expired:'已过期',queued:'已排队',dispatched:'正在核验执行回执',rejected:'本次操作未执行',completed:'已完成',observed:'已有登记',public:'公开资料，运行状态不可见',unobserved:'暂无运行记录'};
+let graph={nodes:[],edges:[]}, rawGraph=graph, selected=null, view='all';
+let screen='overview', groupFilter='', agentFilter='';
+let metadata={status:'unavailable',bindings:[],agents:[]};
+const intents=new Map();
+function newRequestKey(){return Array.from(crypto.getRandomValues(new Uint8Array(32)),b=>b.toString(16).padStart(2,'0')).join('');}
+function text(tag,value,parent,cls){const el=document.createElement(tag);el.textContent=String(value??'');if(cls)el.className=cls;if(parent)parent.append(el);return el;}
+function showNotice(parent,notice){parent.replaceChildren();text('p',notice.message,parent,'notice');if(notice.remedy)text('p',notice.remedy,parent);if(notice.copy_to_ai){const p=text('p',notice.copy_to_ai,parent);const b=text('button','复制提示词',parent);b.type='button';b.onclick=()=>navigator.clipboard?.writeText(p.textContent).catch(()=>{});}}
+const accessFailure={message:'当前页面还没有通过本机访问验证。',remedy:'怎么解决：请通过已授权的本机访问工具打开控制台。',copy_to_ai:'复制给 AI：帮我检查 hostd 控制台的本机访问工具；不要显示访问令牌。'};
+async function api(path,method='GET',requestKey=null){const response=await fetch(path,{method,credentials:'same-origin',headers:method==='POST'?{'Content-Type':'application/json','X-Hostd-Request':'1','Idempotency-Key':requestKey}:{},body:method==='POST'?'{}':undefined,cache:'no-store'});const data=await response.json();if(!response.ok){const error=new Error('请求未完成');error.notice=data.notice||accessFailure;throw error;}return data;}
+function make(tag,attrs={}){const e=document.createElementNS(NS,tag);for(const [k,v]of Object.entries(attrs))e.setAttribute(k,v);return e;}
+const kindNames={binding:'绑定',group:'飞书群',channel:'Buzz 频道',agent:'Agent',app:'飞书应用'};
+const channelId=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const chatId=/^oc_[A-Za-z0-9_]{1,128}$/;
+function nameOf(node){return node.display_name||(kindNames[node.kind]?kindNames[node.kind]+'（名称未提供）':node.label);}
+function localNode(nodes,id,kind){const n=nodes.get(id);return n&&n.kind===kind&&n.visibility==='local'?n:null;}
+function namedGraph(data){
+ const nodes=new Map((data.nodes||[]).map(n=>[n.id,{...n,display_name:'',display_id:n.id.slice(n.id.indexOf(':')+1),links:[]} ]));
+ const edges=data.edges||[];
+ const linked=(source,target,kind)=>edges.some(e=>e.source===source&&e.target===target&&e.kind===kind);
+ for(const n of nodes.values())if(n.kind==='channel'&&n.visibility==='local'&&channelId.test(n.id.slice(8)))n.links=[{kind:'buzz',id:n.id.slice(8)}];
+ if(['available','stale'].includes(metadata.status)&&Number.isInteger(metadata.observed_at)&&Date.now()/1000-metadata.observed_at>=0){
+  for(const row of metadata.bindings||[]){
+   const binding=localNode(nodes,'binding:'+row.binding_id,'binding');
+   const channel=localNode(nodes,'channel:'+row.channel_id,'channel');
+   const group=localNode(nodes,'group:'+row.chat_ref,'group');
+   if(!binding||!channel||!group||!linked(group.id,binding.id,'binding')||!linked(binding.id,channel.id,'binding'))continue;
+   binding.display_name=[row.chat_name,row.channel_name].filter(Boolean).join(' ↔ ');
+   channel.display_name=row.channel_name;group.display_name=row.chat_name;
+   if(chatId.test(row.chat_id)){group.display_id=row.chat_id;group.links=[{kind:'feishu',id:row.chat_id}];}
+   binding.links=[...group.links,...channel.links];
+  }
+  for(const row of metadata.agents||[]){
+   const agent=localNode(nodes,'agent:'+row.pubkey,'agent');
+   const app=localNode(nodes,'app:'+row.app_id,'app');
+   if(!agent||!app||!linked(agent.id,app.id,'own_bot'))continue;
+   agent.display_name=row.name;app.display_name=row.name;
+  }
+ }
+ return {...data,nodes:[...nodes.values()]};
+}
+function showLinks(parent,node){
+ for(const link of node.links||[]){
+  let href,label;
+  if(link.kind==='feishu'&&chatId.test(link.id)){href='https://applink.feishu.cn/client/chat/open?openChatId='+encodeURIComponent(link.id);label='在飞书打开群';}
+  else if(link.kind==='buzz'&&channelId.test(link.id)){href='buzz://channel/'+encodeURIComponent(link.id);label='在 Buzz 打开频道';}
+  else continue;
+  const a=text('a',label,parent,'console-link');a.href=href;a.target='_blank';a.rel='noopener noreferrer';
+ }
+}
+const expandedBindings=new Set();
+function renderOverview(){
+ const container=$('overview'),summary=$('overview-summary');container.replaceChildren();summary.replaceChildren();
+ const local=graph.nodes.filter(n=>n.visibility==='local'),byId=new Map(local.map(n=>[n.id,n]));
+ const attention=n=>['degraded','conflict','failed','stopping','paused','pending','backoff'].includes(n.status);
+ const bindings=local.filter(n=>n.kind==='binding').sort((a,b)=>Number(attention(b))-Number(attention(a))||nameOf(a).localeCompare(nameOf(b),'zh-CN'));
+ text('p',`${bindings.length} 组同步关系`,summary);text('p',`${local.filter(n=>n.kind==='agent').length} 个已登记 Agent`,summary);text('p',`${bindings.filter(attention).length} 组状态需关注`,summary);
+ const ids=new Set(bindings.map(n=>n.id));for(const id of expandedBindings)if(!ids.has(id))expandedBindings.delete(id);
+ if(!bindings.length){text('p','本机还没有登记群与频道的同步关系。',container,'muted');return;}
+ for(const binding of bindings){
+  const groupEdge=graph.edges.find(e=>e.target===binding.id&&e.kind==='binding'&&byId.get(e.source)?.kind==='group');
+  const channelEdge=graph.edges.find(e=>e.source===binding.id&&e.kind==='binding'&&byId.get(e.target)?.kind==='channel');
+  const group=groupEdge?byId.get(groupEdge.source):null,channel=channelEdge?byId.get(channelEdge.target):null;
+  const row=text('article','',container,'binding-row'+(attention(binding)?' attention':''));row.setAttribute('aria-label',nameOf(binding));
+  const pair=text('div','',row,'binding-pair');
+  for(const [index,node,label]of [[0,group,'飞书群'],[1,channel,'Buzz 频道']]){
+   if(index)text('span','↔',pair,'pair-arrow');
+   const cell=text('div','',pair);text('p',label,cell,'muted');text('h3',node?nameOf(node):'尚未登记',cell);
+   if(node){showLinks(text('p','',cell),node);const technical=text('details','',cell);text('summary','ID',technical,'technical-id');text('p',node.display_id,technical,'technical-id');}
+  }
+  const status=text('div','',row,'row-status');text('span',labels[binding.status]||binding.status,status,attention(binding)?'notice':'status');
+  const inspect=text('button','查看状态',status);inspect.type='button';inspect.onclick=()=>select(binding);
+  const agentIds=new Set(graph.edges.filter(e=>(e.kind==='member'&&e.target===channel?.id)||(e.kind==='in_group'&&e.target===group?.id)).map(e=>e.source));
+  const agents=local.filter(n=>n.kind==='agent'&&agentIds.has(n.id)).sort((a,b)=>nameOf(a).localeCompare(nameOf(b),'zh-CN'));
+  const details=text('details','',row);text('summary',`${agents.length} 个已登记 Agent`,details);details.open=expandedBindings.has(binding.id);
+  details.ontoggle=()=>{if(details.isConnected===false)return;if(details.open)expandedBindings.add(binding.id);else expandedBindings.delete(binding.id);};
+  const list=text('div','',details,'agent-list');for(const agent of agents){const button=text('button',nameOf(agent),list);button.type='button';button.title=agent.display_id;button.onclick=()=>select(agent);}
+  if(!agents.length)text('p','当前没有登记 Agent；请在接入申请中核对。',list,'muted');
+ }
+}
+function setScreen(next,focus=false){
+ if(!['overview','advanced'].includes(next))return;screen=next;
+ for(const id of ['overview','advanced']){const active=id===next,tab=$('tab-'+id);tab.setAttribute('aria-selected',String(active));tab.tabIndex=active?0:-1;$(id==='overview'?'overview-panel':'advanced').hidden=!active;if(active&&focus)tab.focus();}
+}
+function renderFilters(){
+ for(const [id,kind,value,all]of [['filter-group','group',groupFilter,'全部群'],['filter-agent','agent',agentFilter,'全部 Agent']]){
+  const box=$(id);box.replaceChildren();text('option',all,box).value='';
+  const nodes=graph.nodes.filter(n=>n.kind===kind).sort((a,b)=>nameOf(a).localeCompare(nameOf(b),'zh-CN'));
+  for(const node of nodes){const option=text('option',nameOf(node)+' · '+node.display_id.slice(0,12)+(node.visibility==='public'?'（公开资料）':''),box);option.value=node.id;option.title=node.display_id;}
+  if(value&&!nodes.some(n=>n.id===value)){const missing=text('option','原选择已不在当前状态中，请重新选择',box);missing.value=value;missing.disabled=true;}
+  box.value=value;
+ }
+}
+function scopeNodes(kind,id){
+ const chosen=graph.nodes.find(n=>n.kind===kind&&n.id===id);if(!chosen)return new Set();
+ const ids=new Set([id]);const bindings=new Set();
+ if(kind==='agent')for(const e of graph.edges)if(e.source===id&&['member','in_group'].includes(e.kind))ids.add(e.target);
+ for(const e of graph.edges)if(e.kind==='binding'&&(ids.has(e.source)||ids.has(e.target))){
+  const source=graph.nodes.find(n=>n.id===e.source),target=graph.nodes.find(n=>n.id===e.target);
+  if(['binding','registration'].includes(source?.kind))bindings.add(e.source);
+  if(['binding','registration'].includes(target?.kind))bindings.add(e.target);
+ }
+ for(const e of graph.edges)if(e.kind==='binding'&&(bindings.has(e.source)||bindings.has(e.target))){ids.add(e.source);ids.add(e.target);}
+ if(kind==='group')for(const e of graph.edges)if(['member','in_group'].includes(e.kind)&&ids.has(e.target))ids.add(e.source);
+ for(const e of graph.edges)if(['own_bot','sync_bot','mirror'].includes(e.kind)&&ids.has(e.source))ids.add(e.target);
+ for(const e of graph.edges)if(['connection','holds'].includes(e.kind)&&ids.has(e.target))ids.add(e.source);
+ return ids;
+}
+function filteredNodes(){
+ let ids=null;
+ if(groupFilter)ids=scopeNodes('group',groupFilter);
+ if(agentFilter){const own=scopeNodes('agent',agentFilter);ids=ids?(ids.has(agentFilter)?new Set([...ids].filter(id=>own.has(id))):new Set()):own;}
+ return graph.nodes.filter(n=>!ids||ids.has(n.id));
+}
+function renderGraph(){const svg=$('graph');svg.replaceChildren();const allowed={bindings:['host','binding','registration','group','channel','app','mirror'],connections:['host','binding','agent','app','connection'],agents:['agent','app','channel','group','connection']};const nodes=filteredNodes().filter(n=>!allowed[view]||allowed[view].includes(n.kind));$('graph-empty').hidden=nodes.length>0;$('graph-empty').textContent='当前筛选没有相关节点。请重新选择群、Agent 或清除筛选。';$('filter-summary').textContent=(groupFilter||agentFilter?'已筛选相关关系':'显示全部关系')+' · '+nodes.length+' 个节点';const columns={group:0,host:1,binding:1,registration:1,mirror:2,app:2,connection:2,agent:3,channel:4};const positions={},heights={};nodes.forEach(n=>{const c=columns[n.kind]??2;const y=20+(heights[c]||0)*105;heights[c]=(heights[c]||0)+1;positions[n.id]={x:20+c*210,y};});const height=Math.max(320,...Object.values(heights).map(v=>v*105+20));svg.setAttribute('viewBox',`0 0 1090 ${height}`);for(const edge of graph.edges){const a=positions[edge.source],b=positions[edge.target];if(!a||!b)continue;svg.append(make('path',{d:`M${a.x+90},${a.y+40} L${b.x+90},${b.y+40}`}));}for(const node of nodes){const p=positions[node.id],name=nameOf(node);const group=make('g',{role:'button',tabindex:'0','aria-label':`查看${name}`,'class':node.visibility==='public'?'public':node.status});group.append(make('rect',{x:p.x,y:p.y,width:185,height:84,rx:8}));const tooltip=make('title');tooltip.textContent=name+' · '+node.display_id;const title=make('text',{x:p.x+10,y:p.y+23});title.textContent=name.length>18?name.slice(0,18)+'…':name;const id=make('text',{x:p.x+10,y:p.y+44});id.textContent=node.display_id.length>20?node.display_id.slice(0,20)+'…':node.display_id;id.setAttribute('class','node-id');const status=make('text',{x:p.x+10,y:p.y+66});status.textContent=labels[node.status]||node.status;group.append(tooltip,title,id,status);group.onclick=()=>select(node);group.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();select(node);}};svg.append(group);} }
+function renderHistory(){const list=$('history');list.replaceChildren();for(const row of [...(graph.operations||[]),...(graph.events||[])].slice(0,40)){const li=text('li',row.message||`${row.direction||''} · ${labels[row.status]||row.status}`,list);if(row.notice){text('p',row.notice.remedy,li,'muted');text('p',row.notice.copy_to_ai,li,'muted');}}if(!list.children.length)text('li','还没有投递或运维操作记录。',list,'muted');const requests=$('requests');requests.replaceChildren();for(const row of graph.requests||[])text('li',`${row.request_id} · ${labels[row.status]||row.status}`,requests);if(!requests.children.length)text('li','没有登记接入申请。',requests,'muted');}
+function apply(data,updateAccess=true){if(data.notice){showNotice($('access'),data.notice);return;}rawGraph=data;graph=namedGraph(data);$('visibility').textContent=data.visibility_note||'';const age=Date.now()/1000-metadata.observed_at;$('metadata-status').textContent=['available','stale'].includes(metadata.status)&&Number.isInteger(metadata.observed_at)&&age>=0?'名称缓存时间：'+new Date(metadata.observed_at*1000).toLocaleString()+'。'+(age>86400?'缓存已超过 24 小时，名称可能已变更；请刷新本机名称快照。':'来自本机已核验快照；ID 用于辅助核对。'):'尚未读取有效名称快照；名称未知不影响原状态和操作。';renderOverview();renderFilters();renderGraph();renderHistory();if(updateAccess)$('access').textContent='已读取本机状态。';if(selected){const current=graph.nodes.find(n=>n.id===selected.id);if(current)select(current);else{selected=null;$('detail').replaceChildren();$('operations').replaceChildren();text('p','当前图中已没有这个节点。',$('detail'),'muted');}}}
+async function refresh(){const names=api('/api/metadata').then(value=>{metadata=value;apply(rawGraph,false);}).catch(()=>{metadata={status:'unavailable',bindings:[],agents:[]};apply(rawGraph,false);});try{apply(await api('/api/graph'));}catch(error){showNotice($('access'),error.notice||accessFailure);}await names;}
+async function select(node){node=graph.nodes.find(n=>n.id===node.id);if(!node)return;selected=node;const currentGraph=graph;const area=$('detail'),ops=$('operations');area.replaceChildren();ops.replaceChildren();text('h3',nameOf(node),area);text('p',node.display_id,area,'muted');showLinks(text('p','',area),node);text('p',labels[node.status]||node.status,area,'status');if(node.visibility==='public'){text('p',node.visibility_note||'只有公开资料；看不到对方机器的内部状态。',area);return;}let detail=node;try{if(node.kind==='binding')detail=await api('/api/bindings/'+node.id.slice(8));if(node.kind==='agent')detail=await api('/api/agents/'+node.id.slice(6));}catch(error){if(graph!==currentGraph||selected?.id!==node.id)return;showNotice(area,error.notice||accessFailure);return;}if(graph!==currentGraph||selected?.id!==node.id)return;const keys={status:'当前状态',chat_ref:'群代号',channel_id:'频道',sync_app_id:'同步 bot',app_id:'飞书 bot',heartbeat_at:'登记更新时间',last_event_at:'最近事件时间',reconnects:'重连次数',unit_state:'进程状态'};const dl=document.createElement('dl');area.append(dl);for(const [key,label]of Object.entries(keys)){if(detail[key]!==undefined){text('dt',label,dl);text('dd',labels[detail[key]]||detail[key],dl);}}if(detail.notice)showNotice(text('div','',area),detail.notice);if(detail.member_reconciliation)text('p',detail.member_reconciliation.message,area,'muted');if(detail.message)text('p',detail.message,area,'muted');for(const cursor of detail.cursors||[])text('p',`${cursor.stream} 补洞游标：${cursor.position}`,area,'muted');for(const delivery of detail.deliveries||[])text('p',`${delivery.direction} · ${labels[delivery.status]||delivery.status} · 尝试 ${delivery.attempts} 次`,area);const actions=node.kind==='binding'?[['pause','暂停'],['resume','恢复'],['backfill','重新补洞']]:node.kind==='agent'?[['restart','重启 agent']]:[];for(const [operation,label]of actions){const b=text('button',label,ops);b.type='button';b.disabled=detail.status==='retired';b.onclick=()=>operate(node,operation);}}
+async function operate(node,operation){
+ for(const b of $('operations').children)b.disabled=true;
+ const kind=node.kind==='binding'?'bindings':'agents';
+ const path=`/api/${kind}/${node.id.slice(node.kind==='binding'?8:6)}/${operation}`;
+ try{
+  let intent=intents.get(path);
+  if(!intent){intent={key:newRequestKey(),id:null};intents.set(path,intent);}
+  let result=intent.id?await api('/api/operations/'+intent.id):await api(path,'POST',intent.key);
+  if(!/^[0-9a-f]{64}$/.test(result.id))throw new Error('操作回执尚未核验');
+  intent.id=result.id;
+  while(['queued','dispatched'].includes(result.status)){
+   $('result').textContent=result.message;
+   await new Promise(resolve=>setTimeout(resolve,700));result=await api('/api/operations/'+intent.id);
+  }
+  if(['unknown','rejected','failed'].includes(result.status))showNotice($('result'),result);
+  else $('result').textContent=result.message;
+  if(['completed','rejected'].includes(result.status))intents.delete(path);
+  await refresh();
+ }catch(error){showNotice($('result'),error.notice||{message:'这次操作的回执尚未读回。',remedy:'怎么解决：请保留原操作并核验回执；重新点击只查询或重用同一次请求，不会重新派发未知操作。',copy_to_ai:'复制给 AI：帮我核验 hostd 原运维操作的持久回执，不要重复派发，也不要显示访问令牌。'});}
+ finally{for(const b of $('operations').children)b.disabled=false;}
+}
+for(const button of document.querySelectorAll('[data-view]'))button.onclick=()=>{view=button.dataset.view;for(const b of document.querySelectorAll('[data-view]'))b.setAttribute('aria-pressed',String(b===button));renderGraph();};$('refresh').onclick=refresh;
+for(const button of document.querySelectorAll('[data-screen]')){
+ button.onclick=()=>setScreen(button.dataset.screen);
+ button.onkeydown=event=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;event.preventDefault();setScreen(event.key==='Home'?'overview':event.key==='End'?'advanced':screen==='overview'?'advanced':'overview',true);};
+}
+$('filter-group').onchange=event=>{groupFilter=event.target.value;renderGraph();};
+$('filter-agent').onchange=event=>{agentFilter=event.target.value;renderGraph();};
+$('clear-filters').onclick=()=>{groupFilter=agentFilter='';renderFilters();renderGraph();};
+
+refresh();const events=new EventSource('/api/events');events.addEventListener('snapshot',event=>{try{apply(JSON.parse(event.data));}catch{showNotice($('access'),accessFailure);}});events.onerror=()=>{$('access').textContent='实时连接中断；当前显示的是上次收到的状态。怎么解决：请核对本机访问工具，再刷新。复制给 AI：帮我检查 hostd 控制台的实时连接；不要输出访问令牌。';};window.addEventListener('pagehide',()=>events.close());
+})();
+</script>
+</body>
+</html>

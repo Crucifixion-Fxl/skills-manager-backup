@@ -2,7 +2,7 @@
 
 > SKILL.md §6 提到的 API 契约详细。看这个 reference 当：选生成器 / 配 CI drift gate / 手写 OpenAPI 时如何标 SSOT / Resource manifest source-location 怎么写。
 >
-> 本 reference **不**含 §6.1 能力命名 / 引用校验（那条留主 SKILL.md 主线）—— 引用解析的 CI 脚本范本见 [`api-refs-check.md`](./api-refs-check.md)。
+> 本 reference **不**含 §6.1 能力命名 / 引用校验（那条留主 SKILL.md 主线）—— 引用解析的 CI 脚本范本见 [`api-refs-check.md`](api-refs-check.md)。
 
 ## 原则
 
@@ -32,7 +32,7 @@ CI 都是 `api:gen-openapi` job：装依赖 → 生成 → `git diff --exit-code
 - [`../scripts/gitlab-ci-snippets/api-drift.yml`](../scripts/gitlab-ci-snippets/api-drift.yml) — `.gitlab-ci.yml` snippet（include 进现有 pipeline）
 - [`../scripts/api-drift/check-routes.py`](../scripts/api-drift/check-routes.py) — 路径集合比对
 - [`../scripts/api-drift/check-schemas.py`](../scripts/api-drift/check-schemas.py) — 字段集合比对
-- [`../scripts/api-drift/check-api-refs.sh`](../scripts/api-drift/check-api-refs.sh) — 引用解析（详见 [api-refs-check.md](./api-refs-check.md)）
+- [`../scripts/api-drift/check-api-refs.sh`](../scripts/api-drift/check-api-refs.sh) — 引用解析（详见 [api-refs-check.md](api-refs-check.md)）
 
 模式：每个 job `stage: lint`、`needs: []`、`rules: changes: [routes / types / openapi / 脚本本身]` + `if: $CI_PIPELINE_SOURCE == "schedule"` nightly 兜底（依赖升级带来的间接漂移）。
 

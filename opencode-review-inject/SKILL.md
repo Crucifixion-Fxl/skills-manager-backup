@@ -118,7 +118,7 @@ terraform-review:
     - docker  # 没有 Harbor 访问权限的 runner
   script:
     - git clone https://<your-gitlab>/engineering/skills.git /tmp/skills  # 无认证，会失败
-    - cp -r /tmp/skills/terraform-audit /root/.opencode/skills/  # 路径错误：缺少 skills/ 前缀
+    - cp -r /tmp/skills/security/terraform-audit /root/.opencode/skills/  # 路径错误：缺少 skills/ 前缀
     - opencode run "audit the terraform files"  # 没有设置 LLM API key
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'  # 应该在 MR 触发，不是 main push
@@ -126,7 +126,7 @@ terraform-review:
 
 **问题**：
 - 没使用 `CI_JOB_TOKEN` 认证，clone 会 403
-- Skill 路径错误：应该是 `skills/terraform-audit`（`skills/` 子目录）
+- Skill 路径错误：应该是 `skills/security/terraform-audit`（`skills/` 子目录）
 - 没有设置 `OPENAI_API_KEY` 环境变量
 - Runner tag 无 Harbor 访问权限
 - 在 main push 触发，应该是 MR 事件

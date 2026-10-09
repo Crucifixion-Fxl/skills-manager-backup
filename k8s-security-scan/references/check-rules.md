@@ -61,7 +61,7 @@
 | 检测路径 | `spec.providerConfigRef.name` |
 | 跨仓库查找 | 在 crossplane-infra 的目标集群目录中搜索 `kind: ClusterProviderConfig`，`metadata.name` 匹配 |
 | 判定 | 未找到匹配的 ClusterProviderConfig → WARNING |
-| 环境映射 | staging-us → `aws-390709477306-us-staging/`；pre/prod-us → `aws-302571458622-us-prod/`；staging-eu → `aws-390709477306-eu-staging/`；pre/prod-eu → `aws-740315635167-eu-prod/`；staging-cn → `aws-801447536674-cn-staging/`；dev-cn → `aws-801447536674-cn-dev/`；pre/prod-cn → `aws-741924744516-cn-prod/` |
+| 环境映射 | staging-us → `aws-390709477306-us-staging/`；pre/prod-us → `aws-302571458622-us-prod/`；staging-eu → `aws-390709477306-eu-staging/`；pre/prod-eu → `aws-740315635167-eu-prod/`；当前 CN 属于腾讯云，AWS CRX/IRSA 规则不按 `-cn` 后缀启用；按文末 TKE 映射和实际 provider CRD 核验 |
 
 ### CRX-04 WARNING: RolePolicy 最小权限
 
@@ -92,7 +92,7 @@
 
 ## Category 2: Ingress 安全 (ING)
 
-适用 Kind：`Ingress`（`networking.k8s.io/v1`）
+适用 Kind：`Ingress`（`networking.k8s.io/v1`）。ING-01/04/05/06/08 中的 ALB 注解规则仅适用于 AWS ALB；当前 CN TKE 的 CLB 必须按 ING-07 和实际 cloud-side 安全组、WAF、TLS 配置核验，不能因缺少 ALB 注解误报或漏报。
 
 ### ING-01 WARNING: 公网 Ingress 需标注
 
@@ -144,9 +144,9 @@
 
 | 属性 | 值 |
 |------|-----|
-| 检测路径 | overlay 路径含 `cn-k8s` 或 `tencent` 且 Ingress 的 `spec.ingressClassName` |
-| 判定 | TKE 环境使用 `alb` 而非 `qcloud` → INFO |
-| 说明 | TKE 使用腾讯云 CLB，ingressClassName 应为空（通过注解 `kubernetes.io/ingress.class: qcloud` 指定） |
+| 检测路径 | 由当前 Application 判定目标为 TKE（包括普通 staging-cn / prod-cn overlay）；检查最终渲染的 controller/CLB/TLS 配置 |
+| 判定 | 当前 TKE 目标仍配置 AWS ALB controller → WARNING；目标云未确定时报告证据缺口，不按路径猜测 |
+| 说明 | 当前 TKE 使用 `kubernetes.io/ingress.class: qcloud`；CLB ID/证书必须属于目标账号，TLS 可来自 Secret 或 CLB certificate 注解，以目标控制器/values 为准，不能统一强制 spec.tls |
 
 ### ING-08 WARNING: 禁止手写 Kyverno 管理的注解
 
@@ -161,7 +161,7 @@
 
 ## Category 3: IRSA / ServiceAccount (IRSA)
 
-适用 Kind：`ServiceAccount`（`v1`）
+适用 Kind：AWS EKS 的 `ServiceAccount`（`v1`）。当前 CN TKE 不使用 EKS IRSA；若发现旧 EKS role-arn，核对是否为遗留错误或明确的跨云 AWS 依赖，不自动替换成 `arn:aws-cn:`。
 
 ### IRSA-01 WARNING: role-arn 在 crossplane-infra 中必须存在
 
@@ -193,8 +193,8 @@
 | 属性 | 值 |
 |------|-----|
 | 检测路径 | `metadata.annotations["eks.amazonaws.com/role-arn"]` |
-| 判定 | CN 环境（overlay 含 `-cn`）使用 `arn:aws:` 而非 `arn:aws-cn:` → INFO |
-| 反之 | 非 CN 环境使用 `arn:aws-cn:` → INFO |
+| 判定 | ARN partition 必须匹配真实 AWS 目标账号/资源；不能根据 overlay 区域后缀推断 |
+| 当前 CN | TKE 环境不因 region=CN 要求 AWS China ARN；历史 AWS 依赖单独查证 |
 
 ---
 
@@ -222,7 +222,7 @@
 | 属性 | 值 |
 |------|-----|
 | 检测路径 | ExternalSecret 的 `spec.secretStoreRef` |
-| 判定 | `kind` 非 `ClusterSecretStore` → CRITICAL；Ops 域使用 `vault-backend`，Builder 域 dev/staging 使用 `vault-builder-backend`，域不匹配 → CRITICAL |
+| 判定 | 按目标集群已批准的 Store kind/name/server/auth/policy 核验域；跨域误接生产凭据 → CRITICAL。US/EU Builder 仍核验 vault-builder-backend；新 CN staging 使用 vault-backend → 本集群 Vault，不能仅因名称不同误报 |
 
 ### SEC-04 CRITICAL: ConfigMap 禁止敏感值
 
@@ -295,8 +295,8 @@
 | 属性 | 值 |
 |------|-----|
 | 检测路径 | `spec.template.spec.imagePullSecrets` |
-| 判定 | 不存在或不含 `harbor-registry-secret` → CRITICAL |
-| 期望 | `name: harbor-registry-secret` |
+| 判定 | 未显式声明目标集群已批准的 Harbor pull secret → CRITICAL；按 registry/namespace/实际 Secret 注入合同核验 |
+| 期望 | 多数集群为 `harbor-registry-secret`；CN tech-service 平台组件当前使用 `harbor-registry-pull`，不得跨集群强制同名 |
 | 原因 | Argo Rollouts / hook Job pod 不可靠继承 default ServiceAccount 的 imagePullSecrets；缺失时从私有 Harbor 匿名拉镜像导致 401 ImagePullBackOff |
 
 ### DEP-07 INFO: imagePullPolicy
@@ -357,7 +357,7 @@
 | 检测路径 | `spec.template.spec.serviceAccountName` |
 |------|-----|
 | 判定 | 值为 `default` 或未指定（隐式 default）→ WARNING |
-| 豁免 | 应用不使用任何 AWS 资源时降级为 INFO |
+| 豁免 | 应用不使用任何云资源时降级为 INFO |
 
 ---
 
@@ -457,17 +457,28 @@
 | staging-eu | aws-390709477306-eu-staging | aws-390709477306-eu-staging | EU | aws |
 | pre-eu | aws-740315635167-eu-prod | aws-740315635167-eu-prod | EU | aws |
 | prod-eu | aws-740315635167-eu-prod | aws-740315635167-eu-prod | EU | aws |
-| staging-cn | aws-801447536674-cn-staging | aws-801447536674-cn-staging | CN | aws-cn |
-| pre-cn | aws-741924744516-cn-prod | aws-741924744516-cn-prod | CN | aws-cn |
-| prod-cn | aws-741924744516-cn-prod | aws-741924744516-cn-prod | CN | aws-cn |
+| staging-cn | 按 TKE 实际 provider 配置查证 | tencent-100052802231-cn-staging | CN | 不适用 AWS partition |
+| pre-cn | 按 TKE 实际 provider 配置查证 | tencent-100014919455-cn-main | CN | 不适用 AWS partition |
+| prod-cn | 按 TKE 实际 provider 配置查证 | tencent-100014919455-cn-main | CN | 不适用 AWS partition |
 | *-data-us | aws-769494896000-us-data | aws-769494896000-us-data | US | aws |
 | *-data-eu | aws-769494896000-eu-data | aws-769494896000-eu-data | EU | aws |
-| dev-cn / *-cn-dev | aws-801447536674-cn-dev | aws-801447536674-cn-dev | CN | aws-cn |
+| tech-service-cn | 按 TKE 实际 provider 配置查证 | tencent-100052802231-cn-tech-service | CN | 不适用 AWS partition |
+| dev-cn / *-cn-dev | 先核对实际目标，不复用旧 AWS CN Dev | 无默认新集群映射 | CN | 按实际目标 |
 
 ## Harbor Registry 映射
 
 | 集群区域 | Registry |
 |---------|----------|
-| US / EU / SG / staging / GKE | 本集群 Harbor（如 `harbor-00249-us-tech.addx.live`、`harbor-39070-us-staging.addx.live`、`harbor-a4xp-us-prod.addx.live`） |
-| CN (EKS) | 本集群 Harbor（如 `harbor-74192-cn-prod.addx.live`、`harbor-80144-cn-staging.addx.live`），旧 `registry-harbor-cn.addx.live` 仅作兼容 |
-| CN (TKE) | `harbor-cn.addx.live` |
+| US / EU / SG / GKE | 本集群 Harbor（如 `harbor-00249-us-tech.addx.live`、`harbor-39070-us-staging.addx.live`、`harbor-a4xp-us-prod.addx.live`） |
+| CN prod TKE / 100014919455 | `harbor-cn.addx.live` |
+| CN staging TKE / 100052802231 | `harbor-02231-cn-staging.addx.live`（内网默认） |
+| CN tech-service TKE / 100052802231 | `harbor-02231-cn-tech-service.addx.live`（私网目标，待切换） |
+
+CN 当前映射与证据见 [环境事实表](../../../infrastructure/k8s-ops/references/cn-tencent-inventory.md)。AWS CN 已弃用，旧目录和旧 Harbor 不参与默认目标选择。迁移期以 Application 的最终渲染值为准。
+
+CN staging 的 `harbor-02231-cn-staging-pub.addx.live` 是同一 Harbor 的受限公网入口，
+用于获准的外部访问；不能直接当成集群内网镜像默认值。采用新内网域名时核验其精确
+pull-secret auth key、Image Updater 与 token realm 的解析；兼容旧域名的存量应用按实际
+迁移声明审查，不因地址规范化推断旧凭据已删除。见 [Harbor 访问说明](../../../delivery/harbor/SKILL.md)。
+
+CN tech-service 的公网目标为 `harbor-02231-cn-tech-service-pub.addx.live`。新旧 host 差异要结合当前 GitOps 渲染值与迁移状态报告，不能把尚未切换的存量旧域名直接判为错误，也不自动修复镜像或 Secret。双入口、TLS、realm、精确 auth key 和来源限制验收后才可切换。

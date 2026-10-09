@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "166d4b02-c0d0-48e0-ae1c-603cb74727d8",
+  "path": "qatools",
+  "path_key": "qatools",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/quality/qatools",
+    "branch": null
+  }
+}

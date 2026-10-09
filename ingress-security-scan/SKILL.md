@@ -5,7 +5,7 @@ description: 扫描全部 EKS/TKE/GKE 集群中 ArgoCD 管理的公网 Ingress�
 
 # ingress-security-scan
 
-扫描 16 个 K8s 集群，找出 ArgoCD 管理的、公网暴露且缺少来源限制/WAF 的 Ingress 资源。
+扫描当前活跃的 K8s 集群，找出 ArgoCD 管理的、公网暴露且缺少来源限制/WAF 的 Ingress 资源。
 
 **适用场景：**
 
@@ -17,7 +17,9 @@ description: 扫描全部 EKS/TKE/GKE 集群中 ArgoCD 管理的公网 Ingress�
 
 ### 安全防护机制
 
-A4x 的 Ingress 安全防护有两种方式：
+以下 ALB 机制只适用于 AWS EKS；CN 当前全部为腾讯云 TKE，应检查 CLB，不能因缺少 ALB 注解漏扫或误报。当前账号映射见 [CN 腾讯云环境事实与核验入口](../../infrastructure/k8s-ops/references/cn-tencent-inventory.md)。
+
+AWS EKS 的 Ingress 安全防护有两种方式：
 
 1. **Kyverno 自动注入**（推荐）：在 Ingress 上添加 label `ingress.addx.io/sg: <value>`，Kyverno 策略根据 value 自动注入对应集群的安全组到 `alb.ingress.kubernetes.io/security-groups`。支持的 value：
 
@@ -41,7 +43,7 @@ ArgoCD 通过以下方式标记 managed 资源（按优先级）：
 
 ### 判定标准
 
-一个 Ingress 被视为"公网无入口层保护候选"需同时满足：
+AWS ALB Ingress 被视为"公网无入口层保护候选"需同时满足：
 
 1. 被 ArgoCD 管理（有上述任一标记）
 2. `alb.ingress.kubernetes.io/scheme` = `internet-facing`
@@ -63,12 +65,10 @@ ArgoCD 通过以下方式标记 managed 资源（按优先级）：
 | EU | eu-prod | `arn:aws:eks:eu-central-1:740315635167:cluster/eu-eks` |
 | EU | eu-data | `arn:aws:eks:eu-central-1:769494896000:cluster/eu-prod-data` |
 | EU | eu-staging | `arn:aws:eks:eu-central-1:390709477306:cluster/eu-eks-staging` |
-| CN | cn-tech-service | `arn:aws-cn:eks:cn-north-1:589899215075:cluster/cn-eks-tech-service` |
-| CN | cn-prod | `arn:aws-cn:eks:cn-north-1:741924744516:cluster/cn-eks` |
-| CN | cn-dev | `arn:aws-cn:eks:cn-north-1:801447536674:cluster/cn-eks-dev` |
-| CN | cn-staging | `arn:aws-cn:eks:cn-north-1:801447536674:cluster/cn-eks-staging` |
+| CN | cn-tech-service | 已核验的 `$CN_TECH_CONTEXT`（100052802231） |
+| CN | cn-staging | 已核验的 `$CN_STAGING_CONTEXT`（100052802231） |
 | SG | sg-devops | `arn:aws:eks:ap-southeast-1:125710977284:cluster/sg-eks` |
-| TKE | tke-cn-main | `tke-cn-k8s` |
+| CN | cn-main（prod，100014919455） | 已核验的 `$CN_PROD_CONTEXT`（常见别名 `tke-cn-k8s`） |
 | GKE | gke-tech-service | `gke_a4xcloud-tech-service-us_us-east4_us-tech-service-east4-gke` |
 | GKE | gke-prod | `gke_a4xcloud-p-us_us-east4_us-prod-east4-gke` |
 
@@ -76,9 +76,9 @@ ArgoCD 通过以下方式标记 managed 资源（按优先级）：
 
 ### Step 1: 并行扫描全部集群
 
-先用 `kubectl config get-contexts -o name` 校验 16 个 context。标准 context 不存在但本地有明确的等价别名时，记录映射后使用别名；不得因 context 缺失静默跳过集群。每个后台进程都要输出 `scan_ok` 或 `scan_error`，只有 16 个集群全部 `scan_ok` 时才能报告“全量扫描完成”；不可达集群必须标记 `UNKNOWN`，不能记为 `PASS`。
+先从当前 Application / root 和环境事实表建立活跃目标清单（本表 14 个），再用 `kubectl config get-contexts -o name` 逐个核验。CN 的两个新账号集群不能用旧 EKS context 回退。标准 context 不存在但本地有明确的等价别名时，记录映射后使用别名；不得因 context 缺失静默跳过集群。每个后台进程都要输出 `scan_ok` 或 `scan_error`，只有本次目标清单全部 `scan_ok` 时才能报告“全量扫描完成”；不可达集群必须标记 `UNKNOWN`，不能记为 `PASS`。
 
-对每个集群执行 `kubectl get ingress --all-namespaces -o json`，用 jq 过滤：
+对每个集群读取完整 Ingress JSON。以下 jq 同时输出 AWS 的候选和需要云端核验的所有 TKE CLB Ingress；CLB 的公网属性、绑定安全组和 WAF 不能由 ALB 注解推断。
 
 ```bash
 kubectl get ingress --all-namespaces --context "$CTX" -o json | \
@@ -104,6 +104,8 @@ kubectl get ingress --all-namespaces --context "$CTX" -o json | \
           "unknown"
         end
       ),
+      controller: (.metadata.annotations["kubernetes.io/ingress.class"] // .spec.ingressClassName // "unknown"),
+      clb: (.metadata.annotations["kubernetes.io/ingress.existLbId"] // .metadata.annotations["kubernetes.io/ingress.qcloud-loadbalance-id"]),
       scheme: .metadata.annotations["alb.ingress.kubernetes.io/scheme"],
       sg: .metadata.annotations["alb.ingress.kubernetes.io/security-groups"],
       cidrs: .metadata.annotations["alb.ingress.kubernetes.io/inbound-cidrs"],
@@ -111,18 +113,19 @@ kubectl get ingress --all-namespaces --context "$CTX" -o json | \
       sgLabel: .metadata.labels["ingress.addx.io/sg"],
       hosts: [.spec.rules[]?.host // "N/A"]
     } |
-    # 2. internet-facing + no security restrictions
+    # 2. AWS 候选，或所有 TKE CLB（后续核验 cloud-side 暴露与保护）
     select(
-      .scheme == "internet-facing" and
-      .sg == null and
-      .cidrs == null and
-      .waf == null
+      (.controller == "qcloud" or .clb != null) or
+      (.scheme == "internet-facing" and
+       .sg == null and .cidrs == null and .waf == null)
     ) |
-    "\(.ns)/\(.name) | app=\(.argoApp) | \(.hosts|join(","))"
+    "\(.ns)/\(.name) | app=\(.argoApp) | controller=\(.controller) | clb=\(.clb // "unknown") | \(.hosts|join(","))"
   '
 ```
 
-为提高效率，应使用 bash 脚本并行扫描所有集群（每个集群一个后台进程），最后汇总结果。
+TKE 逐项使用已验证目标账号的 `tccli clb DescribeLoadBalancers` / 安全组只读查询，核对 CLB ID、地域、内外网属性、实际绑定安全组、有效来源规则、WAF 和应用层认证。CLB ID 缺失时从 Ingress status/controller 取证；无法核验标记 `UNKNOWN`，不能按“无 ALB 注解”标 `PASS` 或直接判无保护。仅实际公网且缺少对应保护时记风险；内部工具必须办公/VPN 来源限制加应用认证，公众服务必须 WAF。
+
+其他 controller（如 GKE）仍需按云端入口核验；上述 jq 无命中不证明整个集群安全。汇总必须区分读取成功与入口保护核验完成。
 
 ### Step 2: 查询责任人（必做，不得跳过）
 
@@ -137,7 +140,9 @@ kubectl get ingress --all-namespaces --context "$CTX" -o json | \
 cd ~/Project/A4x/argocd-apps
 git fetch origin main
 ARGOCD_APPS_REF=origin/main
-APP_FILE=$(git grep -l -E "^[[:space:]]*name:[[:space:]]+$ARGO_APP_NAME([[:space:]]|$)" "$ARGOCD_APPS_REF" -- '*.yaml' '*.yml' | sed 's#^[^:]*:##' | head -1)
+CLUSTER_DIR='<本次已核验的集群目录>'
+APP_FILE=$(git grep -l -E "^[[:space:]]*name:[[:space:]]+$ARGO_APP_NAME([[:space:]]|$)" "$ARGOCD_APPS_REF" -- "$CLUSTER_DIR/*.yaml" "$CLUSTER_DIR/*.yml" | sed 's#^[^:]*:##')
+# 命中必须恰好一个；多结果需按 namespace/source/destination 精确核验，不取 head -1。
 if [ -z "$APP_FILE" ]; then
   echo "最新 $ARGOCD_APPS_REF 中找不到 $ARGO_APP_NAME；按孤儿 Ingress 路径调查。"
   exit 0
@@ -313,14 +318,14 @@ spec:
     - host: factory-tool-staging-us.addx.live
 ```
 
-### Good — 飞书 webhook，用 feishu-webhook label
+### Good — AWS US 的飞书 webhook，用 feishu-webhook label
 
 ```yaml
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: device-cloud-server-feishu-webhook
-  namespace: prod-cn
+  namespace: prod-us
   labels:
     ingress.addx.io/sg: feishu-webhook  # Kyverno 自动注入飞书 IP 白名单 SG
   annotations:

@@ -16,6 +16,8 @@
 你是一个纯数据采集 agent。只执行只读操作，不做任何推理或根因分析。
 使用 @k8s-ops skill 执行所有 kubectl 命令。
 
+CN 必须区分当前三个腾讯集群：prod `100014919455` / `cn-main`，staging 和 tech-service `100052802231`。按 `references/infra/k8s-contexts.md` 核实实际本地 context 与 Application destination；旧 AWS CN context 即使还在 kubeconfig 中也不是当前目标。
+
 ### 采集任务
 
 1. **Pod 状态**

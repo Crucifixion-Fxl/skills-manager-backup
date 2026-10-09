@@ -1,0 +1,11 @@
+# File metadata candidate plans
+
+Only native read preconditions and offline-tested planning are implemented. Every mode other than dry-run rejects before identity or HTTP; submit is not implemented. Actual deployment and action permission remain unknown. These commands do not establish real write acceptance or complete UI coverage.
+
+`file-type-delete --target-code CODE --mode dry-run` reads complete unpaginated file types and `/filecenter/file/list` with only fileTypeCode. SQL list includes disabled/unpublished files, matching the deletion guard's queryByFileTypeCode. Any file blocks deletion. Proposed delete is code-exact, with no recursive deletion. Type rows have no version. Controller checks for files and deletes separately, leaving an unresolved concurrent-insert race and unknown foreign-key behavior.
+
+`file-rename --target-code CODE --file-id ID --file-name NAME --mode dry-run` plans only the API's existing fileName update. This is a backend-supported action; current UI uses updateFile for availability changes and no dedicated rename button is claimed. available, operator, type, version, upload, release and URLs cannot be supplied. Available changes would invoke onIssuedFileChange and are excluded. SQL always updates update_time even if name unchanged; no version CAS exists. File list displays published/ready versions and updateTime uses publish/ready time when present, so these values are not a row concurrency token.
+
+Read source uses SELECT and buildFileVO→S3Service.preSignUrl→generatePresignedUrl(GET). It creates a signed URL response but no object mutation is present in this pinned chain. Commands omit URLs from output and hashes, do not fetch object content. Deployment/runtime SDK behavior is not live validated.
+
+Pinned backend 664: 67ff74a8feab308a7a60b67275094ba1e7cd3180; frontend 665: 2eb99779e75ae8f90f0a99b8c866bf87b3caa768. Source chain: FileCenterController typeDelete/fileList/fileUpdate, FileTypeService/DAO, FileCenterService queryFiles/updateFile/buildFileVO/queryFileTypeCodes, FileCenterDAO queryFiles/queryByFileTypeCode/updateFileFields, FileUpdateVO, S3Service.preSignUrl. Full native reads unverified. Tests use isolated injected dependencies, no credentials or production calls.

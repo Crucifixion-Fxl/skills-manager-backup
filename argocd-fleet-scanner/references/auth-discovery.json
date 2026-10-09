@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "tool": "argocd-fleet-scanner",
+  "owner": "argocd-fleet-scanner",
+  "status": "source-reviewed-runtime-pending",
+  "contract": "saas-access.md",
+  "notes": "仓库声明真实在线scanner入口，sg-devops；其SSO、API/token契约与身份/权限尚未定位，credentialEnv不声明。不要把ArgoCD API token或本地kubectl身份套到scanner，不在未核对契约时自动探测、登录或重用凭据。申请/撤销/生命周期和服务版本均pending。",
+  "runtimeCallsPerformed": false,
+  "credentialHandling": "No login, credential reads, token issuance, global installation or SaaS business calls performed."
+}

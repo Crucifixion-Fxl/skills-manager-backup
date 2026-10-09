@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "tool": "vaultwarden",
+  "owner": "vaultwarden",
+  "provider": "delegated",
+  "authContract": "references/saas-access.md",
+  "verification": "source-verified",
+  "runtimeVerification": "pending",
+  "deploymentVersion": "unknown",
+  "origin": "https://vaultwarden.builder.addx.live"
+}

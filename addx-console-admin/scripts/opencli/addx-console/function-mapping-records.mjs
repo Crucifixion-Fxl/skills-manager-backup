@@ -1,0 +1,10 @@
+import {ArgumentError,CommandExecutionError} from '@jackwener/opencli/errors';
+import {pageRows} from './expansion-records.mjs';
+function fail(){throw new CommandExecutionError('Console function mapping contract changed');}
+function text(v){if(v===null||v===undefined)return null;if(typeof v!=='string')fail();return v;}
+function nonnegative(v){if(v===null||v===undefined)return null;if(!Number.isSafeInteger(v)||v<0)fail();return v;}
+function positive(v){if(!Number.isSafeInteger(v)||v<1)fail();return v;}
+function array(v){if(!Array.isArray(v)||v.length>1000)fail();return v;}
+export function mappingComponent(args){const id=Number(args.component);if(!Number.isSafeInteger(id)||id<1)throw new ArgumentError('component must be an existing positive component ID');return id;}
+export function mappingRows(data,limit){return pageRows(data,limit,'function-mappings').map(v=>{if(!v||typeof v!=='object')fail();return{componentId:positive(v.componentId),name:text(v.componentName),code:text(v.componentCode),groupName:text(v.componentGroupName),groupCode:text(v.componentGroupCode),categories:text(v.categoryName),modelTypes:text(v.modelTypeName),releaseStatus:nonnegative(v.releaseStatus),status:text(v.releaseStatusName),createdAt:text(v.createTime),updatedAt:text(v.lastModifyTime),total:data.total};});}
+export function mappingDetail(data,id){if(!data||data.componentId!==id||typeof data.componentName!=='string')fail();const params=array(data.paramMasterList);let subCount=0,mapped=0;const paramIds=[],functionIds=[];for(const p of params){if(!p||typeof p!=='object')fail();paramIds.push(positive(p.paramId));const functionId=nonnegative(p.appFunctionId);if(functionId!==null){mapped++;functionIds.push(functionId);}for(const sub of array(p.subParamMasterList)){if(!sub||typeof sub!=='object')fail();positive(sub.paramId);subCount++;}}return{componentId:id,name:data.componentName,parameterIds:JSON.stringify(paramIds),parameterCount:params.length,subParameterCount:subCount,appFunctionIds:JSON.stringify([...new Set(functionIds)].sort((a,b)=>a-b)),mappedCount:mapped};}

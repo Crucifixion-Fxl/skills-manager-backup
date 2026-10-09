@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "7d9c319f-18a4-42de-a2c2-21f48550159b",
+  "path": "toil-report",
+  "path_key": "toil-report",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/infrastructure/toil-report",
+    "branch": null
+  }
+}

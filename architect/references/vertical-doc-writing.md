@@ -59,11 +59,11 @@ Vertical 的面向人正文使用同一套 HTML 基础模板：统一 header、�
 <body>
   <main>
     <nav aria-label="Vertical 文档导航">
-      <a href="./domain.html">Domain</a>
-      <a href="./integration.html">Integration</a>
-      <a href="./services.html">Services</a>
-      <a href="./contracts/api.html">Contracts</a>
-      <a href="./flows/">Flows</a>
+      <a href="domain.html">Domain</a>
+      <a href="integration.html">Integration</a>
+      <a href="services.html">Services</a>
+      <a href="contracts/api.html">Contracts</a>
+      <a href="flows">Flows</a>
       <a href="./adrs/README.md">ADRs</a>
     </nav>
 

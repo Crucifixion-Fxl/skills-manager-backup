@@ -13,8 +13,8 @@
 在目标 release checkout 后动态扫描，静态清单只作参考：
 
 ```bash
-~/.codex/skills/ios-dev-setup/scripts/scan_gitlab_access.rb /path/to/IosProjects
-~/.codex/skills/ios-dev-setup/scripts/scan_gitlab_access.rb --check /path/to/IosProjects
+~/.codex/skills/development/ios-dev-setup/scripts/scan_gitlab_access.rb /path/to/IosProjects
+~/.codex/skills/development/ios-dev-setup/scripts/scan_gitlab_access.rb --check /path/to/IosProjects
 ```
 
 `--check` 对每个唯一仓库执行 `GIT_TERMINAL_PROMPT=0 git ls-remote <ssh-url> HEAD`。按失败类型处理：

@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "tool": "tencent-cloud",
+  "owner": "tencent-cloud-cli",
+  "instance": {
+    "selection": "Use target/environment mapping in owner SKILL; never enumerate unrelated profiles or silently fall back.",
+    "contract": "SKILL.md",
+    "currentVersion": "unknown; historical values are not runtime evidence",
+    "addressEvidence": "Owner SKILL.md environment tables are the address SSOT; credential variables and exceptions in auth.nativeCredentialPath are selected-instance constraints."
+  },
+  "auth": {
+    "nativeCredentialPath": "Official tccli selected explicit profile SecretId/SecretKey or approved temporary STS. Current CN prod 100014919455; staging/tech 100052802231.",
+    "missingCredentialWorkflow": "tccli configure for selected profile only with private input; console CAM administrator provisions scoped key. No device-code grant/SSO assumption.",
+    "subjectAndResourcePermissionVerification": "tccli sts GetCallerIdentity --profile <target>: AccountId is primary UIN, not UserId/PrincipalId; then target cluster read; staging cls-riukakjb not retired cls-i860hdh9.",
+    "issuanceConsumptionRevocation": "CAM key disable/delete by owner or temporary STS expiry; local profile removal does not revoke. Shared account never implies shared staging/tech cluster.",
+    "credentialHandling": "Private injection only; never print/store secrets in repository, command arguments, chat or receipts. Discovery itself performs no login/token creation."
+  },
+  "nativeRoute": {
+    "business": "Owner SKILL + version-matched official CLI/API documentation",
+    "loginRecovery": "web-access for human web interaction; official CLI only where explicitly documented",
+    "refresh": "platform-onboarding only for concrete auth/version/interface drift",
+    "runtimeProvider": "delegated",
+    "adapterStatus": "delegated contract only; no new runnable provider or full API mirror implemented"
+  },
+  "referenceSources": [
+    {
+      "kind": "owner-contract",
+      "path": "SKILL.md"
+    },
+    {
+      "kind": "owner-contract",
+      "path": "references/setup.md"
+    },
+    {
+      "kind": "primary-official",
+      "url": "https://github.com/TencentCloud/tencentcloud-cli",
+      "checkedOn": "2026-10-07",
+      "use": "authentication discovery; match actual deployed version before business calls",
+      "status": "retrieved",
+      "limitation": "Official documentation does not prove instance compatibility."
+    }
+  ],
+  "versionPolicy": {
+    "probe": "tccli --version; official service API version/region and selected main UIN, no shared SaaS server version.",
+    "compatibility": "Unknown deployment version requires non-mutating capability evidence before business usage; do not promote latest upstream docs to deployed compatibility."
+  },
+  "verification": {
+    "source": "source-verified",
+    "fixture": "not-run: reference-only changes",
+    "runtime": "pending",
+    "sourceCandidate": "8d736bd81ab8500e51cf6be3d71d1ffa70937cae",
+    "scope": "Owner repository contract and primary documentation research only. No credential inspection, login, token issuance/revocation or online business calls.",
+    "pendingReasons": [
+      "Target deployment version, selected subject and exact resource permissions have not been runtime verified.",
+      "Token/login workflow needs independently authorized selected-instance validation; no runnable unified provider is claimed."
+    ]
+  }
+}

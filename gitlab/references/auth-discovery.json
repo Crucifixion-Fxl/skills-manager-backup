@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "tool": "gitlab",
+  "owner": "gitlab",
+  "instances": [
+    "https://gitlab.addx.ai"
+  ],
+  "nativeRoute": "GitLab official glab / REST; existing GITLAB_TOKEN or configured host credential",
+  "loginFlow": {
+    "reuseFirst": true,
+    "steps": "先复用本实例 glab 已配置身份/环境凭据；缺失则由用户在本实例完成原生登录/MFA，并在 Personal access tokens 页面申请本任务最小 scope，或使用官方 glab auth login；不把浏览器 Cookie 当 PAT。",
+    "authorization": "Login, token creation/rotation/revocation and business writes require the current task scope; this discovery performs none."
+  },
+  "tokenMechanism": "PAT 经环境/官方 credential store 注入；REST PRIVATE-TOKEN，OAuth Bearer；scope 与成员权限共同限制访问。",
+  "subjectPermission": "glab api user（GET /api/v4/user）核对 id/username；读取准确 projects/:id 和 MR 验证资源可见性，读取不证明 merge 权限。",
+  "expiryRevoke": "失效后用官方流程更新凭据；Personal access tokens 页面查看实际 expiry、rotate/revoke；本实例版本与策略决定期限。",
+  "officialRefs": [
+    "https://docs.gitlab.com/user/profile/personal_access_tokens/",
+    "https://docs.gitlab.com/api/users/",
+    "https://docs.gitlab.com/cli/auth/login/"
+  ],
+  "sources": [
+    {
+      "kind": "owner-contract",
+      "path": "../../gitlab-mr/SKILL.md",
+      "status": "contract-recorded"
+    }
+  ],
+  "versionPolicy": {
+    "researchCommit": null,
+    "deployedCommit": null,
+    "deploymentMatch": "unknown",
+    "refreshTriggers": [
+      "authentication contract change",
+      "deployed version change",
+      "reproducible auth failure"
+    ],
+    "rule": "Candidate source and published contracts do not establish deployed compatibility. Verify the target instance version and read-only supported capabilities before enabling an adapter."
+  },
+  "verification": {
+    "source": "owner-contract-only",
+    "fixture": "not-run-in-this-discovery",
+    "runtime": "not-attempted",
+    "scope": "Read-only documentation/repository discovery; no login, token issuance, credential inspection or business API execution."
+  },
+  "referenceBase": "owner-skill-root for SKILL.md/contractEntrypoints/referenceSources paths; contract field resolves from this JSON directory; upstream repository entrypoints stay repository-relative"
+}

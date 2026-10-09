@@ -1,0 +1,66 @@
+{
+  "phase": "0",
+  "issue": "engineering/skills#186",
+  "date": "2026-10-04",
+  "receipts": [
+    "bot-api",
+    "feishu-events",
+    "relay",
+    "relay-authors",
+    "wake"
+  ],
+  "results": {
+    "P0-0 test bots + scopes + events": "pass — hostd-test-desk/-a/-b created, 47 scopes, events+card callback added via lark-cli launcher URL, v1.0.1 published",
+    "P0-1 ws receive": "pass — receive_v1 lag <= 0.15s",
+    "P0-2 multi connection": "pass with constraint — one long connection per process (lark-oapi module-level loop); hostd = main + one child per app_id",
+    "P0-3 card callback over ws": "pass — operator open_id/union_id, value, update token",
+    "P0-4 bot added to bound group": "design change — only the added bot gets bot.added_v1; sync bot gets nothing",
+    "P0-5 reaction on bot message": "pass",
+    "P0-6 selected @ bot": "pass — mentions[].open_id == sync bot's member_id for that bot; lark-cli <at> as user equivalent",
+    "P0-7 bot history": "pass",
+    "P0-8 bot chat list + chat_ref": "pass",
+    "P0-9 bot member list + add bot": "pass",
+    "P0-10 receipt carrier": "kind 9/7 + h + custom tag; unknown kinds rejected; 30078 readable by non-members (rejected)",
+    "P0-11 mirror p tag wakes buzz-acp 0.5.23": "pass; self-authored dropped",
+    "P0-12 relay subscription": "pass with constraint — authors-only or multi-#h gets no live push; authors + single #h works (21-43ms)",
+    "P0-13 local relay": "pass — relay 0.2.1 ready in 5.4s",
+    "P0-14 missing scope link": "pass — 99991672 carries console_url + missing_scopes"
+  },
+  "secrets": "none in receipts; test bot secrets decrypted in memory from lark-cli store only",
+  "fail_loud": {
+    "note": "every probe asserts its claims, writes failed_checks, and exits 1 on failure; re-run 2026-10-04 after !1091 review",
+    "mutation_checks": [
+      {
+        "probe": "wake_probe",
+        "mutation": "negative case sends the agent's p tag",
+        "caught": [
+          "mirror_without_p_tag_does_not_wake"
+        ]
+      },
+      {
+        "probe": "bot_api_probe",
+        "mutation": "look for a chat the bot is not in",
+        "caught": [
+          "P0-8_chat_list_sees_group"
+        ]
+      },
+      {
+        "probe": "relay_authors_probe",
+        "mutation": "authors+#h subscribes to the other channel",
+        "caught": [
+          "self:authors_and_h_ch1_pushed",
+          "other_member:authors_and_h_ch1_pushed",
+          "self:authors_and_h_ch2_not_pushed"
+        ]
+      },
+      {
+        "probe": "check_feishu_events",
+        "mutation": "expect the sync bot to be absent from bot.added for the wrong bot",
+        "caught": [
+          "P0-4_sync_bot_got_no_bot_added"
+        ]
+      }
+    ],
+    "all_caught": true
+  }
+}

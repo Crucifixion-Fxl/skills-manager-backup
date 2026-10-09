@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "tool": "cs-workspace",
+  "owner": "cs-workspace",
+  "instances": [
+    "https://cs.addx.live"
+  ],
+  "nativeRoute": "CS Workspace OAuth2 Password Bearer / native JSON login",
+  "loginFlow": {
+    "reuseFirst": true,
+    "steps": "先复用 CS_WORKSPACE_TOKEN；缺失时用户在 CS Workspace 自身登录页登录，或授权凭据注入 POST /api/v1/auth/token（form）/api/v1/auth/login（JSON）。这份 owner 契约未声明 Casdoor/飞书桥。",
+    "authorization": "Login, token creation/rotation/revocation and business writes require the current task scope; this discovery performs none."
+  },
+  "tokenMechanism": "LDAP-authenticated local user receives Bearer JWT; JWT sub is local username. Existing browser localStorage consumption does not authorize cache harvesting or token disclosure.",
+  "subjectPermission": "GET /api/v1/auth/me owner contract matches source /auth/me under settings.API_V1_STR; signature/expiry and username lookup return UserResponse numeric id, username and groups. Scope numeric id to service/environment, bind JWT username privately; deployment prefix/OpenAPI remains pending. Groups do not attest operation/resource permission; current active-user dependency does not enforce is_active and PERMISSION_CHECK_DISABLED is deployment-specific.",
+  "expiryRevoke": "JWT expiry uses ACCESS_TOKEN_EXPIRE_MINUTES; effective value is unknown. Registered POST /auth/logout returns frontend logout success only; JWT blacklist is future work, and no actual refresh/revocation handler was found. Legacy Flask Redis-jti logic is not a current capability.",
+  "officialRefs": [],
+  "sources": [
+    {
+      "kind": "owner-contract",
+      "path": "../SKILL.md",
+      "status": "contract-recorded"
+    },
+    {
+      "kind": "repository",
+      "repository": "https://gitlab.addx.ai/CUS/CSTools",
+      "branch": "dev-react",
+      "researchCommit": "8231a010eb5b05261f7fb7a5004249d97ede714b",
+      "entries": [
+        "apps/csworkspace/backend/app/main.py",
+        "apps/csworkspace/backend/app/api/api.py",
+        "apps/csworkspace/backend/app/api/endpoints/auth.py",
+        "apps/csworkspace/backend/app/api/deps.py",
+        "apps/csworkspace/backend/app/core/security.py",
+        "apps/csworkspace/backend/app/schemas/user.py"
+      ],
+      "status": "source-verified"
+    },
+    {
+      "kind": "routing-runbook",
+      "url": "https://gitlab.addx.ai/DEV/k8s/-/blob/84312a8e75e315e685181c6ceef603c3a0569555/docs/runbooks/csworkspace-db-endpoint-cutover-runbook.md",
+      "researchCommit": "84312a8e75e315e685181c6ceef603c3a0569555",
+      "lines": "28–29",
+      "status": "source-routing-verified",
+      "notes": "Names CUS/CSTools project 128 dev-react for cs.addx.live and CUS/CSWorkSpace project 129 as dead pre-monorepo layout; manual Docker Compose is described, not proof of current deployment."
+    }
+  ],
+  "versionPolicy": {
+    "researchCommit": "8231a010eb5b05261f7fb7a5004249d97ede714b",
+    "deployedCommit": null,
+    "deploymentMatch": "unknown",
+    "refreshTriggers": [
+      "authentication contract change",
+      "deployed version change",
+      "reproducible auth failure"
+    ],
+    "rule": "Candidate source and published contracts do not establish deployed compatibility. Verify the target instance version and read-only supported capabilities before enabling an adapter."
+  },
+  "verification": {
+    "source": "source-verified-deployment-pending",
+    "fixture": "not-run-in-this-discovery",
+    "runtime": "not-attempted",
+    "scope": "Read-only documentation/repository discovery; no login, token issuance, credential inspection or business API execution."
+  },
+  "sourceMismatch": "Source routing conflict resolved: primary source is CUS/CSTools dev-react FastAPI. CUS/CSWorkSpace Flask is historical pre-monorepo evidence, not current backend. Deployed SHA, effective API_V1_STR, expiry/config and OpenAPI correspondence remain unknown; default dev must not replace dev-react."
+}

@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "tool": "reportportal",
+  "owner": "reportportal",
+  "repo": "https://gitlab.addx.ai/DEVT/reportportal-plugin",
+  "researchCommit": null,
+  "routeEntries": [
+    "k8s/overlays/prod-cn"
+  ],
+  "verification": "source-verified",
+  "deploymentConsistency": "pending",
+  "officialReferences": [
+    "https://reportportal.io/docs/log-data-in-reportportal/HowToGetAnAccessTokenInReportPortal/",
+    "https://reportportal.io/docs/category/api/service-api",
+    "https://developers.reportportal.io/api-docs/api-design/reportportal-reference-api/",
+    "https://github.com/reportportal/reportportal-mcp-server/blob/main/README.md",
+    "https://github.com/reportportal/reportportal-mcp-server/releases"
+  ],
+  "needsResearch": [
+    "Resolve reportportal-plugin source commit and actual prod/staging ingress association",
+    "Read deployment image/chart/API-service revision without Secret access",
+    "Actual SSO provider, user subject, project roles and key lifecycle",
+    "Official MCP deployed/installed version and compatibility; private plugin/API extensions"
+  ],
+  "apiDiscovery": {
+    "method": "Prefer version-matched official ReportPortal MCP README/releases and actual tools/list; fallback to official generated service-api documentation. GET /api/v1/{project}/launch with small pagination is a resource-only probe; subject/role evidence is separate. Mutations/imports/analysis require owner authorization and readback.",
+    "coverage": "Official MCP and API/auth entrypoints located; deployed runtime and private extensions pending"
+  },
+  "deploymentEvidence": {
+    "repo": "https://gitlab.addx.ai/DEV/k8s",
+    "researchCommit": "47800f690df48d1f46174593809dd67e9773a48e",
+    "path": "docs/plans/2026-06-22-reportportal-shared-postgres-consolidation.md",
+    "notes": "Tracked runbook names DEVT/reportportal-plugin@master, overlay k8s/overlays/prod-cn, namespace prod-cn and app reportportal-prod-cn; runbook is pending migration, not deployed-state evidence."
+  },
+  "consumerEvidence": [
+    {
+      "path": "skills/device-cloud-test-management/scripts/trigger_cloud_job.py",
+      "origins": [
+        "https://reportportal.builder.addx.live",
+        "https://reportportal-staging.builder.addx.live"
+      ]
+    },
+    {
+      "path": "skills/api-synthetic-monitoring/SKILL.md",
+      "variables": [
+        "SMOKE_RP_ENDPOINT",
+        "SMOKE_RP_PROJECT",
+        "SMOKE_RP_TOKEN"
+      ]
+    }
+  ],
+  "referenceBase": "owner-skill-root for SKILL.md/contractEntrypoints/referenceSources paths; contract field resolves from this JSON directory; upstream repository entrypoints stay repository-relative"
+}

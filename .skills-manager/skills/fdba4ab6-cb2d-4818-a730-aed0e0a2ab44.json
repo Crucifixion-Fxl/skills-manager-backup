@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "fdba4ab6-cb2d-4818-a730-aed0e0a2ab44",
+  "path": "dittofeed",
+  "path_key": "dittofeed",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/experimentation/dittofeed",
+    "branch": null
+  }
+}

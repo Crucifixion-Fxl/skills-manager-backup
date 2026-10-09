@@ -1,0 +1,95 @@
+{
+  "skill_name": "dev-workflow",
+  "contract": {
+    "version": 1,
+    "id_start": 1,
+    "case_count": 6,
+    "canonical_inputs": true,
+    "require_assertions": true,
+    "hide_tool_tokens": true
+  },
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "用户要求 Implement the approved plan，Requirements exact-hash、G1/G2 均已有效接受。T1 backend 已完成；T2 frontend build 还要8分钟；T3 backend integration 只依赖T1；T4 docs独立。请模拟下一步，不调用真实工具。",
+      "expected_output": "T3与T4可继续；T2后台等待。只检查各任务自身依赖/Gate，不重复索取实施批准，也不把已有批准扩为推送/部署授权。",
+      "assertions": [
+        {
+          "name": "ready_dependency",
+          "check": "不因T2未完成阻塞T3；T4无其他依赖时继续。"
+        },
+        {
+          "name": "scope",
+          "check": "保留实际门禁与外部写授权，阶段汇报不自动等待。"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "已批准日志改造，新隔离worktree没有web/dist，MinIO磁盘快满。请模拟开工及验证顺序，不操作真实环境。",
+      "expected_output": "先检查和准备相关依赖、build产物、磁盘/服务/端口/数据隔离；不能把缺产物或磁盘故障当行为RED。修改时跑定向测试，集成候选跑必需完整门禁。",
+      "assertions": [
+        {
+          "name": "environment_first",
+          "check": "实施前识别并处理web/dist与磁盘风险；不删除其他session数据。"
+        },
+        {
+          "name": "valid_red",
+          "check": "行为失败测试与环境失败分开；保留集成/黑盒验收。"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "SHA X的本地测试已通过，但merge到SHA Y改变了auth接口。为了提速能否直接复用X的通过报告宣布Y验收？只解释，不执行。",
+      "expected_output": "不能。相关证据失效，在Y重跑受影响auth与关联集成，并运行必需完整门禁。不得改写旧SHA。",
+      "assertions": [
+        {
+          "name": "fresh_candidate",
+          "check": "拒绝用X结果声称Y通过；新接口/merge触发相关复验。"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "只帮我生成task-list，先不要实施。尚未授权agent派发、issue回写、推送或部署。请模拟交付。",
+      "expected_output": "只读扫描并交付任务表/依赖；不写平台、不派发、不附加默认派发确认门。",
+      "assertions": [
+        {
+          "name": "planning_only",
+          "check": "输出清单后停止；Action与默认选项不算授权。"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "用户已授权本地实施和独立模块委派，所有前置Gate齐全，推送和部署尚未批准。已完成3个小task，有第4个可做；另有长测试在后台，人员回复未到，但第4个不依赖它们。请模拟下一步。",
+      "expected_output": "继续第4个任务，保留后台task handle/日志/退出码；不机械等反馈或循环sleep；不推送、不部署。",
+      "assertions": [
+        {
+          "name": "continue",
+          "check": "不以3个task或人员未回复阻塞独立任务。"
+        },
+        {
+          "name": "real_results",
+          "check": "后台启动不是通过，取回终态/退出码后才验收；无持久服务不承诺session结束后自动监控。"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "用户说马上执行plan，但Requirements产物只有ready marker，没有artifact_hash和PO ACCEPT。另有与该需求无关且已授权的文档修正。请模拟下一步。",
+      "expected_output": "不能进入依赖需求批准的设计/实施；记录缺失真实Gate和owner，继续独立且已授权的文档修正，不伪造签核。",
+      "assertions": [
+        {
+          "name": "gate_preserved",
+          "check": "拒绝用用户执行意图或marker代替exact-hash PO批准。"
+        },
+        {
+          "name": "local_block",
+          "check": "阻塞只覆盖依赖该Gate的任务。"
+        }
+      ]
+    }
+  ]
+}

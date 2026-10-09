@@ -35,5 +35,5 @@ Do not switch to `ReadWriteOnce` for GitLab runner caches unless the runner is g
 Run:
 
 ```bash
-bash skills/gitlab-runner-pvc-cache/validators/validate.sh <k8s-runner-dir> <argocd-dir> /dev/null
+bash skills/delivery/gitlab-runner-pvc-cache/validators/validate.sh <k8s-runner-dir> <argocd-dir> /dev/null
 ```

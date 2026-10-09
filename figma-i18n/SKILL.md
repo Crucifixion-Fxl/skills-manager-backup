@@ -3,6 +3,9 @@ name: figma-i18n
 description: 将 Figma 设计稿自动翻译为多语言版本，优先匹配 Crowdin Glossary 已有术语。当用户需要翻译 Figma 设计稿、多语言素材适配、或提到"Figma 翻译"、"多语言设计稿"、"figma i18n"、"翻译设计稿"时触发。
 ---
 
+平台登录与认证 SSOT：[figma](../figma/SKILL.md)。本 Skill 保留业务流程与门禁，认证事实由平台 owner 维护，日常访问调用 `web-access`。
+
+
 # Figma I18n
 
 将 Figma 英文设计稿 → 术语匹配 → 翻译 → 克隆多语言 frame → 溢出检查。
@@ -58,8 +61,8 @@ return texts.map(t => ({
 从 Crowdin Glossary API 拉取术语表，与 Step 1 提取的文案做匹配：
 
 ```bash
-# 拉取 glossary 所有 terms（token 内联，不用环境变量）
-curl -s -H "Authorization: Bearer {CROWDIN_TOKEN}" \
+# 拉取 glossary 所有 terms（Token 由授权环境注入，禁止内联真实值）
+curl -s -H "Authorization: Bearer $CROWDIN_TOKEN" \
   "https://api.crowdin.com/api/v2/glossaries/{glossaryId}/terms?limit=500"
 ```
 
@@ -176,7 +179,7 @@ for (const node of textNodes) {
 1. **不修改原始英文 frame**，只克隆
 2. **字体加载**：改文案前必须 `loadFontAsync`，否则 Figma 报错
 3. **克隆后 ID 变化**：用 `characters` 内容匹配 TEXT 节点，不用 ID
-4. **Crowdin Token**：内联到命令中，不用环境变量传递
+4. **Crowdin Token**：使用当前授权环境中的 `CROWDIN_TOKEN`，禁止把真实值内联到命令、聊天、截图或日志。认证客户端在进程内读取并设置请求头；无凭据时沿用 Crowdin owner 的登录/Token 流程。
 
 ## 操作红线
 

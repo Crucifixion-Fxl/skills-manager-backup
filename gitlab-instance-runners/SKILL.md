@@ -75,11 +75,15 @@ sonar_sg:
 以 GitLab 页面（Project → Settings → CI/CD → Runners）显示为准；不要维护固定 Runner 编号表。K8s runner tags 的 GitOps 源头在：
 
 ```bash
-rg --no-filename '^\s*tags:\s*"' ~/Project/A4x/k8s/clusters/*/cicd/gitlab-runner/values-override*.yaml \
-  | sed -E 's/.*tags: "([^"]+)"/\1/' | tr ',' '\n' | sort -u
+# CN 当前只检查新 staging 的已声明 runner；不能从所有旧目录汇总可用 tags
+rg --no-filename '^\s*tags:\s*"' \
+  ~/Project/A4x/k8s/clusters/tencent-100052802231-cn-staging/cicd/gitlab-runner/values-override-amd64.yaml
+# 其他区域：先选当前目标集群，再读取其 values-override*.yaml，并与 GitLab Online runner 核对
 ```
 
-当前常见 tags 包括区域/架构 tags（`us-tech-amd64`、`eu-staging-amd64`、`cn-staging-arm64`、`sg-amd64`）、能力 tags（`runner`、`sonar-scanner`、`runner-sg`、`runner-sg-nat`、`runner-sg-toolchain-cache`）和 GPU tags（`us-tech-gpu-l4`、`us-tech-gpu-t4`）。
+当前常见 tags 包括区域/架构 tags（`us-tech-amd64`、`eu-staging-amd64`、`tke-cn-staging-amd64`、`sg-amd64`）、能力 tags（`runner`、`sonar-scanner`、`runner-sg`、`runner-sg-nat`、`runner-sg-toolchain-cache`）和 GPU tags（`us-tech-gpu-l4`、`us-tech-gpu-t4`）。
+
+**CN 当前部署**：AWS CN 已弃用；prod 在腾讯云 `100014919455` / `cn-main`，staging 与 tech-service 在 `100052802231` 的独立集群，见 [CN 清单](../../infrastructure/k8s-ops/references/cn-tencent-inventory.md)。新 staging 只有 amd64 runner：instance runner 4542（`tke-staging-runner`）在 GitLab 服务端持有 `tke-cn-staging-amd64`、`tke-staging-amd64`、`tke-staging` 及兼容 tag `cn-staging-amd64`、`cn-staging`；原 AWS cn-eks-staging runner 4001 已暂停（tag 改为 `retired-cn-staging-amd64-4001`），旧腾讯 staging 集群的 runner 已缩到 0。该 runner 用 registration token 注册，**tag 以 `GET /runners/4542` 为准**，改 values 不会生效，变更需 GitLab 管理员在服务端修改。新 CI 显式写 `tke-cn-staging-amd64`；存量 `cn-staging-amd64` 已经落到 TKE，runner 注入 `HARBOR_REGISTRY=harbor-cn-staging.addx.live`，写死推送 `harbor-80144-cn-staging` 的 job 会失败。没有 `cn-staging-arm64` 接管者，arm64 job 会一直 pending，不能宣称新环境支持 ARM64。新 tech-service 尚不能仅凭 `gitlab-runner-rbac.yaml` 推断存在 Online runner。
 
 ### Tag 选择速查
 
@@ -91,7 +95,7 @@ rg --no-filename '^\s*tags:\s*"' ~/Project/A4x/k8s/clusters/*/cicd/gitlab-runner
 | 需要固定 NAT 出口的 SG Job | `runner-sg-nat` |
 | 需要共享 toolchain cache | `runner-sg-toolchain-cache` |
 | US tech GPU build | `us-tech-gpu-l4` 或 `us-tech-gpu-t4` |
-| 指定 staging 构建环境 | `us-staging-amd64`、`eu-staging-amd64`、`cn-staging-amd64` |
+| 指定 staging 构建环境 | `us-staging-amd64`、`eu-staging-amd64`；CN staging 使用 `tke-cn-staging-amd64`（存量 `cn-staging-amd64` 兼容，同样落到 TKE；无 arm64） |
 | 杭州内网打包 | `hz-client` |
 | 欧洲区域 / Vault | `eu-vault-runner` |
 

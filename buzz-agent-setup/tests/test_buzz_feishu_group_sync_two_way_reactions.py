@@ -55,6 +55,15 @@ def feishu_reaction(emoji_type, operator_open=None, app=None):
 
 
 class Maps(unittest.TestCase):
+    def test_checkmark_is_an_inbound_alias_without_changing_outbound_done(self):
+        """L1-FGS-162-003: Feishu's CheckMark and DONE both represent the approval check."""
+        reverse = FGS.reverse_reaction_map(FGS.DEFAULT_REACTION_MAP)
+        self.assertEqual(reverse.get("CheckMark"), "✅")
+        self.assertEqual(reverse["DONE"], "✅")
+        self.assertEqual(FGS.DEFAULT_REACTION_MAP["✅"], "DONE")
+        self.assertEqual(FGS.reverse_reaction_map({"x": "CheckMark", "✅": "DONE"})["CheckMark"], "x")
+        self.assertNotIn("CheckMark", FGS.reverse_reaction_map({"👍": "THUMBSUP"}))
+
     def test_approve_and_deny_have_feishu_emojis_both_ways(self):
         """L1-FGS-860: 缺省对照表有 ✅ → DONE、❌ → CrossMark；反查表把 emoji_type 换回表情（THUMBSUP 回 👍，不回 "+"）。"""
         self.assertEqual(FGS.DEFAULT_REACTION_MAP["❌"], "CrossMark")
@@ -204,6 +213,60 @@ class FeishuToBuzz(TwoWay):
 
     def mirror_reactions(self, w):
         return [e for e in w.relay_writes if e["kind"] == 7]
+
+    def test_checkmark_is_delivered_once_with_the_real_author(self):
+        """L2-FGS-162-004: the production incident's exact emoji reaches Buzz with provenance."""
+        w, env, copy, _ = self.start()
+        w.batch_reactions[copy] = [feishu_reaction("CheckMark", ALICE_OPEN)]
+        report = env.round(w, now=at(5))
+        self.assertEqual(report["reactions_to_buzz"], 1, report)
+        env.round(w, now=at(6))
+        (ev,) = self.mirror_reactions(w)
+        self.assertEqual(ev["content"], "✅")
+        self.assertIn(["e", eid(1)], ev["tags"])
+        self.assertIn(["feishu-author", ALICE_PK], ev["tags"])
+        self.assertEqual(ev["pubkey"], MIRROR_PK)
+
+    def test_previously_skipped_checkmark_is_rechecked_without_reaction_toggle(self):
+        """L2-FGS-162-005: upgrading repairs old skipped state while the original check still exists."""
+        w, env, copy, _ = self.start()
+        key = f"{copy}|{union_of(ALICE_OPEN)}|CheckMark"
+        ledger = env.state()
+        ledger["f2r"][key] = FGS.SKIPPED
+        (env.state_dir / FGS.STATE_FILE).write_text(json.dumps(ledger))
+        w.batch_reactions[copy] = [feishu_reaction("CheckMark", ALICE_OPEN)]
+        report = env.round(w, now=at(5))
+        self.assertEqual(report["reactions_to_buzz"], 1, report)
+        env.round(w, now=at(6))
+        (ev,) = self.mirror_reactions(w)
+        self.assertEqual(env.state()["f2r"][key], ev["id"])
+
+    def test_withdrawn_skipped_checkmark_is_not_replayed(self):
+        """L2-FGS-162-006: an absent old check must never be revived just because the map changed."""
+        w, env, copy, _ = self.start()
+        key = f"{copy}|{union_of(ALICE_OPEN)}|CheckMark"
+        ledger = env.state()
+        ledger["f2r"][key] = FGS.SKIPPED
+        (env.state_dir / FGS.STATE_FILE).write_text(json.dumps(ledger))
+        w.batch_reactions[copy] = []
+        env.round(w, now=at(5))
+        self.assertEqual(self.mirror_reactions(w), [])
+        self.assertNotIn(key, env.state()["f2r"])
+
+    def test_checkmark_and_done_share_delivery_until_both_are_removed(self):
+        """L2-FGS-162-007: equivalent checks cannot retract each other's still-present approval."""
+        w, env, copy, _ = self.start()
+        w.batch_reactions[copy] = [feishu_reaction("CheckMark", ALICE_OPEN)]
+        env.round(w, now=at(5))
+        w.batch_reactions[copy].append(feishu_reaction("DONE", ALICE_OPEN))
+        env.round(w, now=at(6))
+        self.assertEqual(len(self.mirror_reactions(w)), 1)
+        w.batch_reactions[copy] = [feishu_reaction("DONE", ALICE_OPEN)]
+        env.round(w, now=at(7))
+        self.assertEqual([e for e in w.relay_writes if e["kind"] == 5], [])
+        w.batch_reactions[copy] = []
+        env.round(w, now=at(8))
+        self.assertEqual(len([e for e in w.relay_writes if e["kind"] == 5]), 1)
 
     def test_a_persons_feishu_reaction_is_put_on_the_buzz_event_by_the_mirror(self):
         """L2-1-FGS-880: 已绑定的人在飞书副本上打 DONE → 镜像在 Buzz 原事件上打 ✅（kind 7，e 指向原事件，feishu-author 是这个人的 pubkey），

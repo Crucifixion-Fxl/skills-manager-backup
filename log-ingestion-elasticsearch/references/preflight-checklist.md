@@ -1,12 +1,14 @@
 # Step 0: 前置调研 (Preflight Checklist)
 
+> **CN 当前路由**：AWS CN 已弃用。prod = `100014919455` / `cn-main`；staging 与 tech-service = `100052802231`。本文 Kafka/Vector 模板仅适用于已验证的存量管道；新 CN staging 是 FluentBit→ES 直写，必须改走 [专用流程](cn-staging-direct-es.md)。新 tech-service 先查实际 OUTPUT，不能套用 prod 管道。
+
 **强制 hard-stop**：以下 7 个问题必须逐条答到**确切的、已验证的值**才能进入 Step 1。任何一个问题答不上来 → STOP，向用户追问后才能继续。禁止"先做再说"、禁止猜。
 
 ---
 
 ## Q1: 目标服务部署在哪个 kubectl context？
 
-不是"哪个地区"，不是"哪个 AWS 账户"，而是**kubectl context 的字符串名**。ArgoCD URL / 业务名 / 环境名都不能直接当答案。
+不是"哪个地区"，不是"哪个云账户"，而是**kubectl context 的字符串名**。ArgoCD URL / 业务名 / 环境名都不能直接当答案。
 
 ### 验证
 
@@ -28,7 +30,8 @@ kubectl --context <guess> -n <ns> get pods | grep <app>
 ### 列出候选 context
 
 ```bash
-kubectl config get-contexts | awk '{print $2}' | grep -iE "eu|us|cn"
+kubectl config get-contexts -o name | grep -iE "eu|us|cn"
+# CN 只选择当前腾讯云三个集群的实际本地别名；旧 AWS CN context 只作历史记录
 ```
 
 ---

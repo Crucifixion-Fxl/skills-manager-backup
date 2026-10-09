@@ -13,7 +13,7 @@ alert_summary:
   service: "grafana-ai"                     # PagerDuty service 名
   cloud_account: "tencent-100014919455"     # 云账户 ID
   cluster: "tencent-100014919455-cn-main"   # K8s cluster context
-  environment: "cn-prod + cn-staging"       # 环境（可多个，用 + 连接）
+  environment: "cn-prod"                    # 与上方单一账户/集群一致；跨环境调查须逐一列出各自账户/集群
   region: "ap-beijing"                      # 部署区域
   severity: "P1"                            # 严重程度（P1/P2/P3/P4）
   triggered_at: "2026-03-24T10:42:50Z"      # 第一条告警触发时间

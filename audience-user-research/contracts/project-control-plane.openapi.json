@@ -690,6 +690,19 @@
             ],
             "title": "Form Id"
           },
+          "form_preview_url": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "No-submission preview of a currently public Typeform. Present only after provider-confirmed publication; not an access-control boundary or the respondent invitation URL.",
+            "title": "Form Preview Url"
+          },
           "form_url": {
             "anyOf": [
               {
@@ -3557,6 +3570,19 @@
             ],
             "title": "Form Id"
           },
+          "form_preview_url": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "No-submission preview of a currently public Typeform. Present only after provider-confirmed publication; not an access-control boundary or the respondent invitation URL.",
+            "title": "Form Preview Url"
+          },
           "form_url": {
             "anyOf": [
               {
@@ -3714,6 +3740,19 @@
               }
             ],
             "title": "Form Id"
+          },
+          "form_preview_url": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "No-submission preview of a currently public Typeform. Present only after provider-confirmed publication; not an access-control boundary or the respondent invitation URL.",
+            "title": "Form Preview Url"
           },
           "form_public": {
             "const": true,
@@ -4342,6 +4381,11 @@
           "recovery": {
             "$ref": "#/components/schemas/IdeaResearchRecovery"
           },
+          "recovery_complete": {
+            "default": false,
+            "title": "Recovery Complete",
+            "type": "boolean"
+          },
           "research_count": {
             "maximum": 100.0,
             "minimum": 0.0,
@@ -4612,6 +4656,187 @@
           "language"
         ],
         "title": "Market",
+        "type": "object"
+      },
+      "NativeFormPatch": {
+        "additionalProperties": false,
+        "properties": {
+          "acknowledge_published_risk": {
+            "const": true,
+            "description": "Explicit confirmation for this exact live Research form. A native PUT replaces the whole form; removed questions/options may affect existing responses. PATCH can change published settings.",
+            "title": "Acknowledge Published Risk",
+            "type": "boolean"
+          },
+          "expected_affected_scope_digest": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Expected Affected Scope Digest",
+            "type": "string"
+          },
+          "expected_provider_revision": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Expected Provider Revision",
+            "type": "string"
+          },
+          "idea_id": {
+            "pattern": "^idea_[A-Za-z0-9]{20,32}$",
+            "title": "Idea Id",
+            "type": "string"
+          },
+          "operations": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Operations",
+            "type": "array"
+          }
+        },
+        "required": [
+          "idea_id",
+          "expected_provider_revision",
+          "expected_affected_scope_digest",
+          "acknowledge_published_risk",
+          "operations"
+        ],
+        "title": "NativeFormPatch",
+        "type": "object"
+      },
+      "NativeFormReplace": {
+        "additionalProperties": false,
+        "properties": {
+          "acknowledge_published_risk": {
+            "const": true,
+            "description": "Explicit confirmation for this exact live Research form. A native PUT replaces the whole form; removed questions/options may affect existing responses. PATCH can change published settings.",
+            "title": "Acknowledge Published Risk",
+            "type": "boolean"
+          },
+          "body": {
+            "additionalProperties": true,
+            "title": "Body",
+            "type": "object"
+          },
+          "expected_affected_scope_digest": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Expected Affected Scope Digest",
+            "type": "string"
+          },
+          "expected_provider_revision": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Expected Provider Revision",
+            "type": "string"
+          },
+          "idea_id": {
+            "pattern": "^idea_[A-Za-z0-9]{20,32}$",
+            "title": "Idea Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "idea_id",
+          "expected_provider_revision",
+          "expected_affected_scope_digest",
+          "acknowledge_published_risk",
+          "body"
+        ],
+        "title": "NativeFormReplace",
+        "type": "object"
+      },
+      "NativeFormRevision": {
+        "additionalProperties": false,
+        "description": "Provider-owned definition, scoped to one Project/Idea/Research/form.",
+        "properties": {
+          "affected_research": {
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "title": "Affected Research",
+            "type": "array"
+          },
+          "affected_scope_digest": {
+            "title": "Affected Scope Digest",
+            "type": "string"
+          },
+          "binding_revision": {
+            "title": "Binding Revision",
+            "type": "string"
+          },
+          "body": {
+            "additionalProperties": true,
+            "title": "Body",
+            "type": "object"
+          },
+          "definition_fingerprint": {
+            "title": "Definition Fingerprint",
+            "type": "string"
+          },
+          "form_id": {
+            "title": "Form Id",
+            "type": "string"
+          },
+          "form_public": {
+            "title": "Form Public",
+            "type": "boolean"
+          },
+          "form_url": {
+            "title": "Form Url",
+            "type": "string"
+          },
+          "idea_id": {
+            "title": "Idea Id",
+            "type": "string"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "provider_revision": {
+            "title": "Provider Revision",
+            "type": "string"
+          },
+          "put_body": {
+            "additionalProperties": true,
+            "description": "Native PUT-ready copy of body, excluding only known provider GET-only metadata.",
+            "title": "Put Body",
+            "type": "object"
+          },
+          "research_id": {
+            "title": "Research Id",
+            "type": "string"
+          },
+          "response_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Unknown without a separate responses:read authorization; never treat null as zero.",
+            "title": "Response Count"
+          }
+        },
+        "required": [
+          "project_id",
+          "binding_revision",
+          "idea_id",
+          "research_id",
+          "form_id",
+          "form_url",
+          "form_public",
+          "provider_revision",
+          "affected_scope_digest",
+          "affected_research",
+          "definition_fingerprint",
+          "body",
+          "put_body"
+        ],
+        "title": "NativeFormRevision",
         "type": "object"
       },
       "NativePublicationSourceCoverage": {
@@ -10466,6 +10691,19 @@
               }
             ],
             "title": "Form Id"
+          },
+          "form_preview_url": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "No-submission preview of a currently public Typeform. Present only after provider-confirmed publication; not an access-control boundary or the respondent invitation URL.",
+            "title": "Form Preview Url"
           },
           "form_url": {
             "anyOf": [
@@ -19002,6 +19240,238 @@
           }
         ],
         "summary": "Publish Form",
+        "tags": [
+          "research-journey"
+        ]
+      }
+    },
+    "/api/platform/v3/projects/{project_id}/research/{research_id}/journey/form/{form_id}": {
+      "patch": {
+        "operationId": "personal_research_journey_form_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "pattern": "^[a-z][a-z0-9-]{1,62}$",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "research_id",
+            "required": true,
+            "schema": {
+              "pattern": "^research_[a-f0-9]{26}$",
+              "title": "Research Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "form_id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9]{1,64}$",
+              "title": "Form Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NativeFormPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NativeFormRevision"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Native Form Patch",
+        "tags": [
+          "research-journey"
+        ]
+      },
+      "put": {
+        "operationId": "personal_research_journey_form_replace",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "pattern": "^[a-z][a-z0-9-]{1,62}$",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "research_id",
+            "required": true,
+            "schema": {
+              "pattern": "^research_[a-f0-9]{26}$",
+              "title": "Research Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "form_id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9]{1,64}$",
+              "title": "Form Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NativeFormReplace"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NativeFormRevision"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Native Form Replace",
+        "tags": [
+          "research-journey"
+        ]
+      }
+    },
+    "/api/platform/v3/projects/{project_id}/research/{research_id}/journey/form/{form_id}/definition": {
+      "get": {
+        "operationId": "personal_research_journey_form_definition",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "pattern": "^[a-z][a-z0-9-]{1,62}$",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "research_id",
+            "required": true,
+            "schema": {
+              "pattern": "^research_[a-f0-9]{26}$",
+              "title": "Research Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "form_id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9]{1,64}$",
+              "title": "Form Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "idea_id",
+            "required": true,
+            "schema": {
+              "pattern": "^idea_[A-Za-z0-9]{20,32}$",
+              "title": "Idea Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NativeFormRevision"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Native Form Definition",
         "tags": [
           "research-journey"
         ]

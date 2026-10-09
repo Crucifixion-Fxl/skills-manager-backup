@@ -307,6 +307,27 @@ REVIEWED_ROUTES: Final = (
     ),
     _route(
         "v3",
+        "GET",
+        JOURNEY + "/form/{form_id}/definition",
+        "personal_research_journey_form_definition",
+        action="forms.read",
+    ),
+    _route(
+        "v3",
+        "PUT",
+        JOURNEY + "/form/{form_id}",
+        "personal_research_journey_form_replace",
+        action="forms.create",
+    ),
+    _route(
+        "v3",
+        "PATCH",
+        JOURNEY + "/form/{form_id}",
+        "personal_research_journey_form_patch",
+        action="forms.create",
+    ),
+    _route(
+        "v3",
         "POST",
         JOURNEY + "/campaign-draft",
         "personal_research_journey_campaign_draft",

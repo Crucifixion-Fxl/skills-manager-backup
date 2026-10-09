@@ -187,9 +187,9 @@ def validate_mr(
         raise CleanupError("MR target branch is missing or invalid")
     if not isinstance(default_branch, str) or not default_branch:
         raise CleanupError("GitLab project default branch is missing or invalid")
-    if target_branch != default_branch:
-        raise CleanupError("MR target branch is not the repository default branch")
     if target_branch == branch:
+        raise CleanupError("MR target branch matches the local branch")
+    if default_branch == branch:
         raise CleanupError("refusing to delete the repository default branch")
 
 

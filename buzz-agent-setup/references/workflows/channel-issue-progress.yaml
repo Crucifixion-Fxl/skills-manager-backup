@@ -1,0 +1,23 @@
+# Generate with render_channel_issue_workflow.py. Enable only after channel-specific gates pass.
+name: channel-issue-progress
+description: 每日北京时间22:00汇总24小时频道讨论，完成后维护对应已有Issue的进展。
+enabled: false
+trigger:
+  on: schedule
+  # UTC 14:00 = Asia/Shanghai 22:00；每天，包括周末。不要再加8小时。
+  cron: "0 14 * * *"
+steps:
+  - id: wake
+    action: send_message
+    text: >-
+      @__AGENT_NAME__ 使用 $addx:channel-issue-progress。
+      [channel-issue-wake:v1] 对象为本Workflow绑定的当前频道；每天北京时间22:00启动。
+      以本次计划触发时刻的22:00为固定终点，汇总前24小时（起点含、终点不含）；
+      延迟运行仍用原计划日期，无法证明日期/频道/run来源则停止，不猜最新消息。
+      完整读取根消息与线程，纳入人类和AI原创的实质讨论进展；同步镜像与自身回执去重。
+      回读可信当前Canvas，仓库取固定授权交集；识别对应已有Issue，处理完成后追加进展评论与来源。
+      每项讨论须为已读回写入、已存在证据、非实质消息或明确待处理；未匹配/多义/无权不丢弃。
+      不自动新建Issue、修改负责人/状态、扩权限、实施或合并。
+      缺完整读取、持久账本、单writer/锁或写后读回时只产草稿并记录owner与恢复条件；
+      未知写结果只读对账，不盲重试，不推进未完成范围。
+      结果回本次Workflow原Thread，带[channel-issue-result:v1]，只列目标链接和真实计数。

@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "tool": "zendesk",
+  "provider": "delegated",
+  "owner": "zendesk",
+  "authContract": "references/saas-access.md",
+  "verification": "source-verified",
+  "runtimeVerification": "pending",
+  "authDiscovery": "references/auth-discovery.json"
+}

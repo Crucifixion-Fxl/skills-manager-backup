@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "2e466b8d-be07-4bed-89d1-38599f8ca635",
+  "path": "network-diagnosis",
+  "path_key": "network-diagnosis",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/infrastructure/network-diagnosis",
+    "branch": null
+  }
+}

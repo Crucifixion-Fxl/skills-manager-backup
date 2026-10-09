@@ -1,38 +1,42 @@
 ---
 name: dev-workflow
-description: Standard R&D process orchestrator — guides the full development lifecycle from User Story to CD. Invoke when user says "start a new feature", "new requirement", "我要开发一个新功能", "开始需求", "next step?", "研发流程", or resumes work on an existing feature. Also invoke proactively when any non-trivial feature work begins, even if the user just says "let's build X". 支持 task-list 模式（resume / parallel dispatch）：当用户说 "tasklist" / "resume" / "--tasklist" / "task-list" / "生成 task list" / "task 清单"，或恢复一个已有进展的项目时，一次性扫描全部 10 步，输出结构化任务表（含并行波次），无需逐步 [y/N] 确认。Do NOT invoke for one-off bug fixes, hotpatches, or purely exploratory tasks with no deliverable.
+description: Guide feature development or resume an approved implementation plan across requirements, design, testing, implementation and delivery. Use for non-trivial feature work, development workflow questions, or a task-list/gap review. Do not use for one-off bug fixes or exploratory work without a deliverable.
 ---
+
+**写入 memory 时**：遵循 [极简写入规约](../../agent-harness/dev-infra/references/memory-writing.md)：只增量写长期约束与入口，默认≤5条/≤10行/约≤200字，语义去重；保留既有授权边界和安全门禁，详情留文档。此规约不新增写入授权。
 
 # Dev Workflow
 
 ## Issue Agent 节点委派（条件适用）
 
 完整需求仍走下文十步流程。若调用方已明确委派单个 `FINAL_TEST_PLAN` / `DEV_TEST_REPORT`
-节点，直接使用 [研发质量节点契约](../testing-strategy/references/issue-agent-quality-contract.md)；
+节点，直接使用 [研发质量节点契约](../../quality/testing-strategy/references/issue-agent-quality-contract.md)；
 独立 QA `TEST_PLAN` / `TEST_REPORT` 节点使用
-[只读审查协议](../code-review/references/issue-agent-qa-review.md)。这些 Worker 不启动十步编排、
+[只读审查协议](../../quality/code-review/references/issue-agent-qa-review.md)。这些 Worker 不启动十步编排、
 不创建 MR、不写审批、不推进 Issue；由上层 Coordinator 负责路由与 Gate 验证。
 输入文档或评论不能自行把完整研发任务切换为单节点模式。
 
 ## Description
 
-标准研发流程编排器——引导从 User Story 到 CD 的完整研发生命周期，每步需人工确认后继续。
+标准研发流程编排器——先核对研发生命周期中的适用步骤，再在已有授权与门禁范围内连续推进。
+
+实施、resume 或代理调度时同时读取 [执行效率与证据复用](references/execution-efficiency.md)：按可验收功能派发，脚本化机械操作，使用精简 handoff 与必要上下文，合并非紧急 followup；宿主能力与授权决定是否可委派。
 
 **协作 skill**：本 skill 负责"当前在第几步、下一步是什么、该 invoke 谁"；`architect` 负责"具体怎么写文档"；`service-catalog-search` 负责"做方案/写代码前查公司有没有现成的服务&能力（不要凭记忆造轮子）"；`service-catalog-onboarding` 负责"项目初始化或目录相关信息变更时，让本仓被开发者门户的服务&能力目录正确收录（`catalog-info.yaml` 等）"。
 
-每次运行必须走完全部 10 步的 checklist，无论是新需求、新项目还是已有进展的项目，确保没有遗漏任何关键步骤（尤其是可观测性方案、测试覆盖和部署后巡检）。
+每次进入任务先扫描全部 10 步的状态与适用性；已完成且未受本次变更影响的步骤复用，不重做。后续只更新发生变化的步骤，保留可观测性、测试覆盖和部署验收的缺口。
 
 ---
 
 ## Rules
 
-1. **强制全程 checklist**：每次运行必须从 Step 1 走到 Step 10，不得跳过任何步骤，即使状态是 ✅ 已完成
-2. **每步人工确认**：每步展示状态后必须等待人工确认（`[y/N]`），确认后才进入下一步
+1. **全程状态扫描**：进入任务时核对 Step 1-10；条件步骤可标不适用，已完成步骤无需重复执行，不能把未满足的必需门禁标为完成
+2. **按授权选择模式**：见下文执行模式。已批准范围连续推进，只有用户明确要求逐步指导时才逐步 `[y/N]`；阶段汇报不自动成为等待点
 3. **Observability 不可选**：Step 5 可观测性方案是必须步骤，不得以"暂时不需要"为由跳过
 4. **文档先于代码**：Step 6 TDD 实现前，Steps 1-5 的文档产物必须全部存在并确认
-5. **首次运行初始化**：检测到项目无 `CLAUDE.md` 或无 workspace skill 时，自动执行项目初始化
+5. **首次运行初始化**：已授权实施且项目缺 `CLAUDE.md` 或 workspace skill 时补齐；只读/仅清单模式只报告缺口
 6. **所有 US/AC 必须有 L3 黑盒覆盖**：Step 4 测试方案中，每条 User Story / AC 必须有对应的 L3 黑盒用例；有 UI 的业务能力用 E2E/UI，technical vertical 用 public API / harness
-7. **Task-list 模式 bypass 每步 [y/N]**：当被 `tasklist` / `resume` / `--tasklist` / `task-list` / `生成 task list` / `task 清单` 等参数触发，或检测到项目有 ≥3 步 ⚠️/❌ 且用户说 "resume" / "continue" 时，一次性跑完 10 步状态检测并输出结构化任务表（含并行波次），整个流程**仅在末尾**询问一次"是否派发 agent"，不再逐步打断
+7. **Task-list 不扩大授权**：只要求清单时输出状态表与依赖，不实施、不派发、不写平台；已授权实施时按依赖推进，不重复询问派发。并行仍受宿主能力和授权约束
 8. **Progress 由 dev-workflow 维护**：跨多步实现、vertical 开发、resume/continue、交付前总结时，创建或更新就近的 `progress.html`；它只记录当前实现、验证、缺口和下一步，设计机制仍链接到 architect / testing-strategy 的 SSOT，不在 progress 中复制
 9. **项目文档产物默认 HTML**：PRD / US / 架构 / 测试 / 可观测性 / 部署 / progress 等写入 `docs/**/*.html`。
    **两个例外，md 与 html 都可以**：`docs/design/<模块>/`（模块设计，长期演进）与 `docs/requirements/<iid>/plan.md`（本次实现计划，一次性）。
@@ -40,6 +44,23 @@ description: Standard R&D process orchestrator — guides the full development l
    Markdown 另外保留给 GitLab comment、skill 内部 reference、`CLAUDE.md` / `AGENTS.md` 等 agent 指令文件。
 10. **Requirements exact-hash 门禁**：任何需求类工作必须先 invoke `requirements-analysis-agent`。`REQUIREMENTS_READY_FOR_PO_REVIEW` 仅是传输 marker；ready 唯一以结构化产物的权威 envelope 字段 `status_or_verdict: READY_FOR_PO_REVIEW` 判定，并要求 `content.readiness` 同值作为契约镜像，needs-input 唯一以 `outcome_kind: ATTEMPT_NEEDS_INPUT` 判定；字段冲突、marker 与 payload 不一致或只有 marker 时必须拒绝。只有 ready 产物经 PO 对精确 `artifact_id + artifact_hash` ACCEPT 后，才可进入 Step 2；`ATTEMPT_NEEDS_INPUT`、缺少 Artifact/hash 或未接受均停止。`dev-workflow` 不自行重建一份较弱的需求契约。
 11. **Producer 与 Gate 分权**：Requirements Agent 只产出 Artifact 或 ATTEMPT_NEEDS_INPUT，不得执行、签署或记录 ACCEPT。Coordinator 请求并验证独立 PO Gate；验收角色、独立身份和 exact-hash 证据以 `requirements-analysis-agent/references/requirements-contract.md` 为准。
+12. **全流程 Issue identity 不漂移**：Step 1 前按 [`gitlab-issue-sop` 生命周期契约](../../collaboration/gitlab-issue-sop/references/lifecycle-binding.md) 实时验证 Root Issue 和当前仓 Work Item。Requirements、设计、测试、开发分支、MR、CI/CD、部署、验收与最终关闭均复用该 binding；跨仓时每仓各有 Work Item，并原生关联 Root Issue。
+
+## 执行模式与真实门禁
+
+- **连续实施（已有授权）**：用户要求实现、修复或继续已批准计划时，自动进入下一项依赖已满足的任务，不按固定任务数停下、不重复重开已确认的设计。先读 [实施与验证调度](references/implementation-execution.md)。
+- **只规划/只读**：用户只要方案、task-list、gap review，或明确要求先 review 时，完成所要求的草稿后交给用户；清单中的 Action 不是执行授权，不自动询问是否派发。
+- **逐步指导（显式选择）**：用户要求每步确认/教学时，使用文末确认模板。
+
+后文“确认/等确认/询问是否进入下一步”仅用于逐步指导或确有未决选择。Requirements exact-hash PO ACCEPT、G1/G2、UI 设计接受、独立 QA/人工测试 Gate 及发布审批仍是实际门禁，不能用“Implement the plan”冒充缺失的签核。已有有效批准不重复索取；缺口只阻塞其依赖任务，继续其他已授权且不依赖该缺口的工作。发布、权限设置与平台写入仍逐项遵守已有授权范围。
+
+## 执行模式与真实门禁
+
+- **连续实施（已有授权）**：用户要求实现、修复或继续已批准计划时，自动进入下一项依赖已满足的任务，不按固定任务数停下、不重复重开已确认的设计。先读 [实施与验证调度](references/implementation-execution.md)。
+- **只规划/只读**：用户只要方案、task-list、gap review，或明确要求先 review 时，完成所要求的草稿后交给用户；清单中的 Action 不是执行授权，不自动询问是否派发。
+- **逐步指导（显式选择）**：用户要求每步确认/教学时，使用文末确认模板。
+
+后文“确认/等确认/询问是否进入下一步”仅用于逐步指导或确有未决选择。Requirements exact-hash PO ACCEPT、G1/G2、UI 设计接受、独立 QA/人工测试 Gate 及发布审批仍是实际门禁，不能用“Implement the plan”冒充缺失的签核。已有有效批准不重复索取；缺口只阻塞其依赖任务，继续其他已授权且不依赖该缺口的工作。发布、权限设置与平台写入仍逐项遵守已有授权范围。
 
 ---
 
@@ -63,15 +84,15 @@ AI：
 状态：✅ 已完成
 产物：docs/product/user-stories/postcard.html
 
-需要更新这一步吗？[y/N（默认跳过）]
+已有产物有效，复用。
 
-...（Steps 2-4 同样展示状态）...
+...（一次汇总 Steps 2-4 状态，不逐步等待）...
 
 ── Step 5 — 可观测性方案 ──────────────
 状态：❌ 缺失
 产物：docs/architecture/postcard/observability.html — 不存在
 
-需要更新这一步吗？[y/N（默认跳过）]
+先补齐已授权的可观测性缺口；未授权的外部配置列出 owner 与放行条件。
 ```
 
 即使用户说"代码写完了"，也必须先检查可观测性方案是否存在。
@@ -131,10 +152,10 @@ Parallel batch 2: T4                  (deps: T2)
 Parallel batch 3: T5                  (deps: T4)
 Serial-only: (none)
 
-Run `Agent`-tool dispatches per batch? [y/N]（default: yes for parallel batches, no for serial）
+只输出清单；是否执行及派发以用户已有授权为准。
 ```
 
-效果：用户一屏看清差距、并行波次和依赖边，10 次 [y/N] 折叠成 1 次。
+效果：用户一屏看清差距、波次与依赖；只要清单时不附加执行动作。
 
 ---
 
@@ -144,7 +165,7 @@ Run `Agent`-tool dispatches per batch? [y/N]（default: yes for parallel batches
 
 在项目 `.agents/skills/{project-name}-workspace/SKILL.md` 中生成一个项目特定的开发指南 skill。这个 skill 的作用是让新 Claude 实例（或新工程师）快速了解项目的所有关键信息。
 
-**触发条件**：首次在项目中运行 `dev-workflow` 时，或 `.agents/skills/{project-name}-workspace/` 不存在时。
+**触发条件**：已授权实施，且首次进入项目或 `.agents/skills/{project-name}-workspace/` 不存在。只读/仅规划模式只记录缺口，不创建文件。
 
 **内容来源**：从以下位置收集信息：
 - `docs/architecture/overview.html` — 系统架构
@@ -240,17 +261,17 @@ description: {Project Name} 项目开发向导。当在 {project-name} 项目工
 
 ## 全流程 Checklist（必须每次执行）
 
-**无论是新需求、新项目，还是已有进展的项目，每次运行都必须从 Step 1 走到 Step 9，逐步确认。**
+**新任务或恢复任务先核对 Step 1-10；状态变化后只检查受影响项。扫描不要求重做已完成步骤。**
 
-对每一步，先扫描对应路径判断当前状态，然后展示状态并请求确认：
+先扫描对应路径，汇总当前状态与缺口，再按执行模式推进：
 
 | 状态 | 含义 | 行动 |
 |------|------|------|
-| ✅ 已完成 | 文档/产物存在且内容完整 | 展示摘要，询问是否需要更新 |
+| ✅ 已完成 | 文档/产物有效且未受本次变更影响 | 复用有效产物与批准 |
 | ⚠️ 需更新 | 文档存在但与当前需求不匹配 | 触发对应 skill 更新 |
 | ❌ 缺失 | 文档/产物不存在 | 触发对应 skill 从头创建 |
 
-每步都必须经过人工确认（"继续下一步？"）才能推进，即使状态是 ✅。这确保每个步骤都经过有意识的检查，而不是自动跳过。
+连续实施不逐步等待；只有显式逐步指导使用确认模板。实际签核 Gate 始终按原契约核验，不因跳过重复询问而省略。
 
 ---
 
@@ -273,7 +294,7 @@ description: {Project Name} 项目开发向导。当在 {project-name} 项目工
 | Step 2.5 | `paper-ui-design` | Paper UI 设计稿 |
 | Step 3 | `dev-infra` | L1/L2/L3 本地环境方案（同时生成仓根 + 各代码一级子目录 CLAUDE.md + AGENTS.md 软链） |
 | Step 4 | `testing-strategy` | 分层测试策略生成 |
-| Step 5 | `tracker-manager` | 埋点查询与创建 |
+| Step 5 | `tracking-lifecycle` | 埋点查询与创建 |
 | Step 5 | `prometheus` | 告警规则审计 |
 | Step 5 | `grafana` | Dashboard 面板管理 |
 | Step 5 | `prom-grafana-dev` | 本地可观测性 TDD 契约（verify.sh 产出） |
@@ -308,7 +329,7 @@ description: {Project Name} 项目开发向导。当在 {project-name} 项目工
 2. 询问用户是否有额外的飞书文档链接（PRD 或 US）。如有，按 `feishu-channel-rules` 完成门禁后，使用已批准 profile 执行 `"$APPROVED_NODE" "$APPROVED_LARK_CLI_ENTRY" --profile <approved-profile> docs +fetch --as user --doc <飞书文档URL>`；若为 PRD，保存到 `docs/product/prd/{service}.html`。
 3. Invoke `requirements-analysis-agent` 固定 canonical source/digest，并由它以 review-only 模式调用 `story-craftsman` 及其他命中的公司 Skills；不得直接调用 story-craftsman 后绕过 Requirements Artifact。
 4. 若返回 `ATTEMPT_NEEDS_INPUT`，展示合并问题并停在 Step 1；若 ready，保存不可覆盖的 REQUIREMENTS Artifact 与内容 SHA-256。
-5. Coordinator 要求独立 PO 对精确 `artifact_id + artifact_hash` 作 ACCEPT/REJECT，并验证签署身份与 exact-hash readback；Requirements Agent 不得执行、签署或记录 ACCEPT。Gate 决策追加记录，不覆盖历史。未 ACCEPT 禁止 Step 2 及其后所有动作。
+5. Coordinator 要求独立 PO 对精确 `artifact_id + artifact_hash` 作 ACCEPT/REJECT，并验证签署身份与 exact-hash readback；Requirements Agent 不得执行、签署或记录 ACCEPT。Gate 决策追加记录，不覆盖历史。未 ACCEPT 禁止该需求依赖批准的 Step 2 及后续动作；不阻塞无关且已授权的任务。
 6. PO ACCEPT 后，如需项目 HTML US 文档，才授权 story-craftsman 从已接受 Artifact 派生写入 `docs/product/user-stories/{service}.html`；如需头脑风暴，invoke `superpowers:brainstorming`，但不得改变已接受需求。变更需求必须创建新 Attempt 并重新 Gate。
 
 ### 1.1 需求定性（强制门禁，缺一不可进入 Step 2）
@@ -325,7 +346,7 @@ US 完成后，必须逐项确认以下信息，全部填写完毕方可进入�
 | **可量化的核心指标** | 本次需求成功的可度量 KPI（如：分享完成率、DAU、p99 延迟） | 仅"基础设施改造/纯技术债清理"类需求可填"N/A（基础设施）"，其余必须提供至少一个具体指标 |
 | **source_issue** | GitLab issue URL（需求正本所在） | **不允许为空** |
 
-> **红线**：上表任意一项未填写（含 `source_issue` 缺失），或核心指标在非基础设施场景下为空，**禁止进入 Step 2**。`source_issue` 缺失时必须停下：要么请用户提供 issue 链接，要么 invoke `gitlab-issue-sop` 先跨仓查重再创建 issue——**禁止无 issue 开写 US**。（#61 G-1，详见 docs/architecture/skill-artifact-delivery-implementation.html §10）
+> **红线**：上表任意一项未填写（含 `source_issue` 缺失），或核心指标在非基础设施场景下为空，**禁止进入 Step 2**。`source_issue` 缺失时必须停下：要么请用户提供 issue 链接，要么 invoke `gitlab-issue-sop` 先跨仓查重再创建 issue——**禁止无 issue 开写 US**。（#61 G-1，详见 docs/development/architecture/skill-artifact-delivery-implementation.html §10）
 
 **完成标准**：每条 US 有 Background + User Story + AC（Given/When/Then），**无**技术实现细节；1.1 需求定性表全部填写完毕。
 
@@ -335,13 +356,13 @@ US 完成后，必须逐项确认以下信息，全部填写完毕方可进入�
 - Each US must have AC in Given/When/Then format
 ```
 
-**确认**：展示 US 列表 + 需求定性表，询问用户"✅ US + 需求定性完成，进入 Step 2（技术方案）？"
+**阶段汇报**：US + 需求定性完成，进入 Step 2（技术方案）；有效门禁与依赖满足后继续，逐步指导模式才询问下一步。
 
 ### G1 Gate — 需求 → 方案（进入 Step 2 前的机器可查门禁）
 
 - G1 通过条件：1.1 定性表（含 `source_issue`）齐全 + issue 存在且可机器查（URL 可访问、iid 与仓库匹配）+ 需求 owner 在 issue comment 确认（个人仓可会话内 `[y]` 代替，但需在 issue comment 留痕）。
 - 未过 G1 禁止进入 Step 2。每次 Gate 流转必须**追加 issue comment + 更新状态 label**（`status::` 按五状态工作流推进），不要只停留在会话里。
-- **红线：AI 不得自我批准** —— AI 只能准备证据、发起/回链 MR、提醒 reviewer；approve 必须来自人（或独立 PO 身份）。（#61 X-2 / G-4，详见 docs/architecture/skill-artifact-delivery-implementation.html §10）
+- **红线：AI 不得自我批准** —— AI 只能准备证据、发起/回链 MR、提醒 reviewer；approve 必须来自人（或独立 PO 身份）。（#61 X-2 / G-4，详见 docs/development/architecture/skill-artifact-delivery-implementation.html §10）
 
 ---
 
@@ -358,13 +379,13 @@ US 完成后，必须逐项确认以下信息，全部填写完毕方可进入�
 
 **完成标准**：架构图（Mermaid）+ 组件职责表 + 术语映射，单文件 ≤ 600 行。
 
-**确认**：询问"✅ 技术方案完成，进入 Step 2.5（UI 方案确认）？"
+**阶段汇报**：技术方案完成，进入 Step 2.5（UI 方案确认）；有效门禁与依赖满足后继续，逐步指导模式才询问下一步。
 
 ### G2 Gate — 方案 → 实施（进入 Step 6 前的批准门禁）
 
 - 架构/方案文档走 MR：**获得 ≥1 个 approve 后方可作为实现依据**进入 Step 6。个人仓豁免 approve，但 **MR 照建**（留痕不可豁免）。
 - G2 通过后追加 issue comment（回链方案 MR）+ 状态 label 流转，与 G1 同一留痕纪律。
-- **红线：AI 不得自我批准** —— AI 只能准备方案证据、发起 MR、@reviewer 提醒；approve 来自人。（#61 X-2 / G-4，详见 docs/architecture/skill-artifact-delivery-implementation.html §10）
+- **红线：AI 不得自我批准** —— AI 只能准备方案证据、发起 MR、@reviewer 提醒；approve 来自人。（#61 X-2 / G-4，详见 docs/development/architecture/skill-artifact-delivery-implementation.html §10）
 
 ---
 
@@ -376,7 +397,7 @@ US 完成后，必须逐项确认以下信息，全部填写完毕方可进入�
 
 **行动**：
 1. Invoke `paper-ui-design` skill，完整走完 Phase 1 + Phase 2 流程：
-   - 读取相关 US 文档与 `~/.claude/skills/paper-ui-design/ds_token.md` 中的 Token
+   - 读取相关 US 文档与 `~/.claude/skills/product/paper-ui-design/ds_token.md` 中的 Token
    - 引导用户打开 Paper 组件库（可选跳过）
    - 在 Paper 新建 Page，按视觉分组增量构建 UI 设计稿
    - 每 2-3 步截图，按 7 项 Review Checkpoint 评估并修复
@@ -390,7 +411,7 @@ US 完成后，必须逐项确认以下信息，全部填写完毕方可进入�
 - Paper 设计稿已完成，通过全部 7 项 Review Checkpoint
 - `docs/ui/ui-implementation-strategy.html` 已创建或更新，包含本次 UI 所有组件规格
 
-**确认**：询问"✅ UI 方案确认完成，进入 Step 3（开发环境）？"
+**阶段汇报**：UI 方案确认完成，进入 Step 3（开发环境）；有效门禁与依赖满足后继续，逐步指导模式才询问下一步。
 
 ---
 
@@ -411,7 +432,7 @@ US 完成后，必须逐项确认以下信息，全部填写完毕方可进入�
 
 **完成标准**：`make dev-up` / `make dev-down` 可用，多 worktree 端口不冲突。
 
-**确认**：询问"✅ 开发环境设计完成，进入 Step 4（测试方案）？"
+**阶段汇报**：开发环境设计完成，进入 Step 4（测试方案）；有效门禁与依赖满足后继续，逐步指导模式才询问下一步。
 
 ---
 
@@ -435,7 +456,7 @@ Issue Agent 场景下，此处是编码前初始设计；有实际 diff 后由�
 - Test files location: docs/testing/
 ```
 
-**确认**：询问"✅ 测试方案完成，进入 Step 5（可观测性方案）？"
+**阶段汇报**：测试方案完成，进入 Step 5（可观测性方案）；有效门禁与依赖满足后继续，逐步指导模式才询问下一步。
 
 ---
 
@@ -447,7 +468,7 @@ Issue Agent 场景下，此处是编码前初始设计；有实际 diff 后由�
 
 **新服务额外步骤**：若本次需求**新增了独立部署的服务**，额外 invoke `sentry-onboarding` 在 staging + prod 创建 Sentry 项目并发放 DSN。复用现有服务的场景不需要重复。
 
-以下 5.0-5.7 是手工 fallback — 仅当 `observability-design` 不可用、或需要对方法论产出做补充约定（如 `measurement_id` 命名、GrowthBook 实验结构）时参考。每步输出内容给用户确认后再推进。
+以下 5.0-5.7 是手工 fallback — 仅当 `observability-design` 不可用、或需要对方法论产出做补充约定（如 `measurement_id` 命名、GrowthBook 实验结构）时参考。按执行模式汇总未决选择；已确认且未变化的方案直接复用，不逐小节等待。
 
 ---
 
@@ -463,7 +484,7 @@ Issue Agent 场景下，此处是编码前初始设计；有实际 diff 后由�
 | 是否需要 A/B 实验 | 基于 GrowthBook |
 | 是否高风险链路 | 故障影响面大、数据不可逆等 |
 
-输出范围确认表，等用户确认后继续。
+输出范围表；仅有未确认且影响后续实施的选择时等待，已有有效决策直接复用。
 
 ---
 
@@ -490,13 +511,13 @@ Issue Agent 场景下，此处是编码前初始设计；有实际 diff 后由�
 | `primary_metric` | 核心指标 |
 | `guardrail_metrics` | 护栏指标（可选） |
 
-用户确认 Measurement Design 后继续。
+Measurement Design 的有效决策未变化时继续；新增未决选择按执行模式处理。
 
 ---
 
 ### 5.2 Event Tracking — 埋点设计
 
-1. Invoke `tracker-manager` 查询现有埋点，确认本次 US 需要新增哪些用户行为事件。
+1. Invoke `tracking-lifecycle` 查询现有埋点，确认本次 US 需要新增哪些用户行为事件。
 2. 以表格形式列出所有候选事件，给用户确认：
 
 | event_name | 分类 | 策略 | 说明 |
@@ -524,7 +545,7 @@ context:
 ownership: 默认为用户所在团队
 ```
 
-用户确认埋点方案后，在 `tracker-manager` 中创建工单，走埋点审核发布流程。
+用户确认埋点方案后，在 `tracking-lifecycle` 中创建工单，走埋点审核发布流程。
 
 ---
 
@@ -665,27 +686,23 @@ docs/architecture/{service}/observability.html
 
 **完成后写入 CLAUDE.md**（若未存在）：
 ```
-- Observability: Snowplow tracking (via tracker-manager) + OTel + Prometheus alerts
+- Observability: Snowplow tracking (via tracking-lifecycle) + OTel + Prometheus alerts
 - Observability docs: docs/architecture/{service}/observability.html
 ```
 
-**确认**：询问"✅ 可观测性方案完成，进入 Step 6（TDD 实现）？"
+**阶段汇报**：可观测性方案完成，进入 Step 6（TDD 实现）；有效门禁与依赖满足后继续，逐步指导模式才询问下一步。
 
 ---
 
 ## Step 6 — TDD 实现
 
-**目标**：Test-first 实现所有功能，优先使用 Claude Code agent teams 并行。
+**目标**：Test-first 实现已批准范围，尽快交付可独立验收的功能。
 
 **行动**：
-1. 展示实现计划（来自 Step 2 的 writing-plans 产物），询问用户：
-   - 哪些任务可以并行？
-   - 哪些任务必须串行？
-2. 根据用户确认：
-   - **并行任务**：invoke `superpowers:dispatching-parallel-agents`
-   - **串行/当前会话**：invoke `superpowers:subagent-driven-development`
-3. 每个任务遵循 `superpowers:test-driven-development`（先写测试，再写实现）。
-4. 代码实现完成后，invoke `code-review` 对本地 diff 做自审（三维度 + 多角色多轮）。红线问题就地修复，P1/P2 建议保留在 review 文档中，Step 7 再批量入 issue。
+1. 读取批准的计划、当前进展与有效 Gate；按 [实施与验证调度](references/implementation-execution.md) 完成相关环境 preflight 并选择依赖已满足的任务。
+2. 简单或紧耦合任务由主会话直接实施。多模块独立任务在宿主允许且已授权委派时按文件所有权派发；共享状态由唯一集成 owner 串行更新，不为了固定流程拆成细碎 agent。
+3. 行为变更遵循 `superpowers:test-driven-development`，先确认相关失败测试再修复；环境故障不充当 RED。
+4. 每个可验收 wave 集成后 invoke `code-review` 自审。相同 diff、相同证据、无新风险时复用已有结论；有新 diff 或契约变化时复审受影响范围。独立 reviewer 和安全专项门禁仍按 Step 7 执行，不以自审替代。
 
 ### 6.4 Bug Fix 左移复盘（强制）
 
@@ -698,7 +715,7 @@ docs/architecture/{service}/observability.html
 
 **完成标准**：所有已实现 AC 的 L3 黑盒测试通过；L1/L2 测试通过；无 broken tests；本地 `code-review` 结论为"通过"或"有条件通过"。
 
-**确认**：询问"✅ 实现完成 + 本地 review 通过，进入 Step 6.5（本地验证门）？"
+**阶段汇报**：实现完成 + 本地 review 通过，进入 Step 6.5（本地验证门）；有效门禁与依赖满足后继续，逐步指导模式才询问下一步。
 
 ---
 
@@ -709,6 +726,8 @@ docs/architecture/{service}/observability.html
 Issue Agent 的受控 RC 验证另按节点契约执行：当前有效方案 Gate → 研发在 exact RC 上测试 →
 DEV_TEST_REPORT → 独立 QA 报告 Review → 人工报告 Gate；本地自测通过不代替这些验收。
 
+实施期间先运行受影响的定向测试；进 MR 前在干净候选版本上执行必要完整 CI 作业和以下适用检查，保存版本/环境/命令/结果。仅在候选版本、依赖、配置、构建产物和测试数据状态均未变化且此前结果完整成功时复用，不为通过两个流程步骤机械重跑。具体证据失效规则见 [实施与验证调度](references/implementation-execution.md)。
+
 进 MR 前必须本地跑绿：
 - `make dev-check` — 所有服务健康
 - `make test-l1` — L1 单测全绿
@@ -718,7 +737,7 @@ DEV_TEST_REPORT → 独立 QA 报告 Review → 人工报告 Gate；本地自测
 
 **禁止**：跳过本地验证直接推送依赖 CI 捕获。CI 是最后一道防线，不是第一道。
 
-**确认**：询问"✅ 本地验证完毕，进入 Step 6.6（Progress Snapshot）？"
+**阶段汇报**：本地验证完毕，进入 Step 6.6（Progress Snapshot）；有效门禁与依赖满足后继续，逐步指导模式才询问下一步。
 
 ---
 
@@ -747,11 +766,11 @@ DEV_TEST_REPORT → 独立 QA 报告 Review → 人工报告 Gate；本地自测
 - 审计结果属于当前状态，由 dev-workflow 维护；`testing-strategy` skill 只定义审计表格式。
 
 **Issue checklist 对账**：
-- 若本次需求存在绑定的 `source_issue`，progress 更新时必须与 issue description checklist **对账**；不一致时列出差异（哪几项两边状态不同），并提醒用户修正哪边（以实际代码/验证证据为准）。（#61 G-6，详见 docs/architecture/skill-artifact-delivery-implementation.html §10）
+- 若本次需求存在绑定的 `source_issue`，progress 更新时必须与 issue description checklist **对账**；不一致时列出差异（哪几项两边状态不同），并提醒用户修正哪边（以实际代码/验证证据为准）。（#61 G-6，详见 docs/development/architecture/skill-artifact-delivery-implementation.html §10）
 
 **完成标准**：`progress.html` 能让新的 Agent 直接知道“现在完成到哪、如何验证、还差什么”，且所有机制性内容都能跳回 SSOT。
 
-**确认**：询问"✅ Progress Snapshot 已更新，进入 Step 7（MR + Review）？"
+**阶段汇报**：Progress Snapshot 已更新，进入 Step 7（MR + Review）；有效门禁与依赖满足后继续，逐步指导模式才询问下一步。
 
 ---
 
@@ -772,7 +791,9 @@ DEV_TEST_REPORT → 独立 QA 报告 Review → 人工报告 Gate；本地自测
 
 **完成标准**：MR 创建成功 + CI 全绿 + 无 merge conflict + `code-review` 结论为"通过"或"有条件通过" + 敏感变更的 `security-compliance-review` 无红线问题。
 
-**确认**：询问"✅ MR + review 完成，进入 Step 8（CI 配置）？"
+**Issue 回执**：记录 MR URL、exact head SHA、verified Issue association 与 review 结论并回读。MR 可合并或 CI 全绿均不关闭 Root Issue。
+
+**阶段汇报**：MR + review 完成，进入 Step 8（CI 配置）；有效门禁与依赖满足后继续，逐步指导模式才询问下一步。
 
 ---
 
@@ -787,7 +808,9 @@ DEV_TEST_REPORT → 独立 QA 报告 Review → 人工报告 Gate；本地自测
 
 **完成标准**：CI pipeline 全绿，L3 黑盒/E2E 在 CI 中运行。
 
-**确认**：询问"✅ CI 配置完成，进入 Step 9（CD）？"
+**Issue 回执**：记录 terminal pipeline ID/status、exact commit 与 artifact 链接；完整日志留在 CI，绿灯不等于发布或业务验收。
+
+**阶段汇报**：CI 配置完成，进入 Step 9（CD）；有效门禁与依赖满足后继续，逐步指导模式才询问下一步。
 
 ---
 
@@ -803,12 +826,14 @@ DEV_TEST_REPORT → 独立 QA 报告 Review → 人工报告 Gate；本地自测
 
 **完成标准**：merge to main 后自动触发部署，staging 环境验证通过。
 
+**Issue 回执**：部署由独立 Deployment Task 记录 artifact digest、环境、审批、operation/history 与结果；`Synced/Healthy`、HTTP 200 或 merge 不得单独写成完成。
+
 **完成后写入 CLAUDE.md**（若未存在）：
 ```
 - CD via ArgoCD, check docs/deployment/cd.html for deployment guide
 ```
 
-**确认**：询问"✅ CD 配置完成，进入 Step 10（部署后主动巡检）？"
+**阶段汇报**：CD 配置完成，进入 Step 10（部署后主动巡检）；有效门禁与依赖满足后继续，逐步指导模式才询问下一步。
 
 ---
 
@@ -827,7 +852,7 @@ DEV_TEST_REPORT → 独立 QA 报告 Review → 人工报告 Gate；本地自测
 
 **完成标准**：定时流水线首次跑通绿色，故障可在飞书群收到告警，ReportPortal 能看到历史结果。
 
-**完成**：恭喜！整个研发流程已完成。询问用户是否有后续需求。
+**完成**：巡检、运行态/业务验收和所需观察窗口完成后，把证据边界写回并读回；仅当所有 required child Tasks terminal 且 final receipt 完整时才关闭 Root Issue。否则保留 open，写明 owner 与 next gate。
 
 ---
 
@@ -872,14 +897,14 @@ DEV_TEST_REPORT → 独立 QA 报告 Review → 人工报告 Gate；本地自测
 - **显式参数**：用户调用时附带 `tasklist` / `resume` / `--tasklist` / `task-list` / `生成 task list` / `task 清单` 等关键词。
 - **隐式触发**：检测到项目状态有 **≥3 步**处于 ⚠️ 或 ❌，**且**用户表达了 "resume" / "continue" / "继续" / "接着搞" 等延续意图。
 
-若两类条件都不满足，回落到默认的**交互式 10 步 walkthrough**（本文档其余章节定义的行为，逐步 [y/N]，保持原状不变）。
+若两类条件都不满足，按“执行模式与真实门禁”判断连续实施、只规划或显式逐步指导；不默认逐步询问。
 
 ### Task-list 模式的行为约定
 
 1. **一次性扫完 10 步**：对每个 Step 执行与交互式模式**完全相同**的状态检测逻辑（路径扫描、文档存在性、内容时效性），但**不打印每步 prose、不询问 [y/N]**。
 2. **优先读取 Progress**：如果目标目录存在 `progress.html`，先读它作为当前状态输入，再用代码、测试、文档扫描校验是否过期；progress 不是事实本身，必须可验证。
 3. **统一聚合**：所有检测结果汇总到下方**唯一一张** Task List Table。
-4. **末尾单次确认门**：整轮扫描完成后，**仅在最后**问一次："Run `Agent`-tool dispatches per batch? [y/N]（默认 parallel batches 走 yes，serial-only 走 no）"，**不在每步中间插入任何 prompt**。
+4. **授权检查**：只要清单时到表格为止；已有实施授权时直接推进，不再设置派发确认门。确实缺少影响下一步的选择时集中提问，继续独立任务。
 
 ### Task List Table 输出格式（强制 schema）
 
@@ -911,24 +936,17 @@ Serial-only:      <task ids> (parallel-safe=no，必须主会话执行)
 ```
 
 派发约定：
-- 同一 batch 内的任务可一次性 dispatch（用 `superpowers:dispatching-parallel-agents`）。
-- batch i+1 必须等 batch i 全部完成再启动。
-- `Serial-only` 任务在主会话用 `superpowers:subagent-driven-development` 串行处理。
+- batch 是展示分组，不是全局 barrier。任务自己的 Depends on 和 Gate 已满足即可启动，不等待同批无关慢任务。
+- `Parallel-safe=yes` 只是安全性判断；只有宿主允许且已授权委派时才可 dispatch。每项写清文件所有权与不得撤销其他人的改动。
+- `Serial-only` 任务由唯一 owner 顺序处理，可直接实施，无需固定三 agent 评审链。
 
-### 末尾确认门（唯一交互点）
+### 末尾交付与授权
 
-输出完表与批次清单后，打印且**只打印一次**：
-
-```
-Run `Agent`-tool dispatches per batch? [y/N]（default: yes for parallel batches, no for serial）
-```
-
-- 用户答 `y`：按 batch 顺序 dispatch。
-- 用户答 `N` 或留空：仅输出计划，不动作。
+只要求 task-list 时交付表与依赖，不派发、不写 issue、不自动增加确认问题。用户已要求实施时按有效门禁和依赖调度，不重复确认是否执行。派发或平台写入超出已有授权时先准备具体请求，不能将默认选项、未回复或清单内的 Action 当作批准。
 
 ### 任务表派发后的 issue 回写
 
-任务表确认派发后，把任务清单（T 编号 / 依赖 / 状态）追加为 `source_issue` 的 comment（模板见进展评论 SOP），并提示用户 description checklist 勾选策略：默认**留到方案 MR 合并后统一勾**（避免中途反复改 description），除非用户要求即时逐项勾选。（#61 G-2，详见 docs/architecture/skill-artifact-delivery-implementation.html §10）
+任务表确认派发后，把任务清单（T 编号 / 依赖 / 状态）追加为 `source_issue` 的 comment（模板见进展评论 SOP），并提示用户 description checklist 勾选策略：默认**留到方案 MR 合并后统一勾**（避免中途反复改 description），除非用户要求即时逐项勾选。（#61 G-2，详见 docs/development/architecture/skill-artifact-delivery-implementation.html §10）
 
 ### 完整输出样例（hypothetical golf bootstrap）
 
@@ -948,22 +966,22 @@ Parallel batch 2: T4                  (deps: T2)
 Parallel batch 3: T5                  (deps: T4)
 Serial-only: (none)
 
-Run `Agent`-tool dispatches per batch? [y/N]（default: yes for parallel batches, no for serial）
+只输出清单；是否执行及派发以用户已有授权为准。
 ```
 
 > 注：上表是**模式产出的样例**，不代表 golf 项目实际状态。真实运行时，每个 cell 都由实时扫描结果填充。
 
 ### 与交互式模式的关系
 
-- 默认行为**完全不变**：未触发关键词时，仍按现有 Step 1 → Step 10 逐步 [y/N] 走。
-- 触发 task-list 后，**只跑一次状态扫描 + 出表**；用户决定派发后，sub-agent 内部仍可遵循各自 skill 的 TDD / Iron Law 规范。
-- task-list 模式**不**取代任何 Rule 1-6 的硬约束（observability 不可选、所有 US/AC 必须 L3 黑盒覆盖等）——它只是把"每步 [y/N]"折叠成"末尾单次 [y/N]"。
+- 三种执行模式共享同一份状态检查与真实门禁，按用户意图选择，不靠关键词暗示写授权。
+- task-list 先扫描并出表；仅清单授权时到此结束。已有实施授权的 resume/continue 随后按有效门禁与任务依赖推进；委派仍需宿主允许且在授权范围内，实施遵循 TDD。
+- task-list 与连续实施均保留可观测性、US/AC L3 覆盖、TDD 和批准门禁。
 
 ---
 
 ## 每步确认模板
 
-每步开始时先展示当前状态，完成后请求确认。始终使用以下格式：
+仅在用户明确选择逐步指导时使用以下格式；连续实施只汇报状态变化，不等待“进入下一步”的回复。
 
 **进入每步时：**
 ```

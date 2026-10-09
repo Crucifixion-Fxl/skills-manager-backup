@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "tool": "graylog",
+  "owner": "graylog",
+  "provider": "delegated",
+  "origin": "https://graylog-staging-us.addx.live",
+  "authContract": "saas-access.md",
+  "verification": "source-verified",
+  "runtimeVerification": "pending",
+  "deploymentVersion": "declared-7.0-runtime-unknown"
+}

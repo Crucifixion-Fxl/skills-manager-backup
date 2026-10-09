@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "23c4dac4-1843-486e-b813-e8c7104571a3",
+  "path": "web-access",
+  "path_key": "web-access",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/agent-harness/web-access",
+    "branch": null
+  }
+}

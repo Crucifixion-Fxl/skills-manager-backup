@@ -9,6 +9,10 @@ description: SLA 指标监控配置。集成 Superset 和 dapp API，完成 SLA 
 
 ## Description
 
+平台登录与认证 SSOT：[dapp](../dapp/SKILL.md)。本 Skill 保留业务流程与门禁，登录/Token事实只在平台 owner 维护；日常访问调用 `web-access`。
+
+首次接入/变更扫描与日常认证入口见 [SaaS 接入](../dapp/references/saas-access.md)；已有平台业务契约与授权门禁仍在本 Skill 维护。
+
 **系统架构：** Superset 创建图表（指标来源） → dapp API 管理 SLA 配置 → Grafana 监控告警（执行监控）
 
 **涉及系统：**

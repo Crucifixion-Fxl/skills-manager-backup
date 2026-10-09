@@ -8,9 +8,19 @@ description: 从零部署一个有状态服务（PVC + StatefulSet 或单节点 
 本文的主运行态 Application 不代表一仓只能有一个 Application。若权限职责或生命周期
 需要分离，先提出独立 runtime/infra 渲染与唯一资源管理者方案，再为各 Application
 登记已有且批准的 Project、source/path/destination 合同；不能隐式多生成一个 Application。
-平台 claim 可按现有合同留 runtime，owner 专属 Project 未获批准前不可使用。
+平台 claim 按合同留 runtime；业务资源分别使用共享 app-runtime/app-data-plane，不新建 owner Project。
 存量资源拆分需独立 ownership/prune/finalizer/回滚评审，不能套用只改 Project 的迁移。
 详见 [权限与部署划分合同](../references/data/permission-boundaries.yaml)。
+
+## CN 迁移能力门禁
+
+当前 CN 路由见 `references/cn-tencent-migration.md`：prod 为 `cn-k8s`（100014919455），
+staging/tech-service 为 `cn-tke-staging` / `cn-tke-tech-service`（100052802231）。
+AWS CN 已退役。下文 AWS shared-middleware 的已上线证明不能覆盖新 TKE；生成 `Database` /
+`KafkaScramCredential` 前必须核验精确目标的 served API、Composition/ProviderConfig、共享实例、
+Vault writer/reader 和 per-app 凭据交付，缺任一证据则 STOP + Ops Todo。消费策略仍适用，
+不得回退到旧 AWS broker/ARN、共享 root 或 app-owned/self-hosted staging 数据库。
+AWS 托管资源 recipe 仅用于 `cloud=aws`；腾讯云请求转对应原生能力或 Ops Todo。
 
 ## 目的
 
@@ -29,7 +39,7 @@ description: 从零部署一个有状态服务（PVC + StatefulSet 或单节点 
 - `docs/deployment/cd-requirements.md` 存在并填完，列了 stateful 资源
 - 工作目录是目标应用 git 仓库
 - 当前自助范围只有 `kind=clickhouse`；其它 kind 走 ops-led 流程，不能因为存在成本档位就现编 manifest
-- 新部署应用的 **staging / tech-service** target（6 集群 us/eu/cn-staging + tech-us/eu/cn）
+- 新部署应用的 **staging / tech-service** target（当前 us/eu/cn staging + tech-service；CN 腾讯云能力须独立验证）
   不应用 StatefulSet+PVC 自托管 ClickHouse / Redis / Nacos / Elasticsearch / mysql / mongo 等
   数据类中间件（hard-rule #29 + #30）；数据需求必须通过 `kind: Database` 在平台共享实例上申请
   **per-app** 凭证（凭证落 `secret/{env}/{platform}/application/{app}/{key}`，region-less，**无**
@@ -53,7 +63,7 @@ description: 从零部署一个有状态服务（PVC + StatefulSet 或单节点 
     - `$db_name`          ClickHouse 启动时创建的 database 名
     - `$clickhouse_image_tag` 不可变 ClickHouse 版本（如 `25.8.23.13`，禁止 `latest`）
     - `$pvc_size`         按 cost-tiering/<kind>.yaml 取或用户给
-    - `$pvc_storage_class` 按 cost-tiering/<kind>.yaml 取；缺省时按目标集群 cloud 默认值回退
+    - `$pvc_storage_class` 读取精确目标 StorageClass / 平台 values 后填写；cost-tiering 值仅作候选，不按 cloud 默认回退，无法确认则 STOP + Ops Todo
 
 [validate]
   - `$kind == clickhouse` 且 `references/cost-tiering/clickhouse.yaml` 存在；否则 STOP，产
@@ -63,12 +73,12 @@ description: 从零部署一个有状态服务（PVC + StatefulSet 或单节点 
   - `$clickhouse_image_tag` 非空且不是 `latest`
   - 把 `$targets[]` 拆成：
     - `$shared_middleware_targets[]`：`$target.cluster` 是 shared-middleware 集群（6 个：
-      `{us,eu,cn}-eks-staging` + `{us,eu,cn}-eks-tech-service`；**按 cluster 名判，不用 `$target.env`**——
+      `{us,eu}-eks-staging` + `{us,eu}-eks-tech-service + cn-tke-staging + cn-tke-tech-service`；**按 cluster 名判，不用 `$target.env`**——
       tech-service env=prod，见 #29），且本应用不是平台 shared-middleware 自身，也不是 cd-requirements.md
       明确标注的 legacy/迁移/第三方派生例外。这些 target 不生成 StatefulSet / PVC / ArgoCD Application；
       改为按 `references/shared-middleware/README.md` 的 `kind: Database` 流程申请 per-app 凭证
       （per-app 路径 `secret/{env}/{platform}/application/{app}/{key}`），就绪门禁未过则产 Ops Todo。
-    - `$managed_targets[]`：**非 shared-middleware 集群 target（真 prod `*-eks-prod`/`*-prod-data`/TKE/dev；
+    - `$managed_targets[]`：**非 shared-middleware 集群 target（真 prod `*-eks-prod`/`*-prod-data`/cn-k8s（TKE prod）；
       tech-service 不在此列）**，或明确允许的 shared-middleware/legacy/第三方派生例外
       （#30 软约定，cd-requirements.md 已写明理由 + 备份/HA/升级方案），继续 Step 2 之后的 StatefulSet/PVC 流程。
   - 如果 `$managed_targets[]` 为空：STOP 在 shared-middleware 输出/Ops Todo 后结束；
@@ -90,9 +100,10 @@ description: 从零部署一个有状态服务（PVC + StatefulSet 或单节点 
   - 对每 `$target`：
     - 查 `cost-tiering/<$kind>.yaml -> $target.env` 取 CPU / Memory / PVC / backup / service_type 等
     - 解析 `$target.pvc_storage_class`：
-      - 优先用 cost-tiering 的 `pvc_storage_class`
-      - 如表里缺失，按 cluster.cloud 默认：AWS=`gp3`，GCP=`standard-rwo`，Tencent=`cbs`
-      - 仍无法决定 → STOP 问用户；不要省略 `storageClassName`
+      - 先读取精确目标的 StorageClass / 平台 values，确认 CSI、拓扑与实际可用性。
+      - cost-tiering 的 `pvc_storage_class` 只有与目标云及现有 StorageClass 一致时可用；不能把 AWS `gp3` 套入 TKE。
+      - 腾讯云各集群不统一：当前新 staging values 使用 `cbs`，新 tech-service 使用 `cbs-topo`；这是仓库证据，仍须验证目标，不能按 cloud 默认。
+      - 无法确认 → STOP + Ops Todo；不要省略 `storageClassName`
     - prod env → 跑 `_global.yaml -> prod_self_check`
     - 查 `clusters.yaml` 取标准字段：
       `account_id`、`region`、`harbor_url`、`runner_tags`、`argocd_apps_dir`、`build_mode`、`vault_css`
@@ -345,7 +356,7 @@ description: 从零部署一个有状态服务（PVC + StatefulSet 或单节点 
 
 ArgoCD sync 后：
 - StatefulSet pod 创建（按 replicas 顺序起）
-- PVC 自动 provision（按 Step 2 解析的 `$target.pvc_storage_class`：AWS=`gp3` / GCP=`standard-rwo` / Tencent=`cbs`，或 cost-tiering 指定值）
+- PVC 按 Step 2 经精确目标验证的 `$target.pvc_storage_class` provision；不从云厂商名称推导默认 SC
 - Headless Service 给 pod 稳定 DNS `{{app}}-0.{{app}}-headless.{{ns}}.svc.cluster.local`
 - ClusterIP Service 给负载均衡（如果有多副本）
 

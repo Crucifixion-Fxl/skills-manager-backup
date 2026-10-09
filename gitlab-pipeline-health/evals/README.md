@@ -3,7 +3,7 @@
 离线夹具。结构校验：
 
 ```bash
-uv run python scripts/validate.py --skill skills/gitlab-pipeline-health
+uv run python scripts/validate.py --skill skills/delivery/gitlab-pipeline-health
 ```
 
 这条只检查 JSON 契约，不跑模型。行为评测：新会话只加载本 skill + 该例 `setup`/`prompt` 与 `evals/fixtures/`，不把 `expected_output` 和 `assertions` 喂给被测模型，不访问 GitLab。

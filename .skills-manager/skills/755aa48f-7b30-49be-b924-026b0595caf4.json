@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "755aa48f-7b30-49be-b924-026b0595caf4",
+  "path": "dapp",
+  "path_key": "dapp",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/observability/dapp",
+    "branch": null
+  }
+}

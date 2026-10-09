@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "tool": "dittofeed",
+  "owner": "dittofeed",
+  "status": "source-reviewed-runtime-pending",
+  "contract": "saas-access.md",
+  "credentialEnv": "DITTOFEED_API_KEY",
+  "notes": "本次研究fork prod overlay `AUTH_MODE=single-tenant`：网页secure session Cookie；Admin `/api/admin`由adminAuth校验`Authorization: Bearer <Admin API key>`和目标workspace（workspaceId/项目slug按源码类型选取）。本人在 `/dashboard/settings#admin-api-key`创建key并由宿主注入`DITTOFEED_API_KEY`；管理key的删除/轮换走该workspace当前版本settings契约，不猜REST路径。公开写key（PublicWriteKey）、内部INTERNAL_API_KEY和网页Cookie独立，不能用历史X-API-Key替代Admin Bearer，也不能复用内部服务key。",
+  "runtimeCallsPerformed": false
+}

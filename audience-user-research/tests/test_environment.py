@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from user_research import SafeApiError
-from user_research.environment import load_local_environment
+from user_research.environment import MAX_ENV_BYTES, load_local_environment
 
 
 class EnvironmentTests(unittest.TestCase):
@@ -29,6 +29,21 @@ class EnvironmentTests(unittest.TestCase):
             with self.assertRaisesRegex(SafeApiError, "invalid_env_file"):
                 load_local_environment(path)
             self.assertFalse((Path(directory) / "should-not-run").exists())
+
+    def test_env_file_size_remains_independent_from_api_payload_limit(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / ".env.local"
+            prefix = "AUDIENCE_PROJECT_ID="
+            path.write_bytes((prefix + "x" * (MAX_ENV_BYTES - len(prefix))).encode())
+            with patch.dict(os.environ, {}, clear=True):
+                load_local_environment(path)
+                self.assertEqual(
+                    len(os.environ["AUDIENCE_PROJECT_ID"]), MAX_ENV_BYTES - len(prefix)
+                )
+
+            path.write_bytes(b"#" + b"x" * MAX_ENV_BYTES)
+            with self.assertRaisesRegex(SafeApiError, "invalid_env_file"):
+                load_local_environment(path)
 
 
 if __name__ == "__main__":

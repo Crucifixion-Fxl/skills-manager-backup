@@ -16,6 +16,13 @@ SPEC.loader.exec_module(MODULE)
 
 
 class OfflineTestRunnerTest(unittest.TestCase):
+    def test_classified_runner_uses_repository_root(self):
+        self.assertTrue((MODULE.REPO_ROOT / ".gitlab-ci.yml").is_file())
+        self.assertEqual(
+            MODULE.SKILL_DIR.relative_to(MODULE.REPO_ROOT),
+            Path("skills/agent-harness/buzz-agent-setup"),
+        )
+
     def test_runner_executes_real_discovery_and_propagates_success(self):
         result = subprocess.run(
             [

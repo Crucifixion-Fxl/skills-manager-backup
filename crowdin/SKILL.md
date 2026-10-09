@@ -1,9 +1,11 @@
 ---
 name: crowdin
-description: Crowdin 字符串录入 + 多语言翻译拉取助手。两条主流——【录入流】当用户提到"录入 Crowdin 文案"、"往 Crowdin 写字符串"、"上传翻译"、"加几条 i18n"、"新增多语言文案"、"帮我翻译并写到 Crowdin"时触发,走 REST API 创建分支 + String + 翻译 + 导出 CSV + 可选合并 dev;【拉取流】当用户提到"拉/更新/同步翻译"、"拉文案"、"更新 i18n"、"sync l10n"、"看 crowdin 有没有更新"、"翻译到本地"、"部署翻译到项目"、"Crowdin diff",或提到具体产品+端的翻译需求("KB/VH/VN/喂鸟器/安防/NatureHood/VicoHome/VicoNature/KiwiBit + Android/iOS/Flutter")时触发,通过 ~/A4x/AI/skills/skills/crowdin/pull.sh 包装 g0-{android,flutter-module,ios}/crowdin/auto_l10n.sh 完成 download → 合并 → 格式转换 → 部署 → 代码生成,跑完自动 git diff 让用户 review。
+description: Crowdin 字符串录入 + 多语言翻译拉取助手。两条主流——【录入流】当用户提到"录入 Crowdin 文案"、"往 Crowdin 写字符串"、"上传翻译"、"加几条 i18n"、"新增多语言文案"、"帮我翻译并写到 Crowdin"时触发,走 REST API 创建分支 + String + 翻译 + 导出 CSV + 可选合并 dev;【拉取流】当用户提到"拉/更新/同步翻译"、"拉文案"、"更新 i18n"、"sync l10n"、"看 crowdin 有没有更新"、"翻译到本地"、"部署翻译到项目"、"Crowdin diff",或提到具体产品+端的翻译需求("KB/VH/VN/喂鸟器/安防/NatureHood/VicoHome/VicoNature/KiwiBit + Android/iOS/Flutter")时触发,通过 ~/A4x/AI/skills/skills/development/crowdin/pull.sh 包装 g0-{android,flutter-module,ios}/crowdin/auto_l10n.sh 完成 download → 合并 → 格式转换 → 部署 → 代码生成,跑完自动 git diff 让用户 review。
 ---
 
 ## Description
+
+首次接入/变更扫描与日常认证入口见 [SaaS 接入](references/saas-access.md)；已有平台业务契约与授权门禁仍在本 Skill 维护。
 
 覆盖 Crowdin 平台两类日常操作:
 
@@ -195,7 +197,7 @@ CSV 告知用户后立即询问:**「是否将 `<branch_name>` 合并到 dev?(�
 skill 同目录 `pull.sh` 已封装好连通性预检、强制 non-interactive、假成功扫描、git diff 兜底。**直接调,不要绕开它去手搓 `auto_l10n.sh` 命令**。
 
 ```bash
-~/A4x/AI/skills/skills/crowdin/pull.sh <android|flutter|ios> <config-name> [op]
+~/A4x/AI/skills/skills/development/crowdin/pull.sh <android|flutter|ios> <config-name> [op]
 ```
 
 退出码语义:

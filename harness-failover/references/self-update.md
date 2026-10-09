@@ -12,7 +12,7 @@
 3. **红**：先只加样本到 `tests/fixtures/samples.json`（`sig` 用新 id）。`test_every_signature_has_a_matching_sample_fixture` 与分类测试应失败。
 4. **绿**：在 `assets/signatures.json` 加签名（有恢复时刻就配 `reset` 规则；不认识的格式先在 `signatures.py` 里加解析函数并写测试）。
 5. 更新 `SKILL.md` 与 [detection.md](detection.md) 的签名表；`learn --prune` 清掉已被解释的样本。
-6. `uv run --extra dev pytest skills/harness-failover/tests -q` 全绿，`uv run python scripts/validate.py --skill skills/harness-failover --security` 通过。
+6. `uv run --extra dev pytest skills/agent-harness/harness-failover/tests -q` 全绿，`uv run python scripts/validate.py --skill skills/agent-harness/harness-failover --security` 通过。
 7. 分支 `feat/harness-failover-<sig>`，提交 `test(hf): red …` → `feat(hf): green …`，用 `addx:gitlab-mr` 提 MR。
 8. 合并后按 `addx` 插件更新流程更新本机插件，并重新运行 `scripts/install.sh`（定时器跑的是安装副本，不是仓库）。
 

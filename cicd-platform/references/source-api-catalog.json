@@ -1,0 +1,2933 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "projectId": 412,
+    "commit": "9eda25f1e5af8861cd2d8f1293d8dc899d45b8b1",
+    "deployedCommit": null,
+    "snapshotRoot": "/tmp/internal-business-source/cicd-server"
+  },
+  "coverage": "all static router registrations in fixed source snapshot; not runtime commands or deployment proof",
+  "snapshotCoverage": {
+    "expectedSourceFiles": 32,
+    "missingSourceFiles": []
+  },
+  "routes": [
+    {
+      "method": "POST",
+      "path": "/api/login",
+      "handler": "login",
+      "source": {
+        "file": "handler/user.go",
+        "line": 16
+      },
+      "modelSymbols": [
+        "request.UserLoginRequest",
+        "response.NewErrorResponse",
+        "response.Response",
+        "response.UserResponse",
+        "response.UserRolesResponse"
+      ],
+      "modelSources": [
+        "response/user.go",
+        "response/common.go",
+        "request/user.go"
+      ],
+      "sideEffectCalls": [
+        "h.op.CreateUser",
+        "h.op.GetRoleByUser",
+        "h.op.GetUserByName",
+        "h.op.SetUserRoleToAdmin",
+        "h.op.SetUserRoleToOP",
+        "h.op.SetUserRoleToQA",
+        "h.op.SetUserRoleToRD",
+        "utils.CheckPassword",
+        "utils.GenerateJWT",
+        "utils.GetUserInfoByLdap"
+      ],
+      "permissionEvidence": [],
+      "gateEvidence": [],
+      "effect": "write-or-auth-transition",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "blocked: select source-confirmed resource read and reconcile actual side effect before execution",
+      "resource": "/api",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "GET",
+      "path": "/api/logout",
+      "handler": "logout",
+      "source": {
+        "file": "handler/user.go",
+        "line": 103
+      },
+      "modelSymbols": [
+        "response.Response"
+      ],
+      "modelSources": [
+        "response/common.go"
+      ],
+      "sideEffectCalls": [],
+      "permissionEvidence": [],
+      "gateEvidence": [],
+      "effect": "write-or-auth-transition",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "blocked: select source-confirmed resource read and reconcile actual side effect before execution",
+      "resource": "/api",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "GET",
+      "path": "/api/oauth/gitlab/login",
+      "handler": "GitLabOAuthLogin",
+      "source": {
+        "file": "handler/oauth.go",
+        "line": 30
+      },
+      "modelSymbols": [
+        "response.NewErrorResponse"
+      ],
+      "modelSources": [
+        "response/common.go"
+      ],
+      "sideEffectCalls": [
+        "utils.GetGitLabBasePath",
+        "utils.GetGitLabOAuthClientID",
+        "utils.GetGitLabOAuthClientSecret",
+        "utils.GetGitLabOAuthRedirectURL",
+        "utils.GetGitLabOAuthScope"
+      ],
+      "permissionEvidence": [],
+      "gateEvidence": [],
+      "effect": "write-or-auth-transition",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "blocked: select source-confirmed resource read and reconcile actual side effect before execution",
+      "resource": "/api/oauth/gitlab",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "GET",
+      "path": "/api/oauth/gitlab/callback",
+      "handler": "GitLabOAuthCallback",
+      "source": {
+        "file": "handler/oauth.go",
+        "line": 80
+      },
+      "modelSymbols": [
+        "model.Role",
+        "model.User",
+        "response.NewErrorResponse",
+        "response.Response",
+        "response.UserResponse",
+        "response.UserRolesResponse"
+      ],
+      "modelSources": [
+        "model/deploy.go",
+        "model/user.go",
+        "model/build.go",
+        "model/task.go",
+        "response/user.go",
+        "response/common.go"
+      ],
+      "sideEffectCalls": [
+        "h.op.CreateUser",
+        "h.op.GetRoleByUser",
+        "h.op.GetUserByName",
+        "h.op.SetUserRoleToQA",
+        "h.op.SetUserRoleToRD",
+        "utils.GenerateJWTWithRefreshToken",
+        "utils.GetGitLabBasePath",
+        "utils.GetGitLabOAuthClientID",
+        "utils.GetGitLabOAuthClientSecret",
+        "utils.GetGitLabOAuthRedirectURL",
+        "utils.GetUserInfoByLdap"
+      ],
+      "permissionEvidence": [],
+      "gateEvidence": [
+        "if resp.StatusCode != http.StatusOK {",
+        "if r, _ = h.op.GetRoleByUser(u); r != nil {",
+        "if r, _ = h.op.GetRoleByUser(u); r != nil {"
+      ],
+      "effect": "write-or-auth-transition",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "blocked: select source-confirmed resource read and reconcile actual side effect before execution",
+      "resource": "/api/oauth/gitlab",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "GET",
+      "path": "/api/user/info",
+      "handler": "CurrentUser",
+      "source": {
+        "file": "handler/user.go",
+        "line": 111
+      },
+      "modelSymbols": [
+        "response.NewErrorResponse",
+        "response.Response",
+        "response.UserResponse",
+        "response.UserRolesResponse"
+      ],
+      "modelSources": [
+        "response/user.go",
+        "response/common.go"
+      ],
+      "sideEffectCalls": [
+        "h.op.GetRoleByUser",
+        "h.op.GetUserByID"
+      ],
+      "permissionEvidence": [],
+      "gateEvidence": [],
+      "effect": "read",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "blocked: select source-confirmed resource read and reconcile actual side effect before execution",
+      "resource": "/api/user",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "GET",
+      "path": "/api/users/qa",
+      "handler": "GetQAUsers",
+      "source": {
+        "file": "handler/user.go",
+        "line": 171
+      },
+      "modelSymbols": [
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "response/common.go"
+      ],
+      "sideEffectCalls": [
+        "h.op.GetRoleByRoleValue",
+        "h.op.GetUsersByRole"
+      ],
+      "permissionEvidence": [
+        "verifyPermissions(c, []string{\"admin\", \"rd\", \"op\"}) {"
+      ],
+      "gateEvidence": [
+        "if !h.verifyPermissions(c, []string{\"admin\", \"rd\", \"op\"}) {"
+      ],
+      "effect": "read",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "blocked: select source-confirmed resource read and reconcile actual side effect before execution",
+      "resource": "/api/users",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "GET",
+      "path": "/api/users/rd",
+      "handler": "GetRDUsers",
+      "source": {
+        "file": "handler/user.go",
+        "line": 148
+      },
+      "modelSymbols": [
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "response/common.go"
+      ],
+      "sideEffectCalls": [
+        "h.op.GetRoleByRoleValue",
+        "h.op.GetUsersByRole"
+      ],
+      "permissionEvidence": [
+        "verifyPermissions(c, []string{\"admin\", \"rd\", \"op\"}) {"
+      ],
+      "gateEvidence": [
+        "if !h.verifyPermissions(c, []string{\"admin\", \"rd\", \"op\"}) {"
+      ],
+      "effect": "read",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "blocked: select source-confirmed resource read and reconcile actual side effect before execution",
+      "resource": "/api/users",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "GET",
+      "path": "/api/users/op",
+      "handler": "GetOPUsers",
+      "source": {
+        "file": "handler/user.go",
+        "line": 194
+      },
+      "modelSymbols": [
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "response/common.go"
+      ],
+      "sideEffectCalls": [
+        "h.op.GetRoleByRoleValue",
+        "h.op.GetUsersByRole"
+      ],
+      "permissionEvidence": [
+        "verifyPermissions(c, []string{\"admin\", \"rd\", \"op\"}) {"
+      ],
+      "gateEvidence": [
+        "if !h.verifyPermissions(c, []string{\"admin\", \"rd\", \"op\"}) {"
+      ],
+      "effect": "read",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "blocked: select source-confirmed resource read and reconcile actual side effect before execution",
+      "resource": "/api/users",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "POST",
+      "path": "/api/group/create",
+      "handler": "CreateGroup",
+      "source": {
+        "file": "handler/user.go",
+        "line": 218
+      },
+      "modelSymbols": [
+        "model.Group",
+        "request.CreateGroupRequest",
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "model/user.go",
+        "model/project.go",
+        "response/common.go",
+        "request/user.go"
+      ],
+      "sideEffectCalls": [
+        "h.op.CreateGroup"
+      ],
+      "permissionEvidence": [
+        "verifyPermissions(c, []string{\"admin\"}) {"
+      ],
+      "gateEvidence": [
+        "if !h.verifyPermissions(c, []string{\"admin\"}) {"
+      ],
+      "effect": "write-or-auth-transition",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "blocked: select source-confirmed resource read and reconcile actual side effect before execution",
+      "resource": "/api/group",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "POST",
+      "path": "/api/group/add/user",
+      "handler": "GroupAddUser",
+      "source": {
+        "file": "handler/user.go",
+        "line": 257
+      },
+      "modelSymbols": [
+        "request.GroupAddUserRequest",
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "response/common.go",
+        "request/user.go"
+      ],
+      "sideEffectCalls": [
+        "h.op.GetGroupByID",
+        "h.op.GetUserByID",
+        "h.op.GroupAddUser"
+      ],
+      "permissionEvidence": [
+        "verifyPermissions(c, []string{\"admin\"}) {"
+      ],
+      "gateEvidence": [
+        "if !h.verifyPermissions(c, []string{\"admin\"}) {"
+      ],
+      "effect": "write-or-auth-transition",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "blocked: select source-confirmed resource read and reconcile actual side effect before execution",
+      "resource": "/api/group/add",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "GET",
+      "path": "/api/groups",
+      "handler": "GetGroups",
+      "source": {
+        "file": "handler/user.go",
+        "line": 241
+      },
+      "modelSymbols": [
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "response/common.go"
+      ],
+      "sideEffectCalls": [
+        "h.op.GetGroups"
+      ],
+      "permissionEvidence": [
+        "verifyPermissions(c, []string{\"admin\", \"rd\", \"op\"}) {"
+      ],
+      "gateEvidence": [
+        "if !h.verifyPermissions(c, []string{\"admin\", \"rd\", \"op\"}) {"
+      ],
+      "effect": "read",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "blocked: select source-confirmed resource read and reconcile actual side effect before execution",
+      "resource": "/api",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "POST",
+      "path": "/api/project/create",
+      "handler": "CreateProject",
+      "source": {
+        "file": "handler/project.go",
+        "line": 17
+      },
+      "modelSymbols": [
+        "model.Project",
+        "request.ProjectCreateRequest",
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "model/deploy.go",
+        "model/user.go",
+        "model/project.go",
+        "model/task.go",
+        "response/common.go",
+        "request/project.go"
+      ],
+      "sideEffectCalls": [
+        "h.op.CreateProject",
+        "utils.GetProjectInfoByGitLab"
+      ],
+      "permissionEvidence": [
+        "verifyPermissions(c, []string{\"admin\", \"rd\", \"op\"}) {"
+      ],
+      "gateEvidence": [
+        "if !h.verifyPermissions(c, []string{\"admin\", \"rd\", \"op\"}) {"
+      ],
+      "effect": "write-or-auth-transition",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "blocked: select source-confirmed resource read and reconcile actual side effect before execution",
+      "resource": "/api/project",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "POST",
+      "path": "/api/project/add/group",
+      "handler": "ProjectAddGroup",
+      "source": {
+        "file": "handler/project.go",
+        "line": 49
+      },
+      "modelSymbols": [
+        "request.ProjectAddGroupRequest",
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "response/common.go",
+        "request/project.go"
+      ],
+      "sideEffectCalls": [
+        "h.op.GetGroupByID",
+        "h.op.GetProjectByID",
+        "h.op.ProjectAddGroup"
+      ],
+      "permissionEvidence": [
+        "verifyPermissions(c, []string{\"admin\", \"rd\", \"op\"}) {"
+      ],
+      "gateEvidence": [
+        "if !h.verifyPermissions(c, []string{\"admin\", \"rd\", \"op\"}) {"
+      ],
+      "effect": "write-or-auth-transition",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "blocked: select source-confirmed resource read and reconcile actual side effect before execution",
+      "resource": "/api/project/add",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "POST",
+      "path": "/api/project/config/update",
+      "handler": "ProjectConfigUpdate",
+      "source": {
+        "file": "handler/project.go",
+        "line": 82
+      },
+      "modelSymbols": [
+        "request.ProjectConfigUpdateRequest",
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "response/common.go",
+        "request/project.go"
+      ],
+      "sideEffectCalls": [
+        "h.op.GetProjectByName",
+        "utils.NewKubernetesDeploymentYamlWithSpecType"
+      ],
+      "permissionEvidence": [
+        "verifyPermissions(c, []string{\"admin\", \"rd\", \"op\"}) {"
+      ],
+      "gateEvidence": [
+        "if !h.verifyPermissions(c, []string{\"admin\", \"rd\", \"op\"}) {"
+      ],
+      "effect": "write-or-auth-transition",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "blocked: select source-confirmed resource read and reconcile actual side effect before execution",
+      "resource": "/api/project/config",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "POST",
+      "path": "/api/project/config/update/custom",
+      "handler": "ProjectConfigUpdateCustom",
+      "source": {
+        "file": "handler/project.go",
+        "line": 108
+      },
+      "modelSymbols": [
+        "request.ProjectConfigUpdateCustomRequest",
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "response/common.go",
+        "request/project.go"
+      ],
+      "sideEffectCalls": [
+        "h.op.GetProjectByName",
+        "utils.NewKubernetesDeploymentYaml"
+      ],
+      "permissionEvidence": [
+        "verifyPermissions(c, []string{\"admin\", \"rd\", \"op\"}) {"
+      ],
+      "gateEvidence": [
+        "if !h.verifyPermissions(c, []string{\"admin\", \"rd\", \"op\"}) {"
+      ],
+      "effect": "write-or-auth-transition",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "blocked: select source-confirmed resource read and reconcile actual side effect before execution",
+      "resource": "/api/project/config/update",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "POST",
+      "path": "/api/project/pipeline/update",
+      "handler": "ProjectPipelineUpdate",
+      "source": {
+        "file": "handler/project.go",
+        "line": 136
+      },
+      "modelSymbols": [
+        "request.ProjectPipelineUpdateRequest",
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "response/common.go",
+        "request/project.go"
+      ],
+      "sideEffectCalls": [
+        "h.op.GetPipelineByName",
+        "h.op.GetProjectByName",
+        "h.op.UpdateProjectPipeline"
+      ],
+      "permissionEvidence": [
+        "verifyPermissions(c, []string{\"admin\", \"rd\", \"op\"}) {"
+      ],
+      "gateEvidence": [
+        "if !h.verifyPermissions(c, []string{\"admin\", \"rd\", \"op\"}) {"
+      ],
+      "effect": "write-or-auth-transition",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "blocked: select source-confirmed resource read and reconcile actual side effect before execution",
+      "resource": "/api/project/pipeline",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "POST",
+      "path": "/api/project/resource/update",
+      "handler": "ProjectResourceUpdate",
+      "source": {
+        "file": "handler/project.go",
+        "line": 238
+      },
+      "modelSymbols": [
+        "request.ProjectResourceUpdateRequest",
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "response/common.go",
+        "request/project.go"
+      ],
+      "sideEffectCalls": [
+        "h.op.GetProjectByName",
+        "utils.NewKubernetesConfigMapYaml"
+      ],
+      "permissionEvidence": [
+        "verifyPermissions(c, []string{\"admin\", \"rd\", \"op\"}) {"
+      ],
+      "gateEvidence": [
+        "if !h.verifyPermissions(c, []string{\"admin\", \"rd\", \"op\"}) {"
+      ],
+      "effect": "write-or-auth-transition",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "blocked: select source-confirmed resource read and reconcile actual side effect before execution",
+      "resource": "/api/project/resource",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "GET",
+      "path": "/api/project/repository/branchs",
+      "handler": "GetProjectBitbucketRepositoryTags",
+      "source": {
+        "file": "handler/project.go",
+        "line": 308
+      },
+      "modelSymbols": [
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "response/common.go"
+      ],
+      "sideEffectCalls": [
+        "h.op.GetProjectByID",
+        "utils.GetGitLabRepositoryTags"
+      ],
+      "permissionEvidence": [
+        "verifyPermissions(c, []string{\"admin\", \"rd\", \"op\"}) {"
+      ],
+      "gateEvidence": [
+        "if !h.verifyPermissions(c, []string{\"admin\", \"rd\", \"op\"}) {"
+      ],
+      "effect": "read",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "blocked: select source-confirmed resource read and reconcile actual side effect before execution",
+      "resource": "/api/project/repository",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "GET",
+      "path": "/api/project/get_gray_project_name",
+      "handler": "GetProjectWithGrayName",
+      "source": {
+        "file": "handler/project.go",
+        "line": 354
+      },
+      "modelSymbols": [
+        "response.Response"
+      ],
+      "modelSources": [
+        "response/common.go"
+      ],
+      "sideEffectCalls": [
+        "utils.GetGrayTrafficProjects"
+      ],
+      "permissionEvidence": [],
+      "gateEvidence": [],
+      "effect": "read",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "blocked: select source-confirmed resource read and reconcile actual side effect before execution",
+      "resource": "/api/project",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "GET",
+      "path": "/api/project/get_gray_readonly_project_name",
+      "handler": "GetGrayReadonlyProjectName",
+      "source": {
+        "file": "handler/project.go",
+        "line": 375
+      },
+      "modelSymbols": [
+        "response.Response"
+      ],
+      "modelSources": [
+        "response/common.go"
+      ],
+      "sideEffectCalls": [
+        "utils.GetGrayReadonlyProjects"
+      ],
+      "permissionEvidence": [],
+      "gateEvidence": [],
+      "effect": "read",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "blocked: select source-confirmed resource read and reconcile actual side effect before execution",
+      "resource": "/api/project",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "GET",
+      "path": "/api/project/get_non_cancelable_project_name",
+      "handler": "GetNonCancelableProjectName",
+      "source": {
+        "file": "handler/project.go",
+        "line": 365
+      },
+      "modelSymbols": [
+        "response.Response"
+      ],
+      "modelSources": [
+        "response/common.go"
+      ],
+      "sideEffectCalls": [
+        "utils.GetNonCancelableProjects"
+      ],
+      "permissionEvidence": [],
+      "gateEvidence": [],
+      "effect": "read",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "blocked: select source-confirmed resource read and reconcile actual side effect before execution",
+      "resource": "/api/project",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects",
+      "handler": "GetProjects",
+      "source": {
+        "file": "handler/project.go",
+        "line": 170
+      },
+      "modelSymbols": [
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "response/common.go"
+      ],
+      "sideEffectCalls": [
+        "h.op.GetProjects",
+        "h.op.GetProjectsByGroups"
+      ],
+      "permissionEvidence": [
+        "verifyPermissions(c, []string{\"admin\", \"rd\", \"op\"}) {"
+      ],
+      "gateEvidence": [
+        "if !h.verifyPermissions(c, []string{\"admin\", \"rd\", \"op\"}) {"
+      ],
+      "effect": "read",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "blocked: select source-confirmed resource read and reconcile actual side effect before execution",
+      "resource": "/api",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "POST",
+      "path": "/api/pipeline/create",
+      "handler": "CreatePipeline",
+      "source": {
+        "file": "handler/project.go",
+        "line": 210
+      },
+      "modelSymbols": [
+        "model.Pipeline",
+        "request.PipelineCreateRequest",
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "model/project.go",
+        "response/common.go",
+        "request/project.go"
+      ],
+      "sideEffectCalls": [
+        "h.op.CreatePipeline",
+        "utils.CreatePipelineScripts"
+      ],
+      "permissionEvidence": [
+        "verifyPermissions(c, []string{\"admin\", \"rd\", \"op\"}) {"
+      ],
+      "gateEvidence": [
+        "if !h.verifyPermissions(c, []string{\"admin\", \"rd\", \"op\"}) {"
+      ],
+      "effect": "write-or-auth-transition",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "blocked: select source-confirmed resource read and reconcile actual side effect before execution",
+      "resource": "/api/pipeline",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "GET",
+      "path": "/api/gitlab/groups",
+      "handler": "GetGitLabGroupList",
+      "source": {
+        "file": "handler/gitlab.go",
+        "line": 14
+      },
+      "modelSymbols": [
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "response/common.go"
+      ],
+      "sideEffectCalls": [
+        "utils.GetGitLabGroups"
+      ],
+      "permissionEvidence": [
+        "verifyPermissions(c, []string{\"admin\", \"rd\", \"op\"}) {"
+      ],
+      "gateEvidence": [
+        "if !h.verifyPermissions(c, []string{\"admin\", \"rd\", \"op\"}) {"
+      ],
+      "effect": "read",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "blocked: select source-confirmed resource read and reconcile actual side effect before execution",
+      "resource": "/api/gitlab",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "GET",
+      "path": "/api/gitlab/projects",
+      "handler": "GetGitLabProjectList",
+      "source": {
+        "file": "handler/gitlab.go",
+        "line": 36
+      },
+      "modelSymbols": [
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "response/common.go"
+      ],
+      "sideEffectCalls": [
+        "utils.GetGitLabProjects"
+      ],
+      "permissionEvidence": [
+        "verifyPermissions(c, []string{\"admin\", \"rd\", \"op\"}) {"
+      ],
+      "gateEvidence": [
+        "if !h.verifyPermissions(c, []string{\"admin\", \"rd\", \"op\"}) {"
+      ],
+      "effect": "read",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "blocked: select source-confirmed resource read and reconcile actual side effect before execution",
+      "resource": "/api/gitlab",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "POST",
+      "path": "/api/task/create",
+      "handler": "CreateTask",
+      "source": {
+        "file": "handler/task.go",
+        "line": 22
+      },
+      "modelSymbols": [
+        "model.TASK_CHECK_STATUS_SUCCESS",
+        "model.TASK_STATUS_AUDIT",
+        "model.Task",
+        "request.TaskCreateRequest",
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "model/deploy.go",
+        "model/project.go",
+        "model/task.go",
+        "model/deploy_test.go",
+        "response/common.go",
+        "request/task.go"
+      ],
+      "sideEffectCalls": [
+        "h.op.CreateTask",
+        "h.op.GetUserByID",
+        "h.op.TaskSetOP",
+        "h.op.TaskSetQA",
+        "h.op.TaskSetRD",
+        "utils.GenerateTaskName"
+      ],
+      "permissionEvidence": [
+        "verifyPermissions(c, []string{\"admin\", \"rd\", \"op\"}) {"
+      ],
+      "gateEvidence": [
+        "if !h.verifyPermissions(c, []string{\"admin\", \"rd\", \"op\"}) {",
+        "if t.HasApollo {",
+        "if err := validateApolloTask(h, &t); err != nil {"
+      ],
+      "effect": "write-or-auth-transition",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "/api/task",
+      "resource": "/api/task",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "POST",
+      "path": "/api/task/update",
+      "handler": "UpdateTask",
+      "source": {
+        "file": "handler/task.go",
+        "line": 98
+      },
+      "modelSymbols": [
+        "model.TASK_STATUS_OPEN",
+        "request.TaskUpdateRequest",
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "model/task.go",
+        "model/deploy_test.go",
+        "response/common.go",
+        "request/task.go"
+      ],
+      "sideEffectCalls": [
+        "h.op.GetTaskByID",
+        "h.op.TaskSetOP",
+        "h.op.TaskSetQA",
+        "h.op.TaskSetRD",
+        "h.op.UpdateTask"
+      ],
+      "permissionEvidence": [
+        "verifyPermissions(c, []string{\"admin\", \"rd\", \"op\"}) {"
+      ],
+      "gateEvidence": [
+        "if !h.verifyPermissions(c, []string{\"admin\", \"rd\", \"op\"}) {",
+        "if task.Status != model.TASK_STATUS_OPEN {"
+      ],
+      "effect": "write-or-auth-transition",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "/api/task",
+      "resource": "/api/task",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "POST",
+      "path": "/api/task/disable",
+      "handler": "DisableTask",
+      "source": {
+        "file": "handler/task.go",
+        "line": 157
+      },
+      "modelSymbols": [
+        "model.TASK_STATUS_CLOSE",
+        "model.Task",
+        "request.DisableTaskRequest",
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "model/deploy.go",
+        "model/project.go",
+        "model/task.go",
+        "model/deploy_test.go",
+        "response/common.go",
+        "request/task.go"
+      ],
+      "sideEffectCalls": [
+        "h.op.GetTaskByID"
+      ],
+      "permissionEvidence": [
+        "verifyPermissions(c, []string{\"admin\", \"op\"}) {"
+      ],
+      "gateEvidence": [
+        "if !h.verifyPermissions(c, []string{\"admin\", \"op\"}) {",
+        "if task.Status == model.TASK_STATUS_CLOSE {",
+        "if freshTask.Status == model.TASK_STATUS_CLOSE {"
+      ],
+      "effect": "write-or-auth-transition",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "/api/task",
+      "resource": "/api/task",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "POST",
+      "path": "/api/task/unlock",
+      "handler": "UnlockTask",
+      "source": {
+        "file": "handler/task.go",
+        "line": 209
+      },
+      "modelSymbols": [
+        "request.DisableTaskRequest",
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "response/common.go",
+        "request/task.go"
+      ],
+      "sideEffectCalls": [
+        "h.op.GetTaskByID",
+        "h.op.GetUserByID",
+        "h.op.UpdateTask"
+      ],
+      "permissionEvidence": [
+        "verifyPermissions(c, []string{\"admin\"}) {"
+      ],
+      "gateEvidence": [
+        "if !h.verifyPermissions(c, []string{\"admin\"}) {"
+      ],
+      "effect": "write-or-auth-transition",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "/api/task",
+      "resource": "/api/task",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "POST",
+      "path": "/api/task/add/project",
+      "handler": "TaskAddProject",
+      "source": {
+        "file": "handler/task.go",
+        "line": 297
+      },
+      "modelSymbols": [
+        "model.BUILD_WORKFLOW_STEP_AUDIT",
+        "model.BUILD_WORKFLOW_STEP_INIT",
+        "model.Build",
+        "model.Project",
+        "model.TASK_STATUS_CLOSE",
+        "model.TASK_STATUS_OPEN",
+        "model.Task",
+        "request.TaskAddProjectRequest",
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "model/deploy.go",
+        "model/user.go",
+        "model/build.go",
+        "model/project.go",
+        "model/task.go",
+        "model/build_test.go",
+        "model/deploy_test.go",
+        "response/common.go",
+        "request/task.go"
+      ],
+      "sideEffectCalls": [
+        "h.op.GetProjectByID",
+        "h.op.GetTaskByID",
+        "h.op.GetUserByID"
+      ],
+      "permissionEvidence": [
+        "verifyPermissions(c, []string{\"admin\", \"rd\", \"op\"}) {"
+      ],
+      "gateEvidence": [
+        "if !h.verifyPermissions(c, []string{\"admin\", \"rd\", \"op\"}) {",
+        "if err := h.assertNotSuspended(t); err != nil {",
+        "if !t.IsShort && t.Status != model.TASK_STATUS_OPEN {",
+        "if t.Status == model.TASK_STATUS_CLOSE {",
+        "if t.OnlyApollo {",
+        "if !freshTask.IsShort && freshTask.Status != model.TASK_STATUS_OPEN {",
+        "if freshTask.OnlyApollo {"
+      ],
+      "effect": "write-or-auth-transition",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "/api/task",
+      "resource": "/api/task/add",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "GET",
+      "path": "/api/task",
+      "handler": "GetTaskByID",
+      "source": {
+        "file": "handler/task.go",
+        "line": 274
+      },
+      "modelSymbols": [
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "response/common.go"
+      ],
+      "sideEffectCalls": [
+        "h.op.GetTaskByID"
+      ],
+      "permissionEvidence": [
+        "verifyPermissions(c, []string{\"admin\", \"rd\", \"qa\", \"op\", \"pm\"}) {"
+      ],
+      "gateEvidence": [
+        "if !h.verifyPermissions(c, []string{\"admin\", \"rd\", \"qa\", \"op\", \"pm\"}) {"
+      ],
+      "effect": "read",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "/api/task",
+      "resource": "/api",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "GET",
+      "path": "/api/task/projects",
+      "handler": "GetTaskProjects",
+      "source": {
+        "file": "handler/task.go",
+        "line": 406
+      },
+      "modelSymbols": [
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "response/common.go"
+      ],
+      "sideEffectCalls": [
+        "h.op.GetTaskByID",
+        "h.op.GetTaskProjects"
+      ],
+      "permissionEvidence": [
+        "verifyPermissions(c, []string{\"admin\", \"rd\", \"qa\", \"op\", \"pm\"}) {"
+      ],
+      "gateEvidence": [
+        "if !h.verifyPermissions(c, []string{\"admin\", \"rd\", \"qa\", \"op\", \"pm\"}) {"
+      ],
+      "effect": "read",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "/api/task",
+      "resource": "/api/task",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "GET",
+      "path": "/api/task/builds",
+      "handler": "GetTaskBuilds",
+      "source": {
+        "file": "handler/task.go",
+        "line": 430
+      },
+      "modelSymbols": [
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "response/common.go"
+      ],
+      "sideEffectCalls": [
+        "h.op.GetTaskBuilds",
+        "h.op.GetTaskByID"
+      ],
+      "permissionEvidence": [
+        "verifyPermissions(c, []string{\"admin\", \"rd\", \"qa\", \"op\", \"pm\"}) {"
+      ],
+      "gateEvidence": [
+        "if !h.verifyPermissions(c, []string{\"admin\", \"rd\", \"qa\", \"op\", \"pm\"}) {"
+      ],
+      "effect": "read",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "/api/task",
+      "resource": "/api/task",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "GET",
+      "path": "/api/task/build/deploy",
+      "handler": "GetTaskBuildDeployByEnv",
+      "source": {
+        "file": "handler/task.go",
+        "line": 498
+      },
+      "modelSymbols": [
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "response/common.go"
+      ],
+      "sideEffectCalls": [
+        "h.op.GetBuildByID",
+        "h.op.GetProjectByID",
+        "h.op.GetTaskByID",
+        "h.op.GetTaskProjectLastDeployByEnv"
+      ],
+      "permissionEvidence": [
+        "verifyPermissions(c, []string{\"admin\", \"rd\", \"qa\", \"op\", \"pm\"}) {"
+      ],
+      "gateEvidence": [
+        "if !h.verifyPermissions(c, []string{\"admin\", \"rd\", \"qa\", \"op\", \"pm\"}) {"
+      ],
+      "effect": "read",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "/api/task",
+      "resource": "/api/task/build",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "GET",
+      "path": "/api/task/project/build",
+      "handler": "GetTaskBuildByProject",
+      "source": {
+        "file": "handler/task.go",
+        "line": 457
+      },
+      "modelSymbols": [
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "response/common.go"
+      ],
+      "sideEffectCalls": [
+        "h.op.GetProjectByID",
+        "h.op.GetTaskBuildByProject",
+        "h.op.GetTaskByID"
+      ],
+      "permissionEvidence": [
+        "verifyPermissions(c, []string{\"admin\", \"rd\", \"qa\", \"op\", \"pm\"}) {"
+      ],
+      "gateEvidence": [
+        "if !h.verifyPermissions(c, []string{\"admin\", \"rd\", \"qa\", \"op\", \"pm\"}) {"
+      ],
+      "effect": "read",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "/api/task",
+      "resource": "/api/task/project",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "POST",
+      "path": "/api/task/project/deploy",
+      "handler": "TaskProjectDeploy",
+      "source": {
+        "file": "handler/deploy.go",
+        "line": 17
+      },
+      "modelSymbols": [
+        "model.BUILD_WORKFLOW_STEP_DEPLOY_GRAY",
+        "model.BUILD_WORKFLOW_STEP_DEPLOY_PRE",
+        "model.BUILD_WORKFLOW_STEP_DEPLOY_PROD",
+        "model.DEPLOY_STATUS_FAIL",
+        "model.DEPLOY_STATUS_RUNNING",
+        "model.Deploy",
+        "model.Project",
+        "model.TASK_STATUS_AUDIT",
+        "model.TASK_STATUS_CLOSE",
+        "model.TASK_STATUS_GRAY",
+        "model.TASK_STATUS_OPEN",
+        "model.Task",
+        "request.TaskProjectDeployRequest",
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "model/deploy.go",
+        "model/user.go",
+        "model/build.go",
+        "model/project.go",
+        "model/task.go",
+        "model/build_test.go",
+        "model/deploy_test.go",
+        "response/common.go",
+        "request/task.go"
+      ],
+      "sideEffectCalls": [
+        "h.op.GetBuildByID",
+        "h.op.GetPipelineByID",
+        "h.op.GetProjectLastSuccessDeployByEnv",
+        "h.op.GetTaskByID",
+        "h.op.GetTaskProjectByID",
+        "h.op.GetTaskProjectSuccessDeployByEnv",
+        "h.op.GetTaskProjects",
+        "h.op.UpdateDeployJenkinsInfo",
+        "h.op.UpdateDeployStatus",
+        "utils.CreateJenkinsDeploy",
+        "utils.IsGitOpsMigratedProject",
+        "utils.IsIoTProject"
+      ],
+      "permissionEvidence": [
+        "verifyPermissions(c, []string{\"admin\", \"rd\", \"op\"}) {",
+        "verifyPermissions(c, []string{\"admin\"}) {",
+        "verifyPermissions(c, []string{\"admin\"}) {"
+      ],
+      "gateEvidence": [
+        "if !h.verifyPermissions(c, []string{\"admin\", \"rd\", \"op\"}) {",
+        "if err := h.assertNotSuspended(t); err != nil {",
+        "if !h.VerifyUserFromToken(c, *t.CreatorId) && !h.verifyPermissions(c, []string{\"admin\"}) {",
+        "if err := validateGrayProjectsSameTask(taskProjects); err != nil {",
+        "if isGrayEnv {",
+        "if !canStartGrayDeploy(t.Status, CurrentWorkflow) {",
+        "if !isGrayEnv {",
+        "if NextWorkflow != model.BUILD_WORKFLOW_STEP_DEPLOY_PROD && t.Status != model.TASK_STATUS_OPEN && t.Status != model.TASK_STATUS_AUDIT {",
+        "if isGrayEnv {",
+        "if t.Status != model.TASK_STATUS_GRAY && t.Status != model.TASK_STATUS_CLOSE {",
+        "if useGrayImageTag {",
+        "if grayDeploy == nil || grayDeploy.ContainerTag == \"\" {",
+        "if freshTask.CreatorId == nil || !locked.VerifyUserFromToken(c, *freshTask.CreatorId) && !locked.verifyPermissions(c, []string{\"admin\"}) {",
+        "if err := validateGrayProjectsSameTask(projects); err != nil {",
+        "if isGrayEnv && currentBuild.BuildWorkflow < model.BUILD_WORKFLOW_STEP_DEPLOY_GRAY {",
+        "if req.Env == \"gray\" || req.Env == \"gray-us\" || req.Env == \"gray-eu\" {",
+        "if uerr := h.op.UpdateDeployStatus(&d, model.DEPLOY_STATUS_FAIL); uerr != nil {"
+      ],
+      "effect": "write-or-auth-transition",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "/api/task",
+      "resource": "/api/task/project",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "POST",
+      "path": "/api/task/project/cancel/deploy",
+      "handler": "TaskProjectCancelDeploy",
+      "source": {
+        "file": "handler/deploy.go",
+        "line": 545
+      },
+      "modelSymbols": [
+        "model.DEPLOY_STATUS_RUNNING",
+        "request.TaskProjectCancelDeployRequest",
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "model/deploy.go",
+        "model/deploy_test.go",
+        "response/common.go",
+        "request/task.go"
+      ],
+      "sideEffectCalls": [
+        "h.op.GetDeployByID",
+        "h.op.GetProjectByID",
+        "h.op.GetTaskByID",
+        "h.op.UpdateDeployStatus",
+        "utils.GetJenkinsBuildStatus",
+        "utils.IsNonCancelableProject",
+        "utils.StopJenkinsBuild"
+      ],
+      "permissionEvidence": [
+        "verifyPermissions(c, []string{\"admin\", \"rd\", \"op\"}) {"
+      ],
+      "gateEvidence": [
+        "if !h.verifyPermissions(c, []string{\"admin\", \"rd\", \"op\"}) {",
+        "if err := h.assertNotSuspended(ct); err != nil {",
+        "if utils.IsNonCancelableProject(proj.ProjectName) && d.DeployStatus == model.DEPLOY_STATUS_RUNNING {",
+        "if err := h.op.UpdateDeployStatus(d, buildStatus); err != nil {"
+      ],
+      "effect": "write-or-auth-transition",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "/api/task",
+      "resource": "/api/task/project/cancel",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "GET",
+      "path": "/api/task/project/deploy/status",
+      "handler": "GetTaskProjectDeployStatus",
+      "source": {
+        "file": "handler/deploy.go",
+        "line": 491
+      },
+      "modelSymbols": [
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "response/common.go"
+      ],
+      "sideEffectCalls": [
+        "h.op.GetDeployByID"
+      ],
+      "permissionEvidence": [
+        "verifyPermissions(c, []string{\"admin\", \"rd\", \"qa\", \"op\", \"pm\"}) {"
+      ],
+      "gateEvidence": [
+        "if !h.verifyPermissions(c, []string{\"admin\", \"rd\", \"qa\", \"op\", \"pm\"}) {"
+      ],
+      "effect": "read",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "/api/task",
+      "resource": "/api/task/project/deploy",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "GET",
+      "path": "/api/task/project/deploy/logs",
+      "handler": "GetTaskProjectDeployLogs",
+      "source": {
+        "file": "handler/deploy.go",
+        "line": 514
+      },
+      "modelSymbols": [
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "response/common.go"
+      ],
+      "sideEffectCalls": [
+        "h.op.GetDeployByID",
+        "utils.GetJenkinsBuildLogFromIndex"
+      ],
+      "permissionEvidence": [
+        "verifyPermissions(c, []string{\"admin\", \"rd\", \"qa\", \"op\", \"pm\"}) {"
+      ],
+      "gateEvidence": [
+        "if !h.verifyPermissions(c, []string{\"admin\", \"rd\", \"qa\", \"op\", \"pm\"}) {"
+      ],
+      "effect": "read",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "/api/task",
+      "resource": "/api/task/project/deploy",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "POST",
+      "path": "/api/task/project/rollback",
+      "handler": "TaskProjectRollback",
+      "source": {
+        "file": "handler/deploy.go",
+        "line": 330
+      },
+      "modelSymbols": [
+        "model.DEPLOY_STATUS_FAIL",
+        "model.DEPLOY_STATUS_RUNNING",
+        "model.Deploy",
+        "model.Project",
+        "model.Task",
+        "request.TaskProjectRollbackRequest",
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "model/deploy.go",
+        "model/user.go",
+        "model/build.go",
+        "model/project.go",
+        "model/task.go",
+        "model/deploy_test.go",
+        "response/common.go",
+        "request/task.go"
+      ],
+      "sideEffectCalls": [
+        "h.op.GetBuildByID",
+        "h.op.GetPipelineByID",
+        "h.op.GetTaskByID",
+        "h.op.GetTaskProjectByID",
+        "h.op.UpdateDeployJenkinsInfo",
+        "h.op.UpdateDeployStatus",
+        "utils.CreateJenkinsRollback",
+        "utils.IsGitOpsMigratedProject"
+      ],
+      "permissionEvidence": [
+        "verifyPermissions(c, []string{\"admin\", \"rd\", \"op\"}) {"
+      ],
+      "gateEvidence": [
+        "if !h.verifyPermissions(c, []string{\"admin\", \"rd\", \"op\"}) {",
+        "if err := h.assertNotSuspended(t); err != nil {",
+        "if updateErr := h.op.UpdateDeployStatus(&d, model.DEPLOY_STATUS_FAIL); updateErr != nil {"
+      ],
+      "effect": "write-or-auth-transition",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "/api/task",
+      "resource": "/api/task/project",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "POST",
+      "path": "/api/task/verify",
+      "handler": "TaskVerify",
+      "source": {
+        "file": "handler/task.go",
+        "line": 1058
+      },
+      "modelSymbols": [
+        "model.BUILD_WORKFLOW_STEP_VERIFY",
+        "model.DEPLOY_STATUS_SUCCESS",
+        "model.TASK_AUTOMATION_TEST_STATUS_SUCCESS",
+        "model.TASK_STATUS_VERIFY",
+        "model.Task",
+        "request.TaskVerifyRequest",
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "model/deploy.go",
+        "model/build.go",
+        "model/project.go",
+        "model/task.go",
+        "model/build_test.go",
+        "model/deploy_test.go",
+        "response/common.go",
+        "request/task.go"
+      ],
+      "sideEffectCalls": [
+        "h.op.GetUserByID"
+      ],
+      "permissionEvidence": [
+        "verifyPermissions(c, []string{\"admin\", \"qa\"}) {"
+      ],
+      "gateEvidence": [
+        "if !h.verifyPermissions(c, []string{\"admin\", \"qa\"}) {",
+        "if !locked.verifyTaskStatus(freshTask.Status, model.TASK_STATUS_VERIFY) {",
+        "if !freshTask.OnlyApollo {",
+        "if err := validateGrayProjectsSameTask(projects); err != nil {",
+        "if freshTask.JmeterPreCNStatus != model.TASK_AUTOMATION_TEST_STATUS_SUCCESS ||",
+        "if deploy == nil || deploy.DeployStatus != model.DEPLOY_STATUS_SUCCESS {"
+      ],
+      "effect": "write-or-auth-transition",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "/api/task",
+      "resource": "/api/task",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "POST",
+      "path": "/api/task/cancel/verify",
+      "handler": "TaskCancelVerify",
+      "source": {
+        "file": "handler/task.go",
+        "line": 1151
+      },
+      "modelSymbols": [
+        "model.TASK_STATUS_VERIFY",
+        "request.TaskCancelVerifyRequest",
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "model/task.go",
+        "response/common.go",
+        "request/task.go"
+      ],
+      "sideEffectCalls": [
+        "h.op.GetTaskByID"
+      ],
+      "permissionEvidence": [
+        "verifyPermissions(c, []string{\"admin\", \"qa\"}) {"
+      ],
+      "gateEvidence": [
+        "if !h.verifyPermissions(c, []string{\"admin\", \"qa\"}) {",
+        "if err := h.assertNotSuspended(t); err != nil {",
+        "if t.Status < model.TASK_STATUS_VERIFY {"
+      ],
+      "effect": "write-or-auth-transition",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "/api/task",
+      "resource": "/api/task/cancel",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "POST",
+      "path": "/api/task/audit",
+      "handler": "TaskAudit",
+      "source": {
+        "file": "handler/task.go",
+        "line": 1256
+      },
+      "modelSymbols": [
+        "model.BUILD_WORKFLOW_STEP_AUDIT",
+        "model.BUILD_WORKFLOW_STEP_DEPLOY_GRAY",
+        "model.TASK_APOLLO_PUBLISH_STATUS_SUCCESS",
+        "model.TASK_STATUS_AUDIT",
+        "model.TASK_STATUS_GRAY",
+        "model.Task",
+        "request.TaskAuditRequest",
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "model/deploy.go",
+        "model/build.go",
+        "model/project.go",
+        "model/task.go",
+        "model/build_test.go",
+        "model/deploy_test.go",
+        "response/common.go",
+        "request/task.go"
+      ],
+      "sideEffectCalls": [
+        "h.op.GetTaskByID",
+        "h.op.GetUserByID",
+        "utils.GetProjectWithGrayName"
+      ],
+      "permissionEvidence": [
+        "verifyPermissions(c, []string{\"admin\", \"op\"}) {"
+      ],
+      "gateEvidence": [
+        "if !h.verifyPermissions(c, []string{\"admin\", \"op\"}) {",
+        "if err := h.assertNotSuspended(t); err != nil {",
+        "if !h.verifyTaskStatus(CurrentStatus, NextStatus) {",
+        "if t.HasApollo {",
+        "if !t.ApolloReviewed {",
+        "if t.ApolloPrePublishStatus != model.TASK_APOLLO_PUBLISH_STATUS_SUCCESS {",
+        "if t.ApolloProdPublishStatus != model.TASK_APOLLO_PUBLISH_STATUS_SUCCESS {",
+        "if !locked.verifyTaskStatus(freshTask.Status, model.TASK_STATUS_AUDIT) {",
+        "if freshTask.HasApollo {",
+        "if !freshTask.ApolloReviewed {",
+        "if freshTask.ApolloPrePublishStatus != model.TASK_APOLLO_PUBLISH_STATUS_SUCCESS {",
+        "if freshTask.ApolloProdPublishStatus != model.TASK_APOLLO_PUBLISH_STATUS_SUCCESS {",
+        "if !freshTask.OnlyApollo {",
+        "if project.ProjectName == grayProject {"
+      ],
+      "effect": "write-or-auth-transition",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "/api/task",
+      "resource": "/api/task",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "POST",
+      "path": "/api/task/check",
+      "handler": "TaskCheck",
+      "source": {
+        "file": "handler/task.go",
+        "line": 1185
+      },
+      "modelSymbols": [
+        "model.Project",
+        "model.TASK_APOLLO_PUBLISH_STATUS_SUCCESS",
+        "model.TASK_CHECK_STATUS_RUNNING",
+        "model.TASK_STATUS_CHECK",
+        "request.TaskCheckRequest",
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "model/deploy.go",
+        "model/user.go",
+        "model/project.go",
+        "model/task.go",
+        "model/deploy_test.go",
+        "response/common.go",
+        "request/task.go"
+      ],
+      "sideEffectCalls": [
+        "h.op.GetTaskByID",
+        "h.op.GetTaskProjects",
+        "h.op.GetUserByID",
+        "h.op.UpdateTask"
+      ],
+      "permissionEvidence": [
+        "verifyPermissions(c, []string{\"admin\", \"op\"}) {"
+      ],
+      "gateEvidence": [
+        "if !h.verifyPermissions(c, []string{\"admin\", \"op\"}) {",
+        "if err := h.assertNotSuspended(t); err != nil {",
+        "if !h.verifyTaskStatus(CurrentStatus, NextStatus) {",
+        "if !t.OnlyApollo {",
+        "if t.HasApollo {",
+        "if !t.ApolloReviewed {",
+        "if t.ApolloPrePublishStatus != model.TASK_APOLLO_PUBLISH_STATUS_SUCCESS {"
+      ],
+      "effect": "write-or-auth-transition",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "/api/task",
+      "resource": "/api/task",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "POST",
+      "path": "/api/task/gray",
+      "handler": "TaskGray",
+      "source": {
+        "file": "handler/task.go",
+        "line": 2016
+      },
+      "modelSymbols": [
+        "model.BUILD_WORKFLOW_STEP_DEPLOY_GRAY",
+        "model.TASK_CHECK_STATUS_SUCCESS",
+        "model.TASK_STATUS_AUDIT",
+        "model.TASK_STATUS_GRAY",
+        "model.Task",
+        "request.TaskGrayRequest",
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "model/deploy.go",
+        "model/build.go",
+        "model/project.go",
+        "model/task.go",
+        "model/build_test.go",
+        "model/deploy_test.go",
+        "response/common.go",
+        "request/task.go"
+      ],
+      "sideEffectCalls": [
+        "h.op.GetTaskByID",
+        "h.op.GetUserByID"
+      ],
+      "permissionEvidence": [
+        "verifyPermissions(c, []string{\"admin\", \"qa\"}) {"
+      ],
+      "gateEvidence": [
+        "if !h.verifyPermissions(c, []string{\"admin\", \"qa\"}) {",
+        "if err := h.assertNotSuspended(t); err != nil {",
+        "if t.Status != model.TASK_STATUS_AUDIT && t.Status != model.TASK_STATUS_GRAY {",
+        "if t.CheckStatus != model.TASK_CHECK_STATUS_SUCCESS {",
+        "if !t.OnlyApollo {",
+        "if err := h.validateGrayRequirements(t); err != nil {",
+        "if freshTask.Status != model.TASK_STATUS_AUDIT && freshTask.Status != model.TASK_STATUS_GRAY {",
+        "if freshTask.CheckStatus != model.TASK_CHECK_STATUS_SUCCESS {",
+        "if !freshTask.OnlyApollo {",
+        "if _, err := locked.validateGrayDatabaseRequirements(freshTask); err != nil {"
+      ],
+      "effect": "write-or-auth-transition",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "/api/task",
+      "resource": "/api/task",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "POST",
+      "path": "/api/task/close",
+      "handler": "TaskClose",
+      "source": {
+        "file": "handler/task.go",
+        "line": 1419
+      },
+      "modelSymbols": [
+        "model.BUILD_WORKFLOW_STEP_CLOSE",
+        "model.DEPLOY_STATUS_SUCCESS",
+        "model.TASK_AUTOMATION_TEST_STATUS_SUCCESS",
+        "model.TASK_STATUS_CLOSE",
+        "model.Task",
+        "request.TaskCloseRequest",
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "model/deploy.go",
+        "model/build.go",
+        "model/project.go",
+        "model/task.go",
+        "model/build_test.go",
+        "model/deploy_test.go",
+        "response/common.go",
+        "request/task.go"
+      ],
+      "sideEffectCalls": [
+        "h.op.GetTaskByID",
+        "h.op.GetUserByID"
+      ],
+      "permissionEvidence": [
+        "verifyPermissions(c, []string{\"admin\", \"qa\"}) {"
+      ],
+      "gateEvidence": [
+        "if !h.verifyPermissions(c, []string{\"admin\", \"qa\"}) {",
+        "if err := h.assertNotSuspended(t); err != nil {",
+        "if !h.verifyTaskStatus(CurrentStatus, NextStatus) {",
+        "if !t.OnlyApollo {",
+        "if err := h.validateGrayDisabled(t); err != nil {",
+        "if !locked.verifyTaskStatus(freshTask.Status, model.TASK_STATUS_CLOSE) {",
+        "if !freshTask.OnlyApollo {",
+        "if freshTask.JmeterProdCNStatus != model.TASK_AUTOMATION_TEST_STATUS_SUCCESS {",
+        "if freshTask.JmeterProdUSStatus != model.TASK_AUTOMATION_TEST_STATUS_SUCCESS {",
+        "if freshTask.JmeterProdEUStatus != model.TASK_AUTOMATION_TEST_STATUS_SUCCESS {",
+        "if deploy == nil || deploy.DeployStatus != model.DEPLOY_STATUS_SUCCESS {"
+      ],
+      "effect": "write-or-auth-transition",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "/api/task",
+      "resource": "/api/task",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "POST",
+      "path": "/api/task/suspend",
+      "handler": "TaskSuspend",
+      "source": {
+        "file": "handler/task_admin.go",
+        "line": 118
+      },
+      "modelSymbols": [
+        "model.TASK_STATUS_CLOSE",
+        "model.Task",
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "model/deploy.go",
+        "model/project.go",
+        "model/task.go",
+        "model/deploy_test.go",
+        "response/common.go"
+      ],
+      "sideEffectCalls": [],
+      "permissionEvidence": [
+        "verifyPermissions(c, []string{\"admin\"}) {"
+      ],
+      "gateEvidence": [
+        "if !h.verifyPermissions(c, []string{\"admin\"}) {",
+        "if freshTask.Status == model.TASK_STATUS_CLOSE {",
+        "if freshTask.Suspended {",
+        "if err := locked.op.SetTaskSuspended(freshTask, true, &uid, u.RealName, now, req.Reason); err != nil {"
+      ],
+      "effect": "write-or-auth-transition",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "/api/task",
+      "resource": "/api/task",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "POST",
+      "path": "/api/task/resume",
+      "handler": "TaskResume",
+      "source": {
+        "file": "handler/task_admin.go",
+        "line": 170
+      },
+      "modelSymbols": [
+        "model.Task",
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "model/deploy.go",
+        "model/project.go",
+        "model/task.go",
+        "model/deploy_test.go",
+        "response/common.go"
+      ],
+      "sideEffectCalls": [],
+      "permissionEvidence": [
+        "verifyPermissions(c, []string{\"admin\"}) {"
+      ],
+      "gateEvidence": [
+        "if !h.verifyPermissions(c, []string{\"admin\"}) {",
+        "if !freshTask.Suspended {",
+        "if err := locked.op.SetTaskSuspended(freshTask, false, nil, \"\", \"\", \"\"); err != nil {"
+      ],
+      "effect": "write-or-auth-transition",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "/api/task",
+      "resource": "/api/task",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "POST",
+      "path": "/api/task/step/skip",
+      "handler": "TaskStepSkip",
+      "source": {
+        "file": "handler/task_admin.go",
+        "line": 214
+      },
+      "modelSymbols": [
+        "model.TASK_CHECK_STATUS_SUCCESS",
+        "model.TASK_STATUS_CHECK",
+        "model.TASK_STATUS_OPEN",
+        "model.TASK_STATUS_VERIFY",
+        "model.Task",
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "model/deploy.go",
+        "model/project.go",
+        "model/task.go",
+        "model/deploy_test.go",
+        "response/common.go"
+      ],
+      "sideEffectCalls": [],
+      "permissionEvidence": [
+        "verifyPermissions(c, []string{\"admin\"}) {"
+      ],
+      "gateEvidence": [
+        "if !h.verifyPermissions(c, []string{\"admin\"}) {",
+        "if err := h.assertNotSuspended(t); err != nil {",
+        "if err := locked.op.ApplyAdminSkip(freshTask.ID, next, buildWorkflowLevelForStatus(next), setCheckSuccess, checkReport); err != nil {"
+      ],
+      "effect": "write-or-auth-transition",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "/api/task",
+      "resource": "/api/task/step",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "POST",
+      "path": "/api/task/step/rollback",
+      "handler": "TaskStepRollback",
+      "source": {
+        "file": "handler/task_admin.go",
+        "line": 278
+      },
+      "modelSymbols": [
+        "model.TASK_CHECK_STATUS_NOT_RUN",
+        "model.TASK_STATUS_CLOSE",
+        "model.TASK_STATUS_OPEN",
+        "model.Task",
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "model/deploy.go",
+        "model/project.go",
+        "model/task.go",
+        "model/deploy_test.go",
+        "response/common.go"
+      ],
+      "sideEffectCalls": [],
+      "permissionEvidence": [
+        "verifyPermissions(c, []string{\"admin\"}) {"
+      ],
+      "gateEvidence": [
+        "if !h.verifyPermissions(c, []string{\"admin\"}) {",
+        "if err := h.assertNotSuspended(t); err != nil {",
+        "if !freshTask.OnlyApollo {"
+      ],
+      "effect": "write-or-auth-transition",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "/api/task",
+      "resource": "/api/task/step",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "GET",
+      "path": "/api/task/review/apollo",
+      "handler": "TaskGetReviewApollo",
+      "source": {
+        "file": "handler/task.go",
+        "line": 540
+      },
+      "modelSymbols": [
+        "model.TASK_STATUS_CHECK",
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "model/task.go",
+        "model/deploy_test.go",
+        "response/common.go"
+      ],
+      "sideEffectCalls": [
+        "h.op.GetTaskByID",
+        "utils.ReviewApollo"
+      ],
+      "permissionEvidence": [
+        "verifyPermissions(c, []string{\"admin\", \"rd\"}) {"
+      ],
+      "gateEvidence": [
+        "if !h.verifyPermissions(c, []string{\"admin\", \"rd\"}) {",
+        "if err := h.assertNotSuspended(t); err != nil {",
+        "if !t.HasApollo {",
+        "if t.Status >= model.TASK_STATUS_CHECK {",
+        "if t.ApolloReviewed {",
+        "if report == t.ApolloReviewReport {"
+      ],
+      "effect": "read",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "/api/task",
+      "resource": "/api/task/review",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "POST",
+      "path": "/api/task/review/apollo",
+      "handler": "TaskReviewApollo",
+      "source": {
+        "file": "handler/task.go",
+        "line": 593
+      },
+      "modelSymbols": [
+        "model.TASK_APOLLO_PUBLISH_STATUS_NOT_RUN",
+        "model.TASK_CHECK_STATUS_RUNNING",
+        "model.TASK_STATUS_CHECK",
+        "model.User",
+        "request.TaskReviewApolloRequest",
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "model/deploy.go",
+        "model/user.go",
+        "model/build.go",
+        "model/task.go",
+        "model/deploy_test.go",
+        "response/common.go",
+        "request/task.go"
+      ],
+      "sideEffectCalls": [
+        "h.op.GetTaskByID",
+        "h.op.GetUserByID",
+        "h.op.UpdateTask",
+        "utils.ReviewApollo"
+      ],
+      "permissionEvidence": [
+        "verifyPermissions(c, []string{\"admin\", \"rd\"}) {"
+      ],
+      "gateEvidence": [
+        "if !h.verifyPermissions(c, []string{\"admin\", \"rd\"}) {",
+        "if err := h.assertNotSuspended(t); err != nil {",
+        "if !t.HasApollo {",
+        "if t.Status >= model.TASK_STATUS_CHECK {",
+        "if t.CheckStatus >= model.TASK_CHECK_STATUS_RUNNING {",
+        "if report != req.ApolloReviewReport {",
+        "if t.ApolloReviewed {",
+        "if report == t.ApolloReviewReport {"
+      ],
+      "effect": "write-or-auth-transition",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "/api/task",
+      "resource": "/api/task/review",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "GET",
+      "path": "/api/task/publish/apollo/pre",
+      "handler": "TaskGetPublishApolloPre",
+      "source": {
+        "file": "handler/task.go",
+        "line": 682
+      },
+      "modelSymbols": [
+        "model.TASK_APOLLO_PUBLISH_STATUS_CHANGED",
+        "model.TASK_STATUS_CHECK",
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "model/task.go",
+        "model/deploy_test.go",
+        "response/common.go"
+      ],
+      "sideEffectCalls": [
+        "h.op.GetTaskByID",
+        "h.op.GetUserByID",
+        "utils.ReviewApollo"
+      ],
+      "permissionEvidence": [
+        "verifyPermissions(c, []string{\"admin\", \"op\"}) {"
+      ],
+      "gateEvidence": [
+        "if !h.verifyPermissions(c, []string{\"admin\", \"op\"}) {",
+        "if err := h.assertNotSuspended(t); err != nil {",
+        "if !t.HasApollo {",
+        "if !t.ApolloReviewed {",
+        "if t.Status >= model.TASK_STATUS_CHECK {",
+        "if report != t.ApolloReviewReport {"
+      ],
+      "effect": "read",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "/api/task",
+      "resource": "/api/task/publish/apollo",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "POST",
+      "path": "/api/task/publish/apollo/pre",
+      "handler": "TaskPublishApolloPre",
+      "source": {
+        "file": "handler/task.go",
+        "line": 743
+      },
+      "modelSymbols": [
+        "model.TASK_APOLLO_PUBLISH_STATUS_CHANGED",
+        "model.TASK_APOLLO_PUBLISH_STATUS_FAIL",
+        "model.TASK_APOLLO_PUBLISH_STATUS_SUCCESS",
+        "model.TASK_STATUS_CHECK",
+        "request.TaskPublishApolloRequest",
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "model/task.go",
+        "model/deploy_test.go",
+        "response/common.go",
+        "request/task.go"
+      ],
+      "sideEffectCalls": [
+        "h.op.GetTaskByID",
+        "h.op.GetUserByID",
+        "h.op.UpdateTask",
+        "utils.ReleaseApolloPre",
+        "utils.ReviewApollo"
+      ],
+      "permissionEvidence": [
+        "verifyPermissions(c, []string{\"admin\", \"op\"}) {"
+      ],
+      "gateEvidence": [
+        "if !h.verifyPermissions(c, []string{\"admin\", \"op\"}) {",
+        "if err := h.assertNotSuspended(t); err != nil {",
+        "if !t.HasApollo {",
+        "if !t.ApolloReviewed {",
+        "if t.Status >= model.TASK_STATUS_CHECK {",
+        "if report != t.ApolloReviewReport {"
+      ],
+      "effect": "write-or-auth-transition",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "/api/task",
+      "resource": "/api/task/publish/apollo",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "GET",
+      "path": "/api/task/publish/apollo/prod",
+      "handler": "TaskGetPublishApolloProd",
+      "source": {
+        "file": "handler/task.go",
+        "line": 821
+      },
+      "modelSymbols": [
+        "model.TASK_APOLLO_PUBLISH_STATUS_CHANGED",
+        "model.TASK_STATUS_CHECK",
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "model/task.go",
+        "model/deploy_test.go",
+        "response/common.go"
+      ],
+      "sideEffectCalls": [
+        "h.op.GetTaskByID",
+        "h.op.GetUserByID",
+        "utils.ReviewApollo"
+      ],
+      "permissionEvidence": [
+        "verifyPermissions(c, []string{\"admin\", \"op\"}) {"
+      ],
+      "gateEvidence": [
+        "if !h.verifyPermissions(c, []string{\"admin\", \"op\"}) {",
+        "if err := h.assertNotSuspended(t); err != nil {",
+        "if !t.HasApollo {",
+        "if !t.ApolloReviewed {",
+        "if t.Status != model.TASK_STATUS_CHECK {",
+        "if report != t.ApolloReviewReport {"
+      ],
+      "effect": "read",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "/api/task",
+      "resource": "/api/task/publish/apollo",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "POST",
+      "path": "/api/task/publish/apollo/prod",
+      "handler": "TaskPublishApolloProd",
+      "source": {
+        "file": "handler/task.go",
+        "line": 885
+      },
+      "modelSymbols": [
+        "model.TASK_APOLLO_PUBLISH_STATUS_CHANGED",
+        "model.TASK_APOLLO_PUBLISH_STATUS_FAIL",
+        "model.TASK_APOLLO_PUBLISH_STATUS_SUCCESS",
+        "model.TASK_STATUS_CHECK",
+        "request.TaskPublishApolloRequest",
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "model/task.go",
+        "model/deploy_test.go",
+        "response/common.go",
+        "request/task.go"
+      ],
+      "sideEffectCalls": [
+        "h.op.GetTaskByID",
+        "h.op.GetUserByID",
+        "h.op.UpdateTask",
+        "utils.ReleaseApolloProd",
+        "utils.ReviewApollo"
+      ],
+      "permissionEvidence": [
+        "verifyPermissions(c, []string{\"admin\", \"op\"}) {"
+      ],
+      "gateEvidence": [
+        "if !h.verifyPermissions(c, []string{\"admin\", \"op\"}) {",
+        "if err := h.assertNotSuspended(t); err != nil {",
+        "if !t.HasApollo {",
+        "if !t.ApolloReviewed {",
+        "if t.Status != model.TASK_STATUS_CHECK {",
+        "if report != t.ApolloReviewReport {"
+      ],
+      "effect": "write-or-auth-transition",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "/api/task",
+      "resource": "/api/task/publish/apollo",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "POST",
+      "path": "/api/task/verify/apollo/change",
+      "handler": "TaskVerifyApolloChange",
+      "source": {
+        "file": "handler/task.go",
+        "line": 966
+      },
+      "modelSymbols": [
+        "model.TASK_APOLLO_PUBLISH_STATUS_SUCCESS",
+        "model.TASK_STATUS_AUDIT",
+        "request.TaskVerifyApolloChangeRequest",
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "model/task.go",
+        "response/common.go",
+        "request/task.go"
+      ],
+      "sideEffectCalls": [
+        "h.op.GetTaskByID",
+        "h.op.GetUserByID",
+        "h.op.UpdateTask"
+      ],
+      "permissionEvidence": [
+        "verifyPermissions(c, []string{\"admin\", \"rd\"}) {"
+      ],
+      "gateEvidence": [
+        "if !h.verifyPermissions(c, []string{\"admin\", \"rd\"}) {",
+        "if err := h.assertNotSuspended(t); err != nil {",
+        "if !t.HasApollo {",
+        "if !t.ApolloReviewed {",
+        "if t.ApolloPrePublishStatus != model.TASK_APOLLO_PUBLISH_STATUS_SUCCESS {",
+        "if t.ApolloProdPublishStatus != model.TASK_APOLLO_PUBLISH_STATUS_SUCCESS {",
+        "if t.Status < model.TASK_STATUS_AUDIT {"
+      ],
+      "effect": "write-or-auth-transition",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "/api/task",
+      "resource": "/api/task/verify/apollo",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "POST",
+      "path": "/api/task/jmeter/run",
+      "handler": "TaskJmeterRun",
+      "source": {
+        "file": "handler/task.go",
+        "line": 1546
+      },
+      "modelSymbols": [
+        "request.TaskJmeterRunRequest",
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "response/common.go",
+        "request/task.go"
+      ],
+      "sideEffectCalls": [
+        "h.op.GetTaskByID"
+      ],
+      "permissionEvidence": [
+        "verifyPermissions(c, []string{\"admin\", \"rd\", \"qa\", \"op\", \"pm\"}) {"
+      ],
+      "gateEvidence": [
+        "if !h.verifyPermissions(c, []string{\"admin\", \"rd\", \"qa\", \"op\", \"pm\"}) {",
+        "if err := h.assertNotSuspended(jt); err != nil {"
+      ],
+      "effect": "write-or-auth-transition",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "/api/task",
+      "resource": "/api/task/jmeter",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "POST",
+      "path": "/api/task/jmeter/gray/run",
+      "handler": "TaskJmeterGrayRun",
+      "source": {
+        "file": "handler/task.go",
+        "line": 2135
+      },
+      "modelSymbols": [
+        "model.TASK_STATUS_AUDIT",
+        "request.TaskJmeterGrayRunRequest",
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "model/task.go",
+        "response/common.go",
+        "request/task.go"
+      ],
+      "sideEffectCalls": [
+        "h.op.GetTaskByID"
+      ],
+      "permissionEvidence": [
+        "verifyPermissions(c, []string{\"admin\", \"rd\", \"op\", \"qa\"}) {"
+      ],
+      "gateEvidence": [
+        "if !h.verifyPermissions(c, []string{\"admin\", \"rd\", \"op\", \"qa\"}) {",
+        "if err := h.assertNotSuspended(t); err != nil {",
+        "if t.Status != model.TASK_STATUS_AUDIT {"
+      ],
+      "effect": "write-or-auth-transition",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "/api/task",
+      "resource": "/api/task/jmeter/gray",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "GET",
+      "path": "/api/tasks",
+      "handler": "GetTasks",
+      "source": {
+        "file": "handler/task.go",
+        "line": 249
+      },
+      "modelSymbols": [
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "response/common.go"
+      ],
+      "sideEffectCalls": [
+        "h.op.GetTasksWithFilter"
+      ],
+      "permissionEvidence": [
+        "verifyPermissions(c, []string{\"admin\", \"rd\", \"qa\", \"op\", \"pm\"}) {"
+      ],
+      "gateEvidence": [
+        "if !h.verifyPermissions(c, []string{\"admin\", \"rd\", \"qa\", \"op\", \"pm\"}) {"
+      ],
+      "effect": "read",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "/api/task",
+      "resource": "/api",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "GET",
+      "path": "/api/apollo/gray/config",
+      "handler": "GetGrayConfig",
+      "source": {
+        "file": "handler/task.go",
+        "line": 1573
+      },
+      "modelSymbols": [
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "response/common.go"
+      ],
+      "sideEffectCalls": [
+        "utils.GetGrayConfig"
+      ],
+      "permissionEvidence": [
+        "verifyPermissions(c, []string{\"admin\", \"rd\", \"qa\", \"op\", \"pm\"}) {"
+      ],
+      "gateEvidence": [
+        "if !h.verifyPermissions(c, []string{\"admin\", \"rd\", \"qa\", \"op\", \"pm\"}) {"
+      ],
+      "effect": "read",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "/api/apollo/gray/config",
+      "resource": "/api/apollo/gray",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "POST",
+      "path": "/api/apollo/gray/config",
+      "handler": "SetGrayConfig",
+      "source": {
+        "file": "handler/task.go",
+        "line": 1625
+      },
+      "modelSymbols": [
+        "request.ApolloGraySetConfigRequest",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "response/common.go",
+        "request/task.go"
+      ],
+      "sideEffectCalls": [
+        "utils.GetGrayConfig",
+        "utils.GrayConfig",
+        "utils.SetGrayConfig"
+      ],
+      "permissionEvidence": [],
+      "gateEvidence": [
+        "if err := h.gateGrayRaise(req.Region, req.Namespace, effectiveCur, effectiveNew, config.Ratio); err != nil {",
+        "if err := utils.SetGrayConfig(req.Region, req.Env, req.Namespace, config); err != nil {"
+      ],
+      "effect": "write-or-auth-transition",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "/api/apollo/gray/config",
+      "resource": "/api/apollo/gray",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "POST",
+      "path": "/api/apollo/gray/ratio",
+      "handler": "UpdateGrayRatio",
+      "source": {
+        "file": "handler/task.go",
+        "line": 1713
+      },
+      "modelSymbols": [
+        "request.ApolloGrayUpdateRatioRequest",
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "response/common.go",
+        "request/task.go"
+      ],
+      "sideEffectCalls": [
+        "utils.GetGrayConfig",
+        "utils.UpdateGrayRatio"
+      ],
+      "permissionEvidence": [],
+      "gateEvidence": [
+        "if err != nil || !hasPermission {",
+        "if err := h.gateGrayRaise(req.Region, req.Namespace, effectiveCur, effectiveNew, req.Ratio); err != nil {",
+        "if err := utils.UpdateGrayRatio(req.Region, req.Env, req.Namespace, req.Ratio); err != nil {"
+      ],
+      "effect": "write-or-auth-transition",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "/api/apollo/gray/config",
+      "resource": "/api/apollo/gray",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "POST",
+      "path": "/api/apollo/gray/ramp",
+      "handler": "GrayRamp",
+      "source": {
+        "file": "handler/task.go",
+        "line": 2178
+      },
+      "modelSymbols": [
+        "model.GrayRamp",
+        "request.ApolloGrayUpdateRatioRequest",
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "model/grayramp.go",
+        "response/common.go",
+        "request/task.go"
+      ],
+      "sideEffectCalls": [
+        "h.op.CreateGrayRamp",
+        "h.op.GetActiveGrayRamp",
+        "h.op.UpdateGrayRampStatus",
+        "utils.GetGrayConfig"
+      ],
+      "permissionEvidence": [],
+      "gateEvidence": [
+        "if err != nil || !hasPermission {",
+        "if cur, gerr := utils.GetGrayConfig(req.Region, req.Env, req.Namespace); gerr == nil && cur != nil && cur.Enabled {",
+        "if active, _ := h.op.GetActiveGrayRamp(req.Region, req.Namespace); active != nil {",
+        "if active.Status == \"running\" {",
+        "if err := h.op.CreateGrayRamp(ramp); err != nil {"
+      ],
+      "effect": "write-or-auth-transition",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "/api/apollo/gray/config",
+      "resource": "/api/apollo/gray",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "GET",
+      "path": "/api/apollo/gray/ramp/status",
+      "handler": "GrayRampStatus",
+      "source": {
+        "file": "handler/task.go",
+        "line": 2269
+      },
+      "modelSymbols": [
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "response/common.go"
+      ],
+      "sideEffectCalls": [
+        "h.op.GetLatestGrayRamp"
+      ],
+      "permissionEvidence": [],
+      "gateEvidence": [],
+      "effect": "read",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "/api/apollo/gray/config",
+      "resource": "/api/apollo/gray/ramp",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "GET",
+      "path": "/api/apollo/gray/ramp/logs",
+      "handler": "GrayRampLogs",
+      "source": {
+        "file": "handler/task.go",
+        "line": 2288
+      },
+      "modelSymbols": [
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "response/common.go"
+      ],
+      "sideEffectCalls": [
+        "h.op.GetGrayRampByID",
+        "utils.GetJenkinsBuildLogFromIndex"
+      ],
+      "permissionEvidence": [
+        "verifyPermissions(c, []string{\"admin\", \"rd\", \"qa\", \"op\", \"pm\"}) {"
+      ],
+      "gateEvidence": [
+        "if !h.verifyPermissions(c, []string{\"admin\", \"rd\", \"qa\", \"op\", \"pm\"}) {"
+      ],
+      "effect": "read",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "/api/apollo/gray/config",
+      "resource": "/api/apollo/gray/ramp",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "POST",
+      "path": "/api/apollo/gray/ramp/confirm",
+      "handler": "GrayRampConfirm",
+      "source": {
+        "file": "handler/task.go",
+        "line": 2329
+      },
+      "modelSymbols": [
+        "request.ApolloGrayConfigRequest",
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "response/common.go",
+        "request/task.go"
+      ],
+      "sideEffectCalls": [
+        "h.op.GetActiveGrayRamp",
+        "h.op.UpdateGrayRampStatus"
+      ],
+      "permissionEvidence": [],
+      "gateEvidence": [
+        "if err != nil || !hasPermission {",
+        "if active, _ := h.op.GetActiveGrayRamp(req.Region, req.Namespace); active != nil {"
+      ],
+      "effect": "write-or-auth-transition",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "/api/apollo/gray/config",
+      "resource": "/api/apollo/gray/ramp",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "POST",
+      "path": "/api/apollo/gray/ramp/descale",
+      "handler": "GrayRampDescale",
+      "source": {
+        "file": "handler/task.go",
+        "line": 2345
+      },
+      "modelSymbols": [
+        "request.ApolloGrayConfigRequest",
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "response/common.go",
+        "request/task.go"
+      ],
+      "sideEffectCalls": [
+        "h.op.CancelCoveringGrayRamps",
+        "utils.GetGrayConfig"
+      ],
+      "permissionEvidence": [],
+      "gateEvidence": [
+        "if err != nil || !hasPermission {"
+      ],
+      "effect": "write-or-auth-transition",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "/api/apollo/gray/config",
+      "resource": "/api/apollo/gray/ramp",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "POST",
+      "path": "/api/apollo/gray/whitelist/add",
+      "handler": "AddGrayWhitelist",
+      "source": {
+        "file": "handler/task.go",
+        "line": 1759
+      },
+      "modelSymbols": [
+        "request.ApolloGrayWhitelistRequest",
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "response/common.go",
+        "request/task.go"
+      ],
+      "sideEffectCalls": [
+        "utils.AddToGrayWhitelist"
+      ],
+      "permissionEvidence": [
+        "verifyPermissions(c, []string{\"admin\", \"rd\"}) {"
+      ],
+      "gateEvidence": [
+        "if !h.verifyPermissions(c, []string{\"admin\", \"rd\"}) {",
+        "if err := utils.AddToGrayWhitelist(req.Region, req.Env, req.Namespace, req.Ids); err != nil {"
+      ],
+      "effect": "write-or-auth-transition",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "/api/apollo/gray/config",
+      "resource": "/api/apollo/gray/whitelist",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "POST",
+      "path": "/api/apollo/gray/whitelist/remove",
+      "handler": "RemoveGrayWhitelist",
+      "source": {
+        "file": "handler/task.go",
+        "line": 1785
+      },
+      "modelSymbols": [
+        "request.ApolloGrayWhitelistRequest",
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "response/common.go",
+        "request/task.go"
+      ],
+      "sideEffectCalls": [
+        "utils.RemoveFromGrayWhitelist"
+      ],
+      "permissionEvidence": [
+        "verifyPermissions(c, []string{\"admin\", \"rd\"}) {"
+      ],
+      "gateEvidence": [
+        "if !h.verifyPermissions(c, []string{\"admin\", \"rd\"}) {",
+        "if err := utils.RemoveFromGrayWhitelist(req.Region, req.Env, req.Namespace, req.Ids); err != nil {"
+      ],
+      "effect": "write-or-auth-transition",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "/api/apollo/gray/config",
+      "resource": "/api/apollo/gray/whitelist",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "POST",
+      "path": "/api/apollo/gray/release",
+      "handler": "GrayRelease",
+      "source": {
+        "file": "handler/task.go",
+        "line": 1811
+      },
+      "modelSymbols": [
+        "request.ApolloGrayReleaseRequest",
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "response/common.go",
+        "request/task.go"
+      ],
+      "sideEffectCalls": [
+        "utils.GetGrayConfig",
+        "utils.GrayReleaseApollo"
+      ],
+      "permissionEvidence": [
+        "verifyPermissions(c, []string{\"admin\", \"op\"}) {"
+      ],
+      "gateEvidence": [
+        "if !h.verifyPermissions(c, []string{\"admin\", \"op\"}) {",
+        "if req.Step > 0 && req.Step < 100 {",
+        "if err := h.gateGrayRaise(req.Region, req.Namespace, effectiveCur, effectiveNew, req.Step); err != nil {"
+      ],
+      "effect": "write-or-auth-transition",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "/api/apollo/gray/config",
+      "resource": "/api/apollo/gray",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "POST",
+      "path": "/api/apollo/gray/release/batch",
+      "handler": "BatchGrayRelease",
+      "source": {
+        "file": "handler/task.go",
+        "line": 1870
+      },
+      "modelSymbols": [
+        "request.ApolloGrayBatchReleaseRequest",
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "response/common.go",
+        "request/task.go"
+      ],
+      "sideEffectCalls": [
+        "utils.BatchGrayReleaseApollo",
+        "utils.GetGrayConfig"
+      ],
+      "permissionEvidence": [
+        "verifyPermissions(c, []string{\"admin\", \"op\"}) {"
+      ],
+      "gateEvidence": [
+        "if !h.verifyPermissions(c, []string{\"admin\", \"op\"}) {",
+        "if req.Step > 0 && req.Step < 100 {",
+        "if !isGrayPrescaleNamespace(ns) {",
+        "if err := h.gateGrayRaise(region, ns, effectiveCur, effectiveNew, req.Step); err != nil {"
+      ],
+      "effect": "write-or-auth-transition",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "/api/apollo/gray/config",
+      "resource": "/api/apollo/gray/release",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "POST",
+      "path": "/api/apollo/gray/enable",
+      "handler": "EnableGray",
+      "source": {
+        "file": "handler/task.go",
+        "line": 1938
+      },
+      "modelSymbols": [
+        "request.ApolloGrayEnableRequest",
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "response/common.go",
+        "request/task.go"
+      ],
+      "sideEffectCalls": [
+        "utils.EnableGray",
+        "utils.GetGrayConfig"
+      ],
+      "permissionEvidence": [
+        "verifyPermissions(c, []string{\"admin\", \"rd\"}) {"
+      ],
+      "gateEvidence": [
+        "if !h.verifyPermissions(c, []string{\"admin\", \"rd\"}) {",
+        "if err := h.gateGrayRaise(req.Region, req.Namespace, effectiveCur, effectiveNew, effectiveNew); err != nil {",
+        "if err := utils.EnableGray(req.Region, req.Env, req.Namespace, req.Ratio, strategy); err != nil {"
+      ],
+      "effect": "write-or-auth-transition",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "/api/apollo/gray/config",
+      "resource": "/api/apollo/gray",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    },
+    {
+      "method": "POST",
+      "path": "/api/apollo/gray/disable",
+      "handler": "DisableGray",
+      "source": {
+        "file": "handler/task.go",
+        "line": 1990
+      },
+      "modelSymbols": [
+        "request.ApolloGrayConfigRequest",
+        "response.AccessForbidden",
+        "response.NewErrorResponse",
+        "response.Response"
+      ],
+      "modelSources": [
+        "response/common.go",
+        "request/task.go"
+      ],
+      "sideEffectCalls": [
+        "utils.DisableGray"
+      ],
+      "permissionEvidence": [
+        "verifyPermissions(c, []string{\"admin\", \"rd\"}) {"
+      ],
+      "gateEvidence": [
+        "if !h.verifyPermissions(c, []string{\"admin\", \"rd\"}) {",
+        "if err := utils.DisableGray(req.Region, req.Env, req.Namespace); err != nil {"
+      ],
+      "effect": "write-or-auth-transition",
+      "evidence": "source-verified",
+      "deployment": "unknown",
+      "readback": "/api/apollo/gray/config",
+      "resource": "/api/apollo/gray",
+      "executionGate": "owner authorization + current identity/role/resource + current state + side-effect/readback contract; deployment match pending"
+    }
+  ],
+  "unresolvedMappings": [],
+  "frontendSource": {
+    "projectId": 411,
+    "commit": "6cd7d7776db78c9f3fefee2de8213e69530da8e5",
+    "snapshotRoot": "/tmp/internal-business-source/cicd-fe"
+  },
+  "frontendBusinessPaths": [
+    "/api/apollo/gray/config",
+    "/api/apollo/gray/ramp",
+    "/api/apollo/gray/ramp/confirm",
+    "/api/apollo/gray/ramp/descale",
+    "/api/apollo/gray/ramp/logs",
+    "/api/apollo/gray/ramp/status",
+    "/api/apollo/gray/ratio",
+    "/api/project/getProjectList",
+    "/api/project/repository/branchs",
+    "/api/projects",
+    "/api/task",
+    "/api/task/add/project",
+    "/api/task/audit",
+    "/api/task/build/deploy",
+    "/api/task/builds",
+    "/api/task/check",
+    "/api/task/close",
+    "/api/task/create",
+    "/api/task/disable",
+    "/api/task/getTaskProjectList",
+    "/api/task/gray",
+    "/api/task/jmeter/gray/run",
+    "/api/task/jmeter/run",
+    "/api/task/project/cancel/deploy",
+    "/api/task/project/deploy",
+    "/api/task/project/deploy/logs",
+    "/api/task/project/deploy/status",
+    "/api/task/project/rollback",
+    "/api/task/publish/apollo/gray",
+    "/api/task/publish/apollo/pre",
+    "/api/task/publish/apollo/prod",
+    "/api/task/resume",
+    "/api/task/review/apollo",
+    "/api/task/step/rollback",
+    "/api/task/step/skip",
+    "/api/task/suspend",
+    "/api/task/unlock",
+    "/api/task/update",
+    "/api/task/verify",
+    "/api/task/verify/apollo/change",
+    "/api/tasks"
+  ],
+  "frontendPathsMissingBackend": [
+    "/api/project/getProjectList",
+    "/api/task/getTaskProjectList",
+    "/api/task/publish/apollo/gray"
+  ]
+}

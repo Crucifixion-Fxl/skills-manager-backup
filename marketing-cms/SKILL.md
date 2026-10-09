@@ -3,7 +3,6 @@ name: marketing-cms
 description: "Use when managing Paywall pages, Promotion assets (popup/banner/video), member features, comparison templates, translation jobs, or cross-environment sync in Marketing CMS (Payload CMS). Triggers: 'paywall', 'promotion', 'CMS content', 'member feature', 'translation progress', 'sync to pre', 'transfer', 'marketing page', 'OEM tenant config', 'upload image', 'push to prod'."
 dependencies:
   - feishu-auth
-  - promotion-i18n
 ---
 
 # marketing-cms
@@ -12,14 +11,9 @@ Marketing Content Center -- Payload CMS platform for App paywall, promotion, and
 
 ## Dependencies
 
-Requires `feishu-auth` skill for authentication. First-time setup:
+Requires the [feishu-auth](../../development/feishu-auth/SKILL.md) skill for authentication. Read its registry, exact-version and credential-handling contract before running any authentication command. Use the host's approved authentication entry when one is configured; never print or persist token stdout, expose registry credentials, or silently fall back to a different CLI version.
 
-```bash
-# 1. Configure registry
-npm config set @a4x:registry https://gitlab.addx.ai/api/v4/projects/1021/packages/npm/
-# 2. Configure auth (requires GitLab PAT with `api` scope; `read_api` is NOT sufficient)
-npm config set //gitlab.addx.ai/api/v4/projects/1021/packages/npm/:_authToken <your-gitlab-pat>
-```
+`promotion-i18n` is an optional, separately distributed dependency only for creating translated images. Check that it is installed before delegating that workflow. If unavailable, report the missing capability and request approved localized assets; do not claim that image translation is available or publish untranslated artwork as localized content. Paywall management and existing-asset operations do not require it.
 
 ## First-touch Decision Tree
 
@@ -30,10 +24,11 @@ User request → Identify target
 ├── Paywall page (carousel + product card + pricing) → paywalls collection
 ├── Touchpoint asset (popup/banner/video image card) → promotions collection
 ├── Image upload → media collection
+├── Member benefit item → member-features collection
 ├── Plan comparison table → comparison-templates collection
 ├── Translation progress → translation-jobs collection
 ├── Push/sync to pre or prod → Transfer API (see "Cross-environment Sync")
-└── Unclear → Ask user: paywall or promotion?
+└── Unclear → Ask which content object and operation the user intends
 ```
 
 ## Description
@@ -62,24 +57,87 @@ API path: `/api/{slug}` (standard Payload CMS REST API).
 
 ### Authentication
 
-Via `feishu-auth` skill:
+Via the [feishu-auth](../../development/feishu-auth/SKILL.md) contract above (including any host-approved wrapper). The commands below require its registry and exact-version checks to have passed:
 
 ```bash
-TOKEN=$(npx --yes @a4x/feishu-auth-cli@1.2.1 token 2>/dev/null)
+# Disable shell tracing before obtaining any credential.
+set +x
+export -n TOKEN
+TOKEN=$(npx --yes @a4x/feishu-auth-cli@1.2.1 token)
 if [ -z "$TOKEN" ]; then
   npx --yes @a4x/feishu-auth-cli@1.2.1 login
   TOKEN=$(npx --yes @a4x/feishu-auth-cli@1.2.1 token)
 fi
 
-# IMPORTANT: use --globoff to prevent curl from interpreting [] in query params
-curl --globoff -H "Authorization: Bearer ${TOKEN}" "${BASE_URL}/api/paywalls?limit=5"
 ```
+
+Use the host-approved wrapper instead of the direct CLI commands above when configured. Never enable `-v`/`--verbose`, `--trace*`, shell tracing or credential logging. Keep `TOKEN` unexported, unset it after the operation, and do not put it in argv or a header file. All examples below use this Bash helper (curl with `--fail-with-body` support):
+
+```bash
+cms_curl() {
+  set +x
+  local cms_request_path="${1:-}"
+  case "${BASE_URL:-}" in
+    https://marketing-cms-staging-us.addx.live|https://marketing-cms-pre-us.addx.live) ;;
+    *) builtin printf 'Unsupported CMS environment\n' >&2; return 64 ;;
+  esac
+  case "$cms_request_path" in
+    /api/*) shift ;;
+    *) builtin printf 'Expected a CMS /api/ path\n' >&2; return 64 ;;
+  esac
+  if [ -z "${TOKEN:-}" ]; then
+    builtin printf 'CMS token is required\n' >&2
+    return 64
+  fi
+  local -a cms_request_options=()
+  local cms_request_value cms_upload_path cms_upload_seen=0
+  while [ "$#" -gt 0 ]; do
+    [ "$#" -ge 2 ] || return 64
+    cms_request_value="$2"
+    case "$1" in
+      -X)
+        case "$cms_request_value" in GET|POST|PATCH|DELETE) ;; *) return 64 ;; esac
+        cms_request_options+=(-X "$cms_request_value") ;;
+      -H)
+        [ "$cms_request_value" = 'Content-Type: application/json' ] || return 64
+        cms_request_options+=(-H "$cms_request_value") ;;
+      -d)
+        case "$cms_request_value" in \{*\}) ;; *) return 64 ;; esac
+        cms_request_options+=(--data-raw "$cms_request_value") ;;
+      -F)
+        case "$cms_request_value" in
+          file=@*)
+            [ "$cms_upload_seen" -eq 0 ] || return 64
+            cms_upload_seen=1
+            cms_upload_path="${cms_request_value#file=@}"
+            case "$cms_upload_path" in
+              ''|-|*';'*|*','*|*$'\n'*|*$'\r'*|*'://'*) return 64 ;;
+            esac
+            cms_request_options+=(-F "$cms_request_value") ;;
+          _payload=\{*\}) cms_request_options+=(--form-string "$cms_request_value") ;;
+          *) return 64 ;;
+        esac ;;
+      *) return 64 ;;
+    esac
+    shift 2
+  done
+  export -n TOKEN
+  builtin printf 'Authorization: Bearer %s\n' "$TOKEN" |
+    command curl --disable --globoff --fail-with-body --silent --show-error \
+      --header @- "${BASE_URL}${cms_request_path}" "${cms_request_options[@]}"
+}
+
+BASE_URL="https://marketing-cms-staging-us.addx.live"
+cms_curl '/api/paywalls?limit=5'
+```
+
+The helper reserves stdin for the header and returns curl's failure status; unsupported or unpaired options return 64 before curl runs. It accepts only the declared collection methods, the exact JSON Content-Type, inline object bodies, one `file=@path` upload and literal `_payload` object data. Upload paths still require user authorization; multipart attributes, multiple files, URL/config/proxy/redirect/trace/output options and stdin bodies are not supported. The API validates JSON content; successful HTTP alone does not prove a successful operation: inspect the response and read back writes.
 
 **Token validity**: 2 hours. After expiry, re-run `npx --yes @a4x/feishu-auth-cli@1.2.1 login`.
 
 **Note:** feishu-auth staging and prod tokens are identical. No need to switch env -- the same token works for all CMS environments (Staging, Pre, Prod).
 
-**API Key (for automation/CI)**: Format `cms_...`, created from CMS Admin → API Key Management. No expiry, but only supports certain endpoints (Transfer API, Sync API).
+**API Key (for automation/CI)**: Historical documentation describes `cms_...` keys from CMS Admin → API Key Management for Transfer/Sync. Expiry (including the historical no-expiry claim), endpoint scopes, environment binding, rotation and revocation have not been verified in this restoration. Before use, verify the actual key's identity and available permissions, choose the least authorization the platform supports, and use an approved secret-delivery entry. Do not assume environment sharing or invent unsupported controls; unresolved access facts block the affected key operation.
 
 ### API Reference
 
@@ -104,17 +162,15 @@ Query parameters:
 
 **Create a member feature:**
 ```bash
-curl --globoff -X POST -H "Authorization: Bearer ${TOKEN}" \
+cms_curl /api/member-features -X POST \
   -H "Content-Type: application/json" \
-  "${BASE_URL}/api/member-features" \
   -d '{"key": "ai_detection", "name": "AI Detection", "subtitle": "Smart alerts"}'
 ```
 
 **Update a paywall (partial):**
 ```bash
-curl --globoff -X PATCH -H "Authorization: Bearer ${TOKEN}" \
+cms_curl "/api/paywalls/${PAYWALL_ID}" -X PATCH \
   -H "Content-Type: application/json" \
-  "${BASE_URL}/api/paywalls/${PAYWALL_ID}" \
   -d '{"description": "Updated description", "_status": "draft"}'
 ```
 
@@ -122,9 +178,8 @@ curl --globoff -X PATCH -H "Authorization: Bearer ${TOKEN}" \
 
 **Publish (prerequisite for Transfer):**
 ```bash
-curl --globoff -X PATCH -H "Authorization: Bearer ${TOKEN}" \
+cms_curl "/api/paywalls/${PAYWALL_ID}" -X PATCH \
   -H "Content-Type: application/json" \
-  "${BASE_URL}/api/paywalls/${PAYWALL_ID}" \
   -d '{"_status": "published"}'
 ```
 
@@ -177,25 +232,11 @@ For field definitions, creation examples, and known constraints, read `reference
 
 **If images contain text that needs translation** (e.g., localized popup/banner), use the `promotion-i18n` skill instead — it handles Figma translation, image export, compression, and CMS upload in one workflow.
 
-The manual approach below is only for universal images (no text) that use the same image across all locales:
+For universal images (no text), first read `/api/promotions/{id}?locale=all&depth=0` and preserve the complete components array, block IDs, non-image fields and every existing locale value. Identify the target block by its ID, not its array position.
 
-```bash
-# Step 1: GET current block id (required for PATCH)
-BLOCK_ID=$(curl --globoff -s -H "Authorization: Bearer ${TOKEN}" \
-  "${BASE_URL}/api/promotions/${ID}?depth=0" | python3 -c "import sys,json; print(json.load(sys.stdin)['components'][0]['id'])")
+Before constructing a write, verify the current API's array replacement and locale merge semantics from its contract or an approved isolated fixture. If those semantics cannot be confirmed, stop the affected write. For each authorized locale, derive a payload from the full original document and change only the target image; never send a one-element array cut from `components[0]`.
 
-# Step 2: PATCH each locale with block id included
-for locale in en ar cs de es fi fi-fi fr he he-il id it ja ko pl pt pt-br pt-pt ru th tr vi zh-hans zh-hant; do
-  curl --globoff -X PATCH -H "Authorization: Bearer ${TOKEN}" \
-    -H "Content-Type: application/json" \
-    "${BASE_URL}/api/promotions/${ID}?locale=$locale" \
-    -d "{\"components\":[{\"id\":\"${BLOCK_ID}\",\"blockType\":\"imageCard\",\"image\":\"${MEDIA_ID}\"}]}"
-done
-
-# Step 3: Verify all locale values
-curl --globoff -H "Authorization: Bearer ${TOKEN}" \
-  "${BASE_URL}/api/promotions/${ID}?locale=all&depth=0"
-```
+Write one locale at a time with `cms_curl`, check HTTP and business results, then read back all locales and compare against the preserved original. Continue only when the intended image changed and every other component, field and locale remained intact. On an error, unknown outcome or unexpected diff, stop and report completed and unexecuted locales without blindly replaying writes.
 
 ---
 
@@ -207,16 +248,13 @@ Translations managed via `translation-jobs` collection (NOT Payload's `?locale=`
 
 ```bash
 # Check translation progress for a paywall
-curl --globoff -H "Authorization: Bearer ${TOKEN}" \
-  "${BASE_URL}/api/translation-jobs?where[entityId][equals]=${ID}&limit=50"
+cms_curl "/api/translation-jobs?where[entityId][equals]=${ID}&limit=50"
 
 # Check pending translations
-curl --globoff -H "Authorization: Bearer ${TOKEN}" \
-  "${BASE_URL}/api/translation-jobs?where[status][equals]=pending"
+cms_curl '/api/translation-jobs?where[status][equals]=pending'
 
 # Check specific locale translation result
-curl --globoff -H "Authorization: Bearer ${TOKEN}" \
-  "${BASE_URL}/api/translation-jobs?where[entityId][equals]=${ID}&where[targetLocale][equals]=ja"
+cms_curl "/api/translation-jobs?where[entityId][equals]=${ID}&where[targetLocale][equals]=ja"
 ```
 
 Supported locales (23): ar, cs, de, es, fi, fi-fi, fr, he, he-il, id, it, ja, ko, pl, pt, pt-br, pt-pt, ru, th, tr, vi, zh-hans, zh-hant
@@ -256,36 +294,35 @@ Pushes from **current environment** to **next environment** (staging→pre or pr
 **Auto-handled:**
 - Media files sync automatically (S3 transfer + metadata upsert), no separate media push needed
 - Multi-language data synced in full (all locale translations)
-- Idempotent: repeated transfer is safe (upsert by key)
+- Records are upserted by key; this is not authorization to replay an unknown or partially successful transfer
 - Media sync failure does not block main content sync
 
 ### Transfer Examples
 
 **Staging → Pre (single):**
 ```bash
-curl --globoff -s -X POST \
-  -H "Authorization: Bearer ${STAGING_TOKEN}" \
-  -H "Content-Type: application/json" \
-  "https://marketing-cms-staging-us.addx.live/api/transfer/paywalls/my_paywall_key"
+BASE_URL="https://marketing-cms-staging-us.addx.live"
+cms_curl /api/transfer/paywalls/my_paywall_key -X POST \
+  -H "Content-Type: application/json"
 ```
 
 **Pre → Prod (batch):**
-```bash
-PRE_TOKEN=$(npx --yes @a4x/feishu-auth-cli@1.2.1 token)
-PRE="https://marketing-cms-pre-us.addx.live"
 
-for key in paywall_key_1 paywall_key_2; do
-  curl --globoff -s -X POST \
-    -H "Authorization: Bearer ${PRE_TOKEN}" \
-    -H "Content-Type: application/json" \
-    "${PRE}/api/transfer/paywalls/${key}"
-done
-```
+1. Produce a local plan listing the exact source/target environments, tenant, collection, keys and item count after verifying published content. This is a read-only preview, not a server-side dry-run API.
+2. Check that existing user authorization covers that exact batch. If it does, continue without asking again; otherwise obtain only the missing scope before any POST. Set `BASE_URL` to the verified Pre URL for Pre→Prod.
+3. Execute one planned key at a time through `cms_curl`. Require HTTP success, parsed business `success: true`, and destination-content/media readback before the next key. For internal-only Prod, use an approved server-side result/readback path; if unavailable, the result is unknown and the batch stops.
+4. Media failure, HTTP/business failure, unknown outcome or unexpected content stops the batch immediately, even if the main document was synced. Report completed, failed/unknown and unexecuted keys separately; do not retry blindly. Reconcile actual state before planning any further attempt.
 
 **Response format:**
+
+First sync:
 ```json
-{"success": true, "action": "created", "id": "..."}   // first sync
-{"success": true, "action": "updated", "id": "..."}   // repeated sync (update)
+{"success": true, "action": "created", "id": "..."}
+```
+
+Repeated sync (update):
+```json
+{"success": true, "action": "updated", "id": "..."}
 ```
 
 ### Sync Logs
@@ -293,8 +330,7 @@ done
 Each transfer is logged in `sync-logs` collection:
 
 ```bash
-curl --globoff -s -H "Authorization: Bearer ${TOKEN}" \
-  "${BASE_URL}/api/sync-logs?sort=-createdAt&limit=10"
+cms_curl '/api/sync-logs?sort=-createdAt&limit=10'
 ```
 
 Fields: `collection`, `documentKey`, `sourceEnv`, `targetEnv`, `status` (success/failed), `timestamp`, `errorMessage`
@@ -310,6 +346,8 @@ Fields: `collection`, `documentKey`, `sourceEnv`, `targetEnv`, `status` (success
 ## Pre-flight Checklist
 
 Before executing any write operation, verify:
+
+- [ ] The user authorized this operation, target environment, tenant and object; read back the result after writing.
 
 - [ ] PATCH promotion: included block `id` from GET? (image loss if missing)
 - [ ] Transfer: document is published? content verified? (irreversible)
@@ -357,15 +395,18 @@ User: "Create a new paywall for soliom"
 AI: POST /api/paywalls {
   "tenantId": "soliom",
   "key": "soliom_main_paywall",
+  "spmb": "vip_purchase_product_page",
   "description": "Soliom main subscription paywall",
   "payType": "2",
   "_status": "draft",
   "components": [
-    {"blockType": "navi-bar", "title": "Upgrade Plan", "style": "default_app_bar"},
-    {"blockType": "bottom-area", "style": "default", "directPay": true}
+    {"blockType": "navi-bar", "componentType": "navi-bar", "title": "Upgrade Plan", "style": "default_app_bar"},
+    {"blockType": "bottom-area", "componentType": "bottom-area", "style": "default", "directPay": true}
   ]
 }
 ```
+
+`spmb` follows the reference's required-field contract. `componentType` matches its examples; this does not assert that the server requires it.
 
 ### Bad -- Checking translation with locale parameter
 
@@ -394,8 +435,9 @@ Problem: image only written to en locale, users of other languages see no image
 
 ```
 User: "Create gen3 phase 2 promotion assets"
-AI: POST /api/promotions?locale=en to create record ->
-    iterate all locales, PATCH /api/promotions/{id}?locale={locale} to write same image
+AI: Create the authorized record -> read its full components and all locales ->
+    verify PATCH semantics -> update only the target image per authorized locale ->
+    read back and preserve every other component/field/locale; stop on unknown or failed results
 ```
 
 ### Bad -- Skipping Pre, pushing directly to Prod
@@ -419,9 +461,10 @@ AI: 1. Call Staging /api/transfer/paywalls/{key} -> pushes to Pre
 
 ```
 User: "Push all gen3 promotions to prod"
-AI: 1. Query Pre with where[key][like]=gen3 to find all matching keys
-    2. Iterate each key: POST /api/transfer/promotions/{key}
-    3. Summarize results table (key / action / success)
+AI: 1. Query Pre, then preview exact keys, tenant, environments and count without writing
+    2. Proceed when existing authorization covers that exact batch; otherwise clarify missing scope
+    3. Transfer one key; check HTTP, business success and destination content/media before the next
+    4. Stop on failure or unknown outcome; report completed/failed-or-unknown/unexecuted keys
 ```
 
 ## References

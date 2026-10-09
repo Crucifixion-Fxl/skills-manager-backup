@@ -359,6 +359,60 @@ class FeishuApproval(JoinTestCase):
 
 
 class TrustedMirrorsAdapter(unittest.TestCase):
+    def test_websocket_relay_uses_signed_http_query_without_changing_host(self):
+        """L2-JOIN-162-020: deployed ws(s) env queries mirror trust with matching NIP-98 URL."""
+        for scheme, query_scheme in (("wss", "https"), ("ws", "http"), ("https", "https"), ("http", "http")):
+            with self.subTest(scheme=scheme):
+                seen = []
+
+                def http(url, headers, timeout, body=None):
+                    seen.append((url, headers))
+                    return 200, json.dumps(mirror_events()).encode()
+
+                env = {"BUZZ_RELAY_URL": f"{scheme}://relay.example.test:8443",
+                       "BUZZ_PRIVATE_KEY": AGENT_KEY}
+                host = "127.0.0.1:8443" if scheme in {"ws", "http"} else "relay.example.test:8443"
+                env["BUZZ_RELAY_URL"] = f"{scheme}://{host}"
+                buzz = join.AgentBuzz("/opt/buzz-0.5.23/usr/bin/buzz", env, http=http)
+                self.assertEqual(buzz.trusted_mirrors({MIRROR}, {MIRROR_OWNER: "owner", MIRROR: "bot"}), {MIRROR})
+                (url, headers), = seen
+                self.assertEqual(url, f"{query_scheme}://{host}/query")
+                auth = json.loads(base64.b64decode(headers["Authorization"][len("Nostr "):]))
+                self.assertIn(["u", url], auth["tags"])
+                self.assertIn(["method", "POST"], auth["tags"])
+                self.assertEqual(auth["pubkey"], AGENT)
+
+    def test_websocket_edge_origins_keep_host_auth_tag_and_runtime_env(self):
+        """L2-JOIN-161-001 (from !1029): default wss port, IPv6 loopback ws, x-auth-tag on the wss path, and the
+        agent's own BUZZ_RELAY_URL left untouched by the query-only conversion."""
+        for origin, endpoint in (
+            ("wss://relay.example.test", "https://relay.example.test/query"),
+            ("ws://[::1]:7777", "http://[::1]:7777/query"),
+        ):
+            with self.subTest(origin=origin):
+                seen = []
+
+                def http(url, headers, timeout, body=None):
+                    seen.append((url, headers))
+                    return 200, json.dumps(mirror_events()).encode()
+
+                env = {"BUZZ_RELAY_URL": origin, "BUZZ_PRIVATE_KEY": AGENT_KEY,
+                       "BUZZ_AUTH_TAG": '["auth","x","","y"]'}
+                buzz = join.AgentBuzz("/opt/buzz-0.5.23/usr/bin/buzz", env, http=http)
+                self.assertEqual(buzz.trusted_mirrors({MIRROR}, {MIRROR_OWNER: "owner", MIRROR: "bot"}), {MIRROR})
+                (url, headers), = seen
+                self.assertEqual(url, endpoint)
+                auth = json.loads(base64.b64decode(headers["Authorization"][len("Nostr "):]))
+                self.assertIn(["u", endpoint], auth["tags"])
+                self.assertEqual(headers["x-auth-tag"], env["BUZZ_AUTH_TAG"])
+                self.assertEqual(buzz.env["BUZZ_RELAY_URL"], origin)
+
+    def test_unsafe_remote_plaintext_relay_is_still_rejected(self):
+        for scheme in ("ws", "http", "file"):
+            with self.subTest(scheme=scheme), self.assertRaises(sync.SyncError):
+                join.AgentBuzz("/opt/buzz-0.5.23/usr/bin/buzz",
+                               {"BUZZ_RELAY_URL": f"{scheme}://relay.example.test", "BUZZ_PRIVATE_KEY": AGENT_KEY})
+
     def test_it_asks_the_relay_as_the_agent_with_its_auth_tag(self):
         """L2-JOIN-F20: AgentBuzz.trusted_mirrors 用 agent 自己的 key 签一次 relay 的 POST /query（带 x-auth-tag），问候选者的 kind 0 与
         kind 30177，按 parse_trusted_mirrors 判定；查询失败就当没有可信镜像（不影响 owner 自己签的信号）；候选里没有频道 bot 成员就不查。"""

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "2de103de-8210-467d-b8d6-c9146a5e78d9",
+  "path": "litellm",
+  "path_key": "litellm",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/infrastructure/litellm",
+    "branch": null
+  }
+}

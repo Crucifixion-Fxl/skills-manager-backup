@@ -308,7 +308,7 @@ Workflow 不保存责任人名单、GitLab username、Buzz pubkey 或 alias，�
 
 ```text
 转化率 10.0%（200/2,000），对比 8.0%（144/1,800），绝对增加 2.0pp。
-口径：[Dashboard 630](<superset-url>/superset/dashboard/630/) / [Chart 912](<superset-url>/explore/?slice_id=912)；UTC+8；新用户；user_id 去重；各 7 天。
+口径：[Dashboard 630](<superset-url>/superset/dashboard/630) / [Chart 912](<superset-url>/explore?slice_id=912)；UTC+8；新用户；user_id 去重；各 7 天。
 实验：[Experiment exp_x](<growthbook-url>/experiment/exp_x) 与产品、功能和 production 环境均匹配，但平台状态不能单独证明仍有流量。
 解读：上线后观察到同步上升；同期渠道结构变化仍是替代解释，现有证据不能归因给该功能。
 ```

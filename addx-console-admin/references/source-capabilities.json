@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "checkedOn": "2026-10-06",
+  "verification": "public initial frontend bundle source only; no authentication or business calls",
+  "runtimeVerification": "pending",
+  "scope": "initial bundle authentication hints; lazy routes and full UI functionality not covered",
+  "sourceFiles": {
+    "console-0.js": "34f676251505433b9f51f2ebff4a99e3ac0ffbcd79fb77afe183a54a37908f27"
+  },
+  "uiOrigin": "https://console.addx.live",
+  "apiOrigin": "https://revenus-sharing-backend.addx.live",
+  "authentication": {
+    "storage": "localStorage",
+    "key": "userToken",
+    "header": "Authorization",
+    "scheme": "raw-token"
+  },
+  "identityCandidate": {
+    "method": "POST",
+    "path": "/api/user/info",
+    "subjectCandidate": "data.userId",
+    "successCode": 0
+  },
+  "expiredCodes": [
+    101,
+    50008,
+    50012,
+    50014
+  ],
+  "requiredAdapterChanges": [
+    "explicit dual-origin binding",
+    "selected tab storage auth custody",
+    "owner-declared read-only POST identity",
+    "live response identity and permission verification"
+  ]
+}

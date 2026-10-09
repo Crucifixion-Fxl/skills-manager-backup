@@ -1,0 +1,12 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {auditDacIntent} from '../addx-console/dac-write-audit-core.mjs';
+const gen={action:'generate',modelCount:2,quantity:20};
+const edit={action:'alert-edit',modelCount:1,existing:'present',fullState:true};
+test('default intent denies network and completion',()=>{const r=auditDacIntent(gen);assert.equal(r.mode,'dry-run');assert.equal(r.submitAllowed,false);assert.equal(r.liveAccepted,false);assert.equal(r.payloadAvailable,false);assert.ok(r.blockers.includes('ASYNC_ISSUANCE_NOT_COMPLETION'));});
+test('no submit authorization string or boolean bypass',()=>{for(const x of [{...gen,mode:'submit'},{...gen,authorized:true}])assert.throws(()=>auditDacIntent(x));});
+test('generate limits and malformed inputs fail closed',()=>{for(const quantity of [-1,0,null,1.5,Number.MAX_SAFE_INTEGER+1])assert.throws(()=>auditDacIntent({...gen,quantity}));assert.throws(()=>auditDacIntent({...gen,modelCount:0}));});
+test('create/edit require exact saved-state distinction',()=>{assert.throws(()=>auditDacIntent({...edit,existing:'absent'}));assert.throws(()=>auditDacIntent({...edit,fullState:false}));assert.throws(()=>auditDacIntent({action:'alert-create',modelCount:1,existing:'present',fullState:true}));assert.equal(auditDacIntent({action:'alert-create',modelCount:1,existing:'absent',fullState:true}).submitAllowed,false);});
+test('edit preserves replacement and version blockers',()=>{const r=auditDacIntent(edit);assert.ok(r.blockers.includes('REPLACE_NOT_PATCH'));assert.ok(r.blockers.includes('NO_ATOMIC_CAS_PROVEN'));assert.ok(r.blockers.includes('FULL_RECIPIENT_STATE_REQUIRES_PRIVATE_REVIEW'));});
+test('unknown action and sensitive/payload keys never accepted or echoed',()=>{for(const key of ['payload','token','privateKey','alertEmails','userId','endpoint'])assert.throws(()=>auditDacIntent({...gen,[key]:'synthetic-secret'}));assert.throws(()=>auditDacIntent({...gen,action:'allocate'}));assert.throws(()=>auditDacIntent(null));assert.doesNotMatch(JSON.stringify(auditDacIntent(edit)),/synthetic-secret/);});
+test('fixtures cannot upgrade unverified deployment or permissions',()=>{const r=auditDacIntent(edit);assert.ok(r.blockers.includes('DEPLOYMENT_UNVERIFIED'));assert.ok(r.blockers.includes('PERMISSION_UNVERIFIED'));assert.equal(r.status,'OFFLINE_INTENT_ONLY');});

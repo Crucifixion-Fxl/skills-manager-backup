@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "0a96190d-8403-44f5-8bfe-db7de926fe3d",
+  "path": "apify",
+  "path_key": "apify",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/data/apify",
+    "branch": null
+  }
+}

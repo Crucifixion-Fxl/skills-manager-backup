@@ -170,8 +170,9 @@ public protocol TrackerInterface {
 ```swift
 let spmA = "smart_camera"
 let jsonSchemaVersion = "1-0-43"
-let staingTrackerUrl = "https://us-test-log.theunismart.com"
-let prodTrackerUrl = "https://log-us.kiwibit.com"
+// 示例常量；实际 Collector 从当前部署环境的配置读取。
+let stagingTrackerUrl = "https://<reviewed-staging-collector>"
+let prodTrackerUrl = "https://<reviewed-production-collector>"
 ```
 
 ## 后端 (iot-service-unified)

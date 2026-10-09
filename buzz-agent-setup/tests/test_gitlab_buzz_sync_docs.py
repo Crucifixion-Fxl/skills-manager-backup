@@ -10,9 +10,9 @@ SCRIPT = SKILL / "scripts" / "gitlab_buzz_sync.py"
 REFERENCE = SKILL / "references" / "gitlab-buzz-sync.md"
 DESK_PROMPT = SKILL / "references" / "gitlab-buzz-sync.desk-prompt.md"
 WAKE_TEMPLATE = SKILL / "references" / "workflows" / "webhook-wake-desk.yaml"
-REPO = SKILL.parents[1]
-USER_STORY = REPO / "docs" / "04-user-stories" / "buzz-agent-setup-gitlab-buzz-sync.md"
-ADR_DIR = REPO / "docs" / "05-adr"
+REPO = SKILL.parents[2]
+USER_STORY = REPO / "docs" / "agent-harness" / "requirements" / "buzz-agent-setup-gitlab-buzz-sync.md"
+ADR_DIR = REPO / "docs" / "agent-harness" / "adr"
 TIMER_ADR = ADR_DIR / "0008-run-gitlab-sync-from-owner-systemd-timer.md"
 HEARTBEAT_ADR = ADR_DIR / "0005-use-local-heartbeat-and-gate-it-on-restricted-runtime-eval.md"
 DESK_OWNED_ADR = ADR_DIR / "0004-run-gitlab-sync-as-desk-owned-agent-step.md"
@@ -21,8 +21,8 @@ SKILL_MD = SKILL / "SKILL.md"
 RUNTIME = SKILL / "references" / "runtime-setup.md"
 SCRIPTS_README = SKILL / "references" / "scripts" / "README.md"
 EVALS = SKILL / "evals" / "evals.json"
-SCENARIO_DOC = REPO / "docs" / "testing" / "scenarios" / "tech-gitlab-buzz-bridge.html"
-TEST_PLAN = REPO / "docs" / "plans" / "2026-09-13-buzz-agent-setup-gitlab-buzz-sync-test-plan.md"
+SCENARIO_DOC = REPO / "docs" / "agent-harness" / "testing" / "scenarios" / "tech-gitlab-buzz-bridge.html"
+TEST_PLAN = REPO / "docs" / "agent-harness" / "plans" / "2026-09-13-buzz-agent-setup-gitlab-buzz-sync-test-plan.md"
 
 # Operational requirements of the retired heartbeat design (ADR-0005). None of them may
 # remain a prerequisite for GitLab sync after ADR-0008.

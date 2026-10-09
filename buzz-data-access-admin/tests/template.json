@@ -1,0 +1,52 @@
+{
+  "approval_admin_ids": [
+    "ou_6d7b771147382dd4baaee27ebba8487f",
+    "ou_755158d120e03b0c18dd4a9334bc3aad"
+  ],
+  "approval_name": "Buzz Agent 数据访问申请",
+  "form": "[{\"custom_id\":\"agent_id\",\"default_value_type\":\"\",\"display_condition\":null,\"enable_default_value\":false,\"id\":\"widget17912912170\",\"name\":\"Agent ID\",\"printable\":true,\"required\":true,\"type\":\"input\",\"visible\":true,\"widget_default_value\":\"\"},{\"custom_id\":\"agent_name_type\",\"default_value_type\":\"\",\"display_condition\":null,\"enable_default_value\":false,\"id\":\"widget17912912171\",\"name\":\"Agent 名称与类型\",\"printable\":true,\"required\":true,\"type\":\"input\",\"visible\":true,\"widget_default_value\":\"\"},{\"custom_id\":\"creator\",\"default_value_type\":\"\",\"display_condition\":null,\"enable_default_value\":false,\"id\":\"widget17912912172\",\"name\":\"Creator（实际发起人）\",\"printable\":true,\"required\":true,\"type\":\"input\",\"visible\":true,\"widget_default_value\":\"\"},{\"custom_id\":\"business_owner\",\"default_value_type\":\"\",\"display_condition\":null,\"enable_default_value\":false,\"id\":\"widget17912912173\",\"name\":\"业务负责人\",\"printable\":true,\"required\":true,\"type\":\"input\",\"visible\":true,\"widget_default_value\":\"\"},{\"custom_id\":\"business_line_issue\",\"default_value_type\":\"\",\"display_condition\":null,\"enable_default_value\":false,\"id\":\"widget17912912174\",\"name\":\"业务线与关联业务 Issue\",\"printable\":true,\"required\":true,\"type\":\"textarea\",\"visible\":true,\"widget_default_value\":\"\"},{\"custom_id\":\"background\",\"default_value_type\":\"\",\"display_condition\":null,\"enable_default_value\":false,\"id\":\"widget17912912175\",\"name\":\"业务背景与分析问题\",\"printable\":true,\"required\":true,\"type\":\"textarea\",\"visible\":true,\"widget_default_value\":\"\"},{\"custom_id\":\"query_frequency\",\"default_value_type\":\"\",\"display_condition\":null,\"enable_default_value\":false,\"id\":\"widget17912912176\",\"name\":\"查询频率\",\"printable\":true,\"required\":true,\"type\":\"input\",\"visible\":true,\"widget_default_value\":\"\"},{\"custom_id\":\"audience_destination\",\"default_value_type\":\"\",\"display_condition\":null,\"enable_default_value\":false,\"id\":\"widget17912912177\",\"name\":\"结果受众与允许输出目的地\",\"printable\":true,\"required\":true,\"type\":\"textarea\",\"visible\":true,\"widget_default_value\":\"\"},{\"custom_id\":\"region_environment\",\"default_value_type\":\"\",\"display_condition\":null,\"enable_default_value\":false,\"id\":\"widget17912912178\",\"name\":\"区域与环境\",\"printable\":true,\"required\":true,\"type\":\"input\",\"visible\":true,\"widget_default_value\":\"\"},{\"custom_id\":\"data_scope\",\"default_value_type\":\"\",\"display_condition\":null,\"enable_default_value\":false,\"id\":\"widget17912912179\",\"name\":\"申请的数据范围（库表字段或需求描述）\",\"printable\":true,\"required\":true,\"type\":\"textarea\",\"visible\":true,\"widget_default_value\":\"\"},{\"custom_id\":\"pii_reason\",\"default_value_type\":\"\",\"display_condition\":null,\"enable_default_value\":false,\"id\":\"widget179129121710\",\"name\":\"敏感数据需求与理由（无需求请填无）\",\"printable\":true,\"required\":true,\"type\":\"textarea\",\"visible\":true,\"widget_default_value\":\"\"},{\"custom_id\":\"validity\",\"default_value_type\":\"\",\"display_condition\":null,\"enable_default_value\":false,\"id\":\"widget179129121711\",\"name\":\"权限有效期（起止日期）\",\"printable\":true,\"required\":true,\"type\":\"input\",\"visible\":true,\"widget_default_value\":\"\"},{\"custom_id\":\"account_name\",\"default_value_type\":\"\",\"display_condition\":null,\"enable_default_value\":false,\"id\":\"widget179129121712\",\"name\":\"建议 Agent 专用账号名\",\"printable\":true,\"required\":true,\"type\":\"input\",\"visible\":true,\"widget_default_value\":\"\"}]",
+  "node_list": [
+    {
+      "approver_chosen_multi": true,
+      "custom_node_id": "data_access_approval",
+      "empty_assignee_list": [],
+      "empty_auto_pass": true,
+      "name": "陈敬敏审批",
+      "need_approver": false,
+      "node_id": "9bf0f22b9cb39a12f7f307f299063dda",
+      "node_type": "AND",
+      "require_signature": false
+    },
+    {
+      "approver_chosen_multi": true,
+      "empty_assignee_list": [],
+      "name": "",
+      "need_approver": false,
+      "node_id": "b1a326c06d88bf042f73d70f50197905",
+      "node_type": "AND",
+      "require_signature": false
+    },
+    {
+      "approver_chosen_multi": true,
+      "empty_assignee_list": [],
+      "name": "",
+      "need_approver": false,
+      "node_id": "b078ffd28db767c502ac367053f6e0ac",
+      "node_type": "AND",
+      "require_signature": false
+    }
+  ],
+  "status": "ACTIVE",
+  "viewers": [
+    {
+      "id": "ou_755158d120e03b0c18dd4a9334bc3aad",
+      "type": "USER",
+      "user_id": "188a29a5"
+    },
+    {
+      "id": "ou_6d7b771147382dd4baaee27ebba8487f",
+      "type": "USER",
+      "user_id": "79114129"
+    }
+  ]
+}

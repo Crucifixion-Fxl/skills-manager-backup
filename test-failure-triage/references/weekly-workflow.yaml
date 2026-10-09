@@ -1,0 +1,20 @@
+name: weekly-test-failure-triage
+description: Analyze Device Cloud and ReportPortal failures with evidence; bootstrap the capability loop.
+enabled: false
+trigger:
+  on: schedule
+  cron: "30 1 * * 2"
+steps:
+  - id: wake
+    action: send_message
+    text: >-
+      @test-failure-investigator 使用 $addx:test-failure-triage。
+      对象：prod-cn 自动化测试平台与对应 ReportPortal 诊断，包含生成任务和既有用例执行。
+      窗口：[触发时减7日,触发时)，时区 UTC；分析时点：触发时；平台完整分页，默认最多20条详细RP事件、40个媒体；预算与缺项显式报告。
+      对比窗口：上一份相同平台与统计口径的归因报告；首期写无上期，不计算趋势。
+      分别判断 run_kind、failure_stage、root_cause；查看日志和截图/XML/DOM、context 与实际能力版本。
+      重点区分框架缺能力、Step绑定、Plugin动作、WebView context/调试/driver、accessibility、前置与业务问题。
+      只读调查，给出优化归属、证据门槛与候选；不创建运行任务、不占设备、不修改源码或原失败结果。
+      最终报告走 helper，sources：person jchen（channel_admin）、person jchen（core_eng，缺席写未通知）。
+      本期只在本Thread发最多8行摘要与真实来源链接，完整JSON存私有工作区；既有bridge署名镜像。长报告须先验证你自己的bot文档权限。
+      任一取数/身份/发布权限失败均明确报阻断，不把空记录写成无失败。

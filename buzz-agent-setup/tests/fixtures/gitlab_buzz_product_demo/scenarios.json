@@ -6,7 +6,7 @@
     "agent": "@nh-feature",
     "l3_case": "L3-GIS-DEMO-01",
     "l3_status": "automated",
-    "evidence": "skills/buzz-agent-setup/tests/integration/test_routing_e2e.py",
+    "evidence": "skills/agent-harness/buzz-agent-setup/tests/integration/test_routing_e2e.py",
     "l4_case": "L4-GIS-DEMO-01",
     "l4_status": "specified",
     "oracle": "新 feature/ready Issue 只有一个 root 和 binding，原 Thread 中出现路由 p tag 与 Role 回复。"
@@ -18,7 +18,7 @@
     "agent": "@nh-feature",
     "l3_case": "L3-GIS-DEMO-02",
     "l3_status": "automated",
-    "evidence": "skills/buzz-agent-setup/tests/integration/test_routing_e2e.py",
+    "evidence": "skills/agent-harness/buzz-agent-setup/tests/integration/test_routing_e2e.py",
     "l4_case": "L4-GIS-DEMO-02",
     "l4_status": "specified",
     "oracle": "backlog 到 ready 只产生一个 routing reply，root 不变，Role 在原 Thread 回应。"
@@ -30,7 +30,7 @@
     "agent": "不新增唤醒",
     "l3_case": "L3-GIS-DEMO-03",
     "l3_status": "automated",
-    "evidence": "skills/buzz-agent-setup/tests/integration/test_routing_e2e.py",
+    "evidence": "skills/agent-harness/buzz-agent-setup/tests/integration/test_routing_e2e.py",
     "l4_case": "L4-GIS-DEMO-03",
     "l4_status": "specified",
     "oracle": "content reply 落在原 Thread，既有 route 数量不增加，Role 不产生新 turn。"
@@ -42,7 +42,7 @@
     "agent": "角色 Agent（按规则）",
     "l3_case": "L3-GIS-DEMO-04",
     "l3_status": "automated",
-    "evidence": "skills/buzz-agent-setup/tests/integration/test_routing_e2e.py",
+    "evidence": "skills/agent-harness/buzz-agent-setup/tests/integration/test_routing_e2e.py",
     "l4_case": "L4-GIS-DEMO-04",
     "l4_status": "specified",
     "oracle": "GitLab 评论被中和后进入原 Thread，不含 executor p tag，也不产生额外 Role turn；同一可信 Canvas 的真实 routing 正向对照成功。"
@@ -54,7 +54,7 @@
     "agent": "无 / @nh-bi（另配）",
     "l3_case": "L3-GIS-DEMO-05",
     "l3_status": "automated",
-    "evidence": "skills/buzz-agent-setup/tests/integration/test_routing_e2e.py",
+    "evidence": "skills/agent-harness/buzz-agent-setup/tests/integration/test_routing_e2e.py",
     "l4_case": "L4-GIS-DEMO-05",
     "l4_status": "specified",
     "oracle": "关闭 Issue 只追加 closed/done routing 事实，不出现新 route、Role turn 或 Agent p tag。"
@@ -126,7 +126,7 @@
     "agent": "@nh-dev / 无",
     "l3_case": "L3-GIS-DEMO-11",
     "l3_status": "automated",
-    "evidence": "skills/buzz-agent-setup/tests/integration/test_product_demo_e2e.py",
+    "evidence": "skills/agent-harness/buzz-agent-setup/tests/integration/test_product_demo_e2e.py",
     "l4_case": "L4-GIS-DEMO-11",
     "l4_status": "specified",
     "oracle": "真实 MR open/update/merge 只使用 kind 9 lifecycle/update，真实 patch 才使用 kind 40008；未关联 Issue 的 MR 留在 MR Thread。"
@@ -162,7 +162,7 @@
     "agent": "@nh-desk",
     "l3_case": "L3-GIS-DEMO-15",
     "l3_status": "automated",
-    "evidence": "skills/buzz-agent-setup/tests/integration/test_product_demo_e2e.py",
+    "evidence": "skills/agent-harness/buzz-agent-setup/tests/integration/test_product_demo_e2e.py",
     "l4_case": "L4-GIS-DEMO-15",
     "l4_status": "specified",
     "oracle": "真实 GitLab MR 中超过上限的单文件不产生 kind 40008，结果明确计 skipped，其他可投递文件不受影响。"
@@ -174,7 +174,7 @@
     "agent": "无",
     "l3_case": "L3-GIS-DEMO-16",
     "l3_status": "automated",
-    "evidence": "skills/buzz-agent-setup/tests/integration/test_routing_e2e.py",
+    "evidence": "skills/agent-harness/buzz-agent-setup/tests/integration/test_routing_e2e.py",
     "l4_case": "L4-GIS-DEMO-16",
     "l4_status": "specified",
     "oracle": "非 Bridge publisher pubkey 的顶层和 Thread 伪造 header 都不产生 Desk route reply，正向对照仍成功。"
@@ -186,7 +186,7 @@
     "agent": "@nh-feature",
     "l3_case": "L3-GIS-DEMO-17",
     "l3_status": "automated",
-    "evidence": "skills/buzz-agent-setup/tests/integration/test_routing_e2e.py",
+    "evidence": "skills/agent-harness/buzz-agent-setup/tests/integration/test_routing_e2e.py",
     "l4_case": "L4-GIS-DEMO-17",
     "l4_status": "specified",
     "oracle": "正文中的 @、nostr、Channel 与 URL 只作为中和后的数据；Desk route reply 只有 code registry 中的目标 Role p tag，且恰好一次。"
@@ -210,7 +210,7 @@
     "agent": "无",
     "l3_case": "L3-GIS-DEMO-19",
     "l3_status": "automated",
-    "evidence": "skills/buzz-agent-setup/tests/integration/test_product_demo_e2e.py",
+    "evidence": "skills/agent-harness/buzz-agent-setup/tests/integration/test_product_demo_e2e.py",
     "l4_case": "L4-GIS-DEMO-19",
     "l4_status": "specified",
     "oracle": "删除真实 GitLab binding note 后，从 Bridge 进程入口重跑会复用可信 Buzz root、补 binding，不创建第二个 root。"
@@ -234,7 +234,7 @@
     "agent": "@desk（运维告警）",
     "l3_case": "L3-GIS-DEMO-21",
     "l3_status": "automated",
-    "evidence": "skills/buzz-agent-setup/tests/integration/test_product_demo_e2e.py",
+    "evidence": "skills/agent-harness/buzz-agent-setup/tests/integration/test_product_demo_e2e.py",
     "l4_case": "L4-GIS-DEMO-21",
     "l4_status": "specified",
     "oracle": "真实坏 token、错误 project 和错误 Channel 从公开进程入口失败，Buzz/GitLab 零写入且输出不泄露 token。"
@@ -258,7 +258,7 @@
     "agent": "@nh-feature",
     "l3_case": "L3-GIS-DEMO-23",
     "l3_status": "automated",
-    "evidence": "skills/buzz-agent-setup/tests/integration/test_route_reply_e2e.py",
+    "evidence": "skills/agent-harness/buzz-agent-setup/tests/integration/test_route_reply_e2e.py",
     "l4_case": "L4-GIS-DEMO-23",
     "l4_status": "specified",
     "oracle": "默认 Desk+Canvas 路径与 HTTP compatibility 路径只能启用一个；不可信最新 Canvas fail closed，最终 reply 的 root/reply 与唯一 p tag 回读一致。"
@@ -270,7 +270,7 @@
     "agent": "@nh-feature",
     "l3_case": "L3-GIS-DEMO-24",
     "l3_status": "automated",
-    "evidence": "skills/buzz-agent-setup/tests/integration/test_routing_e2e.py",
+    "evidence": "skills/agent-harness/buzz-agent-setup/tests/integration/test_routing_e2e.py",
     "l4_case": "L4-GIS-DEMO-24",
     "l4_status": "specified",
     "oracle": "频道 owner 的真实 p tag 创建一个 thread-scoped Role turn，Agent 只在该 Thread 回复一次。"

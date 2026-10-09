@@ -1,0 +1,14 @@
+/* The node directory belongs to the diagram's details, not the page outline. */
+.detail-explorer{display:grid;grid-template-columns:220px minmax(0,1fr);border:1px solid var(--atlas-line);border-radius:12px;overflow:hidden;margin:20px 0 30px;background:var(--atlas-panel)}
+.node-directory{background:var(--atlas-panel-2);border-right:1px solid var(--atlas-line);padding:16px 12px;min-width:0}
+.directory-label{font:11px var(--atlas-mono);letter-spacing:1px;color:var(--atlas-muted);margin:0 10px 14px}
+.node-directory a{display:grid;grid-template-columns:24px minmax(0,1fr);gap:7px;padding:12px 10px;line-height:1.6;border:1px solid transparent;border-radius:7px;text-decoration:none;font-size:12px;color:var(--atlas-ink);margin-bottom:5px}
+.node-directory a span{font:10px/1.8 var(--atlas-mono);color:var(--atlas-muted)}.node-directory a b{font-weight:500}.node-directory a:hover{background:var(--atlas-panel)}.node-directory a[aria-current=step]{background:var(--atlas-panel);border-color:var(--atlas-mint);color:var(--atlas-mint)}.node-directory a[aria-current=step] span{color:var(--atlas-mint)}
+.detail-reader{min-width:0;padding:8px 24px}.detail-explorer .node-detail{border:0;border-radius:0;padding:20px 0;margin:0;background:transparent;scroll-margin-top:18px}.detail-explorer .node-detail>summary{font-size:21px;line-height:1.45;color:var(--atlas-ink)}.detail-explorer .node-detail p{font-size:13px;line-height:1.9}.detail-explorer .node-detail.module-active{border:0}
+.detail-explorer.is-enhanced .node-directory,.detail-explorer.is-enhanced .detail-reader{height:580px;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-gutter:stable}
+.detail-explorer.is-enhanced .node-detail[hidden]{display:none!important}.detail-explorer.is-enhanced .node-detail>summary{list-style:none;cursor:default;border-bottom:1px solid var(--atlas-line);padding-bottom:18px;margin-bottom:18px}.detail-explorer.is-enhanced .node-detail>summary::-webkit-details-marker{display:none}
+@media(max-width:760px){.detail-explorer{grid-template-columns:minmax(0,1fr)}.node-directory{border-right:0;border-bottom:1px solid var(--atlas-line)}.detail-explorer.is-enhanced .node-directory{height:190px}.node-directory a{padding:8px 10px;margin-bottom:2px}.detail-explorer.is-enhanced .detail-reader{height:560px}.detail-reader{padding:6px 18px}}
+@media print{.detail-explorer{display:block;overflow:visible;border:0}.node-directory{display:none}.detail-explorer.is-enhanced .detail-reader{height:auto;overflow:visible;padding:0}.detail-explorer.is-enhanced .node-detail[hidden]{display:block!important}.detail-explorer .node-detail{padding:16px 0;break-inside:auto}}
+/* Modern native details uses content-visibility even when child display is forced.
+   Open its contents for no-JS printing as well as the beforeprint JS path. */
+@media print{details::details-content{display:block!important;content-visibility:visible!important}}

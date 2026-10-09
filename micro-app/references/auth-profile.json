@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "tool": "micro-app",
+  "provider": "delegated",
+  "owner": "micro-app",
+  "authContract": "references/saas-access.md",
+  "verification": "source-verified",
+  "runtimeVerification": "pending",
+  "authDiscovery": "references/auth-discovery.json",
+  "sourceDiscovery": "references/source-discovery.json"
+}

@@ -120,6 +120,6 @@ def propose(entries) -> str:
             f"   {json.dumps(sig, ensure_ascii=False)}\n"
             f"2) tests/fixtures/samples.json — add the sample as a fixture:\n"
             f"   {json.dumps(fixture, ensure_ascii=False)}\n"
-            f"3) `uv run --extra dev pytest skills/harness-failover/tests -q`, update SKILL.md's signature table, open an MR "
+            f"3) `uv run --extra dev pytest skills/agent-harness/harness-failover/tests -q`, update SKILL.md's signature table, open an MR "
             f"(references/self-update.md)\n")
     return "\n".join(out)

@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "tool": "vaultwarden",
+  "owner": "vaultwarden",
+  "status": "source-reviewed-runtime-pending",
+  "contract": "../../credential-provider/references/cli-commands.md",
+  "notes": "复用credential-provider/BW CLI；首次网页SSO激活+Master Password；仅trusted交互进程操作，AI不得读取vault item、Hidden field或secret；lock非撤销，logout才撤销服务端token。",
+  "credentialHandling": "No login, secret reads, token issuance, or SaaS business calls performed.",
+  "referenceBase": "owner-skill-root for SKILL.md/contractEntrypoints/referenceSources paths; contract field resolves from this JSON directory; upstream repository entrypoints stay repository-relative"
+}

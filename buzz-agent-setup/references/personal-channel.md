@@ -4,7 +4,7 @@
 
 **状态：reference candidate。**脚本与文档已通过离线测试，**尚未在真机启用**。下列几处只能真机确认（另有三条假设记在「安全与已知缺口」的「待真机验证」里），未验证前不要当成已确认的事实：Workflow `send_message` 文本里 `{{trigger.message_id}}` 的渲染、助手被 Workflow 的 @ 唤醒（依赖 harness 0.5.23）、飞书卡片的折叠面板与链接在手机端的真实显示。
 
-决策与例外见 [ADR-0013](../../../docs/05-adr/0013-run-personal-todo-sync-with-the-owners-pat.md)；timer／launcher 见 [systemd/personal-todo-sync.md](systemd/personal-todo-sync.md)；脚本是 `scripts/gitlab_todo_sync.py`。
+决策与例外见 [ADR-0013](../../../../docs/agent-harness/adr/0013-run-personal-todo-sync-with-the-owners-pat.md)；timer／launcher 见 [systemd/personal-todo-sync.md](systemd/personal-todo-sync.md)；脚本是 `scripts/gitlab_todo_sync.py`。
 
 ## 一个 Channel、三个身份
 

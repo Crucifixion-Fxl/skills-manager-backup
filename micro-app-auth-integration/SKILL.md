@@ -7,6 +7,10 @@ description: Audit, design, implement, or review a micro-application retrofit th
 
 ## Description
 
+平台登录与认证 SSOT：[micro-app](../micro-app/SKILL.md)。本 Skill 保留业务流程与门禁，登录/Token事实只在平台 owner 维护；日常访问调用 `web-access`。
+
+首次接入/变更扫描与日常认证入口见 [SaaS 接入](../micro-app/references/saas-access.md)；已有平台业务契约与授权门禁仍在本 Skill 维护。
+
 把认证、授权、审批和微前端装载视为四个独立契约。先固定事实，再选择拓扑，最后实现和验证；不要从示例代码直接推导生产契约。
 
 本 Skill 是微应用改造、统一飞书登录迁移和权限接入的唯一入口，替代已删除的 `unified-feishu-auth-migration`。旧 Skill 的分阶段切换与联调经验合入 [migration-cutover.md](references/migration-cutover.md)；不沿用其禁用 SDK、缓存 raw token 或以健康检查作为权限验收的模板。

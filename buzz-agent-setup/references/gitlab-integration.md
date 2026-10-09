@@ -4,6 +4,8 @@
 
 > 本页处理普通事件流／摘要播报。若目标是“每个 Issue／MR 一个 Thread、状态变化后在原 Thread 指派角色 Agent”，不要扩展本播报脚本；改读 [gitlab-buzz-sync.md](gitlab-buzz-sync.md)。接入新同步前，先按其中的切换清单把项目从旧 notifier 的 `SOURCES` 删掉，避免重复播报。（旧的 [issue-thread-routing.md](issue-thread-routing.md) 已取代。）
 
+> 本页处理普通事件流／摘要播报。若目标是“每个 Issue 一个 Thread、状态变化后在原 Thread 指派角色 Agent”，不要扩展本播报脚本；改读 [issue-thread-routing.md](issue-thread-routing.md)，使用带双向绑定与路由矩阵的专用 adapter。
+
 ## 网络前提（先读这段，决定架构）
 
 **GitLab（`gitlab.addx.ai`）出网到 buzz relay 的 ALB 不通**（实测 2026-09）：
@@ -163,5 +165,5 @@ INSTANT = {"issue 新建", "issue 关闭", "issue 重开", "MR 新建", "MR 合�
 ## Canonical 落点
 
 - 每个业务／业务平台 Channel 配一个 Buzz schedule，只唤醒该 Channel 的 `<business>-desk`。
-- Desk 在同一 turn 调用 `skills/buzz-agent-setup/scripts/issue_thread_router.py` 与该业务的独立配置；不部署第二个 systemd timer、第二个进程 writer 或 `-issue`／router Agent。
+- Desk 在同一 turn 调用 `skills/agent-harness/buzz-agent-setup/scripts/issue_thread_router.py` 与该业务的独立配置；不部署第二个 systemd timer、第二个进程 writer 或 `-issue`／router Agent。
 - 旧的 `gitlab-issue-notify.py + gitlab-buzz-notify.timer` 只是早期通知流实验，不是当前 Issue→Thread 自动化的部署方法，不得按它新建实例。

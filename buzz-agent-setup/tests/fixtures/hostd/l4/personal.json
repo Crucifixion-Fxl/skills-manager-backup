@@ -1,0 +1,20 @@
+{
+  "agent_reply_s": 91.7,
+  "b2f_s": 3.8,
+  "binding": "personal",
+  "checks": {
+    "agent_reply_in_thread_from_own_bot": true,
+    "b2f_arrived": true,
+    "b2f_sent_by_sync_bot": true,
+    "f2b_arrived": true,
+    "f2b_by_mirror_agent": true,
+    "f2b_signed_feishu_name": true,
+    "reaction_f2b_arrived": true
+  },
+  "f2b_s": 4.5,
+  "failed_checks": [],
+  "ok": true,
+  "probe": "hostd-l4-smoke",
+  "reaction_f2b_s": 3.1,
+  "t": 1791124748
+}

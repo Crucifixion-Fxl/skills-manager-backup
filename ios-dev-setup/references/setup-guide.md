@@ -38,7 +38,7 @@ glab api "projects/SWCLIEN%2Fsmartdevicecoresdk-ios/repository/branches?search=r
 不读取 `.xcode-version`、CI/Jenkins pin、`LastUpgradeCheck` 或兼容表来选择版本。直接运行 skill 内安装脚本，安装 Apple 当前最新版 Xcode：
 
 ```bash
-~/.codex/skills/ios-dev-setup/scripts/install_xcode.sh --runtime
+~/.codex/skills/development/ios-dev-setup/scripts/install_xcode.sh --runtime
 ```
 
 脚本安装 `xcodes` CLI，并执行 `xcodes install --latest --select`，从 Apple Developer 下载最新版，安装到 `/Applications`、立即选择最新版、执行 first-launch 组件安装并验证 SDK/runtime。它不会读取或打印 Apple 密码；Apple Account、2FA、macOS sudo 密码和 license 由用户在交互提示中处理。不要把 `XCODES_PASSWORD` 或 session cookie 写入命令、日志或 skill。
@@ -92,7 +92,7 @@ xcrun simctl list devices available
 先 checkout/确认目标 release 的依赖声明，再运行：
 
 ```bash
-~/.codex/skills/ios-dev-setup/scripts/scan_gitlab_access.rb --check /path/to/IosProjects
+~/.codex/skills/development/ios-dev-setup/scripts/scan_gitlab_access.rb --check /path/to/IosProjects
 ```
 
 脚本读取三个主仓 origin、`.gitmodules`、Podfile/Podfile.lock、Gemfile/Gemfile.lock、fastlane Pluginfile、pubspec.yaml/pubspec.lock，去重后逐项执行无交互的 `git ls-remote`。任何仓库失败都先申请对应仓库或 Group 权限；不要等到 `pod install` / `pub get` 中途再逐个发现。
@@ -132,7 +132,7 @@ git -C smartdevicecoresdk-ios submodule update --init --depth=1 SmartDeviceCoreS
 先执行统一的只读预检；它不会读取 Fastlane secret，也不会修改仓库：
 
 ```bash
-~/.codex/skills/ios-dev-setup/scripts/preflight_ios_env.sh /path/to/IosProjects
+~/.codex/skills/development/ios-dev-setup/scripts/preflight_ios_env.sh /path/to/IosProjects
 ```
 
 先读源文件，再安装工具：

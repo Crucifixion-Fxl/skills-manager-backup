@@ -7,6 +7,8 @@ description: 为已部署服务搭建 API synthetic monitoring（主动巡检）
 
 ## Description
 
+平台登录与认证 SSOT：[reportportal](../../quality/reportportal/SKILL.md)。本 Skill 保留业务流程与门禁，登录/Token事实只在平台 owner 维护；日常访问调用 `web-access`。
+
 用 Python pytest + GitLab CI 定时流水线对已部署服务做**主动 HTTP 探针**（synthetic monitoring）。失败发签名飞书卡，结果汇总到 ReportPortal。**与 K8s probe 和被动可观测性正交** — 填"进程活着"（K8s）和"用户已经踩坑"（Prometheus/Sentry）之间的那段盲区。
 
 > **术语说明**：Synthetic monitoring 是行业标准说法（Datadog / Google SRE），强调**主动合成请求**对抗真实用户流量的被动观测。中文用"主动巡检"最贴切。口语里偶尔说"smoke test"指代类似动作，但严格意义 smoke test 是构建后一次性检查，本 skill 是**持续、周期性**的，不是 smoke。
@@ -128,7 +130,7 @@ v1 每个服务 ≤ 3 项。越多 = 噪音越大、triage 越难。深度断言
 
 ### Step 3: 初始化项目
 
-从 [assets/](assets/) 模板复制出目录：
+从 [assets/](assets) 模板复制出目录：
 
 ```
 smoke/

@@ -2,13 +2,13 @@
 
 ## 适用范围
 
-`engagement-touchpoint-integration` 只负责触点接入。对于 `OPEN_PAYWALL`，它只选择和校验已有 `paywallId`，并验证触点归因能够传到 Paywall 打开、支付成功和支付失败等结果事件；它不负责创建或修改 H5 Paywall 模板。
+`engagement-touchpoint-integration` 只负责触点接入。对于 `OPEN_PAYWALL`，它只选择和校验已有 `paywallId`，并验证触点归因能够传到 Paywall 打开、支付成功和支付失败等结果事件；它不负责创建或修改 H5 Paywall 模板。直接打开 H5 的数据准备和交接见 [H5 Paywall 数据链路](h5-paywall-data-flow.md)；模板开发按 `engagement-h5-paywall-creation` 执行，可在同一授权任务中组合使用。
 
 ## 处理规则
 
 | 情况 | 处理方式 |
 |---|---|
-| 已有 Paywall 满足需求 | 在 engagement-admin 的 action 配置中引用该 `paywallId`，确认目标环境已发布，再用通用 P0 看板按触点和 Paywall 筛选验收 |
+| 已有 Paywall 满足需求 | 按 slotType 确认是直接 Paywall 还是素材 CTA；核对 runtime / actionContext、目标环境发布和真实 cms-content，再按触点和 Paywall 筛选验收 |
 | 只有小幅 UI 差异 | 转交 H5 Paywall 流程评估复用现有模板，只修改允许开放的业务 UI 层 |
 | 与现有模板结构差异较大 | 转交 H5 Paywall 流程申请新增模板和 `templateKey`；`templateKey` 不是自动生成的 |
 | 需要修改底层逻辑 | 立即停止修改，先提交 issue 给 Engagement owner 评审 |

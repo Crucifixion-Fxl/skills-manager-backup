@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "75c61eab-d88d-4fa2-868d-3808759b23a4",
+  "path": "gitlab-bulk-members",
+  "path_key": "gitlab-bulk-members",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/security/gitlab-bulk-members",
+    "branch": null
+  }
+}

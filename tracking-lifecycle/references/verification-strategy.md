@@ -73,7 +73,7 @@
 
 **目标**：验证真实 SDK 上报到 collector 的格式正确，schema 已注册。
 
-**环境**：沙盒 Collector `https://us-prod-log-sandbox.theunismart.com`
+**环境**：以下为 US 沙盒示例；实际 Micro 查询服务通过 `TRACKING_SANDBOX_BASE_URL` 显式指定，SDK Collector 另按本次沙盒环境配置。
 - collector 实时可查，适合纳入 CI 自动化卡控
 - 查询接口：`/micro/good`（有效事件）、`/micro/bad`（无效事件）
 

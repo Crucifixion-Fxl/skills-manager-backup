@@ -48,16 +48,20 @@
 
 ## Base Schema
 
-Base Schema 是由埋点平台统一管理的**可复用参数集合**，在事件上报时自动附加。
+Base Schema 是由埋点平台统一管理的**可复用参数集合**。当前平台将这些参数合并进事件自身的 JSON Schema；SDK 必须实际采集并发送到事件 `data`。平台关联不会替 SDK 自动附加值。
+
+2026-10-03 已依据后端 commit `d61e1692c3d28224e4d642f7bdf765a6a982ab0d` 校正。注册、回读与 SDK 验证见 [Base/Context API](base-context-api.md)。
 
 ### 工作原理
 
 1. 平台管理员在 `/schema/list/` 页面创建 Base Schema，定义参数名和类型
 2. 在 `tracking-design.md` 的 `base_schemas` 字段中引用名称（如 `["user_info", "device_info"]`）
 3. 创建事件时，平台将 Base Schema 的 required 参数合并到事件的校验规则中
-4. SDK 上报时，Base Schema 以 `iglu` URI 格式附加为 Snowplow Context
+4. SDK 将合并后的参数发送在事件 `data` 中；独立 Snowplow Context 使用自己的 URI/payload，需要单独注册、部署与验证
 
-### 各端 Base Schema URI
+### 历史 SDK 自定义 Context URI（不等于平台 Base 关联）
+
+下表保留历史 SDK 记录，不能据此假定当前项目、版本或部署必然附带这些 Context。其 URI 是独立实体，不是当前平台 Base ID 的自动转换。
 
 | 端 | Schema URI | 源文件 |
 |---|-----------|--------|
@@ -69,7 +73,7 @@ Base Schema 是由埋点平台统一管理的**可复用参数集合**，在事�
 
 ```bash
 curl -H "Authorization: Bearer $TMT_TOKEN" \
-  "https://us-analytics-management.theunismart.com/api/baseSchema/list?applicationId={id}"
+  "$TRACKING_PLATFORM_BASE_URL/api/baseSchema/list?applicationId={id}"
 ```
 
 ### 与自定义参数的区分

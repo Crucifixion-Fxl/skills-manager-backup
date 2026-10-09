@@ -1,6 +1,13 @@
 # Telepresence Intercept Onboarding — TDD Platform
 
-This is the "from zero to a working L2.DevLink intercept" walk-through for the A4x TDD demo (`tdd-demo` namespace). As of Phase 2b (2026-05-28+) the demo runs on **three staging clusters** — us-eks-staging, eu-eks-staging, cn-eks-staging — and the first real pilot service (personalization-engine) is live on us-staging. Pick whichever cluster you're targeting; the flow is identical, only the `--context` and Harbor registry change. The examples below default to **us-eks-staging**; the eu / cn context ARNs are listed under [Pick your cluster](#pick-your-cluster).
+> CN lifecycle update (2026-09-28): AWS CN is retired. Current staging is Tencent
+> account 100052802231 (`tencent-100052802231-cn-staging`). The Phase 2b CN rollout
+> below is historical evidence only; verify the exact new cluster
+> traffic-manager, demo workloads, access/RBAC and Harbor images before using CN.
+> Do not reuse an AWS kubeconfig/ARN or infer availability from an old CI pass.
+
+
+This is the "from zero to a working L2.DevLink intercept" walk-through for the A4x TDD demo (`tdd-demo` namespace). As of Phase 2b (2026-05-28+) the demo runs on **three staging clusters** — us-eks-staging, eu-eks-staging, cn-eks-staging — and the first real pilot service (personalization-engine) is live on us-staging. The original three-cluster rollout is historical; current CN must pass the migration gates above. The examples below default to **us-eks-staging**; the EU context ARN are listed under [Pick your cluster](#pick-your-cluster).
 
 > Heads-up: this doc is the **interactive** intercept path (tunnel cluster traffic to your laptop). The **automated** L2.DevLink regression path (testbase baggage through the real chain, in CI) is a different thing keyed on `addx.run-id` / `X-Addx-Run-Id` — see the table in [README.md](README.md). Don't mix the two header models.
 
@@ -16,7 +23,7 @@ This is the "from zero to a working L2.DevLink intercept" walk-through for the A
 
 | Item | Why | How |
 |---|---|---|
-| kubectl access to the target staging cluster | telepresence rides on K8s API server port-forward to reach traffic-manager | `aws eks update-kubeconfig --name us-eks-staging --region us-east-1` (eu: `--name eu-eks-staging --region eu-central-1`; cn: `--name cn-eks-staging --region cn-north-1 --profile <cn-profile>`) then `kubectl auth can-i create pods/portforward --namespace tdd-demo` should be `yes`. If not, ops needs to add your IAM identity to `aws-auth` ConfigMap |
+| kubectl access to the target staging cluster | telepresence rides on K8s API server port-forward to reach traffic-manager | `aws eks update-kubeconfig --name us-eks-staging --region us-east-1` (eu: `--name eu-eks-staging --region eu-central-1`; current CN TKE: use the verified new-account access contract, not AWS CLI) then `kubectl auth can-i create pods/portforward --namespace tdd-demo` should be `yes`. If denied, ops must inspect the target's actual identity and namespace RBAC contract. IAM identity / `aws-auth` remediation applies only to an AWS EKS target whose access configuration uses it; CN TKE requires its verified new-account OIDC/RBAC contract and must not use the AWS remedy. |
 | telepresence client v2.27.4 | The OSS CLI | `curl -fL https://github.com/telepresenceio/telepresence/releases/download/v2.27.4/telepresence-linux-amd64 -o ~/.local/bin/telepresence && chmod +x $_` (mac/windows variants on releases page) |
 | `ADDX_DEV_ID` env on your machine | The triple-key contract (impl notes D-1 v0.13): `addx.run-id` traces a test run; `addx.dev-id` routes intercepts; `user_id` is Kafka partition. Header value is exact-match in OSS (no regex) so dev-id must be stable per dev | `echo 'export ADDX_DEV_ID="$(git config user.name | tr A-Z a-z | tr -c a-z0-9- -)"' >> ~/.bashrc` |
 | sudo on your laptop | The telepresence root daemon needs a TUN device for cluster DNS / VIF. WSL: `sudo` works as long as you have a sudo password configured | n/a |
@@ -30,8 +37,8 @@ This is the "from zero to a working L2.DevLink intercept" walk-through for the A
 CTX=arn:aws:eks:us-east-1:390709477306:cluster/us-eks-staging
 # eu-eks-staging
 CTX=arn:aws:eks:eu-central-1:390709477306:cluster/eu-eks-staging
-# cn-eks-staging (AWS China, account 801447536674)
-CTX=arn:aws-cn:eks:cn-north-1:801447536674:cluster/cn-eks-staging
+# CN: stop until the 100052802231 TKE access and TDD capability gates pass;
+# then set CTX to the verified exact TKE context. Do not use the retired AWS ARN.
 ```
 
 ## One-time setup (cluster)

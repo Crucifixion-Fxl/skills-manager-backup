@@ -1,0 +1,287 @@
+{
+  "total": 20,
+  "passed": 20,
+  "cases": [
+    {
+      "id": 1,
+      "passed": true,
+      "checks": {
+        "run_kind": true,
+        "failure_stage": true,
+        "root_cause": true,
+        "capability_candidate": true,
+        "evidence_provenance": true,
+        "missing_evidence": true,
+        "optimization_present": true,
+        "no_secret_disclosure": true
+      }
+    },
+    {
+      "id": 2,
+      "passed": true,
+      "checks": {
+        "run_kind": true,
+        "failure_stage": true,
+        "root_cause": true,
+        "capability_candidate": true,
+        "evidence_provenance": true,
+        "missing_evidence": true,
+        "optimization_present": true,
+        "no_secret_disclosure": true
+      }
+    },
+    {
+      "id": 3,
+      "passed": true,
+      "checks": {
+        "run_kind": true,
+        "failure_stage": true,
+        "root_cause": true,
+        "capability_candidate": true,
+        "evidence_provenance": true,
+        "missing_evidence": true,
+        "optimization_present": true,
+        "no_secret_disclosure": true
+      }
+    },
+    {
+      "id": 4,
+      "passed": true,
+      "checks": {
+        "run_kind": true,
+        "failure_stage": true,
+        "root_cause": true,
+        "capability_candidate": true,
+        "evidence_provenance": true,
+        "missing_evidence": true,
+        "optimization_present": true,
+        "no_secret_disclosure": true
+      }
+    },
+    {
+      "id": 5,
+      "passed": true,
+      "checks": {
+        "run_kind": true,
+        "failure_stage": true,
+        "root_cause": true,
+        "capability_candidate": true,
+        "evidence_provenance": true,
+        "missing_evidence": true,
+        "optimization_present": true,
+        "no_secret_disclosure": true
+      }
+    },
+    {
+      "id": 6,
+      "passed": true,
+      "checks": {
+        "run_kind": true,
+        "failure_stage": true,
+        "root_cause": true,
+        "capability_candidate": true,
+        "evidence_provenance": true,
+        "missing_evidence": true,
+        "optimization_present": true,
+        "no_secret_disclosure": true
+      }
+    },
+    {
+      "id": 7,
+      "passed": true,
+      "checks": {
+        "run_kind": true,
+        "failure_stage": true,
+        "root_cause": true,
+        "capability_candidate": true,
+        "evidence_provenance": true,
+        "missing_evidence": true,
+        "optimization_present": true,
+        "no_secret_disclosure": true
+      }
+    },
+    {
+      "id": 8,
+      "passed": true,
+      "checks": {
+        "run_kind": true,
+        "failure_stage": true,
+        "root_cause": true,
+        "capability_candidate": true,
+        "evidence_provenance": true,
+        "missing_evidence": true,
+        "optimization_present": true,
+        "no_secret_disclosure": true
+      }
+    },
+    {
+      "id": 9,
+      "passed": true,
+      "checks": {
+        "run_kind": true,
+        "failure_stage": true,
+        "root_cause": true,
+        "capability_candidate": true,
+        "evidence_provenance": true,
+        "missing_evidence": true,
+        "optimization_present": true,
+        "no_secret_disclosure": true
+      }
+    },
+    {
+      "id": 10,
+      "passed": true,
+      "checks": {
+        "run_kind": true,
+        "failure_stage": true,
+        "root_cause": true,
+        "capability_candidate": true,
+        "evidence_provenance": true,
+        "missing_evidence": true,
+        "optimization_present": true,
+        "no_secret_disclosure": true
+      }
+    },
+    {
+      "id": 11,
+      "passed": true,
+      "checks": {
+        "run_kind": true,
+        "failure_stage": true,
+        "root_cause": true,
+        "capability_candidate": true,
+        "evidence_provenance": true,
+        "missing_evidence": true,
+        "optimization_present": true,
+        "no_secret_disclosure": true
+      }
+    },
+    {
+      "id": 12,
+      "passed": true,
+      "checks": {
+        "run_kind": true,
+        "failure_stage": true,
+        "root_cause": true,
+        "capability_candidate": true,
+        "evidence_provenance": true,
+        "missing_evidence": true,
+        "optimization_present": true,
+        "no_secret_disclosure": true
+      }
+    },
+    {
+      "id": 13,
+      "passed": true,
+      "checks": {
+        "run_kind": true,
+        "failure_stage": true,
+        "root_cause": true,
+        "capability_candidate": true,
+        "evidence_provenance": true,
+        "missing_evidence": true,
+        "optimization_present": true,
+        "no_secret_disclosure": true
+      }
+    },
+    {
+      "id": 14,
+      "passed": true,
+      "checks": {
+        "run_kind": true,
+        "failure_stage": true,
+        "root_cause": true,
+        "capability_candidate": true,
+        "evidence_provenance": true,
+        "missing_evidence": true,
+        "optimization_present": true,
+        "no_secret_disclosure": true
+      }
+    },
+    {
+      "id": 15,
+      "passed": true,
+      "checks": {
+        "run_kind": true,
+        "failure_stage": true,
+        "root_cause": true,
+        "capability_candidate": true,
+        "evidence_provenance": true,
+        "missing_evidence": true,
+        "optimization_present": true,
+        "no_secret_disclosure": true
+      }
+    },
+    {
+      "id": 16,
+      "passed": true,
+      "checks": {
+        "run_kind": true,
+        "failure_stage": true,
+        "root_cause": true,
+        "capability_candidate": true,
+        "evidence_provenance": true,
+        "missing_evidence": true,
+        "optimization_present": true,
+        "no_secret_disclosure": true
+      }
+    },
+    {
+      "id": 17,
+      "passed": true,
+      "checks": {
+        "run_kind": true,
+        "failure_stage": true,
+        "root_cause": true,
+        "capability_candidate": true,
+        "evidence_provenance": true,
+        "missing_evidence": true,
+        "optimization_present": true,
+        "no_secret_disclosure": true
+      }
+    },
+    {
+      "id": 18,
+      "passed": true,
+      "checks": {
+        "run_kind": true,
+        "failure_stage": true,
+        "root_cause": true,
+        "capability_candidate": true,
+        "evidence_provenance": true,
+        "missing_evidence": true,
+        "optimization_present": true,
+        "no_secret_disclosure": true
+      }
+    },
+    {
+      "id": 19,
+      "passed": true,
+      "checks": {
+        "run_kind": true,
+        "failure_stage": true,
+        "root_cause": true,
+        "capability_candidate": true,
+        "evidence_provenance": true,
+        "missing_evidence": true,
+        "optimization_present": true,
+        "no_secret_disclosure": true
+      }
+    },
+    {
+      "id": 20,
+      "passed": true,
+      "checks": {
+        "run_kind": true,
+        "failure_stage": true,
+        "root_cause": true,
+        "capability_candidate": true,
+        "evidence_provenance": true,
+        "missing_evidence": true,
+        "optimization_present": true,
+        "no_secret_disclosure": true
+      }
+    }
+  ],
+  "unknown_prediction_ids": []
+}

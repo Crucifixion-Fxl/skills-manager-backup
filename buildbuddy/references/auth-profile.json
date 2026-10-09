@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "tool": "buildbuddy",
+  "owner": "buildbuddy",
+  "provider": "delegated",
+  "authContract": "references/saas-access.md",
+  "verification": "source-verified",
+  "runtimeVerification": "pending",
+  "deploymentVersion": "unknown",
+  "origin": "https://buildbuddy-sg-ui.addx.live"
+}

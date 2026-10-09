@@ -22,6 +22,8 @@ AddX Troubleshooting 故障诊断平台 API 操作助手。
 
 ## Description
 
+首次接入/变更扫描与日常认证入口见 [SaaS 接入](references/saas-access.md)；已有平台业务契约与授权门禁仍在本 Skill 维护。
+
 Troubleshooting 平台是 AddX 内部的故障诊断中枢，服务于技术支持、研发和运维团队。
 
 > 认证边界：本 Skill 使用 Micro App Platform/效能应用 OAuth 换取业务平台 JWT。
@@ -226,6 +228,8 @@ Staging-US/EU 的应用日志共享区域级 logs-v2 索引空间。每次查询
 |------|---------------------------|------|
 | Staging-US | `aws-390709477306-us-staging/` | `us-eks-staging` |
 | Staging-EU | `aws-390709477306-eu-staging/` | `eu-eks-staging` |
+
+**CN 定位**：CN 当前使用腾讯云，prod 为 `tencent-100014919455-cn-main/`，staging 为 `tencent-100052802231-cn-staging/`，tech-service 为 `tencent-100052802231-cn-tech-service/`。先按 Application 的实际 source / destination 定位；AWS CN 目录仅供历史追溯。不要将下面 Staging-US/EU 的 logs-v2 API、索引或 AWS 凭据直接套用到 CN；CN 日志链路见 `log-ingestion-elasticsearch` 技能。
 
 **解析 `kubernetes.labels.app`**：
 

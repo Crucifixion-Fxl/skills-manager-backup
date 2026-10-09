@@ -7,11 +7,13 @@ description: 通过 AWS CLI 管理多账户、多区域 AWS 资源。当用户�
 
 ## Description
 
+首次接入/变更扫描与日常认证入口见 [SaaS 接入](references/saas-access.md)；已有平台业务契约与授权门禁仍在本 Skill 维护。
+
 通过 AWS CLI 协助运维和开发人员管理公司多账户、多区域的 AWS 资源。覆盖所有常见 AWS 服务的读操作，写操作需用户确认。
 
 ## 账户体系
 
-公司采用多账户、多区域（US/EU/CN）、职责分离（prod/tech-service/data/devops/dev）架构。
+当前 AWS 集群覆盖 US/EU/SG 等区域。**AWS CN 集群已弃用，当前 CN 环境全部在腾讯云**：prod=`100014919455`，staging / tech-service=`100052802231`。CN 日常任务改用 `tencent-cloud-cli`；只有明确查询历史 AWS CN 资源时才使用下方 legacy 账号，不由旧 profile 存在推断仍有活跃集群。
 
 ### 账户映射表
 
@@ -28,14 +30,14 @@ description: 通过 AWS CLI 管理多账户、多区域 AWS 资源。当用户�
 | `aws-390709477306-eu-staging` | 390709477306 | eu-central-1 | aws | 欧区 staging（同账号 390709477306） |
 | `aws-740315635167-eu-prod` | 740315635167 | eu-central-1 | aws | 欧区生产 |
 | `aws-010840394398-eu-tech-service` | 010840394398 | eu-central-1 | aws | 欧区技术服务 |
-| `aws-741924744516-cn-prod` | 741924744516 | cn-north-1 | aws-cn | 国区生产 |
-| `aws-589899215075-cn-tech-service` | 589899215075 | cn-north-1 | aws-cn | 国区技术服务 |
-| `aws-801447536674-cn-dev` | 801447536674 | cn-north-1 | aws-cn | 国区开发（同账号含 cn-eks-staging 集群） |
-| `aws-437416304740-cn-old` | 437416304740 | cn-north-1 | aws-cn | 国区旧账号 |
+| `aws-741924744516-cn-prod` | 741924744516 | cn-north-1 | aws-cn | **已弃用 AWS CN 集群的历史账号**；国区生产 |
+| `aws-589899215075-cn-tech-service` | 589899215075 | cn-north-1 | aws-cn | **已弃用 AWS CN 集群的历史账号**；国区技术服务 |
+| `aws-801447536674-cn-dev` | 801447536674 | cn-north-1 | aws-cn | **已弃用 AWS CN 集群的历史账号**；国区开发（`cn-eks-dev` 已删除，`cn-eks-staging` 已停业务；S3 bucket 按要求保留，禁止删除） |
+| `aws-437416304740-cn-old` | 437416304740 | cn-north-1 | aws-cn | **已弃用 AWS CN 集群的历史账号**；国区旧账号 |
 | `aws-125710977284-sg-devops` | 125710977284 | ap-southeast-1 | aws | DevOps 基础设施（新加坡） |
 | `aws-343938550037-kr-dev` | 343938550037 | ap-northeast-2 | aws | 开发（韩国；EKS 集群已删，账号尚存） |
 
-> **国区 staging** 无独立 profile，复用 `aws-801447536674-cn-dev`（同账号，加 `--region cn-north-1`，集群 `cn-eks-staging`）。
+> 国区 dev/staging 当前统一在腾讯云 `100052802231` / `cls-riukakjb`（`staging-cn`）；不要复用旧 AWS dev profile 或访问旧 `cn-eks-dev` / `cn-eks-staging`。历史账号仍可能保留迁移资源（如 S3），历史盘点需用户明确范围。801447536674 的 S3 bucket 与 object 均需保留：Crossplane 管理角色已挂 `RetirementS3DeletionGuard`（Deny `s3:*`），不要解除，也不要为“清理”发起任何 S3 删除或生命周期变更。
 
 ### 区域速查
 
@@ -51,10 +53,10 @@ description: 通过 AWS CLI 管理多账户、多区域 AWS 资源。当用户�
 | 欧区 + 技术服务/tech | `aws-010840394398-eu-tech-service` |
 | 欧区 + staging | `aws-390709477306-eu-staging` |
 | 欧区 + 数据/data | `aws-769494896000-us-data --region eu-central-1` |
-| 国区/CN/中国 + 生产/prod | `aws-741924744516-cn-prod` |
-| 国区 + 技术服务/tech | `aws-589899215075-cn-tech-service` |
-| 国区 + 开发/dev | `aws-801447536674-cn-dev` |
-| 国区 + staging | `aws-801447536674-cn-dev`（集群 `cn-eks-staging`） |
+| 国区/CN/中国 + 生产/prod | 转 `tencent-cloud-cli`，账号 `100014919455` / `cn-main` |
+| 国区 + 技术服务/tech | 转 `tencent-cloud-cli`，账号 `100052802231` / `cn-tech-service` |
+| 国区 + 开发/dev | 先核对当前 TKE 应用落点；不沿用已弃用 CN Dev 集群 |
+| 国区 + staging | 转 `tencent-cloud-cli`，账号 `100052802231` / `cn-staging` |
 | devops/运维 | `aws-125710977284-sg-devops` |
 
 ## 执行流程
@@ -272,4 +274,18 @@ AI：Secret 值为 sk-a1b2c3d4e5f6g7h8i9j0  ← 完整暴露
 | 场景 | 条件 |
 |------|------|
 | 紧急故障恢复 | 用户明确声明紧急情况，可简化确认流程（仍需展示命令） |
-| dev/dev-cn 环境 | 开发环境的非删除类写操作可简化确认 |
+| 已核验的活跃 dev 环境 | 开发环境的非删除类写操作可简化确认 |
+
+## 原生 CLI 浏览器授权与远程消费
+
+保留已有授权 profile、STS 或密钥方式；优先恢复其原有认证，不复制浏览器 Cookie。IAM Identity Center 使用已配置的 `aws sso login --profile <selected-profile>`；控制台 IAM／联合身份可在 CLI >=2.32.0 使用 `aws login --profile <selected-profile>`，远端无浏览器时使用 `--remote`，在任务浏览器打开官方原始授权 URL，再私密回传授权码。`--remote` 是跨设备 OAuth 授权码流程，不能称 device-code grant，也不能把远端认证成功当作本机凭据已就绪。禁止将 URL 中的授权参数、授权码或缓存凭据放入日志、聊天、argv 或报告。需要用户登录或 MFA 时将任务页置前并有界检测，之后继续官方交换。
+
+`aws login` 可能更新该 profile 的 login_session 与官方缓存，现有会话不匹配时不要自动覆盖；新会话使用任务隔离配置与缓存机制，先确认实际支持路径，不能通过改 HOME 影响其他工具。登录要求既有 SignInLocalDevelopmentAccess 权限时，缺权只记录，不为验收添加 IAM policy。登录后分别核本机、远端 STS 的目标 Account／subject，再做有界授权读取；不默认 profile、不遍历所有账户或退回历史 CN。清理按官方 profile 作用域操作，不能无 profile logout 清掉既有会话。
+
+官方安装入口支持用户目录安装，先下载并审查脚本、固定同一版本和已存在路径保护，再设置任务专用 XDG_DATA_HOME／XDG_BIN_HOME；不覆盖系统 CLI 或修改全局 PATH。Linux 检查隔离 keyring 中的官方 PGP 签名；macOS 核官方 Apple Developer team。安装及版本／profile 名称发现只证明运行条件，不能记为真实身份或资源验收。见 [官方登录说明](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-sign-in.html) 与 [官方安装说明](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)。
+
+### `aws login` 的配置与缓存隔离
+
+控制台登录的官方缓存目录支持 `AWS_LOGIN_CACHE_DIRECTORY`。任务登录同时固定任务独有的 `AWS_CONFIG_FILE`、`AWS_SHARED_CREDENTIALS_FILE` 和 `AWS_LOGIN_CACHE_DIRECTORY`，并显式给 `--profile`；不修改 HOME，不读取或复制其他 profile 内容。这些环境变量应传给登录、STS／后续原生读取和指定 profile 的 logout 全链，而非只传给安装器。密钥文件路径可指向任务空文件；配置仅写已选 profile 的公共 region 等字段，OAuth session／缓存由官方 CLI 写入。报告只记录路径、profile、权限／身份核验和清理布尔值，绝不保存缓存内容。
+
+`AWS_LOGIN_CACHE_DIRECTORY` 仅适用于 console-login provider；不能推断它也隔离 IAM Identity Center 的 SSO cache。SSO 路径需另核官方实现／隔离能力，不因覆盖 config 文件就声称所有缓存隔离完成。缺明确账号、region 或 CLI 授权权限时保持待输入，不新建长期 Key、不改 IAM policy。正常 OAuth 创建的本地缓存属于登录流程，但不能把工具准备／离线配置测试计为真实鉴权。参考 [login provider 设置](https://docs.aws.amazon.com/sdkref/latest/guide/feature-login-credentials.html)。

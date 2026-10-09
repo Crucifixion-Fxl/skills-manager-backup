@@ -22,7 +22,7 @@ BucketPolicy 仍归 bucket owner 管理。
 
 - 应用已经有 `k8s/base/` + `k8s/overlays/{env_keyword}/`
 - 用户已说明：需要哪些 AWS 服务 + 操作 + 资源 ARN 范围
-- 每个 target 集群 EKS OIDC Provider 已配（GCP / TKE 集群没有 IRSA，**STOP** 产 ops-todo 改用 AK/SK 走 vault）
+- 每个 target 集群 EKS OIDC Provider 已配。本 workflow 仅覆盖 AWS IRSA；TKE 访问 COS 转 `workflows/add-tencent-cos.md`，其他非 AWS / 跨云访问产 Ops Todo，由平台评估原生身份或跨云信任，不默认改用长期 AK/SK。
 
 ## Step 1. 解析需求
 
@@ -56,7 +56,7 @@ BucketPolicy 仍归 bucket owner 管理。
 [action]
   - 对每个 `$target`：
     - 查 `references/data/clusters.yaml -> clusters[<target.cluster>]`，记录 `account_id`、`region`、`cloud`、`partition`
-    - **`cloud != aws`** → STOP 产 ops-todo "GCP/TKE 集群无 IRSA，改 AK/SK 走 Vault"（**不要** 给非 aws target 写 IRSA manifest；workflow 跳过该 target，对其他 aws target 继续）
+    - **`cloud != aws`** → STOP 当前 AWS 流程；TKE 访问 COS 转 `workflows/add-tencent-cos.md`，其他需求产 Ops Todo "非 AWS / 跨云身份需平台评估，不默认分发长期 AK/SK"（**不要** 给非 aws target 写 IRSA manifest；workflow 跳过该 target，对其他 aws target 继续）
     - `cloud == aws` 但 `partition` 字段不存在 → 数据错乱，STOP 让用户先修 clusters.yaml
     - 若目标 S3 bucket 在不同 partition（如 `aws` ↔ `aws-cn`）→ STOP：
       IRSA / OIDC / STS trust 不能跨 partition；产 Ops Todo 走 Vault AK/SK 或云厂商

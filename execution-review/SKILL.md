@@ -35,6 +35,7 @@ description: 任务执行结果不及预期、经过用户多轮纠正后才完�
 5. **改进必须可执行**：输出具体动作，不能是"下次注意"
 6. **改进必须关联假设**：每个改进关联到具体的假设编号
 7. **只分析自己可控的部分**：不甩锅，外因分析不产生改进
+8. **项目改进必须回到原 Issue identity**：当复盘源于项目交付偏差时，按 [`gitlab-issue-sop` 生命周期契约](../../collaboration/gitlab-issue-sop/references/lifecycle-binding.md) 把复盘 artifact/digest、改进 owner、success criterion 与 next gate 写回原 Work Item；跨仓或独立改进另建 linked follow-up Task。个人反思或纯本机任务不为形式化而创建项目 Issue。
 
 ---
 

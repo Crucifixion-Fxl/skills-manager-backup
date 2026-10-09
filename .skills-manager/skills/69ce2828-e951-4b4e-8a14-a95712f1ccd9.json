@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "69ce2828-e951-4b4e-8a14-a95712f1ccd9",
+  "path": "cicd-opensource",
+  "path_key": "cicd-opensource",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/delivery/cicd-opensource",
+    "branch": null
+  }
+}

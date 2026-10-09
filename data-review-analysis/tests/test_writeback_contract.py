@@ -2,13 +2,17 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import sys
 from pathlib import Path
 import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = ROOT.parents[2]
+sys.path.insert(0, str(REPO_ROOT / "scripts"))
+from gitlab_ci_config import merged_text  # noqa: E402
 RESOLVER_PATH = ROOT / "scripts" / "resolve_issue_target.py"
-PROGRESS_SKILL_PATH = ROOT.parent / "delivery-progress-analysis" / "SKILL.md"
+PROGRESS_SKILL_PATH = REPO_ROOT / "skills/collaboration/delivery-progress-analysis/SKILL.md"
 
 
 def load_resolver():
@@ -454,13 +458,13 @@ class DataReviewWritebackContractTest(unittest.TestCase):
         self.assertIn("不能把整份复盘降级", checks)
 
     def test_ci_runs_the_data_review_contract(self) -> None:
-        ci = (ROOT.parents[1] / ".gitlab-ci.yml").read_text(encoding="utf-8")
+        ci = merged_text(REPO_ROOT)
         self.assertIn("data-review-analysis:unit:", ci)
         self.assertIn(
-            "python3 -m unittest discover -s skills/data-review-analysis/tests",
+            "python3 -m unittest discover -s skills/data/data-review-analysis/tests",
             ci,
         )
-        self.assertIn('"skills/data-review-analysis/**/*"', ci)
+        self.assertIn('"skills/data/data-review-analysis/**/*"', ci)
 
 
 if __name__ == "__main__":

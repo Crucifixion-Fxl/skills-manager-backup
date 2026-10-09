@@ -1,6 +1,6 @@
 # 个人 Channel todo 同步 timer 部署（owner `systemd --user`）
 
-本页是 [ADR-0013](../../../../docs/05-adr/0013-run-personal-todo-sync-with-the-owners-pat.md) 的 wiring 契约。每个人一对 `gitlab-todo-sync-<name>.service`／`.timer`，跑在这个人自己的主机、自己的 Unix UID 下。结构沿用 [GitLab → Buzz 同步 timer](README.md)（ADR-0008），差别在凭据：这里用的是**本人的 GitLab PAT**。
+本页是 [ADR-0013](../../../../../docs/agent-harness/adr/0013-run-personal-todo-sync-with-the-owners-pat.md) 的 wiring 契约。每个人一对 `gitlab-todo-sync-<name>.service`／`.timer`，跑在这个人自己的主机、自己的 Unix UID 下。结构沿用 [GitLab → Buzz 同步 timer](README.md)（ADR-0008），差别在凭据：这里用的是**本人的 GitLab PAT**。
 
 ## 边界
 

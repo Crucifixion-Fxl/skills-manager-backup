@@ -1,0 +1,12 @@
+schemaVersion: 1
+kind: scenario
+host: demo
+applicationId: 1
+expectations:
+  - event:
+      type: PAGE
+      trackerType: BASE
+      spm: [home]
+    count: 1
+    fields:
+      source: home

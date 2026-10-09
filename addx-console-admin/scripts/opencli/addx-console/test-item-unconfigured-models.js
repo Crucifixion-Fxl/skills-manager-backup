@@ -1,0 +1,4 @@
+import {cli,Strategy} from '@jackwener/opencli/registry';
+import {identity,request} from './native.mjs';
+import {testItemQuery,testItemModelRows} from './test-item-model-records.mjs';
+cli({site:'addx-console',name:'test-item-unconfigured-models',access:'read',description:'Read PCBA/whole-device candidate models shown under UI unpublished; no saved management ID or initialization',strategy:Strategy.LOCAL,browser:false,args:[{name:'page',type:'int',default:1,help:'Positive page'},{name:'limit',type:'int',default:10,help:'Page size 1 to 20'},{name:'model-type',type:'int',default:0,help:'0 PCBA or 1 whole device'}],columns:['model','modelType','categoryId','category','status','statusName','itemCount','configuredArtCount','totalArtCount','createdAt','updatedAt','candidate','total'],func:async(args)=>{const q=testItemQuery(args,true);await identity();return testItemModelRows(await request(q.path,'POST',{}),q,true);}});

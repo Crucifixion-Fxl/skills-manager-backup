@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "a44e3606-7ee2-4c3a-8341-fc1db24ba435",
+  "path": "engagement-admin",
+  "path_key": "engagement-admin",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/experimentation/engagement-admin",
+    "branch": null
+  }
+}

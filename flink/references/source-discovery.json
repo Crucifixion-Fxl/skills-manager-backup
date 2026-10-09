@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "tool": "flink",
+  "owner": "flink",
+  "repo": "https://gitlab.addx.ai/DATA/flink-addx",
+  "researchCommit": null,
+  "routeEntries": [
+    "k8s/flink/overlays/staging-us/flinkdeployment-patch.yaml"
+  ],
+  "verification": "existing-reference-only",
+  "deploymentConsistency": "pending",
+  "needsResearch": [
+    "deployment SHA/version and auth configuration",
+    "subject and resource permissions"
+  ],
+  "officialReferences": [
+    "https://nightlies.apache.org/flink/flink-docs-stable/docs/ops/rest_api/"
+  ],
+  "apiDiscovery": {
+    "method": "Version-matched official CLI/API reference plus AddX deployment/private extension source",
+    "officialReferences": [
+      "https://nightlies.apache.org/flink/flink-docs-stable/docs/ops/rest_api/"
+    ],
+    "deploymentRouteEntries": [
+      "k8s/flink/overlays/staging-us/flinkdeployment-patch.yaml"
+    ],
+    "coverage": "Do not copy public API; deploy version and private-extension inventory pending"
+  },
+  "referenceBase": "owner-skill-root for SKILL.md/contractEntrypoints/referenceSources paths; contract field resolves from this JSON directory; upstream repository entrypoints stay repository-relative"
+}

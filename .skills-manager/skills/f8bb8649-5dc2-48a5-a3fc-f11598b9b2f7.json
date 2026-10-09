@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "f8bb8649-5dc2-48a5-a3fc-f11598b9b2f7",
+  "path": "dagster-dbt-model-create",
+  "path_key": "dagster-dbt-model-create",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/data/dagster-dbt-model-create",
+    "branch": null
+  }
+}

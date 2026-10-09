@@ -7,18 +7,21 @@ description: 通过 tccli 管理腾讯云资源。当用户提到腾讯云、CVM
 
 ## Description
 
+首次接入/变更扫描与日常认证入口见 [SaaS 接入](references/saas-access.md)；已有平台业务契约与授权门禁仍在本 Skill 维护。
+
 通过腾讯云官方 CLI（tccli）协助运维和开发人员管理腾讯云资源。
 
 ## 账户信息
 
-| 项目 | 值 |
-|------|-----|
-| 环境 | 国区生产（prod-cn） |
-| 主账号 UIN | 100014919455 |
-| 子账号 UIN | 100015217945 |
-| AppId | 1302606863 |
-| 默认区域 | ap-beijing |
-| CLI Profile | `tencent-100014919455-cn-main` |
+CN 当前集群全部在腾讯云，AWS CN 集群已弃用。按环境选择账号，不能再默认 prod 账号。
+
+| 环境 | 主账号 UIN | Region | GitOps 集群目录 |
+|------|-----------|--------|----------------|
+| prod / cn-main | `100014919455` | `ap-beijing` | `tencent-100014919455-cn-main` |
+| staging | `100052802231` | `ap-beijing` | `tencent-100052802231-cn-staging` |
+| tech-service | `100052802231` | `ap-beijing` | `tencent-100052802231-cn-tech-service` |
+
+目录、服务入口和取证方法见 [CN 腾讯云环境事实与核验入口](../k8s-ops/references/cn-tencent-inventory.md)。旧 `100050722703` staging、`100014919455` tech-service 目录可能残留，不能作为当前环境映射。老账号 `100014919455` 下还残留旧 staging 集群 `cls-i860hdh9`（VPC `vpc-jxxz6aiq`，名为 `staing-cn`），已无业务、待下线；用 `--profile` 指向老账号查到同名 `staging-cn` 集群时不要当成当前 staging，当前 staging 是新账号的 `cls-riukakjb`。prod 账号的 AppId `1302606863` 不适用于新账号；新账号 AppId、子账号 UIN、SecretId 和 profile 名均须从已授权配置/身份接口核验，不可按 UIN 推算。
 
 ## 认证方式
 
@@ -35,7 +38,7 @@ ls ~/.tccli/*.configure | xargs -n1 basename | sed 's/.configure$//'
 # 注意：tccli 没有内置的 switch 命令，建议始终显式指定 --profile
 ```
 
-所有命令建议显式指定 `--profile`，避免依赖默认 profile。
+所有命令必须显式指定 `--profile`，避免依赖默认 profile。
 
 ## tccli 基础用法
 
@@ -44,7 +47,7 @@ tccli <Service> <Action> [--profile <profile>] [--region <region>] [--参数名 
 ```
 
 常用参数：
-- `--profile`：指定配置 profile（建议显式指定）
+- `--profile`：指定配置 profile（必须显式指定）
 - `--region`：覆盖默认区域（默认 ap-beijing）
 - `--output json`：JSON 输出（默认）
 - `--filter`：JMESPath 过滤
@@ -87,20 +90,19 @@ tccli <Service> <Action> [--profile <profile>] [--region <region>] [--参数名 
 
 ## 执行流程
 
-### Step 1: 执行命令
+### Step 1: 检查本机工具和凭据来源
 
-直接执行目标命令。如果报错（如 command not found、认证失败、配置缺失），读取 `references/setup.md` 并按引导帮助用户完成安装和配置。
+先检查 `tccli --version` 和已有 profile 名称。工具不存在、认证失败或配置缺失时读取 `references/setup.md`；优先使用本机已有配置和用户授权的凭据来源，不先执行未选定账号的资源命令。
 
 ### Step 2: 确认操作目标
 
 根据用户描述确定：
 
-1. **目标账户**：确定 `--profile`
-   - 先执行 `ls ~/.tccli/*.configure | xargs -n1 basename | sed 's/.configure$//'` 查看已有 profile
-   - 如果只有一个 profile，直接使用
-   - 如果有多个 profile，且根据上下文和已有知识无法判断使用哪个 profile，主动询问用户使用哪个 profile
-   - 当前默认使用 `default` profile（对应账户信息表中的配置）
-2. **目标区域**：未指定时使用默认区域 ap-beijing，用户指定其他区域时用 `--region` 覆盖
+1. **目标账户**：按上表确定主账号 UIN，然后枚举本机已有 profile 名称。profile 即使只有一个也必须验证，不默认使用 `default`，也不假定 `old`、`new` 或集群目录名是可用 profile。
+   - 用腾讯云 STS `GetCallerIdentity` 对候选 profile 做只读校验，核对返回的 `AccountId`（主账号 UIN）与目标 UIN 一致；不能用子账号 `UserId` / `PrincipalId` 代替；仅展示身份标识，不输出凭据。
+   - 已验证新账号 profile 可用于 staging 和 tech-service，但仍须核对目标集群 ID；共用账号不代表共用集群。
+   - 找不到匹配身份时报告缺口，不退回旧账号。`DescribeRegions` 成功只能证明 API 可访问，不能证明选对账户。
+2. **目标区域**：当前三个 CN 集群使用 `ap-beijing`，命令显式传 `--region ap-beijing`；其他资源区域以任务证据为准。
 3. **操作内容**：判断读/写操作
 
 ### Step 3: 执行命令
@@ -188,7 +190,7 @@ tccli 列表接口有分页限制，**必须处理分页以确保结果完整**�
    - 第二页：`--Limit 100 --Offset 100`
    - 依此类推直到取完
 3. 使用 JMESPath `contains()` 等客户端过滤时，必须确保已获取全部数据，否则会遗漏结果
-4. 当前 prod-cn 有 170 台 CVM，单次 `--Limit 100` 无法覆盖全部
+4. 资源数量会变化，按目标账号实时 `TotalCount` 分页；不要沿用历史 prod 账号的实例数，也不要假定单次 `--Limit 100` 覆盖全部
 
 ### 输出优化
 
@@ -204,7 +206,7 @@ tccli 列表接口有分页限制，**必须处理分页以确保结果完整**�
 用户：看看腾讯云上有哪些机器
 
 AI：查询 CVM 实例：
-  [执行 tccli cvm DescribeInstances --filter 'InstanceSet[*].{InstanceId:InstanceId,InstanceName:InstanceName,PublicIpAddresses:PublicIpAddresses,PrivateIpAddresses:PrivateIpAddresses,InstanceState:InstanceState,InstanceType:InstanceType}']
+  [先校验目标账户，然后执行 tccli cvm DescribeInstances --profile <已验证 profile> --region ap-beijing --filter 'InstanceSet[*].{InstanceId:InstanceId,InstanceName:InstanceName,PublicIpAddresses:PublicIpAddresses,PrivateIpAddresses:PrivateIpAddresses,InstanceState:InstanceState,InstanceType:InstanceType}']
 ```
 
 ```
@@ -212,8 +214,8 @@ AI：查询 CVM 实例：
 用户：看看腾讯云的 K8s 集群
 
 AI：查询 TKE 集群：
-  [执行 tccli tke DescribeClusters]
-  找到集群 tke-cn-k8s...
+  [按环境选择并校验主账号后，执行 tccli tke DescribeClusters --profile <已验证 profile> --region ap-beijing]
+  展示实际返回的 ClusterId / ClusterName，不把本机 context 别名当成云端集群名。
 ```
 
 ```
@@ -227,7 +229,7 @@ AI：找到实例：
 
     账户: 腾讯云 prod-cn (AppId: 1302606863)
     区域: ap-beijing
-    命令: tccli cvm RebootInstances --InstanceIds '["ins-abc123"]'
+    命令: tccli cvm RebootInstances --profile <已验证 profile> --region ap-beijing --InstanceIds '["ins-abc123"]'
 
   确认执行？(y/n)
 ```

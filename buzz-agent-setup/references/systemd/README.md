@@ -1,6 +1,6 @@
 # GitLab → Buzz 同步 timer 部署（owner `systemd --user`）
 
-本页是生产 wiring 契约。按 [ADR-0008](../../../../docs/05-adr/0008-run-gitlab-sync-from-owner-systemd-timer.md)，每个业务 Channel 一对 `gitlab-buzz-sync-<channel>.service`／`.timer`，由 Desk 所在主机、同一 Unix UID 的 `systemd --user` 运行，同步路径里没有 LLM。确定性步骤仍是 ADR-0004 的 **Desk-owned Agent Step**：以 Desk identity 发布，sync/route/outbox/binding 契约不变。Desk Agent 的 harness 是普通常驻 service，与本页无关；不部署常驻 sync daemon、listener 或 loopback。
+本页是生产 wiring 契约。按 [ADR-0008](../../../../../docs/agent-harness/adr/0008-run-gitlab-sync-from-owner-systemd-timer.md)，每个业务 Channel 一对 `gitlab-buzz-sync-<channel>.service`／`.timer`，由 Desk 所在主机、同一 Unix UID 的 `systemd --user` 运行，同步路径里没有 LLM。确定性步骤仍是 ADR-0004 的 **Desk-owned Agent Step**：以 Desk identity 发布，sync/route/outbox/binding 契约不变。Desk Agent 的 harness 是普通常驻 service，与本页无关；不部署常驻 sync daemon、listener 或 loopback。
 
 ## 边界
 

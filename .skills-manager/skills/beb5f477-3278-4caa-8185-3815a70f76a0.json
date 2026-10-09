@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "beb5f477-3278-4caa-8185-3815a70f76a0",
+  "path": "face-review-repair",
+  "path_key": "face-review-repair",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/quality/face-review-repair",
+    "branch": null
+  }
+}

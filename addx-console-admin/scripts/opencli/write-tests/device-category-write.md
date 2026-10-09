@@ -1,0 +1,15 @@
+# Device-category create/edit planning
+
+`device-category-create` and `device-category-edit` execute Console's real native read preconditions when invoked with an authorized private token. They do not accept a simulated identity/context. Both default to and support only `--mode dry-run`. Submission is hard rejected before reading input or making HTTP requests. Actual deployment/action permission and write authorization have not been verified; these commands do not make full-site writing ready.
+
+Provide `--changes-file` containing business JSON only. Creation fields: `categoryCode`, `categoryName`, and full `requiredList` of `{componentGroupId, required}`. Editing fields: existing `id`, `categoryName`, and full `requiredList`; code cannot be supplied or renamed. A required flag is numeric 0 or 1. Model code follows the UI's ASCII letters/digits/underscore rule, maximum 50; names follow the UI maximum 50. An explicit empty full list proposes no groups. The diff exposes additions, removals from the next active version, and required-flag changes; this is not a claim of physical deletion of historical rows.
+
+Read sequence: actual native identity, complete bounded unfiltered category inventory (100 pages maximum, 20 per page, stable total, unique resource IDs), category parameter/group options, and existing target detail for editing. Details must return the same existing ID. Proposed group IDs must occur in current published group options. Unpublished/unknown options fail closed; preservation of such legacy groups requires separate safe discovery rather than guessing.
+
+Only target category ID/code/name/version/status/time and group ID/required flags are projected. Parameter definitions, parameter values, icon maps, and raw detail objects are not emitted or hashed. Public catalog ID/code/name values are hashed for duplicate checks, not printed as a full catalog. The plan exposes current/proposed values, group diff and hash, with `deploymentAndActionPermission: UNKNOWN_NOT_VERIFIED` and `submissionImplemented: false`.
+
+The pinned backend source read chains use SELECT/list/map operations. No business initialization/insert was found in the category list/parameters/detail chains. This source finding does not prove the current deployed SHA or make another untraced endpoint safe.
+
+On change, source save logic writes a new epoch-second version, updates the category, and inserts versioned group mappings; edits become unpublished. UI code is disabled on edit, and the server intends to preserve the category code. `saveAndRelease` is fixed false; it is forbidden in input and there is no user switch. True would call release/Git operations. Future submissions need verified deployment/action permission, explicit authorization for the complete replacement and status effect, fresh conflict checks, and readback. Source provides no atomic CAS; epoch-second version collisions and partial multi-step failures remain untested risks.
+
+Offline tests use only synthetic injected read responses. CLI help loading proves registration only, not login, live data, write permission, submission or readback.

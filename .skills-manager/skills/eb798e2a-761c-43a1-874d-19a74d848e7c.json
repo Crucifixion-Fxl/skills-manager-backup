@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "eb798e2a-761c-43a1-874d-19a74d848e7c",
+  "path": "work-method-retrospective",
+  "path_key": "work-method-retrospective",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/agent-harness/work-method-retrospective",
+    "branch": null
+  }
+}

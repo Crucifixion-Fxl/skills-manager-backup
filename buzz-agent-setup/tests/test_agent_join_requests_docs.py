@@ -8,12 +8,12 @@ import unittest
 
 TEST_DIR = Path(__file__).resolve().parent
 SKILL_DIR = TEST_DIR.parent
-REPO = SKILL_DIR.parents[1]
+REPO = SKILL_DIR.parents[2]
 SKILL = SKILL_DIR / "SKILL.md"
 RUNTIME = SKILL_DIR / "references" / "runtime-setup.md"
 MODEL = SKILL_DIR / "references" / "fchac-model.md"
 SCRIPTS_README = SKILL_DIR / "references" / "scripts" / "README.md"
-ADR = REPO / "docs" / "05-adr" / "0018-treat-a-bot-invite-as-a-join-request-the-agent-owner-approves-in-the-channel.md"
+ADR = REPO / "docs" / "agent-harness" / "adr" / "0018-treat-a-bot-invite-as-a-join-request-the-agent-owner-approves-in-the-channel.md"
 
 
 def _read(path: Path) -> str:
@@ -185,7 +185,7 @@ class JoinRequestReferenceTest(unittest.TestCase):
             self.assertNotIn("从 journal 读重启之后的内容", text)
 
     def test_adr_index_lists_0018(self) -> None:
-        index = _read(REPO / "docs" / "05-adr" / "README.md")
+        index = _read(REPO / "docs" / "agent-harness" / "adr" / "README.md")
         self.assertIn("(0018-treat-a-bot-invite-as-a-join-request-the-agent-owner-approves-in-the-channel.md)", index)
 
     def test_add_policy_wording_keeps_both_conditions(self) -> None:

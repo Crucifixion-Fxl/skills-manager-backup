@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "64220d63-b196-421a-9605-119c7ba4be1e",
+  "path": "temporal",
+  "path_key": "temporal",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/agent-harness/temporal",
+    "branch": null
+  }
+}

@@ -34,6 +34,7 @@ description: 通用分层测试策略 — 根据项目类型 (后端+APP / 后�
 
 ## Rules
 
+0. **Root Issue 门禁**：项目特定测试方案开始前，按 [`gitlab-issue-sop` 生命周期契约](../../collaboration/gitlab-issue-sop/references/lifecycle-binding.md) 验证 Root Issue、当前仓 Work Item，以及 accepted Requirements/技术方案使用同一 binding。缺失、漂移或仓库不匹配时停止；纯通用测试教育可豁免，但不得写项目测试方案。
 1. **分层必须完整**: 每个项目必须定义 L1-L4 各层级的测试范围和工具
 2. **覆盖率门禁**: L1 覆盖率 ≥ 80%，核心逻辑库 ≥ 90%
 3. **Mock 隔离**: L1 测试必须 Mock 所有外部依赖（DB/网络/HAL/文件系统）
@@ -50,10 +51,15 @@ description: 通用分层测试策略 — 根据项目类型 (后端+APP / 后�
 14. **HTML-only 测试文档**: 新建或重写测试策略文档时，SSOT 必须是 `docs/testing/strategy.html`、`docs/testing/scenarios/*.html` 和 `docs/architecture/verticals/<vertical>/testing/*.html`；旧 Markdown 只允许作为迁移期导航或外部平台兼容镜像，不复制正文
 15. **同模板不同类型**: strategy、Epic scenario、技术 scenario、vertical-local testing 页面共用同一个 HTML shell（导航、大纲、summary cards、table wrapper、traceability grid、quality gates）；不同文档类型只替换内容模块，不换页面骨架
 16. **MR TDD Level**: 单个 MR 的 TDD 过程证据统一按 [`references/tdd-level-assessment.md`](references/tdd-level-assessment.md) 输出 `T0-T4 / N/A / UNVERIFIED`；该等级只用于观测，不作为合并门禁
-17. **证据契约 (Evidence Contract)**: 每层必须声明证据物、格式、存放与受众（见 Step 4.7）。CI 可跑层（L1/L2/L3）的证据是 pipeline 本身——job URL + report artifact + MR 描述证据块（生成的摘要），**不为每次运行向仓库提交报告文件**；不进 CI 的层（L4）必须由运行生成带溯源头的人读 HTML 报告，按项目约定提交（如 `docs/testing/evidence/<date>-<slug>/`）。**手抄终端输出不是证据**。commit 级 TDD 证明靠红绿 commit + 重放工具（tddproof、故意破坏验证、mutation），报告只汇总不转述；证据挂 MR/运行，不逐 commit 提交
+17. **证据契约 (Evidence Contract)**: 每层必须声明证据物、格式、存放与受众（见 Step 4.7）。CI 可跑层（L1/L2/L3）的证据是 pipeline 本身——job URL + report artifact + MR 描述证据块（生成的摘要），**不为每次运行向仓库提交报告文件**；不进 CI 的层（L4）必须由运行生成带溯源头的人读 HTML 报告，按项目约定提交（如 `docs/testing/evidence/<date>-<slug>/`）。**手抄终端输出不是证据**。L3/L4 报告必须含由运行记录计算的「测试环境」与「真实性保证」两块（见 [`references/l3-l4-run-report.md`](references/l3-l4-run-report.md)）。commit 级 TDD 证明靠红绿 commit + 重放工具（tddproof、故意破坏验证、mutation），报告只汇总不转述；证据挂 MR/运行，不逐 commit 提交
 18. **证据呈现面与平台写边界**: 证据本体只有两个 SSOT——仓内 evidence 文件（L4 等离线层）、pipeline artifact（CI 层）；MR 描述证据块是生成摘要的投影；issue/MR comment 只承载通知、时间戳与人工签核（操作人身份由平台背书，这是 L4-Manual 签核的价值所在），**不存证据本体**（可编辑、无保留期、与 SSOT 漂移后出现两份真相）。bot comment 单条 upsert，不逐次追加。对 issue tracker 的写操作（bot 身份）属平台写，**须按产品线单独授权**；credential-free / 离线产品线不挂任何平台写 bot
+19. **阶段回执**：测试方案 accepted 时，把固定版本/digest、AC→Test Case 追溯结果、层级与 reviewer 写回 Work Item；最终 Gate 只写 terminal result、exact commit/pipeline/artifact、证据边界与未覆盖风险。`TEST_PLAN_ACCEPTED` 不等于测试通过，revision 漂移后必须重跑受影响范围。
 
 ---
+
+## 已批准方案的执行效率
+
+制定或执行测试方案时，使用 [实施与验证调度](../../development/dev-workflow/references/implementation-execution.md) 的环境 preflight、开发内环/集成候选分层和长任务管理。实施阶段先跑受影响范围；最终验收保留方案要求的完整 CI、AC 黑盒覆盖、独立 QA/人工 Gate。只有同一候选版本与环境完全未变且已有完整成功回执时复用；变更后的旧 SHA、失败、skip 或未知退出码不能算通过。
 
 ## Step 1: 识别项目类型
 
@@ -64,6 +70,9 @@ description: 通用分层测试策略 — 根据项目类型 (后端+APP / 后�
 | **后端+APP**        | Go/Java + Flutter/RN              | App UI 测试、API 契约、推送                 |
 | **后端+WEB**        | Go/Java + React/Vue               | 浏览器兼容性、SEO、SSR                      |
 | **后端+APP+嵌入式** | Go/Java + Flutter + C/C++ (Bazel) | HAL 抽象、Wasm 仿真、Digital Twin、固件 OTA |
+
+
+跨任务调度与回执、hash 校验和报告摘要脚本化遵循 [执行效率与证据复用](../../development/dev-workflow/references/execution-efficiency.md)，链接运行证据 SSOT；保留必要测试、独立 reviewer 与安全 Gate。
 
 ---
 
@@ -213,7 +222,7 @@ async def test_agent_memory_persists(letta_client):
 | L1 (Unit)           | ✅ 必选 | 后端业务逻辑 + App 状态管理   |
 | L2-1 (Interface)    | ✅ 必选 | API 契约 (OpenAPI/Protobuf)   |
 | L2-2 (Integration)  | ✅ 必选 | 后端服务 + DB/MQ 集成         |
-| L2-3 (E2E)          | ✅ 必选 | App → API 全链路              |
+| L3 (E2E)          | ✅ 必选 | App → API 全链路              |
 | L2-4 (Playground)   | ⭐ 推荐 | Swagger UI + Mock 环境        |
 | L3-1 (Contract)     | ⭐ 推荐 | 前后端 API 契约               |
 | L3-2 (Cross-System) | 🔵 可选 | 多子系统联动                  |
@@ -233,7 +242,7 @@ async def test_agent_memory_persists(letta_client):
 | L1 (Unit)           | ✅ 必选 | 后端业务逻辑 + 前端组件/Store     |
 | L2-1 (Interface)    | ✅ 必选 | API 契约 + 组件 Props 接口        |
 | L2-2 (Integration)  | ✅ 必选 | 后端服务集成 + 前端 API 层        |
-| L2-3 (E2E)          | ✅ 必选 | Browser → API 全链路 (Playwright) |
+| L3 (E2E)          | ✅ 必选 | Browser → API 全链路 (Playwright) |
 | L2-4 (Playground)   | ⭐ 推荐 | Storybook + Staging 环境          |
 | L3-1 (Contract)     | ⭐ 推荐 | 前后端 API 变更兼容性             |
 | L3-2 (Cross-System) | 🔵 可选 | 多子系统联动                      |
@@ -254,7 +263,7 @@ async def test_agent_memory_persists(letta_client):
 | L1 (Unit)           | ✅ 必选 | 后端 + App + Cluster/FSM/算法              |
 | L2-1 (Interface)    | ✅ 必选 | API 契约 + C ABI + AxData 协议             |
 | L2-2 (Integration)  | ✅ 必选 | 后端集成 + Device Wasm 集成 (Digital Twin) |
-| L2-3 (E2E)          | ✅ 必选 | App → Cloud → Hub(Wasm) → HAL 全链路       |
+| L3 (E2E)          | ✅ 必选 | App → Cloud → Hub(Wasm) → HAL 全链路       |
 | L2-4 (Playground)   | ✅ 必选 | Web Simulator (仿真器)                     |
 | L3-1 (Contract)     | ✅ 必选 | 端/云/边协议契约                           |
 | L3-2 (Cross-System) | ⭐ 推荐 | 多子系统联动 (安防↔AI↔推送)                |
@@ -507,6 +516,7 @@ Vertical-local scenario 还必须包含 `TDD Ladder`、`Scenario Fixture`、`Smo
 - **L4 附加块**：操作人、recipient 及范围声明（如「测试应用可用范围只有 PO」）、逐用例回执（如飞书 `message_id`）、负向对照结果、「本次不证明什么」
 - **脱敏红线**：secret / token / nsec / 验证码 / 消息全文不进报告；回执引 `message_id` 这类服务端凭据而非消息内容
 - 同一渲染器复用于各层：L3 直接吃 `go test -json`，L4 吃证据 fixture + 运行结果
+- **测试环境 + 真实性保证（L3/L4 必含）**：L3 与 L4 用同一个渲染器、同一套页面约束（自包含、无脚本），用例块含步骤树（每步耗时与请求数）、transport 层网络请求表、附件与失败原文；环境逐组件写真实/替身、谁启动、地址、PID、commit/版本、数据存储、客户端制品 sha256、网络范围；真实性是由原始记录逐条计算的 ✓/✗（溯源一致、跳过不算通过、真实进程、transport 层网络记录且 L4 无回环、绕开被测系统的独立核对、替身只限第三方、临时 worktree 防假绿改动（报告列每处 diff 与抓住/漏过）、脱敏扫描、原始记录随报告保存可重渲染），任一 ✗ 报告不通过。字段、算法与反模式见 [`references/l3-l4-run-report.md`](references/l3-l4-run-report.md)
 - 已委派研发质量节点（如 `DEV_TEST_REPORT`）时，机器记录 schema 以节点契约为准，HTML 报告是其人读投影，不另立第二份真相
 
 #### 需求覆盖：生成，不手填
@@ -658,7 +668,7 @@ stages:
   - build
   - test-l1 # L1 + L2-1 (每次提交)
   - test-l2 # L2-2 集成 (Nightly / Merge)
-  - test-e2e # L2-3 E2E (发布前)
+  - test-e2e # L3 E2E (发布前)
   - quality # SonarQube / 覆盖率
 
 test-l1:
@@ -736,7 +746,7 @@ release 身份本身不触发全端或全量 L3；低风险局部行为可用 L1
 | API 接口     | L2-1     | 接口测试 + Mock               |
 | 前端组件     | L1       | Vitest / Jest / flutter_test  |
 | 前后端集成   | L2-2     | Docker Compose + Integration  |
-| 全链路       | L2-3     | Playwright / Simulator        |
+| 全链路       | L3     | Playwright / Simulator        |
 | 嵌入式逻辑   | L1       | GTest + Mock HAL              |
 | Wasm/Browser | L2-2     | Vitest Browser (Digital Twin) |
 
@@ -748,7 +758,7 @@ release 身份本身不触发全端或全量 L3；低风险局部行为可用 L1
 
 ### 3. 验证 (Refactor)
 
-运行全套测试确认无回归，保留测试用例作为回归防护。
+修复后先跑受影响测试，再验证关联路径；集成候选运行方案要求的完整 CI/黑盒门禁。保留测试用例作为回归防护，未运行项明确 pending。
 
 ### 4. 左移追溯 (Trace Back)
 
@@ -881,7 +891,7 @@ TDD 的 Red 环节要求"确认测试失败"，但一旦进了 Green 后再修 f
 
 ### 7. 策略实现审计（不记录进度）
 
-`testing-strategy` 可以定义实现审计表格式，但不维护当前进度。具体“已完成 / 未完成 / 本轮通过哪些命令”归 `dev-workflow` 维护的 `PROGRESS.md`。
+`testing-strategy` 可以定义实现审计表格式，但不维护当前进度。具体“已完成 / 未完成 / 本轮通过哪些命令”归 `dev-workflow` 维护的 `progress.html`。
 
 ```html
 <section id="testing-strategy-audit">
@@ -978,7 +988,7 @@ func TestReportHidesFromFeed(t *testing.T) {
 - [ ] L1 覆盖核心逻辑 + 边界条件
 - [ ] L2-1 覆盖 API 契约 / ABI 接口
 - [ ] L2-2 覆盖关键集成路径
-- [ ] L2-3 覆盖核心 User Story 端到端路径
+- [ ] L3 覆盖核心 User Story 端到端路径
 - [ ] 需求追溯矩阵已建立 (User Story → Test Case)
 - [ ] 无 UI technical vertical 的 L3 入口已定义为 public API / harness / HTTP route，而不是强行 UI
 - [ ] Shell DI / wiring 有独立装配测试 target
@@ -993,6 +1003,7 @@ func TestReportHidesFromFeed(t *testing.T) {
 - [ ] MR Review 已按 `tdd-level-assessment.md` 输出 TDD Level；等级仅作观测，不参与门禁
 - [ ] 每层证据物已声明：CI 层走 pipeline artifact + MR 证据块；L4 运行生成人读 HTML 报告并按约定提交（Rule 17、Step 4.7）
 - [ ] 运行报告自包含、确定性、带溯源头与脱敏；L4 报告含回执、负向对照与「本次不证明什么」
+- [ ] L3/L4 报告含运行记录生成的「测试环境」与逐条计算的「真实性保证」，防假绿改动在临时 worktree 重放且全部被抓住
 - [ ] 需求覆盖从 US 锚点 + 代码用例声明 + 运行报告生成三清单；手填矩阵已退役（Step 4.7）
 - [ ] 平台写（bot comment 等）按产品线授权；credential-free 线无平台写 bot（Rule 18）
 

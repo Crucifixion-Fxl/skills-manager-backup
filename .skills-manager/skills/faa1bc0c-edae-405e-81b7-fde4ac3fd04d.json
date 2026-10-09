@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "faa1bc0c-edae-405e-81b7-fde4ac3fd04d",
+  "path": "security-compliance-review",
+  "path_key": "security-compliance-review",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/security/security-compliance-review",
+    "branch": null
+  }
+}

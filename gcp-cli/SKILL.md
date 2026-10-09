@@ -7,6 +7,8 @@ description: 通过 gcloud CLI 管理多项目 GCP 资源。当用户提到 GCP�
 
 ## Description
 
+首次接入/变更扫描与日常认证入口见 [SaaS 接入](references/saas-access.md)；已有平台业务契约与授权门禁仍在本 Skill 维护。
+
 通过 Google Cloud CLI（gcloud）协助运维和开发人员管理公司多项目的 GCP 资源。
 
 ## 项目体系
@@ -20,13 +22,14 @@ description: 通过 gcloud CLI 管理多项目 GCP 资源。当用户提到 GCP�
 | `a4xcloud-p` | a4xCloud-p | 128565888518 | 全球生产 |
 | `a4xcloud-p-us` | a4xcloud-p-us | 316805749903 | 美区生产（含 GKE） |
 | `a4xcloud-p-eu` | a4xcloud-p-eu | 930188386332 | 欧区生产 |
-| `a4xcloud-p-gemini` | a4xcloud-p-gemini | 142954504100 | 生产 Gemini AI |
-| `a4xcloud-p-eu-gemini` | a4xcloud-p-eu-gemini | 737607047816 | 欧区生产 Gemini AI |
+| `a4xcloud-p-gemini` | a4xcloud-p-gemini | 142954504100 | ⚠️ 已弃用（原生产 Gemini AI，由 `a4xcloud-diversion` 取代） |
+| `a4xcloud-p-eu-gemini` | a4xcloud-p-eu-gemini | 737607047816 | ⚠️ 已弃用（原欧区生产 Gemini AI，由 `a4xcloud-diversion-eu` 取代） |
 | `a4xcloud-tech-service` | a4xCloud-tech-service | 900295803500 | 技术服务 |
 | `a4xcloud-tech-service-eu` | a4xcloud-tech-service-eu | 1007060311362 | 欧区技术服务 |
 | `a4xcloud-tech-service-us` | a4xcloud-tech-service-us | 492991028653 | 美区技术服务 |
-| `a4xcloud-diversion` | a4xcloud-diversion | 628061703556 | 流量分发 |
-| `a4xcloud-diversion-eu` | a4xcloud-diversion-eu | 102653985444 | 欧区流量分发 |
+| `cloud-p-us-gemini31-lite-gsu` | cloud-p-us-gemini31-lite-gsu | 488893874401 | 生产 Gemini AI（美区，现行）— 含 GSU 预留吞吐与 Vertex 折扣 |
+| `a4xcloud-diversion` | a4xcloud-diversion | 628061703556 | ⚠️ 已弃用（原美区生产 Gemini AI，由 `cloud-p-us-gemini31-lite-gsu` 取代——后者含 GSU 预留吞吐与 Vertex 折扣） |
+| `a4xcloud-diversion-eu` | a4xcloud-diversion-eu | 102653985444 | 欧区生产 Gemini AI（现行） |
 | `a4xcloud-t` | a4xCloud-t | 187170137062 | 测试环境 |
 | `a4xpaas-000001` | A4xPaaS | 597807550844 | PaaS 平台 |
 | `gen-lang-client-0660217726` | Default Gemini Project | 806183732506 | Gemini 默认项目 |
@@ -40,13 +43,11 @@ description: 通过 gcloud CLI 管理多项目 GCP 资源。当用户提到 GCP�
 | 生产/prod + 全球/默认 | `a4xcloud-p` |
 | 生产/prod + 美区/US | `a4xcloud-p-us` |
 | 生产/prod + 欧区/EU | `a4xcloud-p-eu` |
-| Gemini/AI + 生产 | `a4xcloud-p-gemini` |
-| Gemini/AI + 欧区 | `a4xcloud-p-eu-gemini` |
+| Gemini/AI + 生产 / 美区 | `cloud-p-us-gemini31-lite-gsu` |
+| Gemini/AI + 欧区 | `a4xcloud-diversion-eu` |
 | 技术服务/tech + 默认 | `a4xcloud-tech-service` |
 | 技术服务/tech + 美区 | `a4xcloud-tech-service-us` |
 | 技术服务/tech + 欧区 | `a4xcloud-tech-service-eu` |
-| 流量分发/diversion | `a4xcloud-diversion` |
-| 流量分发 + 欧区 | `a4xcloud-diversion-eu` |
 | 测试/test | `a4xcloud-t` |
 | PaaS | `a4xpaas-000001` |
 

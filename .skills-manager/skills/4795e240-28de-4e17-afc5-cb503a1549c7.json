@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "4795e240-28de-4e17-afc5-cb503a1549c7",
+  "path": "micro-app-auth-integration",
+  "path_key": "micro-app-auth-integration",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/development/micro-app-auth-integration",
+    "branch": null
+  }
+}

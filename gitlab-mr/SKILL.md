@@ -3,6 +3,9 @@ name: gitlab-mr
 description: 在 gitlab.addx.ai 仓库创建和管理 GitLab Merge Request，驱动到真正可合并为止，并在用户明确要求“MR 已合并后清理本地 worktree/分支”或“清理 session”时安全收尾。自动生成 User Story 文档、push 前对目标 staging/main/master/release 的 MR 强制完整跑一遍 `/code-review`，并通过 `face-review-repair` 判断和安全修复真实 Review 意见；生产晋级 MR 额外执行 release parity check，证明 staging 已验证代码、后续 bugfix、Review 修复、测试、可观测性和必要配置没有遗漏。构造 MR（必须指定且只能指定一位 reviewer，并回读验证；回读通过后按 feishu-channel-rules 飞书通知 reviewer）、推送后由后台 Driver 持续读取 discussion 和 CI：只自主处理语义低风险问题，高风险或人工评论返回用户确认。Supervisor 做存活检查和完工独立审计，直到 CI 全绿、discussion 闭环、无冲突且生产晋级一致性通过。当用户说"提交 MR"、"创建 MR"、"push and create MR"、"合并到 main/master/release"、"从 staging 晋级生产"、"MR 合并后清理本地分支"、"清理 worktree"或"清理 session"时触发。
 ---
 
+平台登录与认证 SSOT：[gitlab](../gitlab/SKILL.md)。本 Skill 保留业务流程与门禁，认证事实由平台 owner 维护，日常访问调用 `web-access`。
+
+
 # GitLab MR
 
 创建 MR 并驱动到**真正可合并**（CI 全绿 + 无 merge conflict）。核心原则：**先写文档，再提 MR，用 API 验证，循环修复直到 MR 可合并。**
@@ -26,10 +29,15 @@ description: 在 gitlab.addx.ai 仓库创建和管理 GitLab Merge Request，驱
    必须显式判定 parity 适用性，并归类为 `production-promotion`、
    `production-non-promotion`、确定性证明的 `staging-writer-cleanup` 或明确批准的 `emergency-hotfix`。
    `production-non-promotion` 仅用于仓库对该类变更没有 staging 晋级链路的场景，必须
-   记录工作流证据和可核查原因；禁止用“本次不是 staging 投影”或默认普通 MR 绕过 parity。
+   记录工作流证据和可核查原因；存在 staging 分支时仅接受通过 [生产专属 overlay 校验](reference/production-only-overlay.md) 的窄例外。
+   禁止用“本次不是 staging 投影”或默认普通 MR 绕过 parity。
 
 7. **提 MR 必须指定 reviewer** — 创建前按 Step 1.5 确定且只能指定一位 reviewer；创建命令显式传 `--reviewer`，创建/更新后按 Step 4 回读验证。
 8. **MR 完工后主动询问，本地清理仍须明确授权并机械校验** — Step 7 完工时，若原始请求 / 当前 thread 无明确选择，且 state history 无同一 MR / 当前 session 的完整匹配 `pending|approved|declined` 记录，必须主动询问一次“合并完成后是否清理当前 session 的本地 worktree/分支”，避免用户遗漏；已有选择或 `pending` 提醒记录时不重复询问。询问本身不构成删除授权。MR 创建、CI 全绿或可合并都不授权删除，只有用户明确同意后才按 Step 8 处理；不批量扫描、不删除远端分支。
+9. **无 canonical Issue 不得 push/MR** — 按 [`gitlab-issue-sop` 生命周期契约](../../collaboration/gitlab-issue-sop/references/lifecycle-binding.md) 回读验证 Root Issue 与当前仓 Work Item；分支名、commit message、裸 IID 或 closing keyword 不能单独放行。
+10. **技术方案必须回链 Work Item** — 方案 push 后追加幂等 Issue comment 并回读；未确认回链前不得创建或更新 MR。
+11. **关联 Issue 必须同步 update/close 并回读** — 创建/更新 MR、实际合并和 session 收尾均按 [Issue 同步流程](reference/issue-sync.md) 处理已验证关联的 Issue。满足各自完成条件的关闭，未完成的更新证据与下一步；merge 或 CI 全绿不能代替验收，Root Issue 仅在整体验收完成后关闭。失败时保留 MR 事实并报告 `ISSUE_SYNC_UNVERIFIED`，不能声称 Issue 已同步或 session 收尾完成。
+12. **大文件存储检查覆盖所有 MR 目标分支** — push、创建或更新 MR 前执行 Step 2.85；跳过完整 code-review 不跳过此项。源资产走 LFS，编译制品走 `addx:addx-nexus-usage`，运行数据/缓存不入 Git；复用统一 reference，规则只存 skill，不写项目 memory。
 
 ---
 
@@ -53,6 +61,13 @@ git status
 ```
 
 如果有未提交变更，先提交或 stash。
+
+### Step 1.25：验证 canonical Issue（push/MR 硬门禁）
+
+- 要求完整 Root Issue 与 Work Item URL。通过 GitLab API 验证二者存在、`opened`、至少一位 assignee，且 Work Item 属于当前仓；跨仓时验证原生 Issue link。
+- 已有 MR 时，MR 描述中的 `Work Item:` / `Root Issue:` 只是候选，仍须确认 GitLab 将当前 MR 列为 Work Item 的 related MR。新 MR 在创建前以 live Issue 与 native Root↔Work link 放行，创建后必须完成 related-MR 回读。
+- 缺失、不可读、歧义、关闭、无 assignee 或项目/关系不匹配时停止，不执行 code-review、push 或 MR 写入。
+- 保存完整 binding 字段与 snapshot digest，后续 review、方案回链、MR 描述和最终审计使用同一 identity。
 
 #### 1a：识别 MR 模式
 
@@ -81,8 +96,8 @@ git status
 
 1. 先检查仓库文档、远端分支和近期同类 MR，判定该类变更是否存在 staging 晋级链路。
 2. 存在 staging 晋级链路：完整 verified SHA 用 `production-promotion`；只退休已验收 writer 可按 [`cleanup contract`](reference/staging-writer-cleanup.md) 校验；否则停止或批准 hotfix。
-3. 确实不存在 staging 晋级链路：只能用 `production-non-promotion`，并记录分支查询、
-   工作流文档或同类 MR 作为 `staging_flow_evidence`。
+3. 确实不存在 staging 晋级链路：只能用 `production-non-promotion`，记录分支查询、工作流文档或同类 MR 作为 `staging_flow_evidence`。
+   若 staging 分支存在，必须通过 [受保护 GitOps Application 的生产专属 overlay 校验](reference/production-only-overlay.md)；仅有文档或同类 MR 不放行。
 4. 无法判断是否存在 staging 链路：停止确认，不能默认 parity 不适用。
 
 “本次改动不是 staging 投影”本身不是 `production-non-promotion` 的合法理由。只要仓库
@@ -144,25 +159,43 @@ git commit -m "docs: add <feature> design document"
 仅当目标分支是 `main` / `master` / `release/*` 且属于生产晋级模式时执行。
 目标为 `staging` 时无条件跳过本步骤。先读
 [`reference/release-parity-check.md`](reference/release-parity-check.md)。
-此阶段先确认 canonical 分支最后一个绑定 staging 验证结果的已合并 MR，并创建
-`release-contracts/<feature>.yaml`。contract 必须提交到 candidate 分支，不能从工作区
-临时文件读取。确定性脚本会从 GitLab API 自动追溯该 canonical 分支最早 staging MR 的
-`diff_refs.base_sha`，并在 Step 4 绑定 candidate MR 当前 HEAD；通过前不得启动 Driver。
+此阶段先确认发布拓扑及最后一个绑定 staging 验证结果的已合并 MR。单功能分支采用默认
+模式，确定性脚本从 GitLab API 追溯该分支最早 staging MR 的 `diff_refs.base_sha`。
+长期 `develop → staging → main` 环境分支采用 `--branch-promotion`，要求 candidate
+MR HEAD 与该已验收 staging MR 的 merge commit、当前 staging HEAD 完全相同；
+不依赖旧 MR ref，也不要求 main 是 staging 的祖先；必须绑定 staging 合并后成功
+pipeline、验收 note，并要求生产合并结果树等于 staging 树。详见参考文档。存在环境差异或
+外部门禁时创建 `release-contracts/<feature>.yaml` 并提交到 candidate 分支，不能从
+工作区临时文件读取。Step 4 必须绑定 candidate MR 当前 HEAD；通过前不得启动 Driver。
+长期环境分支的 contract 必须在 staging 验收合并前纳入该 merge commit；若验收后发现
+新 gate，需重新走 staging 合并与验收，不得向生产候选独自补交 contract。
 
 没有环境差异或外部 gate 时可省略 `--contract`；存在任一差异/gate 时必须提交 contract。
 
-同时执行 `git cherry` 和 `git range-diff` 检查 commit/冲突处理语义。检查范围必须覆盖：
+单功能分支同时执行 `git cherry` 和 `git range-diff` 检查 commit/冲突处理语义；
+长期环境分支检查精确 merge SHA、完整目标差异及合并结果。范围必须覆盖：
 
 - 初始功能代码。
 - staging 后的 bugfix 和 Review 修复。
 - 测试、可观测性、migration 和部署配置。
 - 需要在外部平台完成的 gate 及其真实证据。
 
-环境配置允许不同，但必须在 per-feature release contract 中声明 path、reason、owner，
+默认功能分支模式的环境配置允许不同，但必须在 per-feature release contract 中声明 path、reason、owner，
 并为每个候选差异路径绑定精确的 `required_content`；临时差异还要有 expires。任一缺失、
 额外或精确变更不同都阻塞。脚本只验证代码和 contract，不接受 contract 自报
 `status: ready`；外部 gate 必须由 Auditor 从证据 URL 实时读取。报告中记录脚本解析出的
 四个完整 SHA 和 contract blob OID/SHA-256；目标分支更新后必须基于新 target SHA 重跑。
+
+### Step 2.85：Git 大文件与制品检查（所有目标分支）
+
+读取项目已有政策和 [统一存储规则与检查方法](reference/large-file-storage.md)。
+检查本次 staged blob（若有）及候选 HEAD 相对实际目标分支新增的历史对象，包含二进制、测试资产、生成文件和“提交后又删除”的文件；不能只看最终 diff。
+核验实际大小、有效 LFS pointer、Nexus 固定版本/摘要引用及项目路径例外；默认阈值以 reference 为准。
+发现本次引入的不合规内容时，列出路径、大小、分类、修复方式并停止 push/MR 写入；无法完成对象核验时记录缺少证据，不宣称检查通过。旧历史仅登记，不阻断无关变更。
+
+不补写项目 memory；规则由 skill 管理。制品发布和下载引用 [addx:addx-nexus-usage](../addx-nexus-usage/SKILL.md)，不自动上传、改写历史或强推。
+
+记录候选 HEAD、目标分支 SHA 和采用的项目政策。`code-submit` 已检查同一候选时复用其有效证据；候选、目标或政策变化后重查，包括 review 修复、rebase、直接更新已有 MR 和 Driver 后续 push。
 
 ### Step 2.9：提交前完整 code-review + 安全修复（push 前的 gate）
 
@@ -198,11 +231,26 @@ verified SHA。放行条件：code-review 结论是「通过」（≥8.0），�
 
 ### Step 3：推送分支
 
+确认 Step 2.85 对当前候选仍有效，再执行 push；Step 2.9 修复产生的新提交必须重新核验。
+
 ```bash
 git push -u origin <branch-name>
 ```
 
+### Step 3.5：技术方案回链 Work Item（MR 前硬门禁）
+
+检查目标分支 diff 中的 `docs/plans/**`、`docs/design/**`、`docs/architecture/**`、ADR 及项目声明的技术方案文件。若存在：
+
+1. 为已推送文件构造绑定当前 branch/HEAD 的 blob URL，并验证 remote 文件存在。
+2. 使用稳定 marker `<!-- gitlab-mr-design-link:<project-id>:<issue-iid>:<head-sha> -->` 查重后，在 Work Item 追加方案链接、HEAD SHA 和分支。
+3. 通过 Notes API 回读并核验 Issue、作者、marker、HEAD SHA 和链接；超时或结果未知时先对账，不盲目重复。
+4. 回读失败或不一致时返回 `ISSUE_DESIGN_LINK_UNVERIFIED`；保留 push 事实，但不得进入 Step 4。
+
+没有技术方案时记录 `design_link=NOT_APPLICABLE`。不得为了过门禁创建无内容文档。
+
 ### Step 4：创建或更新 MR
+
+直接从已有远端分支创建/更新 MR 时也执行 Step 2.85，绑定 MR 实际 source/target SHA；不以“分支已推送”代替检查。
 
 #### 查看是否已有 MR
 
@@ -249,6 +297,10 @@ glab mr create \
 - User Story 文档：https://gitlab.addx.ai/<group>/<project>/-/blob/<branch>/docs/plans/<doc>.md
 - Tech Design 文档：<如有则填，否则删除此行>
 
+## 关联 Issue
+Work Item: <当前仓完整 Issue URL>
+Root Issue: <Root Issue 完整 URL>
+
 ## 变更类型
 - [x] <对应类型>
 EOF
@@ -282,9 +334,11 @@ glab mr update <mr-id> --reviewer '<已核验的唯一username>'
 glab api "projects/:id/merge_requests/<mr-id>"
 ```
 
-核验响应是目标 MR，并确认 `reviewers` 是恰好含一个元素的数组，且该元素的 username / ID 与 Step 1.5 的唯一人选一致。空响应、字段缺失、人数不是一位、身份不符或请求失败均不算通过，不能进入 Step 5 或声称提交完成。写请求结果不明时先回读已有 MR，避免重复创建；服务端拒绝指定人选或权限不足时报告具体原因，不擅自换人。
+核验响应是目标 MR，并确认 `reviewers` 是恰好含一个元素的数组，且该元素的 username / ID 与 Step 1.5 的唯一人选一致；同时确认 GitLab 将当前 MR 列为 Work Item 的 related MR，且 MR 描述中唯一的两个完整 URL 与已验证 binding 一致。空响应、字段缺失、人数不是一位、身份不符、Issue 关系不符或请求失败均不算通过，不能进入 Step 5 或声称提交完成。写请求结果不明时先回读已有 MR，避免重复创建；服务端拒绝指定人选或权限不足时报告具体原因，不擅自换人。
 
 最终交付时同时报告 MR URL 和实际回读的 reviewer。命令语义见 [GitLab CLI create](https://docs.gitlab.com/cli/mr/create/) / [update](https://docs.gitlab.com/cli/mr/update/)，回读字段见 [Merge requests API](https://docs.gitlab.com/api/merge_requests/)。
+
+进入 Step 5 前，父会话按 [Issue 同步流程](reference/issue-sync.md) 回写并回读本次提交/更新的 Issue receipt；HEAD、目标分支、关联 Issue 或交付范围改变时重新同步。Driver 返回新的 HEAD 后由父会话负责同步，不能只把链接写在 MR 描述中。
 
 #### 回读通过后的 reviewer 飞书通知
 
@@ -313,19 +367,24 @@ if [ "$MR_MODE" = "production-promotion" ]; then
   PARITY_REPORT="/tmp/gitlab-mr-parity-${MR_IID}.json"
   PARITY_ARGS=()
   test -z "$CONTRACT_PATH" || PARITY_ARGS=(--contract "$CONTRACT_PATH")
+  test "$PARITY_MODE" != "branch-promotion" || PARITY_ARGS+=(--branch-promotion)
+  test "$PARITY_MODE" != "branch-promotion" || PARITY_ARGS+=(--staging-pipeline-id "$STAGING_PIPELINE_ID" --staging-acceptance-note-id "$STAGING_ACCEPTANCE_NOTE_ID")
   uv run <skill-path>/scripts/release_parity_check.py \
     --project-path "$PROJECT_PATH" \
     --canonical-verification-mr "$CANONICAL_VERIFICATION_MR_IID" \
     --candidate-mr "$MR_IID" \
+    --staging-branch "$STAGING_BRANCH" \
     "${PARITY_ARGS[@]}" \
     --json > "$PARITY_REPORT"
 fi
 ```
 
-`CANONICAL_VERIFICATION_MR_IID` 必须是主功能分支最后一次通过 staging 验证的已合并 MR。
-脚本会从其 source branch 的 staging MR 历史中自动选择最早 MR 的
-`diff_refs.base_sha`，并直接 fetch 三个 GitLab MR ref 和当前生产目标分支；调用方不再
-手填 canonical/candidate ref 或 SHA。
+`CANONICAL_VERIFICATION_MR_IID` 必须是当前晋级内容最后一次通过 staging 验证的
+已合并 MR。`PARITY_MODE=branch-promotion` 仅用于长期环境分支；此时脚本绑定
+该 MR 的 merge SHA、当前 staging 与 candidate HEAD、验收 note 和成功流水线，
+并检验生产合并树，不查询早期 MR ref。默认
+功能分支模式仍从同源分支 staging MR 历史中选最早的 `diff_refs.base_sha`。
+调用方不手填 canonical/candidate ref 或 SHA。
 
 ### Step 5：派后台 Driver agent 接手
 
@@ -348,6 +407,7 @@ uv run <skill-path>/scripts/init_drive_state.py \
   --head-sha "$HEAD_SHA" \
   --staging-flow-exists "$STAGING_FLOW_EXISTS" \
   --staging-flow-evidence "$STAGING_FLOW_EVIDENCE" \
+  <branch-promotion mode: --branch-promotion --staging-pipeline-id ID --staging-acceptance-note-id ID, if applicable> \
   <mode-specific MR-IID/contract/non-promotion/emergency arguments> \
   --output "$STATE_FILE"
 ```
@@ -356,8 +416,10 @@ uv run <skill-path>/scripts/init_drive_state.py \
 `--canonical-verification-mr "$CANONICAL_VERIFICATION_MR_IID"`、
 `--candidate-mr "$MR_IID"` 及可选 contract；初始化器会自行重跑 GitLab-aware parity，
 并校验真实 Git HEAD 与 GitLab candidate MR SHA 一致。`production-non-promotion` 必须填入
-`staging_flow_exists=false`、工作流证据和不适用原因；cleanup 按 reference 传入
-`staging_flow_exists=true` 和 `--cleanup-contract`；hotfix 填批准/owner/验证/回补。
+`staging_flow_exists=false`、工作流证据和不适用原因；有 staging 分支时分别用 `--staging-flow-evidence` 和 `--staging-application-evidence` 提供 `DEV/argocd-apps` 生产与 staging Application 的 main blob URL，生成 `non_promotion` attestation，caller reason 单独无效。
+cleanup 按 reference 传入 `staging_flow_exists=true` 和 `--cleanup-contract`；hotfix 填批准/owner/验证/回补。
+
+Step 4 的已回读 Issue receipt 先保存在父会话证据记录；initializer 创建 state 后，父会话将这些真实 receipt 追加到 `history`，不能被初始化的空 history 丢弃。派 Driver/Auditor 前从最新记录生成 `ISSUE_SYNC_CONTEXT` JSON（已验证 binding 与当前 revision 的 receipt），原样填入各 prompt；恢复时重新生成，不省略字段。
 
 #### 5b：派 Driver（background Agent）
 
@@ -377,6 +439,7 @@ print(json.dumps({
     "mr_mode": state["mr_mode"],
     "promotion": state["promotion"],
     "cleanup": state["cleanup"],
+    "non_promotion": state["non_promotion"],
     "emergency": state["emergency"],
 }, ensure_ascii=False))
 PY
@@ -385,6 +448,7 @@ PY
 
 必须把这段完整 JSON 原样填入 Driver prompt，不能只传
 `promotion.enabled`。后续每次恢复 Driver 和派 Auditor 前都从最新 state 重新生成。
+同时传入上述 `ISSUE_SYNC_CONTEXT`；无 receipt 时执行同步，不伪造默认成功值。
 
 ```
 Agent(
@@ -416,7 +480,7 @@ Driver 返回时是一个 JSON（见 reference 第 2 节返回格式）。按 `s
 | status | 处理 |
 |---|---|
 | `done` | 进入 Step 7 完工审计 |
-| `awaiting_confirmation` | 按 reference 第 5 节 Resume protocol：把 `pending_items` 格式化给用户，收集决议，bundle 到 `{{RESUME_DECISIONS}}`，回到 Step 5b 派新 Driver |
+| `awaiting_confirmation` | 先由父会话处理 `kind=issue_sync` 的已授权同步待办并回读；只有其余真正需要用户决议的项目才按 reference 第 5 节询问。同步成功后刷新 context 并恢复 Driver；实际已 merged 时完成合并后同步并报告真实结果，不再等待 mergeable |
 | `stuck` | 把 `stuck_context` 的最近 3 次 pipeline 日志尾部 + 当前 snapshot 展示给用户，问下一步 |
 | `timeout` | 展示当前 snapshot，问用户是否继续（重派）还是中止 |
 
@@ -446,14 +510,16 @@ Agent(
 
 - Auditor 必须返回 `background-drive.md` 定义的结构化 JSON。
 - 父会话先按 Step 4 回读 reviewer，验证通过后再用 `scripts/validate_drive_audit.py` 校验该 JSON 与最新 state；只有
-  `AUDIT PASS` 才写 `completed: true`、取消 liveness 并报告 MR URL。
+  `AUDIT PASS` 且当前 HEAD 的 Issue 提交 receipt 回读通过，才写 `completed: true`、取消 liveness 并报告 MR URL。该字段仅表示 MR 可合并审计完成，不表示已经合并或 Issue 已关闭。
 - 校验失败时把准确错误放入新 `{{RESUME_DECISIONS}}`，回到 Step 5b 再派一轮 Driver。
 
 生产目标的 Auditor 还必须验证 `mr_mode` 与目标分支一致；`production-promotion` 在
 当前 HEAD 重跑 Step 2.8 并实时核验外部 gate，`production-non-promotion` 核查
-staging 流程不存在证据；cleanup 重跑 attestation 并核查 pipeline/branch policy；hotfix 核查批准/回补。
+staging 流程不存在证据；有 staging 分支时重跑生产 overlay attestation；cleanup 重跑 attestation 并核查 pipeline/branch policy；hotfix 核查批准/回补。
 **只有 Driver done + 结构化 Auditor 结果通过机械校验 + deterministic code parity
 PASS 及外部 gate 实时核验通过（适用时）同时成立，才向用户报告 MR 可合并。**
+
+若本轮执行合并、用户告知已合并或收尾回读发现 `state=merged`，父会话必须先执行 [合并后 Issue 同步](reference/issue-sync.md)：逐项 update/close、回读 receipt 与最终状态，记录未完成条件；全部同步成功后才能报告合并收尾完成或进入 Step 8。不等待本地清理授权才同步 Issue，也不因清理受阻省略同步。
 
 报告完工时，先检查原始请求、当前 thread 和 state history。若原始请求 / 当前 thread
 没有明确选择，且 history 没有 MR/worktree/branch 完全匹配的
@@ -478,10 +544,12 @@ worktree 时才执行。用户可以在 MR 尚未合并时同意，但执行前�
 详细门禁与命令见
 [`reference/post-merge-local-cleanup.md`](reference/post-merge-local-cleanup.md)。
 
+本地清理前必须先完成关联 Issue 同步与回读；未合并不写 merge receipt。Issue 状态未知或同步失败时停止本地删除，保留证据和准确的待办。
+
 先运行 helper 的默认预检模式；只有返回 `status=ready`，才在同一明确授权下加
 `--execute`。helper 必须验证 GitLab `state=merged`、MR source branch/SHA 与本地完全
-一致、MR 目标等于仓库默认主干、worktree 已注册且不含 tracked/untracked/ignored 内容、
-目标不是主 checkout，并保留另一个 worktree 管理仓库。
+一致、MR target 与本地 source 分支不同、待删分支不是仓库默认分支、worktree 已注册且
+不含 tracked/untracked/ignored 内容、目标不是主 checkout，并保留另一个 worktree 管理仓库。
 任一条件失败都报告 `status=blocked` 的准确原因，不改用 `--force`、不换目标、不删除
 远端分支。该 source SHA 绑定同时覆盖 squash merge；禁止只用
 `git branch --merged <target>` 作为合并证明。
@@ -507,68 +575,7 @@ glab mr create --title "feat: add retry logic" --description "..." \
 
 ## Bad/Good 示例
 
-### Bad — Driver done 就声称完成
-
-```
-Driver → status: done
-# → "MR !42 可合并！"  ← 没派 Auditor，可能是 Driver 误判
-```
-
-### Bad — 按评论行数判断风险
-
-```text
-AI bot 建议改 1 行事务/数据源代码
-→ 因为少于 20 行直接自动修复
-```
-
-问题：语义风险与行数无关。必须 invoke `face-review-repair`。
-
-### Bad — 手工从记忆拼生产分支
-
-```text
-从 staging 相关 MR 中挑几个 commit cherry-pick 到 release
-→ 忘记后续 Review 修复和一个生产 profile 配置
-```
-
-问题：生产晋级必须以 canonical branch + verified SHA 为输入执行 parity check。
-
-### Bad — 替用户 resolve 人工 reviewer 的 discussion
-
-```
-Driver 改完代码就自动 PUT discussions/<id>?resolved=true  ← 违反规则，人工 discussion 只能 reply
-```
-
-### Bad — 贴无关文档链接
-
-```
-glab mr create --description "User Story: .../README.md"  # 与变更无关，对 reviewer 无用
-```
-
-### Bad — 目标 staging 却跳过本地 code-review，靠 CI 打回
-
-```
-git push → glab mr create --target-branch staging
-# CI 的 code-review gate 报红线：已实现 handler 无 L2/L3 test
-# → 又得改一轮、再 push、再等 CI  ← 应该在 Step 2.9 就修掉
-```
-
-### Good — push 前先过 code-review，CI 一次过
-
-```
-Step 2.9: 本地跑 /code-review → 红线：handler 无 E2E + TODO.md 未同步
-→ TODO.md 自动补上并 commit
-→ E2E 缺失：问用户 → 用户同意 → invoke testing-strategy 补 L3 用例 → commit
-→ 复跑 /code-review → 通过 8.5/10
-→ Step 3 push → CI code-review gate 绿
-```
-
-### Good — 全链路驱动到真正可合并
-
-```
-创建 MR → 派后台 Driver + liveness → Driver 自主修低风险 →
-→ 高风险攒清单返回 → 用户逐条决议 → 重派 Driver →
-→ Driver done → Auditor 独立验证 VERIFIED → 报告 MR URL
-```
+完整示例见 [reference/examples.md](reference/examples.md)。
 
 ---
 

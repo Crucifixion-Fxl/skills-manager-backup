@@ -13,18 +13,25 @@ alwaysActive: true
 
 ## Description
 
-本 Skill 是飞书能力的路由 SSOT。具体命令和参数由 `lark-cli` 自带、与版本匹配的
-Skill 决定；这里仅决定使用哪个应用、profile 和身份，并保留简洁的飞书输出规范。
+本 Skill 是飞书能力的路由 SSOT。具体命令和参数以当前安装的 `lark-cli` 自带
+Skill 为准；这里决定使用哪个应用、profile 和身份，并保留简洁的飞书输出规范。
 
 ## Rules
 
 ### 1. 默认应用和身份
 
-每个任务首次执行任何联网、认证或用户数据相关的 CLI 操作前，必须先完整执行
-[`references/approved-lark-cli.md`](references/approved-lark-cli.md) 的可执行文件与指令基线
-门禁。除门禁指定的本地校验命令外，不得先运行 `whoami`、`--help`、读取 token 或业务命令。
-后续命令只能用本地策略批准的 Node 二进制绝对路径执行批准的 CLI 入口绝对路径，不得
-再次通过 PATH 或脚本的 `/usr/bin/env` 解析 runtime。
+首次操作前按 [`references/approved-lark-cli.md`](references/approved-lark-cli.md)
+确认本机策略中的 CLI 路径和包名。不要用固定版本或版本相关哈希作为门禁。
+后续命令用本机策略指定的 Node 和 CLI 入口绝对路径；本机策略或用户已授权直接使用
+已安装原生二进制时，可按引用文档以核验后的绝对路径执行。不通过 PATH 或脚本的
+`/usr/bin/env` 解析 runtime。首次调用 launcher 前静态检查其 bootstrap 分支和 native binary
+是否存在，避免帮助或 Skill 读取意外下载/安装。
+
+仅做已授权的身份发现时，可读取 CLI 当前默认 `whoami --as user` 或本地
+`auth status --json`；预期账号/profile 尚未确认不妨碍这种只读预检。输出只保留公开
+身份/profile、状态与存在/过期布尔值，不输出 token、ID、scope、hint 或完整凭据对象。
+默认身份是待核对的事实，缓存名称不等于服务器已认证；不得因此自动登录、刷新、
+切换 profile 或读取业务。细节见上述引用文档。业务操作继续显式绑定已批准 profile。
 
 普通个人飞书操作显式绑定本地策略批准的 profile：
 
@@ -93,7 +100,7 @@ CLI 的 user identity 报权限错误时，先按
 
 ### 4. 其他普通能力
 
-门禁核验通过后再进入具体能力：
+确认 CLI 路径后再进入具体能力：
 
 ```bash
 "$APPROVED_NODE" "$APPROVED_LARK_CLI_ENTRY" skills read lark-shared

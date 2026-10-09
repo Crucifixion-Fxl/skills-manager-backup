@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "e0a46eb4-72d5-481c-89f7-19c189eec6ec",
+  "path": "terraform-audit",
+  "path_key": "terraform-audit",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/security/terraform-audit",
+    "branch": null
+  }
+}

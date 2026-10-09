@@ -3,7 +3,7 @@
 ## 统一入口
 
 ```text
-python skills/device-cloud-test-management/scripts/device_cloud.py <command>
+python skills/quality/device-cloud-test-management/scripts/device_cloud.py <command>
 ```
 
 认证、触发和诊断脚本已打包在 Skill 中。Windows 只依赖 Python 3 标准库并使用 Credential Manager；macOS/Linux 还必须安装 Python `keyring`，并配置可用的系统安全存储后端。缺少安全后端时认证会失败，不会把 refresh token 降级写入明文文件。

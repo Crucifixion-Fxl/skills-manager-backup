@@ -122,10 +122,45 @@
       "query_parameters": []
     },
     {
+      "method": "GET",
+      "name": "personal_research_journey_form_definition",
+      "path": "/api/platform/v3/projects/{project_id}/research/{research_id}/journey/form/{form_id}/definition",
+      "path_parameters": [
+        "form_id",
+        "project_id",
+        "research_id"
+      ],
+      "query_parameters": [
+        "idea_id"
+      ]
+    },
+    {
+      "method": "PATCH",
+      "name": "personal_research_journey_form_patch",
+      "path": "/api/platform/v3/projects/{project_id}/research/{research_id}/journey/form/{form_id}",
+      "path_parameters": [
+        "form_id",
+        "project_id",
+        "research_id"
+      ],
+      "query_parameters": []
+    },
+    {
       "method": "POST",
       "name": "personal_research_journey_form_publish",
       "path": "/api/platform/v3/projects/{project_id}/research/{research_id}/journey/form/publish",
       "path_parameters": [
+        "project_id",
+        "research_id"
+      ],
+      "query_parameters": []
+    },
+    {
+      "method": "PUT",
+      "name": "personal_research_journey_form_replace",
+      "path": "/api/platform/v3/projects/{project_id}/research/{research_id}/journey/form/{form_id}",
+      "path_parameters": [
+        "form_id",
         "project_id",
         "research_id"
       ],

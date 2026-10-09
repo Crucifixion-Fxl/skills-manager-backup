@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "tool": "aliyun",
+  "provider": "delegated",
+  "owner": "aliyun-cli",
+  "authContract": "SKILL.md",
+  "verification": "source-verified",
+  "runtimeVerification": "pending",
+  "authDiscovery": "references/auth-discovery.json"
+}

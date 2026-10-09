@@ -19,6 +19,7 @@ Driver / Supervisor / Auditor 的完整提示词契约、状态文件规范、�
   "project_path": "engineering/skills",
   "promotion": {
     "enabled": false,
+    "parity_mode": "feature-branch",
     "staging_flow_exists": null,
     "staging_branch": "staging",
     "staging_flow_evidence": "",
@@ -31,10 +32,15 @@ Driver / Supervisor / Auditor 的完整提示词契约、状态文件规范、�
     "candidate_mr_sha": "",
     "contract": {},
     "parity_report_sha256": "",
+    "staging_acceptance": {},
+    "merge_result": {},
     "external_gates": [],
     "not_applicable_reason": ""
   },
   "cleanup": {
+    "enabled": false
+  },
+  "non_promotion": {
     "enabled": false
   },
   "emergency": {
@@ -63,7 +69,8 @@ Driver / Supervisor / Auditor 的完整提示词契约、状态文件规范、�
 - 初始化（Step 5 首次派 Driver 前）
 - 每次 Supervisor liveness 醒来，更新 `last_snapshot`、`no_change_streak`
 - 每次 Driver 返回，append 一条 `history`
-- Auditor 结构化结果通过 `validate_drive_audit.py` 后设 `completed: true`
+- 父会话按 [Issue 同步流程](issue-sync.md) 回写并回读关联 Issue，在 history 追加 `kind=issue_sync` receipt
+- Auditor 结构化结果通过 `validate_drive_audit.py` 且当前 HEAD 的 Issue 提交 receipt 已回读后设 `completed: true`；它只表示可合并审计，不代表 merged 或 Issue closed
 
 ---
 
@@ -84,9 +91,20 @@ Driver / Supervisor / Auditor 的完整提示词契约、状态文件规范、�
 - Branch: {{BRANCH}}
 - Target branch: {{TARGET_BRANCH}}
 - Promotion context JSON: {{PROMOTION_CONTEXT}}
+- Verified Issue context JSON: {{ISSUE_SYNC_CONTEXT}}
 - 工作目录已 checkout 到该分支
 - glab CLI 已登录
 - 上一轮待确认决议: {{RESUME_DECISIONS}}  // 首轮为 "(none)"
+
+# Issue 同步责任
+
+父会话负责 [Issue update/close](issue-sync.md)。Driver 不自行关闭 Issue、不扩大绑定范围。
+从 Issue context JSON 读取已验证 binding 与 receipt，不依赖外部 state 文件。
+返回新的 HEAD、交付范围或实际 merged 状态时必须明确交给父会话同步；在 done 前核验
+当前 HEAD 的 submitted/revised receipt，缺失时返回 awaiting_confirmation，列
+`kind=issue_sync`、`ISSUE_SYNC_UNVERIFIED` 及缺少的 Issue/revision；这是同步操作待办，不是要求用户再批准已授权的更新。
+若实际 MR 已 merged，立即以同类待办返回实际 merge SHA/pipeline，交父会话完成合并后
+同步；不得继续等 detailed_merge_status=mergeable 或把已合并宣称为可合并。
 
 # 每轮循环做三件事
 
@@ -140,7 +158,7 @@ glab api "projects/:id/merge_requests/{{MR_IID}}" | \
 - `false-positive` / `already-fixed` 且无需改代码时，可以用证据回复；人工 discussion
   仍不 resolve。
 
-先从 Promotion context JSON 读取 `mr_mode`、完整 `promotion`、`cleanup` 和 `emergency` 对象。
+先从 Promotion context JSON 读取 `mr_mode`、完整 `promotion`、`cleanup`、`non_promotion` 和 `emergency` 对象。
 字段缺失、JSON 无法解析或 target 不一致时立即返回 `stuck`。不得自行补默认值。
 
 `{{TARGET_BRANCH}}=staging` 时 `mr_mode` 必须为 `ordinary` 且
@@ -149,8 +167,13 @@ glab api "projects/:id/merge_requests/{{MR_IID}}" | \
 `production-non-promotion`、`staging-writer-cleanup` 或 `emergency-hotfix`，禁止使用 `ordinary`：
 
 - `production-promotion` 必须满足 `promotion.enabled=true` 且所有 canonical 字段完整。
+  每轮重跑 parity 时必须按 `promotion.parity_mode` 传参；`branch-promotion` 还必须
+  从 `promotion.staging_acceptance` 传 `--staging-pipeline-id` 和
+  `--staging-acceptance-note-id`，并传 `--staging-branch`。缺任一 ID 即返回 `stuck`。
 - `production-non-promotion` 必须满足 `promotion.enabled=false`，并包含可核查的
   `staging_flow_exists=false`、`staging_flow_evidence` 和 `not_applicable_reason`。
+  仓库存在 staging 分支时还必须有绑定当前 HEAD、MR、生产与 staging GitOps Application 和 diff 的
+  `non_promotion.enabled=true` attestation；每轮重跑 initializer 验证，不靠 caller 文字放行。
 - `staging-writer-cleanup` 必须满足 `promotion.enabled=false`、`cleanup.enabled=true`，
   且当前 HEAD 的 cleanup attestation PASS。caller reason、MR description 或
   `not_applicable_reason` 均不能替代 committed contract 和 GitLab/Git evidence。
@@ -160,6 +183,11 @@ glab api "projects/:id/merge_requests/{{MR_IID}}" | \
 模式与目标分支不一致时立即返回 `stuck`，不得继续修改、push 或声称完成。
 
 # 分类决策表
+
+每次 commit/push 修复或 rebase 后的候选前，执行主 skill 的 Step 2.85，按
+[统一大文件检查](large-file-storage.md) 核验实际 blob、LFS 指针及新增历史对象。
+复用证据必须绑定未变化的候选 HEAD、目标 SHA 和项目政策；未通过或证据不足时不 push，返回具体路径/缺口。
+Nexus 操作引用 `addx:addx-nexus-usage`；不得把制品迁移、上传或历史改写当成机械修复自动执行。
 
 | 类型 | 判定 | 动作 |
 |---|---|---|
@@ -284,7 +312,15 @@ print(c)"
 同一次 MR API 回读中的 `reviewers` 必须为恰好包含一位 reviewer 的数组，否则返回 `rejected`；指定 reviewer 不代表已获得 approval。
 
 4. 从 `{{PROMOTION_CONTEXT}}` JSON 读取 `promotion.enabled`。如果为 true：
-   - 按 `reference/release-parity-check.md` 重跑 GitLab-aware deterministic checker
+   - 按 `reference/release-parity-check.md` 重跑 GitLab-aware deterministic checker；
+     `promotion.parity_mode=branch-promotion` 时传 `--branch-promotion`、
+     `--staging-branch` 及 `promotion.staging_acceptance` 中的 pipeline/note ID。
+     记录重算的 `promotion.merge_result.tree_sha`，目标分支变化时旧结果必须失效。
+     重新用 GitLab API 读取验收流水线和 note 的原始 JSON，核对 SHA/ref/status、
+     note 作者（合并人）、所属 MR IID、创建时间晚于 MR 合并时间、首行 PASS 标记、
+     正文 hash 和流水线 URL，保存为审计证据。
+     `validate_drive_audit.py` 只校验 Auditor 保存的原始证据结构和绑定；证据的实时性
+     依赖独立 Auditor 当场重跑 checker 与 GitLab API，不能用本地旧文件替代。
    - 确认新报告 SHA-256 与 context 中 `parity_report_sha256` 一致
    - 确认 required content 无失败，contract blob OID/SHA-256 属于当前 candidate commit
    - 对 contract 中每个 required external gate，使用对应平台 Skill/API 打开 evidence
@@ -296,11 +332,20 @@ print(c)"
    - `main` / `master` / `release/*` 只能是 `production-promotion`、`production-non-promotion`、`staging-writer-cleanup` 或 `emergency-hotfix`
    - `production-promotion` 必须启用 parity
    - `production-non-promotion` 必须有 `staging_flow_exists=false`、工作流证据和可核查
-     的不适用原因
+     的不适用原因；有 staging 分支时重跑生产 overlay attestation 并核对摘要
    - `staging-writer-cleanup` 必须重跑 initializer attestation，并实时打开 accepted pipeline
      和 protected staging branch policy；确认 contract SHA-256、HEAD、target、staging SHA、
      pipeline/ref/status 和 force-push policy 均与 state 一致
    - `emergency-hotfix` 必须有明确批准和回补记录
+
+# Issue receipt 审计
+
+父会话提供当前 history 的 `kind=issue_sync` receipt。独立通过 GitLab Notes/Issue API
+核验当前 HEAD 的 submitted/revised receipt、Issue identity、作者与正文；仅 state 自报
+或旧 HEAD 不算通过。遗漏或写后回读不一致时返回 rejected 并列
+`ISSUE_SYNC_UNVERIFIED`。如 GitLab 已为 merged，返回实际事实给父会话先做合并后
+update/close，不能把 mergeable 审计当作 Issue 已关闭。
+Verified Issue context JSON: {{ISSUE_SYNC_CONTEXT}}
 
 # 返回格式
 
@@ -319,6 +364,11 @@ print(c)"
   "release": {
     "code_parity_status": "pass",
     "parity_report_sha256": "<rerun report SHA-256>",
+    "merge_result_tree_sha": "<branch-promotion merge result tree SHA>",
+    "staging_acceptance": [
+      {"name": "staging-postmerge-pipeline", "evidence_url": "<pipeline API path>", "target_environment": "staging", "observed_value": "<verified SHA>", "evidence_file": "/tmp/<raw pipeline JSON>", "verifier_tool": "GitLab API", "verified_at_utc": "<current UTC>"},
+      {"name": "staging-acceptance-note", "evidence_url": "<note API path>", "target_environment": "staging", "observed_value": "<acceptance marker>", "evidence_file": "/tmp/<raw note JSON>", "verifier_tool": "GitLab API", "verified_at_utc": "<current UTC>"}
+    ],
     "external_gates": [
       {
         "name": "<contract gate name>",
@@ -332,14 +382,17 @@ print(c)"
     ],
     "cleanup_contract_sha256": "<cleanup contract SHA-256 when applicable>",
     "cleanup_evidence": [],
-    "workflow_evidence": null
+    "workflow_evidence": null,
+    "non_promotion_attestation_sha256": "<branch-present non-promotion attestation SHA-256 when applicable>"
   }
 }
 ```
 
 失败时返回相同结构，但 `status: rejected` 并增加 `failures` 数组。对于
 `production-non-promotion`，`workflow_evidence` 使用同一 observation 结构，name 固定为
-`staging-flow-not-applicable`，并实时打开 state 中的证据 URL。
+`staging-flow-not-applicable`，并实时打开 state 中的证据 URL。仓库有 staging 分支时，
+`validate_drive_audit.py` 还会对当前 HEAD 重跑 GitLab/GitOps/Git tree attestation，
+并比较 `non_promotion_attestation_sha256`；单个网页 observation 不足以放行。
 `staging-writer-cleanup` 的 `cleanup_evidence` 必须恰好包含
 `accepted-staging-pipeline`、`accepted-staging-jobs` 和 `staging-branch-policy`，并保存
 GitLab API 原始 JSON；它们分别绑定 pipeline、contract jobs 与 force-push policy。
@@ -363,6 +416,16 @@ uv run <skill-path>/scripts/validate_drive_audit.py \
 ## 5. Resume protocol
 
 Driver 返回 `awaiting_confirmation` 时，父会话按以下步骤处理：
+
+先分流 `kind=issue_sync` 的待办：父会话直接执行已授权的同步、回读并刷新 state/context，
+不向用户再次请求 approve。失败时报告确切 blocker，保留 MR 和已验证 receipt；缺权限或
+必要完成证据时仅请求缺失信息。其余真实人工/高风险决策才进入下面 5.1–5.2。
+若只有同步待办，成功后直接恢复 Driver；若 MR 已 merged，则完成合并后同步并收尾，
+不要继续派 Driver 等待 mergeable。混合待办仍逐项保留未解决的人工作业。
+
+Issue 同步待办使用 `pending_items` 中的 `kind=issue_sync`，另带 Issue URL、revision、phase
+和缺少操作；它不是 discussion finding，不要求伪造 author/file/disposition。通用 JSON
+示例中的 discussion 字段只适用于实际 discussion。
 
 ### 5.1 格式化给用户
 

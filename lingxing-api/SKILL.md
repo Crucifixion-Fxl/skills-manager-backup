@@ -23,7 +23,7 @@ description: 领星 API 路径录入 NocoDB。验证领星 API 文档、自动�
 ### 认证
 
 - **NocoDB**：依赖 nocodb skill（`xc-token: $NOCODB_TOKEN`）
-- **领星文档站**：Cookie 中设置 Access Key `yrUxaGnbto`
+- **领星文档站**：如需 Access Key/Cookie，通过当前任务已授权的私有凭据来源或本人网页登录取得；由浏览器/本地 HTTP 客户端在进程内使用，禁止在 Skill、聊天或日志保留真实值。
 
 ### 只录入读取类 API
 

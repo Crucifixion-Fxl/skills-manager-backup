@@ -22,9 +22,12 @@ python3 <skill-dir>/scripts/issue_dedupe.py \
 - `--title` 必填，issue 标题草稿
 - `--body` / `--body-file` 二选一，正文
 - `--state open|closed|all`，默认 `all`
-- `--repo GROUP/REPO` 可重复，覆盖默认仓
+- `--repo GROUP/REPO` 可重复，指定当前仓查询目标并保留默认跨仓查询池。脚本会把 GitLab 裸路径补成
+  `https://gitlab.addx.ai/GROUP/REPO`，避免 `glab` 在仓库外把它解析到错误的 host；
+  已带 host 的完整 URL 原样使用。
 - `--extra-repo GROUP/REPO` 可重复，在默认仓基础上追加
 - `--platform auto|gitlab|github`，默认 `auto`（按 `git remote` 与可用 CLI 自动选）
+- `GITLAB_BASE_URL` 可覆盖 `references/gitlab-instance.json` 中的 GitLab 实例地址
 - `--limit` 每个仓最多取多少条 issue 做比对，默认 200
 - `--top` 输出 top N 候选，默认 8
 - `--json` 机器可读输出
@@ -68,9 +71,11 @@ python3 <skill-dir>/scripts/issue_dedupe.py \
 python3 -m unittest skills.gitlab-issue-sop.tests.test_issue_dedupe -v
 ```
 
-覆盖 12 个 case：
+覆盖 15 个 case：
 - 中文标题相似排序（电池横幅类）
 - 默认仓常量和软件 issue 项目池
+- GitLab 裸路径和完整 URL 的 host 处理
+- GitLab fetch 传给 `glab` 的 host-qualified repo 参数
 - recommendation() 各 state × 阈值组合
 - 0.55 / 0.25 边界
 - 全失败 → `insufficient_data` 覆盖任何分数

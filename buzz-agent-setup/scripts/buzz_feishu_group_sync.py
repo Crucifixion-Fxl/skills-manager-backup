@@ -59,6 +59,7 @@ import hashlib
 import http.client
 import json
 import os
+import pwd
 import re
 import secrets
 import shutil
@@ -67,6 +68,7 @@ import struct
 import subprocess
 import sys
 import tempfile
+import time
 import unicodedata
 import urllib.error
 import urllib.parse
@@ -245,7 +247,8 @@ BUZZ_SCHEME_RE = re.compile(r"buzz://", re.IGNORECASE)
 CONFIG_KEYS = {"channel_id", "chat_id", "owner_open_id", "owner_app_id", "mirror_pubkey", "mirror_env_file",
                "people_api", "remove_extras", "agents", "buzz_cli", "buzz_cli_sha256", "lark_cli", "desk_pubkey"}
 OPTIONAL_CONFIG_KEYS = {"reaction_map", "identity", "message_format", "feishu_sender_allowlist", "feishu_unmapped_senders",
-                       "buzz_unmapped_senders", "buzz_unmanaged_agents", "membership_sync", "reaction_sync", "people_cache_file"}
+                       "buzz_unmapped_senders", "buzz_unmanaged_agents", "membership_sync", "reaction_sync", "people_cache_file",
+                        "binding_claim"}
 # Config feishu_sender_allowlist: only these Buzz pubkeys' Feishu messages are mirrored into Buzz (absent = everyone
 # who is mapped and in the channel, as before). At most this many distinct pubkeys.
 MAX_SENDER_ALLOWLIST = 50
@@ -267,6 +270,7 @@ CONTEXT_BODY_LIMIT = 4000  # characters of a stranger's body that are mirrored; 
 BUZZ_UNMAPPED_SENDER_MODES = ("skip", "context")
 DEFAULT_BUZZ_UNMAPPED_SENDERS = "skip"
 BUZZ_CONTEXT_LABEL = "非成员"  # inserted into the existing "（Buzz）" / plain speaker signature
+BUZZ_WORKFLOW_LABEL = "定时任务"  # workflow messages have a signed origin tag but no human profile
 
 # Config buzz_unmanaged_agents: what to do with a channel agent this host has no configuration for at all. An agent
 # belongs to as many channels as its owner is pulled into, but each channel's group sync runs on a different person's
@@ -297,6 +301,14 @@ AUTH_HINT = "the owner's lark-cli login may have expired: run `lark-cli auth log
 
 class GroupSyncError(RuntimeError):
     report: dict[str, Any] | None = None
+
+
+class ResponseTooLarge(GroupSyncError):
+    """A local response byte cap, distinct from HTTP or verification failures."""
+
+
+class MirrorContentConflict(GroupSyncError):
+    """A retry no longer reproduces its sealed event; isolate without replay."""
 
 
 class BuzzBacklogError(GroupSyncError):
@@ -428,9 +440,13 @@ class State:
     agent_intros_initialized: bool = False
     agent_intros: dict[str, str] = field(default_factory=dict)  # agent pubkey -> baseline | pending/retry marker | message id | terminal
     agent_intro_senders: dict[str, str] = field(default_factory=dict)  # app that first attempted a proxied introduction
+    agent_intro_formats: dict[str, str] = field(default_factory=dict)  # absent means an existing text attempt
     # Two-way reactions (ADR-0020).
     rwatch: dict[str, str] = field(default_factory=dict)  # Feishu message id -> "<Buzz event id>|<watched until>"
     f2r: dict[str, str] = field(default_factory=dict)  # "<message>|<operator>|<emoji_type>" -> the mirror's kind 7 id | pending:<t> | failed | skipped
+    # Binding claims (ADR-0022).
+    claim_notes: dict[str, str] = field(default_factory=dict)  # "<feishu|buzz>:<conflict digest>" -> sent | retry:<first> | failed
+    claim_takeovers: dict[str, int] = field(default_factory=dict)  # expired rival claim digest -> when it was counted
 
 
 # ---------------------------------------------------------------- files
@@ -636,7 +652,7 @@ def parse_people_response(body: bytes, channel_id: str) -> PeopleAnswer:
     ({key: [address, ...]}). Nothing of the body is quoted in an error. A later extra top-level field is tolerated;
     a malformed person is not, whichever mode is chosen."""
     if len(body) > PEOPLE_API_MAX_BYTES:
-        raise GroupSyncError("people API answer is larger than the cap")
+        raise ResponseTooLarge("people API answer is larger than the cap")
     try:
         doc = json.loads(body)
     except ValueError:  # includes UnicodeDecodeError
@@ -681,7 +697,7 @@ def _http_get(url: str, headers: Mapping[str, str], timeout: float, body: bytes 
     except http.client.HTTPException as exc:
         raise OSError(f"HTTP transport error: {type(exc).__name__}") from None
     if len(body) > PEOPLE_API_MAX_BYTES:
-        raise GroupSyncError("people API answer is larger than the cap")
+        raise ResponseTooLarge("people API answer is larger than the cap")
     return status, body
 
 
@@ -903,6 +919,14 @@ def render_agent_introduction(intro: AgentIntroduction, *, relayed: bool = False
     return f"{prefix}大家好，我是 {intro.name}。{description}\n回应方式：{reach}"
 
 
+def render_agent_introduction_card(intro: AgentIntroduction, *, relayed: bool = False) -> str:
+    """Public metadata only; plain_text prevents descriptions becoming links/actions."""
+    return json.dumps({'config': {'wide_screen_mode': True},
+        'header': {'template': 'blue', 'title': {'tag': 'plain_text', 'content': f'Agent 已加入 · {intro.name}'}},
+        'elements': [{'tag': 'div', 'text': {'tag': 'plain_text',
+                      'content': render_agent_introduction(intro, relayed=relayed)}}]}, ensure_ascii=False)
+
+
 def owner_signed_policies(events: Iterable[Any], agents: Collection[str]) -> tuple[dict[str, str], dict[str, Mapping[str, Any]]]:
     """({identity: owner}, {identity: its latest kind:30177}) for `agents`: the owner is the one the identity's latest profile
     declares (NIP-OA auth tag), and only a policy that owner signed counts — the rule Buzz Desktop applies. Malformed events are
@@ -972,6 +996,233 @@ def fetch_agent_directory(cfg: Mapping[str, Any], relay_url: str, agents: Collec
         return parse_agent_directory(_relay_query(cfg, relay_url, directory_filters(agents), http, now), agents, reserved)
     policies = _relay_query(cfg, relay_url, [{"kinds": [KIND_MANAGED_AGENT], "#d": sorted(set(agents))}], http, now)
     return parse_agent_directory([*policies, *_profiles(cfg, relay_url, agents, http, now)], agents, reserved)
+
+
+# ---------------------------------------------------------------- binding claims (ADR-0022)
+
+
+# Every sync claims its channel -> group binding in its mirror's kind:30177 (signed by the mirror's NIP-OA owner, the people
+# API's signer key): {"feishu": {"mirror": true, "bindings": [{channel, chat_ref, claimed_at, heartbeat, takeover_of?, policy}]}}.
+# Each round reads every declared mirror's claims; a valid rival that beats this binding stops it for the round.
+CLAIM_LEASE_SECONDS = 30 * 60
+CLAIM_HEARTBEAT_SECONDS = 10 * 60
+CHAT_REF_PREFIX = "buzz-feishu-chat:v1:"
+CLAIM_LOCK_WAIT_SECONDS = 10.0  # how long a round waits for another writer of the same owner's policies
+
+
+@dataclass(frozen=True)
+class BindingClaim:
+    mirror: str  # the claiming mirror identity
+    owner: str  # its NIP-OA owner, who signed the claim
+    channel: str
+    chat_ref: str
+    claimed_at: int
+    heartbeat: int
+    takeover_of: str = ""
+    name: str = ""  # the mirror's public display name
+    policy: str = ""  # its published policy, canonical JSON ("" when absent): a change is written at once
+
+
+@dataclass(frozen=True)
+class ClaimView:
+    claims: tuple[BindingClaim, ...]
+    owners: Mapping[str, str]  # mirror -> the owner its latest profile names
+    names: Mapping[str, str]
+    policies: tuple[Any, ...] = ()  # every kind:30177 read (the agent index reuses them)
+
+
+def chat_ref(chat_id: str) -> str:
+    """The public name of a Feishu group in a claim: keyless, versioned, and not reversible to the chat_id."""
+    return hashlib.sha256((CHAT_REF_PREFIX + chat_id).encode()).hexdigest()
+
+
+def binding_claim_enabled(cfg: Mapping[str, Any]) -> bool:
+    """Config binding_claim (default true): publish and check claims. false falls back to the local-only guards."""
+    return cfg.get("binding_claim", True) is not False
+
+
+def claim_policy(cfg: Mapping[str, Any]) -> dict[str, Any]:
+    """How this binding syncs, for the channel's members to read (#97 item 4): booleans and enums, never an identifier."""
+    return {"remove_extras": bool(cfg["remove_extras"]), "feishu_unmapped_senders": unmapped_sender_mode(cfg),
+            "buzz_unmapped_senders": buzz_unmapped_sender_mode(cfg), "membership_sync": membership_sync_mode(cfg),
+            "reaction_sync": reaction_sync_mode(cfg)}
+
+
+def _canonical(value: Any) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def _strongest(claims: list[BindingClaim]) -> BindingClaim:
+    """The claim none of the others beats (the first such, in a stable order; a takeover cycle falls back to that order)."""
+    ordered = sorted(claims, key=lambda c: (c.claimed_at, c.mirror, c.channel, c.chat_ref))
+    return next((c for c in ordered if not any(claim_beats(o, c) for o in ordered if o is not c)), ordered[0])
+
+
+def claim_lock(home: str, owner: str) -> Any:
+    """The owner's policy lock, shared with buzz_agent_feishu_app.py: two writers of one owner's kind:30177 would otherwise
+    read the same head and overwrite each other. Waits up to CLAIM_LOCK_WAIT_SECONDS, then GroupSyncError."""
+    directory = Path(home or pwd.getpwuid(os.geteuid()).pw_dir) / ".local" / "state" / "buzz-agent-feishu-app" / "locks"
+    try:
+        directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+        fd = os.open(directory / f"{owner}.lock", os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0),
+                     0o600)
+    except OSError:
+        raise GroupSyncError("the owner's policy lock could not be opened") from None
+    handle = os.fdopen(fd, "a")
+    deadline = time.monotonic() + CLAIM_LOCK_WAIT_SECONDS
+    while True:
+        try:
+            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return handle
+        except BlockingIOError:
+            if time.monotonic() >= deadline:
+                handle.close()
+                raise GroupSyncError("another process is writing this owner's policies") from None
+            time.sleep(0.2)
+
+
+def _claim_time(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and 0 < value < 1 << 40
+
+
+def _claims_in(mirror: str, owner: str, name: str, content: str) -> list[BindingClaim]:
+    bindings = _feishu_block(content).get("bindings")
+    out = []
+    for item in bindings if isinstance(bindings, list) else []:
+        if not isinstance(item, dict):
+            continue
+        channel, ref, takeover = item.get("channel"), item.get("chat_ref"), item.get("takeover_of", "")
+        if (not isinstance(channel, str) or not UUID_RE.fullmatch(channel) or not isinstance(ref, str)
+                or not HEX64_RE.fullmatch(ref) or not _claim_time(item.get("claimed_at"))
+                or not _claim_time(item.get("heartbeat"))
+                or not isinstance(takeover, str) or (takeover and not HEX64_RE.fullmatch(takeover))):
+            continue  # a malformed entry is skipped, never fatal, and never spoils its neighbours
+        policy = item.get("policy")
+        out.append(BindingClaim(mirror=mirror, owner=owner, channel=channel, chat_ref=ref, claimed_at=item["claimed_at"],
+                                heartbeat=item["heartbeat"], takeover_of=takeover, name=name,
+                                policy=_canonical(policy) if isinstance(policy, dict) else ""))
+    return out
+
+
+def _profile_name(event: Mapping[str, Any]) -> str:
+    try:
+        body = json.loads(event["content"])
+    except (KeyError, TypeError, ValueError):
+        return ""
+    if not isinstance(body, dict):
+        return ""
+    return _public_intro_text(body.get("display_name") or body.get("name"), INTRO_NAME_MAX)
+
+
+def read_binding_claims(query: Callable[[list[dict[str, Any]]], list[Any]], *, also: Collection[str] = (),
+                        scope: tuple[str, str] | None = None) -> ClaimView:
+    """Every declared mirror's claims: all kind:30177 (one query, small), then the kind 0 of the identities whose policy
+    declares a mirror (and of `also`, this host's own mirror), a few per query. A claim counts only in the latest policy that
+    the mirror's NIP-OA owner signed and that declares `"mirror": true`. Any failure of `query` propagates: the caller
+    must not read "no answer" as "no claims"."""
+    policies = tuple(e for e in query([{"kinds": [KIND_MANAGED_AGENT]}])
+                     if _event_shape_ok(e) and e.get("kind") == KIND_MANAGED_AGENT)
+    candidates = {d[1] for e in policies if (d := _first_tag(e, "d")) is not None and isinstance(d[1], str)
+                  and HEX64_RE.fullmatch(d[1]) and declares_mirror(e["content"])} | {m for m in also if HEX64_RE.fullmatch(m)}
+    if scope is not None:
+        if (not isinstance(scope, tuple) or len(scope) != 2 or not isinstance(scope[0], str)
+                or not UUID_RE.fullmatch(scope[0]) or not isinstance(scope[1], str) or not HEX64_RE.fullmatch(scope[1])):
+            raise GroupSyncError("binding claim scope is invalid")
+        # Keep the complete policy snapshot. Preselect only identities whose
+        # ANY policy could conflict with this exact channel OR chat. A newer
+        # unrelated/foreign policy cannot hide an older matching candidate;
+        # owner + latest-policy resolution below remains unchanged.
+        relevant = set()
+        for event in policies:
+            tag = _first_tag(event, "d")
+            if tag is None or tag[1] not in candidates or not declares_mirror(event["content"]):
+                continue
+            if any(claim.channel == scope[0] or claim.chat_ref == scope[1]
+                   for claim in _claims_in(tag[1], event["pubkey"], "", event["content"])):
+                relevant.add(tag[1])
+        candidates = relevant | {m for m in also if HEX64_RE.fullmatch(m)}
+    profiles: list[Any] = []
+    for group in batches(sorted(candidates), PROFILE_QUERY_BATCH):
+        profiles += [e for e in query([{"kinds": [0], "authors": group}]) if _event_shape_ok(e) and e.get("kind") == 0]
+    owners, latest = owner_signed_policies([*policies, *profiles], candidates)
+    newest: dict[str, Mapping[str, Any]] = {}
+    for event in profiles:
+        if event["pubkey"] in candidates and _newest(event, newest.get(event["pubkey"])):
+            newest[event["pubkey"]] = event
+    names = {mirror: _profile_name(event) for mirror, event in newest.items()}
+    claims = [c for mirror, event in sorted(latest.items()) if declares_mirror(event["content"])
+              for c in _claims_in(mirror, owners[mirror], names.get(mirror, ""), event["content"])]
+    return ClaimView(tuple(claims), owners, names, policies)
+
+
+def claim_valid(claim: BindingClaim, now_ts: int) -> bool:
+    """Inside its lease. A heartbeat further in the future than the relay would take is not a heartbeat."""
+    return now_ts - CLAIM_LEASE_SECONDS <= claim.heartbeat <= now_ts + RELAY_CLOCK_SKEW_SECONDS
+
+
+def claim_beats(a: BindingClaim, b: BindingClaim) -> bool:
+    """Whether claim `a` wins over claim `b`: a named takeover beats its target; two that name each other, the later takeover
+    wins; otherwise the earlier claim, then the smaller mirror pubkey (then the binding itself, for one mirror's two)."""
+    a_names_b, b_names_a = a.takeover_of == b.mirror, b.takeover_of == a.mirror
+    if a_names_b != b_names_a:
+        return a_names_b
+    if a_names_b and a.claimed_at != b.claimed_at:
+        return a.claimed_at > b.claimed_at
+    return (a.claimed_at, a.mirror, a.channel, a.chat_ref) < (b.claimed_at, b.mirror, b.channel, b.chat_ref)
+
+
+def rival_claims(view: ClaimView, *, mirror: str, channel: str, ref: str | None,
+                 roles: Mapping[str, str]) -> list[BindingClaim]:
+    """The claims that compete with this binding (valid or not): on the same channel from a bot member of it whose owner is
+    the channel's owner or admin (the only ones who can run a sync), and on the same group from any other channel (knowing
+    the chat_id already takes being in the group). This very binding's own entry is not a rival."""
+    out = []
+    for c in view.claims:
+        if (c.mirror, c.channel, c.chat_ref) == (mirror, channel, ref):
+            continue
+        if c.channel == channel:
+            if roles.get(c.mirror) == "bot" and roles.get(c.owner) in ("owner", "admin"):
+                out.append(c)
+        elif ref is not None and c.chat_ref == ref:
+            out.append(c)
+    return out
+
+
+def with_binding_claim(content: str | None, *, name: str, channel: str, ref: str, entry: Mapping[str, Any] | None) -> str:
+    """The mirror's policy content with this binding's entry replaced in place (appended when new, removed when `entry` is
+    None). Everything else keeps its value and key order; written the way buzz_agent_feishu_app.py writes it, so content
+    that tool wrote comes back byte for byte. No policy yet: the most cautious one, as `--mirror` creates it."""
+    if content is None:
+        doc: Any = {"name": name, "parallelism": 1, "respond_to": "owner-only"}
+    else:
+        try:
+            doc = json.loads(content)
+        except ValueError:
+            raise GroupSyncError("the mirror's kind:30177 content is not JSON: not merging a claim into it") from None
+    if not isinstance(doc, dict):
+        raise GroupSyncError("the mirror's kind:30177 content is not a JSON object: not merging a claim into it")
+    if "feishu" in doc and not isinstance(doc["feishu"], dict):
+        raise GroupSyncError("the mirror's kind:30177 feishu field is not a JSON object: not merging a claim into it")
+    feishu = doc.get("feishu", {})
+    if "app_id" in feishu:
+        raise GroupSyncError("the mirror's kind:30177 publishes a Feishu app id: it is an agent, not a mirror")
+    bindings = feishu.get("bindings", [])
+    if not isinstance(bindings, list):
+        raise GroupSyncError("the mirror's kind:30177 bindings is not a list: not merging a claim into it")
+    mine = [i for i, item in enumerate(bindings)
+            if isinstance(item, dict) and item.get("channel") == channel and item.get("chat_ref") == ref]
+    kept = [item for i, item in enumerate(bindings) if i not in mine[1:]]
+    if entry is None:
+        kept = [item for i, item in enumerate(bindings) if i not in mine]
+    elif mine:
+        kept[mine[0]] = dict(entry)
+    else:
+        kept.append(dict(entry))
+    feishu = dict(feishu) if "mirror" in feishu else {"mirror": True, **feishu}
+    feishu["mirror"] = True
+    feishu["bindings"] = kept
+    doc["feishu"] = feishu
+    return json.dumps(doc, ensure_ascii=False)
 
 
 # ---------------------------------------------------------------- two-way membership and reactions (ADR-0020)
@@ -1095,12 +1346,16 @@ def publish_event(relay_url: str, secret_key_hex: str, kind: int, tags: list[lis
     return publish_signed_event(relay_url, secret_key_hex, event, http, now, auth_tag=auth_tag)
 
 
-def _relay_query(cfg: Mapping[str, Any], relay_url: str, filters: list[dict[str, Any]], http: Any, now: datetime) -> list[Any]:
+def _relay_query(cfg: Mapping[str, Any], relay_url: str, filters: list[dict[str, Any]], http: Any, now: datetime,
+                 *, auth_clock: Callable[[], datetime] | None = None,
+                 mirror_candidates_only: bool = False, candidate_apps: Collection[str] | None = None,
+                 complete_limit: int | None = None) -> list[Any]:
     """One signed POST /query with the people API's signer key (a member of the relay, never handed to a child)."""
     key = load_signer_key(Path(cfg["people_api"]["signer_env_file"]))
     url = relay_query_url(relay_url)
     body = json.dumps(filters, separators=(",", ":")).encode()
-    headers = {"Authorization": nip98_header(key, "POST", url, now, body=body), "Content-Type": "application/json",
+    headers = {"Authorization": nip98_header(key, "POST", url, auth_clock() if auth_clock else now, body=body),
+               "Content-Type": "application/json",
                "Accept": "application/json"}
     try:
         status, answer = http(url, headers, DIRECTORY_TIMEOUT, body=body)
@@ -1114,6 +1369,27 @@ def _relay_query(cfg: Mapping[str, Any], relay_url: str, filters: list[dict[str,
         raise GroupSyncError("the relay's agent directory answer is not JSON") from None
     if not isinstance(events, list):
         raise GroupSyncError("the relay's agent directory answer is not a list of events")
+    # Check the raw response before invalid signatures can shorten it. A full
+    # bounded page cannot prove absence or uniqueness for mapping recovery.
+    if complete_limit is not None and len(events) >= complete_limit:
+        raise GroupSyncError("the relay mapping lookup is incomplete")
+    # The broad query contains every registered agent. Content narrows the identities worth
+    # checking, but a later policy for the same d tag may revoke a mirror or change its app id.
+    # Verify *all* policies for each candidate identity before selecting its latest policy.
+    if mirror_candidates_only or candidate_apps is not None:
+        wanted_apps = set(candidate_apps or ())
+        policies = []
+        for event in events:
+            if not _event_shape_ok(event) or event.get("kind") != KIND_MANAGED_AGENT:
+                continue
+            tag = _first_tag(event, "d")
+            if tag is None or not isinstance(tag[1], str) or not HEX64_RE.fullmatch(tag[1]):
+                continue
+            policies.append((event, tag[1]))
+        candidates = {identity for event, identity in policies
+                      if (mirror_candidates_only and declares_mirror(event["content"]))
+                      or (candidate_apps is not None and _claimed_app_id(event["content"]) in wanted_apps)}
+        events = [event for event, identity in policies if identity in candidates]
     return [event for event in events if _nip01_event_verified(event)]
 
 
@@ -1127,13 +1403,15 @@ def _profiles(cfg: Mapping[str, Any], relay_url: str, authors: Collection[str], 
 
 
 def fetch_agent_index(cfg: Mapping[str, Any], relay_url: str, reserved: Collection[str], http: Any, now: datetime, *,
-                      wanted: Collection[str]) -> dict[str, str]:
-    """{Feishu app id: agent pubkey} for the `wanted` app ids that an agent's owner published: every kind:30177 on the relay
-    (small), then only the profiles of the agents whose policy claims one of them, checked the same way as the directory
+                      wanted: Collection[str], policies: Collection[Any] | None = None) -> dict[str, str]:
+    """{Feishu app id: agent pubkey} for the `wanted` app ids that an agent's owner published: scan kind:30177 on the relay,
+    verify only matching candidates, then read the profiles of the agents whose policy claims one of them
     (ADR-0019). Read only in a round in which a bot nobody here knows has joined the group."""
     wanted = set(wanted)
-    policies = [e for e in _relay_query(cfg, relay_url, [{"kinds": [KIND_MANAGED_AGENT]}], http, now)
-                if _event_shape_ok(e) and e.get("kind") == KIND_MANAGED_AGENT]
+    if policies is None:
+        policies = _relay_query(cfg, relay_url, [{"kinds": [KIND_MANAGED_AGENT]}], http, now,
+                                candidate_apps=wanted)
+    policies = [e for e in policies if _event_shape_ok(e) and e.get("kind") == KIND_MANAGED_AGENT]
     claimants = {d[1] for e in policies if (d := _first_tag(e, "d")) is not None and isinstance(d[1], str)
                  and HEX64_RE.fullmatch(d[1]) and _claimed_app_id(e["content"]) in wanted}
     if not claimants:
@@ -2168,6 +2446,11 @@ def route_buzz_event(event: Mapping[str, Any], *, mirror_pubkey: str, agent_apps
             # names nobody: the agent's own bot never renders mentions either (open_ids belong to one app), so
             # relaying must not make an agent's message notify more people than it would have itself (skills#143).
             name = _safe_name(names.get(author) or "") or author[:12]
+            # Agent provenance and the sending bot are separate: admission links still
+            # need resolving when this known agent speaks through the Desk. Keep the
+            # Desk presentation and empty mention allowlist unchanged.
+            if card:
+                raw_content = _join_feedback_card_content(raw_content, card)
             return Outbound(event_id, None, f"{name}（Buzz·{BUZZ_AGENT_RELAY_LABEL}）：{content}", parent,
                             _event_card(event, raw_content, f"{name}（{BUZZ_AGENT_RELAY_LABEL}）", False, names, card,
                                         mention_pubkeys=frozenset()) if card else None,
@@ -2183,7 +2466,11 @@ def route_buzz_event(event: Mapping[str, Any], *, mirror_pubkey: str, agent_apps
         # card, the same way a stranger's typed mentions are neutralised on the Feishu -> Buzz side. A stranger's
         # message must not even visually address a real person by name (ADR-0017, skills#142).
         agent_targets = agent_mention_targets or {}
-        name = _safe_name(names.get(author) or "") or author[:12]
+        is_workflow = any(isinstance(tag, list) and tag[:2] == ["buzz:workflow", "true"]
+                          for tag in event.get("tags") or [])
+        name = (BUZZ_WORKFLOW_LABEL if is_workflow else _safe_name(names.get(author) or "") or author[:12])
+        text_speaker = f"{name}（Buzz）" if is_workflow else f"{name}（Buzz·{BUZZ_CONTEXT_LABEL}）"
+        card_speaker = name if is_workflow else f"{name}（{BUZZ_CONTEXT_LABEL}）"
         ats: list[str] = []
         disallowed_names: set[str] = set()
         seen: set[str] = {author}
@@ -2206,10 +2493,10 @@ def route_buzz_event(event: Mapping[str, Any], *, mirror_pubkey: str, agent_apps
             return text
 
         content, raw_content = scrub(content), scrub(raw_content)
-        text = f"{name}（Buzz·{BUZZ_CONTEXT_LABEL}）：{content}"
+        text = f"{text_speaker}：{content}"
         if ats:
             text += " " + " ".join(ats)
-        card_json = (_event_card(event, raw_content, f"{name}（{BUZZ_CONTEXT_LABEL}）", False, names, card,
+        card_json = (_event_card(event, raw_content, card_speaker, False, names, card,
                                  mention_pubkeys=frozenset(agent_targets)) if card else None)
         return Outbound(event_id, None, text, parent, card_json, images, images_over)
     name = _safe_name(names.get(author) or "") or author[:12]
@@ -2229,6 +2516,24 @@ def route_buzz_event(event: Mapping[str, Any], *, mirror_pubkey: str, agent_apps
         text += " " + " ".join(ats)
     return Outbound(event_id, None, text, parent, _event_card(event, raw_content, name, False, names, card) if card else None,
                     images, images_over)
+
+
+def _join_feedback_card_content(content: str, card: CardContext) -> str:
+    """Convert the fixed same-channel request reference, not arbitrary custom URLs.
+
+    The admission helper does not know this binding's bridge origin. Resolve its
+    reference here using the same HTTPS-only navigator as the card's own link.
+    """
+    lines = content.splitlines()
+    if not lines or not re.fullmatch(r"buzz-join:v1 JOIN-[0-9a-f]{8} feedback-[0-9a-f]{64}", lines[-1]):
+        return content
+    for index, line in enumerate(lines):
+        match = re.fullmatch(r"原入群申请：buzz://message\?channel=([^&]+)&id=([0-9a-f]{64})", line)
+        if match and match.group(1) == card.channel_id:
+            url = open_link(card.link_base, match.group(2), card.channel_id, None)
+            if url:
+                lines[index] = f"[原入群申请]({url})"
+    return "\n".join(lines)
 
 
 def _event_card(event: Mapping[str, Any], raw_content: str, speaker: str, agent: bool, names: Mapping[str, str],
@@ -2253,6 +2558,8 @@ def _event_card(event: Mapping[str, Any], raw_content: str, speaker: str, agent:
         mentions.append(CardMention(names.get(target) or target[:12], card.emails.get(target),
                                     None if agent else card.open_ids.get(target)))
     url = open_link(card.link_base, str(event.get("id") or ""), card.channel_id, buzz_thread_root(event))
+    if agent:
+        raw_content = _join_feedback_card_content(raw_content, card)
     return build_message_card(speaker, raw_content, agent=agent, channel=card.channel_name,
                               mentions=tuple(mentions), open_url=url)
 
@@ -2266,6 +2573,11 @@ def reverse_reaction_map(mapping: Mapping[str, str]) -> dict[str, str]:
     out: dict[str, str] = {}
     for emoji, emoji_type in mapping.items():
         out.setdefault(emoji_type, _reaction_emoji(emoji))
+    # Feishu exposes two visually similar check marks. Accept the native
+    # CheckMark input as well, without changing outbound DONE or overriding
+    # an explicitly configured CheckMark mapping.
+    if "DONE" in out:
+        out.setdefault("CheckMark", out["DONE"])
     return out
 
 
@@ -2368,21 +2680,33 @@ def _feishu_ts(msg: Mapping[str, Any]) -> int | None:
     return int(created.timestamp()) if created else None
 
 
-def _context_mentions(mentions: Any, bot_member_to_pubkey: Mapping[str, str]) -> tuple[str, ...]:
+def _bot_mention(mention: Mapping[str, Any], bot_member_to_pubkey: Mapping[str, str],
+                 bot_app_to_pubkey: Mapping[str, str]) -> str | None:
+    identity = mention.get('id')
+    if not isinstance(identity, str):
+        return None
+    if mention.get('id_type') == 'app_id':
+        return bot_app_to_pubkey.get(identity) if APP_ID_RE.fullmatch(identity) else None
+    if mention.get('id_type') in (None, 'open_id') and OPEN_ID_RE.fullmatch(identity):
+        return bot_member_to_pubkey.get(identity)
+    return None
+
+
+def _context_mentions(mentions: Any, bot_member_to_pubkey: Mapping[str, str],
+                      bot_app_to_pubkey: Mapping[str, str] | None = None) -> tuple[str, ...]:
     """A stranger can wake an agent, never a person: only the selected mention entities that are one of the channel's bots
-    (matched directly by member id, the same space the row's mentions are already in — no per-app id resolution needed, so
-    this costs no Feishu call). A human he @-mentioned, agent or not configured with a Feishu app, is silently dropped —
+    (matched by typed member id or a hostd app alias from the verified channel bot roster; no extra Feishu call). A human he @-mentioned, agent or not configured with a Feishu app, is silently dropped —
     his words are read, never honoured as a command to notify somebody. Order is the message's, duplicates collapse."""
     out: list[str] = []
     for mention in mentions or []:
-        target = bot_member_to_pubkey.get(str((mention or {}).get("id") or ""))
+        target = _bot_mention(mention or {}, bot_member_to_pubkey, bot_app_to_pubkey or {})
         if target and target not in out:
             out.append(target)
     return tuple(out)
 
 
 def _context_inbound(msg: Mapping[str, Any], sender: Mapping[str, Any], content: str, image_keys: list[str], now: datetime,
-                     bot_member_to_pubkey: Mapping[str, str]) -> Inbound:
+                     bot_member_to_pubkey: Mapping[str, str], bot_app_to_pubkey: Mapping[str, str] | None = None) -> Inbound:
     """A Feishu message from a person who maps to no channel member (config feishu_unmapped_senders "context"): words to
     read, not a call to act on a human — but PO decision 2026-09-22: he can still wake an agent (see _context_mentions),
     because the channel's own bots are not a person to command, only a worker to point at. Signed with its own label so
@@ -2400,7 +2724,7 @@ def _context_inbound(msg: Mapping[str, Any], sender: Mapping[str, Any], content:
     created = _parse_feishu_time(msg.get("create_time"))
     if created is not None and (now - created).total_seconds() > STALE_AFTER_SECONDS:
         text += f"（飞书 {msg.get('create_time')}）"
-    mentions = _context_mentions(msg.get("mentions"), bot_member_to_pubkey)
+    mentions = _context_mentions(msg.get("mentions"), bot_member_to_pubkey, bot_app_to_pubkey)
     # Last word: whatever was done to the text on the way, what goes to the CLI has no typed @ and no nostr: only the
     # selected mentions above can notify anybody, and only agents are ever in that list.
     return Inbound(str(msg.get("message_id") or ""), "", sync.neutralize(text), mentions, tuple(image_keys), True)
@@ -2412,7 +2736,8 @@ def route_feishu_message(msg: Mapping[str, Any], *, open_id_to_pubkey: Mapping[s
                          resolve_id: Callable[[str], str] | None = None,
                          allowed_senders: frozenset[str] | None = None,
                          unmapped_senders: str = DEFAULT_UNMAPPED_SENDERS,
-                         ambiguous_ids: frozenset[str] = frozenset()) -> Inbound | str:
+                         ambiguous_ids: frozenset[str] = frozenset(),
+                         bot_app_to_pubkey: Mapping[str, str] | None = None) -> Inbound | str:
     """Decide what a Feishu message becomes in Buzz. A str is a skip reason. `open_id_to_pubkey` is keyed by the
     people's ids in the chosen identity space; in union mode a message row still carries this app's open_ids, so
     `resolve_id` turns one into a union_id ("" when it cannot be vouched for) — only when a person is actually
@@ -2449,7 +2774,7 @@ def route_feishu_message(msg: Mapping[str, Any], *, open_id_to_pubkey: Mapping[s
             return "unmapped_sender"
         if resolved in ambiguous_ids:  # some member's account, only nobody can say whose: not a stranger, not anybody
             return "identity_conflict"
-        return _context_inbound(msg, sender, content, image_keys, now, bot_member_to_pubkey)
+        return _context_inbound(msg, sender, content, image_keys, now, bot_member_to_pubkey, bot_app_to_pubkey)
     if pubkey not in channel_members:
         return "sender_not_in_channel"
     if allowed_senders is not None and pubkey not in allowed_senders:
@@ -2469,7 +2794,9 @@ def route_feishu_message(msg: Mapping[str, Any], *, open_id_to_pubkey: Mapping[s
     mentions: list[str] = []
     for mention in msg.get("mentions") or []:
         mid = str((mention or {}).get("id") or "")
-        target = bot_member_to_pubkey.get(mid) or open_id_to_pubkey.get(resolve_id(mid) if resolve_id else mid)
+        target = _bot_mention(mention or {}, bot_member_to_pubkey, bot_app_to_pubkey or {})
+        if not target and (mention or {}).get('id_type') in (None, 'open_id'):
+            target = open_id_to_pubkey.get(resolve_id(mid) if resolve_id else mid)
         if target and target != pubkey and target in channel_members and target not in mentions:
             mentions.append(target)
     return Inbound(str(msg.get("message_id") or ""), pubkey, text, tuple(mentions), tuple(image_keys))
@@ -2702,6 +3029,8 @@ def prune_state(state: State) -> None:
         del state.people_seen[key]
     for key in list(state.f2r)[:max(len(state.f2r) - LEDGER_KEEP, 0)]:
         del state.f2r[key]
+    for key in sorted(state.claim_takeovers, key=state.claim_takeovers.__getitem__)[:max(len(state.claim_takeovers) - 200, 0)]:
+        del state.claim_takeovers[key]
     newest_note = max(state.member_notes.values(), default=0)
     state.member_notes = {k: t for k, t in state.member_notes.items() if newest_note - t <= MEMBER_NOTE_TTL}
 
@@ -2712,6 +3041,11 @@ def load_state(state_dir: Path) -> State:
         return State()
     # A corrupt state must not read as empty: that would re-mirror everything.
     data = _load_json(_read_owner_only(path, "state file"), "state file")
+    return state_from_data(data)
+
+
+def state_from_data(data: Any) -> State:
+    """Validate and upgrade captured legacy metadata without reopening its file."""
     if not isinstance(data, dict):
         raise GroupSyncError("state file must be a JSON object")
     reaction_fields, identity_fields, image_fields = {"r2f", "react_since"}, {"idmap", "emailmap"}, {"images", "img_unresolved"}
@@ -2767,15 +3101,20 @@ def load_state(state_dir: Path) -> State:
         data = {**data, "agent_intros_initialized": False, "agent_intros": {}}
     if "agent_intro_senders" not in data:
         data = {**data, "agent_intro_senders": {}}
+    if "agent_intro_formats" not in data:
+        data = {**data, "agent_intro_formats": {}}
+    if not {"claim_notes", "claim_takeovers"} & set(data):
+        # Written before binding claims (ADR-0022): no conflict was ever told, no takeover counted.
+        data = {**data, "claim_notes": {}, "claim_takeovers": {}}
     if set(data) != set(State.__dataclass_fields__):
         # A partial state would read as "nothing sent yet" and re-mirror recent messages.
         raise GroupSyncError("state file has missing or unknown fields")
     state = State(**data)
     str_maps = (state.b2f, state.b2f_modes, state.b2f_senders, state.e2f, state.f2b, state.r2f, state.idmap, state.emailmap, state.images,
                 state.feishu_seen, state.buzz_seen, state.people_seen, state.rwatch, state.f2r, state.agent_intros,
-                state.agent_intro_senders)
+                state.agent_intro_senders, state.agent_intro_formats, state.claim_notes)
     int_maps = (state.attempts, state.threads, state.polled, state.tried, state.unresolved, state.f_unresolved,
-                state.edit_unresolved, state.img_unresolved, state.member_notes)
+                state.edit_unresolved, state.img_unresolved, state.member_notes, state.claim_takeovers)
     ok = (isinstance(state.binding, str)
           and isinstance(state.member_notice_event, str) and isinstance(state.member_notice_feishu, str)
           and isinstance(state.member_notice_content, str) and isinstance(state.member_notice_active, bool)
@@ -2783,6 +3122,8 @@ def load_state(state_dir: Path) -> State:
           and isinstance(state.agent_intros_initialized, bool)
           and all(isinstance(v, int) and not isinstance(v, bool) for v in (state.floor, state.buzz_since, state.feishu_since, state.buzz_floor, state.feishu_floor, state.react_since, state.members_synced))
           and all(isinstance(m, dict) and all(isinstance(k, str) and isinstance(v, str) for k, v in m.items()) for m in str_maps)
+          and all(HEX64_RE.fullmatch(k) is not None and v in ('text', 'card_v1')
+                  for k, v in state.agent_intro_formats.items())
           and all(isinstance(m, dict) and all(isinstance(k, str) and isinstance(v, int) and not isinstance(v, bool)
                                               for k, v in m.items()) for m in int_maps))
     ok = (ok and all(OPEN_ID_RE.fullmatch(k) and UNION_ID_RE.fullmatch(v) for k, v in state.idmap.items())
@@ -2792,6 +3133,8 @@ def load_state(state_dir: Path) -> State:
     ok = ok and all(HEX64_RE.fullmatch(k) and APP_ID_RE.fullmatch(v) and k in state.b2f
                     for k, v in state.b2f_senders.items())
     ok = ok and (not state.member_notice_sender or APP_ID_RE.fullmatch(state.member_notice_sender) is not None)
+    ok = ok and all(re.fullmatch(r"(feishu|buzz):[0-9a-f]{40}", k) and re.fullmatch(r"sent|failed|retry:[0-9]{1,12}", v)
+                    for k, v in state.claim_notes.items())
     ok = ok and all(HEX64_RE.fullmatch(k) and APP_ID_RE.fullmatch(v) and k in state.agent_intros
                     for k, v in state.agent_intro_senders.items())
     ok = (ok and (not state.member_notice_event or HEX64_RE.fullmatch(state.member_notice_event))
@@ -2955,6 +3298,8 @@ def _validated_config(cfg: Any) -> dict[str, Any]:
         raise GroupSyncError('config reaction_sync must be "two_way" (the default) or "agents_only"')
     if "people_cache_file" in cfg:
         _absolute(cfg["people_cache_file"], "people_cache_file")
+    if "binding_claim" in cfg and not isinstance(cfg["binding_claim"], bool):
+        raise GroupSyncError("config binding_claim must be true (the default) or false")
     if "identity" in cfg and cfg["identity"] not in IDENTITY_MODES:
         raise GroupSyncError('config identity must be "union_id" (the default) or "email"')
     if "message_format" in cfg and (not isinstance(cfg["message_format"], str) or cfg["message_format"] not in MESSAGE_FORMATS):
@@ -3314,9 +3659,12 @@ class LarkCli:
         return True
 
     def bot_scopes(self) -> set[str]:
-        data = self.call("scopes", ["api", "GET", "/open-apis/application/v6/scopes", "--as", "bot"])
-        return {str(s.get("scope_name")) for s in data.get("scopes") or []
-                if isinstance(s, dict) and s.get("grant_status") == 1}
+        from hostd.native_scopes import NOTICE as scope_notice, parse_bot_scope_envelope
+        payload = self.call("scopes", ["api", "GET", "/open-apis/application/v6/scopes", "--as", "bot"], full=True)
+        try:
+            return set(parse_bot_scope_envelope(payload))
+        except ValueError:
+            raise GroupSyncError(scope_notice) from None
 
 
 class BuzzCli:
@@ -3466,6 +3814,7 @@ class Clients:
     relay_url: str = ""  # the mirror env's BUZZ_RELAY_URL: where the agent directory is read (ADR-0019)
     mirror_key: str = ""  # the mirror env's BUZZ_PRIVATE_KEY: signs the reactions it carries into Buzz, in this process (ADR-0020)
     mirror_auth_tag: str = ""  # the mirror env's BUZZ_AUTH_TAG: an agent identity is a relay member only with it
+    home: str = ""  # the caller's HOME: where the owner's policy lock lives (ADR-0022)
 
 
 def _clients(cfg: Mapping[str, Any], base_env: Mapping[str, str], runner: Any, http: Any = None) -> Clients:
@@ -3486,6 +3835,7 @@ def _clients(cfg: Mapping[str, Any], base_env: Mapping[str, str], runner: Any, h
         relay_url=mirror.get("BUZZ_RELAY_URL", ""),
         mirror_key=mirror.get("BUZZ_PRIVATE_KEY", ""),
         mirror_auth_tag=mirror.get("BUZZ_AUTH_TAG", ""),
+        home=str(base_env.get("HOME") or ""),
     )
 
 
@@ -3502,9 +3852,10 @@ def _desired_agent_bots(cfg: Mapping[str, Any], members: list[dict[str, Any]]) -
 
 
 def preflight_command(config_path: Path, mode: str, chat_id: str | None, *, base_env: Mapping[str, str],
-                      runner: Any = subprocess.run) -> dict[str, Any]:
+                      runner: Any = subprocess.run, http: Any = None, now: datetime | None = None) -> dict[str, Any]:
     cfg = load_config(config_path)
-    clients = _clients(cfg, base_env, runner)
+    clients = _clients(cfg, base_env, runner, http)
+    members: list[dict[str, Any]] | None = None
     if mode == "new":
         result = preflight_new_chat(owner_in_scope=clients.owner.user_in_scope(cfg["owner_open_id"]),
                                     bot_scopes=clients.owner.bot_scopes(),
@@ -3523,18 +3874,59 @@ def preflight_command(config_path: Path, mode: str, chat_id: str | None, *, base
             return {"mode": mode, "ok": False, "problems": ["chat_unreadable"], "warnings": [], "can_remove": False,
                     "error_code": exc.code}
         _, actual_bots = clients.owner.members(chat_id)
-        wanted = _desired_agent_bots(cfg, clients.buzz.members(cfg["channel_id"])) | {cfg["owner_app_id"]}
+        members = clients.buzz.members(cfg["channel_id"])
+        wanted = _desired_agent_bots(cfg, members) | {cfg["owner_app_id"]}
         result = preflight_existing_chat(chat, owner_open_id=cfg["owner_open_id"],
                                          bots_to_add=len(wanted - set(actual_bots)),
                                          remove_extras=cfg["remove_extras"])
     else:
         raise GroupSyncError("preflight --mode must be new or existing")
-    return {"mode": mode, "ok": result.ok, "problems": list(result.problems), "warnings": list(result.warnings),
-            "can_remove": result.can_remove}
+    problems, warnings = list(result.problems), list(result.warnings)
+    claimed: list[dict[str, str]] = []
+    if binding_claim_enabled(cfg):
+        if members is None:
+            members = clients.buzz.members(cfg["channel_id"])
+        roles = {str(m.get("pubkey")): str(m.get("role") or "") for m in members}
+        claimed, unreadable = _claims_in_the_way(cfg, clients, roles, chat_id if mode == "existing" else None,
+                                                 now or datetime.now(timezone.utc),
+                                                 auth_clock=(lambda: now) if now else (lambda: datetime.now(timezone.utc)))
+        if claimed:
+            problems.append("claimed_by_other_mirror")
+        if unreadable:
+            warnings.append("claims_unreadable")
+    out = {"mode": mode, "ok": not problems, "problems": problems, "warnings": warnings, "can_remove": result.can_remove}
+    if claimed:
+        out["claimed_by"] = claimed
+    return out
+
+
+def _claims_in_the_way(cfg: Mapping[str, Any], clients: Clients, roles: Mapping[str, str], chat_id: str | None,
+                       now: datetime, *, auth_clock: Callable[[], datetime] | None = None) -> tuple[list[dict[str, str]], bool]:
+    """(another mirror's valid claims on this channel or group, whether the claims could not be read) for bind/create-chat
+    (ADR-0022). This host's own mirror is not "another": its old entry, still leased while rebinding, is the round's business
+    (the new binding waits for it or takes over with `round --take-over`)."""
+    mirror = cfg["mirror_pubkey"]
+    try:
+        view = read_binding_claims(lambda f: _relay_query(
+            cfg, clients.relay_url, f, clients.http, now, auth_clock=auth_clock,
+            mirror_candidates_only=f == [{"kinds": [KIND_MANAGED_AGENT]}]))
+    except GroupSyncError:
+        return [], True
+    ref = chat_ref(chat_id) if chat_id else None
+    found = [c for c in rival_claims(view, mirror=mirror, channel=cfg["channel_id"], ref=ref, roles=roles)
+             if c.mirror != mirror and claim_valid(c, int(now.timestamp()))]
+    return [{"mirror": c.mirror[:12], "name": c.name or c.mirror[:12],
+             "reason": "same_channel" if c.channel == cfg["channel_id"] else "same_chat"}
+            for c in sorted(found, key=lambda c: (c.claimed_at, c.mirror))], False
+
+
+def _preflight_refusal(report: Mapping[str, Any]) -> GroupSyncError:
+    who = "; ".join(f"{c['name']} ({c['mirror']})" for c in report.get("claimed_by") or [])
+    return GroupSyncError(f"preflight failed: {', '.join(report['problems'])}" + (f" — claimed by {who}" if who else ""))
 
 
 def create_chat_command(config_path: Path, name: str, *, base_env: Mapping[str, str],
-                        runner: Any = subprocess.run) -> dict[str, Any]:
+                        runner: Any = subprocess.run, http: Any = None, now: datetime | None = None) -> dict[str, Any]:
     cfg = load_config(config_path)
     if cfg["chat_id"]:
         raise GroupSyncError("config is already bound to a chat; refusing to create another")
@@ -3543,9 +3935,9 @@ def create_chat_command(config_path: Path, name: str, *, base_env: Mapping[str, 
         raise GroupSyncError(f"an earlier create-chat may already have created the group ({intent.name} remains): "
                              "find it with `lark-cli im +chat-search --as user`, run bind with its chat_id, "
                              "then delete the intent file")
-    report = preflight_command(config_path, "new", None, base_env=base_env, runner=runner)
+    report = preflight_command(config_path, "new", None, base_env=base_env, runner=runner, http=http, now=now)
     if not report["ok"]:
-        raise GroupSyncError(f"preflight failed: {', '.join(report['problems'])}")
+        raise _preflight_refusal(report)
     # Recorded before the call: if the chat is created but the config is not rewritten,
     # a second create-chat must not create another group.
     _write_owner_only(intent, json.dumps({"name": name}, ensure_ascii=False))
@@ -3561,13 +3953,13 @@ def create_chat_command(config_path: Path, name: str, *, base_env: Mapping[str, 
 
 
 def bind_command(config_path: Path, chat_id: str, *, base_env: Mapping[str, str],
-                 runner: Any = subprocess.run) -> dict[str, Any]:
+                 runner: Any = subprocess.run, http: Any = None, now: datetime | None = None) -> dict[str, Any]:
     cfg = load_config(config_path)
     if cfg["chat_id"] and cfg["chat_id"] != chat_id:
         raise GroupSyncError("config is already bound to another chat")
-    report = preflight_command(config_path, "existing", chat_id, base_env=base_env, runner=runner)
+    report = preflight_command(config_path, "existing", chat_id, base_env=base_env, runner=runner, http=http, now=now)
     if not report["ok"]:
-        raise GroupSyncError(f"preflight failed: {', '.join(report['problems'])}")
+        raise _preflight_refusal(report)
     _write_config(config_path, dict(cfg, chat_id=chat_id))
     return {"chat_id": chat_id, "warnings": report["warnings"]}
 
@@ -3598,13 +3990,16 @@ def _new_report() -> dict[str, Any]:
             "reactions_to_buzz": 0, "reactions_withdrawn_in_buzz": 0, "approvals_to_buzz": 0,
             # Images are the point of a report, so a lost one (images_failed) needs a look; a policy skip (too large, over the
             # per-message limit, a format Feishu refuses ...) is counted by reason and does not.
-            "images_to_feishu": 0, "images_to_buzz": 0, "images_failed": 0, "images_skipped": {}}
+            "images_to_feishu": 0, "images_to_buzz": 0, "images_failed": 0, "images_skipped": {},
+            # Binding claims (ADR-0022).
+            "claim_conflict": None, "claims_unreadable": 0, "claim_published": 0, "claim_publish_failed": 0,
+            "claim_takeovers": 0}
 
 
 def needs_attention(report: Mapping[str, Any]) -> bool:
     return bool(report["errors"] or report["unknown"] or report["failed"] or report["blocked_bots"]
                 or report["member_failures"] or report["removals_withheld"] or report["backlog_skipped"]
-                or report["identity_conflicts"] or report["images_failed"])
+                or report["identity_conflicts"] or report["images_failed"] or report["claim_conflict"])
 
 
 def _skip(report: dict[str, Any], reason: str) -> None:
@@ -3648,6 +4043,7 @@ class Round:
     agent_lookup_failed: bool = False  # a relay lookup failed this round: bots it could not place are asked about again next round
     signer_key: str = ""  # the people API's signer key, loaded when a member event is signed
     keep_gone: set[str] = field(default_factory=set)  # left the channel, removals withheld: kept in the snapshot for next round
+    auth_clock: Callable[[], datetime] | None = None  # live NIP-98 requests use a fresh time; injected tests keep their clock
 
     @property
     def now_ts(self) -> int:
@@ -3793,7 +4189,8 @@ class Round:
             return
         reserved = {agent["app_id"] for agent in self.cfg["agents"].values()} | {self.cfg["owner_app_id"]}
         try:
-            answer = fetch_agent_directory(self.cfg, self.clients.relay_url, foreign, reserved, self.clients.http, self.now)
+            answer = fetch_agent_directory(self.cfg, self.clients.relay_url, foreign, reserved, self.clients.http,
+                                           self.auth_clock() if self.auth_clock else self.now)
         except GroupSyncError:
             self.report["directory_failed"] += 1
             self.agent_lookup_failed = True  # the relay is not answering this round: no further lookups either
@@ -3808,7 +4205,149 @@ class Round:
         """Directory agents whose bot is in the group: {pubkey: the bot's member id there}."""
         return {pk: self.bot_members[app] for pk, app in self.directory.items() if app in self.bot_members}
 
+    # -- binding claims (ADR-0022) ---------------------------------------------------------------
+
+    def _relay_read(self, filters: list[dict[str, Any]], *, complete_limit: int | None = None) -> list[Any]:
+        return _relay_query(self.cfg, self.clients.relay_url, filters, self.clients.http, self.now,
+                            auth_clock=self.auth_clock, complete_limit=complete_limit)
+
+    def _relay_claims(self, filters: list[dict[str, Any]]) -> list[Any]:
+        return _relay_query(self.cfg, self.clients.relay_url, filters, self.clients.http, self.now,
+                            auth_clock=self.auth_clock,
+                            mirror_candidates_only=filters == [{"kinds": [KIND_MANAGED_AGENT]}])
+
+    def check_claims(self, take_over: bool = False) -> str:
+        """Read every declared mirror's claims and decide this round: "off" (binding_claim false), "unreadable" (messages
+        and reactions go on, membership waits), "lost" (a valid rival beats this binding: nothing is synced this round) or
+        "won". The winner keeps its claim fresh; a loser keeps a standby claim, unless it was taken over by name: then it
+        withdraws its entry."""
+        cfg, report = self.cfg, self.report
+        if not binding_claim_enabled(cfg):
+            return "off"
+        mirror, channel, ref = cfg["mirror_pubkey"], cfg["channel_id"], chat_ref(cfg["chat_id"])
+        try:
+            view = read_binding_claims(self._relay_claims, also={mirror}, scope=(channel, ref))
+        except GroupSyncError:
+            report["claims_unreadable"] = 1
+            return "unreadable"
+        now = self.now_ts
+        rivals = rival_claims(view, mirror=mirror, channel=channel, ref=ref, roles=self.roles)
+        valid = [c for c in rivals if claim_valid(c, now)]
+        self._count_takeovers([c for c in rivals if not claim_valid(c, now)])
+        recorded = next((c for c in view.claims if (c.mirror, c.channel, c.chat_ref) == (mirror, channel, ref)), None)
+        # An expired claim of ours starts again now: it must not beat whoever took over while this host was away.
+        own = recorded if recorded is not None and claim_valid(recorded, now) else None
+        me = own or BindingClaim(mirror=mirror, owner="", channel=channel, chat_ref=ref, claimed_at=now, heartbeat=now)
+        if take_over and (beaters := [c for c in valid if claim_beats(c, me)]):
+            me = replace(me, takeover_of=_strongest(beaters).mirror)
+        beaters = [c for c in valid if claim_beats(c, me)]
+        if not beaters:
+            self.state.claim_notes.clear()  # no conflict (any more): the next one is told again
+            self._keep_claim(view, me, own)
+            return "won"
+        taker = next((c for c in beaters if c.takeover_of == mirror), None)
+        winner = taker or _strongest(beaters)
+        reason = "taken_over" if taker else "same_channel" if winner.channel == channel else "same_chat"
+        report["claim_conflict"] = {"reason": reason, "mirror": winner.mirror[:12], "name": winner.name or winner.mirror[:12]}
+        if taker:
+            if recorded is not None:
+                self._write_claim(view, None)
+        else:
+            self._keep_claim(view, me, own)  # a standby: it takes over by itself once the winner's lease runs out
+        self._tell_stop(reason, winner)
+        return "lost"
+
+    def _count_takeovers(self, expired: list[BindingClaim]) -> None:
+        for c in expired:
+            digest = hashlib.sha256(f"{c.mirror}|{c.channel}|{c.chat_ref}|{c.claimed_at}".encode()).hexdigest()[:40]
+            if digest not in self.state.claim_takeovers:
+                self.state.claim_takeovers[digest] = self.now_ts
+                self.report["claim_takeovers"] += 1
+
+    def _keep_claim(self, view: ClaimView, me: BindingClaim, own: BindingClaim | None) -> None:
+        policy = claim_policy(self.cfg)
+        if (own is not None and self.now_ts - own.heartbeat < CLAIM_HEARTBEAT_SECONDS and own.policy == _canonical(policy)
+                and own.takeover_of == me.takeover_of):
+            return
+        entry: dict[str, Any] = {"channel": me.channel, "chat_ref": me.chat_ref, "claimed_at": me.claimed_at,
+                                 "heartbeat": self.now_ts}
+        if me.takeover_of:
+            entry["takeover_of"] = me.takeover_of
+        entry["policy"] = policy
+        self._write_claim(view, entry)
+
+    def _write_claim(self, view: ClaimView, entry: Mapping[str, Any] | None) -> None:
+        """Read-modify-write of the mirror's kind:30177 under the owner's lock, signed by the owner (the people API's signer
+        key, which must be the one the mirror's profile names). A failure is counted and retried next round; syncing goes on."""
+        mirror = self.cfg["mirror_pubkey"]
+        key = self._signer()
+        owner = _signer_pubkey(key)
+        if view.owners.get(mirror) != owner:
+            self.report["errors"] += 1
+            _skip(self.report, "claim_owner_mismatch")
+            return
+        try:
+            with claim_lock(self.clients.home, owner):
+                head = None
+                for event in self._relay_read([{"kinds": [KIND_MANAGED_AGENT], "authors": [owner], "#d": [mirror]}]):
+                    if (event.get("kind") == KIND_MANAGED_AGENT and event["pubkey"] == owner
+                            and (_first_tag(event, "d") or [None, None])[1] == mirror and _newest(event, head)):
+                        head = event
+                content = with_binding_claim(head["content"] if head else None,
+                                             name=view.names.get(mirror) or "feishu-mirror", channel=self.cfg["channel_id"],
+                                             ref=chat_ref(self.cfg["chat_id"]), entry=entry)
+                if head is not None and content == head["content"]:
+                    return
+                tags = json.loads(json.dumps(head["tags"])) if head else [["d", mirror]]
+                created_at = max(self.now_ts, int(head["created_at"]) + 1) if head else self.now_ts
+                event = sign_event(key, KIND_MANAGED_AGENT, tags, content, created_at)
+                publish_signed_event(self.clients.relay_url, key, event, self.clients.http,
+                                     self.auth_clock() if self.auth_clock else self.now)
+        except GroupSyncError:
+            self.report["claim_publish_failed"] = 1
+            return
+        self.report["claim_published"] = 1
+
+    def _tell_stop(self, reason: str, winner: BindingClaim) -> None:
+        """Once per conflict, in the group (the owner's bot) and in the channel (the mirror). A failed notice is retried
+        with the same idempotency key (Feishu) or the same event id (Buzz) while that still dedupes, then given up."""
+        name = winner.name or winner.mirror[:12]
+        text = {"same_channel": f"飞书群同步：本频道已由「{name}」所在的机器同步，这边已停。",
+                "same_chat": f"飞书群同步：本群已由「{name}」所在的机器同步到另一个频道，这边已停。",
+                "taken_over": f"飞书群同步：本频道已由「{name}」所在的机器接管同步，这边已停。"}[reason]
+        note = hashlib.sha256(f"{reason}|{winner.mirror}|{winner.channel}|{winner.chat_ref}|{winner.claimed_at}".encode()
+                              ).hexdigest()[:40]
+        notes = self.state.claim_notes
+        if any(not k.endswith(":" + note) for k in notes):
+            notes.clear()  # another conflict than the one told before
+        for side, window in (("feishu", FEISHU_RETRY_WINDOW_SECONDS), ("buzz", RELAY_CLOCK_SKEW_SECONDS - 60)):
+            item = f"{side}:{note}"
+            value = notes.get(item, "")
+            if value in ("sent", FAILED):
+                continue
+            first = int(value[len("retry:"):]) if value.startswith("retry:") else self.now_ts
+            if self.now_ts - first > window:
+                notes[item] = FAILED
+                self.report["errors"] += 1
+                continue
+            notes[item] = f"retry:{first}"
+            self.persist()
+            try:
+                if side == "feishu":
+                    self.clients.owner.send(self.cfg["chat_id"], text, "claim-" + note)
+                else:
+                    self._mirror_publish(9, [["h", self.cfg["channel_id"]]], text, created_at=first)
+            except GroupSyncError:
+                self.report["errors"] += 1
+                continue
+            notes[item] = "sent"
+            self.persist()
+
     # -- membership -------------------------------------------------------------------------
+
+    def _membership_plan(self, plan: MembershipPlan) -> MembershipPlan:
+        """Runtime-specific restriction; legacy membership behavior is unchanged."""
+        return plan
 
     def reconcile_members(self) -> None:
         cfg, owner, report, chat = self.cfg, self.clients.owner, self.report, self.cfg["chat_id"]
@@ -3849,6 +4388,7 @@ class Round:
                        remove_users=tuple(sorted(set(plan.remove_users) | {u for u in delta.remove_users if u in actual_users and u not in keep})),
                        remove_bots=tuple(sorted(set(plan.remove_bots) | {b for b in delta.remove_bots
                                                                           if b in self.bot_members and b != cfg["owner_app_id"]})))
+        plan = self._membership_plan(plan)
         # The plan counted on its removals; if some were withheld, only add what still fits.
         room = max(MAX_BOTS_PER_CHAT - (len(self.bot_members) - len(plan.remove_bots)), 0)
         if len(plan.add_bots) > room:
@@ -3917,8 +4457,8 @@ class Round:
                 return ""  # the relay failed once this round: not asked again for every other bot
             reserved = {agent["app_id"] for agent in self.cfg["agents"].values()} | {self.cfg["owner_app_id"]}
             try:
-                found = fetch_agent_index(self.cfg, self.clients.relay_url, reserved, self.clients.http, self.now,
-                                          wanted=[app_id])
+                found = fetch_agent_index(self.cfg, self.clients.relay_url, reserved, self.clients.http,
+                                          self.auth_clock() if self.auth_clock else self.now, wanted=[app_id])
             except GroupSyncError:
                 self.report["directory_failed"] += 1
                 self.agent_lookup_failed = True
@@ -3963,7 +4503,13 @@ class Round:
             self.signer_key = load_signer_key(Path(self.cfg["people_api"]["signer_env_file"]))
         return self.signer_key
 
+    def bot_admission_allowed(self, pubkey: str, app_id: str) -> bool:
+        """Legacy bot membership contract; hostd supplies its stricter approval gate."""
+        return True
+
     def _member_event(self, kind: int, pubkey: str, source_key: str, role: str | None = None) -> str:
+        if kind == 9000 and role == 'bot' and not self.bot_admission_allowed(pubkey, source_key.removeprefix('b:')):
+            raise MemberEventBlocked('approval_pending')
         operation = _member_event_key(kind, pubkey, role, source_key)
         event = self.state.member_events.get(operation)
         fresh = event is None
@@ -3990,6 +4536,8 @@ class Round:
             raise MemberEventBlocked("signer_changed")
         if abs(self.now_ts - event["created_at"]) > RELAY_CLOCK_SKEW_SECONDS:
             raise MemberEventBlocked("expired")
+        if kind == 9000 and role == 'bot' and not self.bot_admission_allowed(pubkey, source_key.removeprefix('b:')):
+            raise MemberEventBlocked('approval_pending')
         try:
             publish_signed_event(self.clients.relay_url, key, event, self.clients.http, self.now)
         except RelayRefused:
@@ -4134,17 +4682,22 @@ class Round:
         if not state.agent_intros_initialized:
             # Upgrade/binding baseline: every bot present while the feature is first enabled belongs to setup and does not
             # all speak at once. Subsequent joins are detected by their absence from this binding-scoped ledger.
-            for pubkey in present:
-                state.agent_intros.setdefault(pubkey, "baseline")
+            for pubkey, app_id in present.items():
+                if self.bot_admission_allowed(pubkey, app_id):
+                    state.agent_intros.setdefault(pubkey, "baseline")
             state.agent_intros_initialized = True
         candidates = [pubkey for pubkey in sorted(present)
                       if pubkey not in state.agent_intros
                       or _is_pending(state.agent_intros.get(pubkey)) or _is_retry(state.agent_intros.get(pubkey))]
         if not candidates:
             return
+        candidates = [pubkey for pubkey in candidates if self.bot_admission_allowed(pubkey, present[pubkey])]
+        if not candidates:
+            return
         for pubkey in candidates:
             if pubkey not in state.agent_intros:
                 state.agent_intros[pubkey] = _mark(RETRY, self.now_ts)
+                state.agent_intro_formats[pubkey] = 'card_v1'
                 state.agent_intro_senders[pubkey] = (present[pubkey] if present[pubkey] in self.clients.agents
                                                    else self.desk_app_id)
         self.persist()
@@ -4156,6 +4709,8 @@ class Round:
             except GroupSyncError:
                 pass  # configured agents can still introduce themselves with an explicitly unconfirmed response range
         for pubkey in candidates:
+            if not self.bot_admission_allowed(pubkey, present[pubkey]):
+                continue
             value = state.agent_intros[pubkey]
             first = _marked_time(value) if _is_pending(value) or _is_retry(value) else self.now_ts
             if self.now_ts - first > FEISHU_RETRY_WINDOW_SECONDS:
@@ -4181,12 +4736,19 @@ class Round:
             client = self.clients.agents[sender_app]
             text = render_agent_introduction(intro, relayed=not own_profile)
             key = "agent-intro-" + hashlib.sha256(
-                f"{self.cfg['channel_id']}\0{self.cfg['chat_id']}\0{pubkey}".encode()).hexdigest()[:36]
+                (f"{self.cfg['channel_id']}\0{self.cfg['chat_id']}\0{pubkey}"
+                 + ('\0card_v1' if state.agent_intro_formats.get(pubkey) == 'card_v1' else '')).encode()).hexdigest()[:36]
             state.agent_intros[pubkey] = _mark(PENDING, first)
             state.agent_intro_senders[pubkey] = sender_app
             self.persist()
+            if not self.bot_admission_allowed(pubkey, app_id):
+                continue
             try:
-                message_id = client.send(self.cfg["chat_id"], text, key)
+                # Existing pending/UNKNOWN text attempts retain their wire
+                # format and key; an upgrade never retries them as a new card.
+                message_id = (client.send_card(self.cfg["chat_id"], render_agent_introduction_card(intro, relayed=not own_profile), key)
+                              if state.agent_intro_formats.get(pubkey) == 'card_v1'
+                              else client.send(self.cfg["chat_id"], text, key))
             except CliError as exc:
                 report["errors"] += 1
                 report["agent_intro_failures"] += 1
@@ -4311,6 +4873,11 @@ class Round:
             if pubkey in buzz_now or pubkey in state.buzz_seen or pubkey == mirror or pubkey in self.other_mirrors:
                 state.feishu_seen[key] = ""
                 continue  # a member already, or it left the channel this round and Buzz wins
+            if kind == 'bot' and not self.bot_admission_allowed(pubkey, _key_member_id(key)):
+                # Leave the invite for onboarding. Do not make it a permanent
+                # baseline or turn pending approval into a native bot removal.
+                delta.hold_bots.add(_key_member_id(key))
+                continue
             adds.append((key, pubkey, "bot" if kind == "bot" else "member"))
         removes: list[tuple[str, str]] = []
         for key in removed:
@@ -4532,6 +5099,7 @@ class Round:
         if isinstance(out, str):
             _skip(report, "edit_" + out)
             return
+        out = self._prepare_outbound(original, out, content=replacement["content"])
         client = self.outbound_client(out, original=True)
         first = _marked_time(value) if open_attempt else self.now_ts
         state.e2f[edit_id] = _mark(PENDING, first, _edit_extra(target, message_id, mode))
@@ -4560,6 +5128,68 @@ class Round:
         if card:
             return client.reply_card(parent, body, key) if parent else client.send_card(chat_id, body, key)
         return client.reply(parent, body, key) if parent else client.send(chat_id, body, key)
+
+    def _prepare_outbound(self, event: Mapping[str, Any], out: Outbound, *, content: str | None = None) -> Outbound:
+        """Optional hostd message format hook; legacy timer rendering is unchanged."""
+        return out
+
+    def _recover_buzz_mapping(self, event: Mapping[str, Any]) -> None:
+        """Optional hostd lookup before sending an event with no local ledger."""
+
+    def _recover_buzz_target(self, event_id: str) -> None:
+        """Optional hostd lookup for a reaction target outside the message window."""
+
+    def _recover_feishu_mapping(self, msg: Mapping[str, Any]) -> bool:
+        return False
+
+    def _feishu_pending_retry(self, message_id: str) -> bool:
+        return False
+
+    def _feishu_reply_mapping(self, root: str | None) -> str | None:
+        return buzz_id_for_feishu(self.state, root) if root else None
+
+    def _feishu_tags(self, msg, root, inbound, reply_to, files):
+        return self._approval_tags(inbound, reply_to)
+
+    def _counts_approval(self) -> bool:
+        return True
+
+    def _delivery_settled(self, direction: str, source: str, target: str) -> None:
+        """Optional hostd atomic checkpoint after an actual transport acknowledgment."""
+
+    def _reply_parent(self, parent: str) -> str:
+        """A chat-list projection of a thread reply cannot itself start a thread.
+
+        Feishu exposes the projection in the main chat with sync_to_chat_info.type=1.
+        Its related message is the actual thread reply (type=2); use that reply's
+        root as the target for reply_in_thread. The chat-list shortcut omits this
+        metadata, so read it from the raw message API before the first send.
+        """
+        if parent not in self.state.f2b:
+            return parent
+        projection = self.clients.owner.message_view(parent, "open_id")
+        if projection is None:
+            raise GroupSyncError("Feishu reply parent disappeared")
+        sync_info = projection.get("sync_to_chat_info")
+        if not isinstance(sync_info, dict) or sync_info.get("type") != 1:
+            return parent
+        related = sync_info.get("related_message_id")
+        if not isinstance(related, str) or not MESSAGE_ID_RE.fullmatch(related):
+            raise GroupSyncError("Feishu chat projection has no valid source message")
+        original = self.clients.owner.message_view(related, "open_id")
+        if (original is None or original.get("chat_id") != self.cfg["chat_id"]
+                or not isinstance(original.get("sync_to_chat_info"), dict)
+                or original["sync_to_chat_info"].get("type") != 2
+                or original["sync_to_chat_info"].get("related_message_id") != parent):
+            raise GroupSyncError("Feishu chat projection source is inconsistent")
+        root = original.get("root_id")
+        if not isinstance(root, str) or not MESSAGE_ID_RE.fullmatch(root):
+            raise GroupSyncError("Feishu chat projection source has no thread root")
+        return root
+
+    def _route_buzz_source(self, event: Mapping[str, Any]) -> bool:
+        """Runtime adapter source gate; legacy routing accepts the original stream."""
+        return True
 
     def buzz_to_feishu(self) -> None:
         cfg, state, report = self.cfg, self.state, self.report
@@ -4607,6 +5237,20 @@ class Round:
                 state.img_unresolved.pop(item)
             state.buzz_floor = self.now_ts  # everything up to now is dropped, and never read again
             fetched = []
+        if unmapped_mode == "context":
+            # Channel-member profiles were loaded earlier. Context authors are outside that set, so
+            # resolve their Buzz profiles before rendering either text or cards. A missing profile
+            # still uses the existing short-pubkey fallback.
+            unknown_authors = {str(event.get("pubkey")) for event in fetched
+                               if isinstance(event, dict) and isinstance(event.get("pubkey"), str)
+                               and HEX64_RE.fullmatch(event["pubkey"]) and event["pubkey"] not in self.names
+                               and event["pubkey"] not in self.roles}
+            if unknown_authors:
+                try:
+                    self.names.update(self.clients.buzz.names(list(unknown_authors)))
+                except GroupSyncError:
+                    pass
+        fetched = [event for event in fetched if self._route_buzz_source(event)]
         by_id = {str(e["id"]): e for e in fetched}
         queue = deque(sorted(fetched, key=buzz_message_order))
         while queue:  # a reply whose thread root has no Feishu copy is put back behind that root (_thread_root_parent)
@@ -4623,6 +5267,7 @@ class Round:
                                 unmanaged_mode, managed_agents)
                 continue
             attached = any(isinstance(t, list) and t[:1] == ["imeta"] for t in event.get("tags") or [])
+            self._recover_buzz_mapping(event)
             value = state.b2f.get(event_id)
             if value in (FAILED, UNKNOWN) or _settled(value) or event_id in mirrored_from_feishu:
                 state.unresolved.pop(event_id, None)
@@ -4674,6 +5319,12 @@ class Round:
                     parent = self._thread_root_parent(event, out.parent_event_id, queue, by_id)
                     if parent is _HELD:
                         continue
+                if parent:
+                    try:
+                        parent = self._reply_parent(parent)
+                    except (CliError, GroupSyncError):
+                        report["errors"] += 1  # no send was attempted; resolve again next round
+                        continue
             if mode == SEND_CARD:  # only a message that is really going out as a card asks for the card's context
                 out = route_buzz_event(event, mirror_pubkey=cfg["mirror_pubkey"], agent_apps=agent_apps,
                                        human_pubkeys=self.humans(), agent_pubkeys=self.agents_in_channel(),
@@ -4681,6 +5332,7 @@ class Round:
                                        agent_mention_targets={},
                                        unmanaged_agents=unmanaged_mode, managed_agents=managed_agents,
                                        other_mirrors=self.other_mirrors, card=self._card_context(agent_apps))
+            out = self._prepare_outbound(event, out)
             state.b2f[event_id] = _mark(PENDING, first, _send_extra(parent, mode))
             state.b2f_senders[event_id] = out.via_app_id or self.desk_app_id
             state.unresolved[event_id] = created
@@ -4718,6 +5370,7 @@ class Round:
             state.attempts.pop("b2f:" + event_id, None)
             state.attempts.pop("b2f-thread:" + event_id, None)
             self._watch(message_id, event_id, str(event.get("content") or ""))
+            self._delivery_settled("b2f", event_id, message_id)
             if parent:
                 state.threads[parent] = self.now_ts  # our reply opened or continued this thread
                 state.polled.setdefault(parent, state.feishu_since)  # replies since the last round count
@@ -4764,6 +5417,10 @@ class Round:
             root_event = by_id.get(root_id, found)
             if root_id not in by_id:
                 self.thread_backfilled.add(root_id)
+        if root_event is not None and state.buzz_floor and int(root_event.get("created_at") or 0) < state.buzz_floor:
+            # The owner dropped this history. A new reply can still be mirrored, but its old root must not be sent.
+            report["thread_root_unavailable"] += 1
+            return None
         if root_id not in self.thread_handled:
             if root_id in by_id:
                 queue.remove(root_event)  # read with this reply, but sorted behind it: it goes first
@@ -5018,16 +5675,22 @@ class Round:
                     item = f"{message_id}|{operator_id}|{emoji_type}"
                     present.add(item)
                     said = state.f2r.get(item, "")
-                    if said and not said.startswith(PENDING):
+                    if said and said != SKIPPED and not said.startswith(PENDING):
                         continue
                     emoji = reverse.get(emoji_type)
                     if emoji is None:
                         state.f2r[item] = SKIPPED
-                        _skip(report, "reaction_emoji_unmapped")
+                        if said != SKIPPED:
+                            _skip(report, "reaction_emoji_unmapped")
                         continue
+                    # A skipped *unmapped* reaction is not an approval decision.
+                    # Re-evaluate it against the live read after a mapping upgrade;
+                    # removed reactions and expired watches never reach this path.
+                    if said == SKIPPED:
+                        said = ""
                     # The relay keeps one reaction per identity, target and emoji: a second person's same emoji shares it.
                     shared = next((v for k, v in state.f2r.items() if k != item and k.startswith(message_id + "|")
-                                   and k.endswith("|" + emoji_type) and HEX64_RE.fullmatch(v)), None)
+                                   and reverse.get(k.rsplit("|", 1)[-1]) == emoji and HEX64_RE.fullmatch(v)), None)
                     if shared:
                         state.f2r[item] = shared
                         continue
@@ -5096,6 +5759,7 @@ class Round:
             report["backlog_skipped"].append("reactions")
             state.react_since = self.now_ts
             return
+        fetched = [event for event in fetched if self._route_buzz_source(event)]
         withdrawn: dict[str, set[str]] = {}  # reaction event id -> authors of a deletion that names it
         for event in fetched:
             if str(event.get("kind")) == "5":
@@ -5182,7 +5846,9 @@ class Round:
                 continue
             app_id, emoji_type = routed
             via_proxy = str(event.get("pubkey") or "") not in agent_apps and app_id == self.desk_app_id
-            message_id = feishu_id_for_buzz(state, reaction_target(event) or "")
+            target_id = reaction_target(event) or ""
+            self._recover_buzz_target(target_id)
+            message_id = feishu_id_for_buzz(state, target_id)
             if message_id is None:
                 _skip(report, "reaction_target_unmirrored")  # read again next round while it is inside the window
                 continue
@@ -5243,32 +5909,89 @@ class Round:
                 shutil.rmtree(slot, ignore_errors=True)
         return files, skipped, failed
 
-    def feishu_to_buzz(self) -> None:
+    def _feishu_overlap(self) -> int:
+        return FEISHU_OVERLAP_SECONDS
+
+    def _feishu_source_root(self, msg: Mapping[str, Any]) -> str | None:
+        """Legacy history readers supply reply roots through thread polling."""
+        return None
+
+    def _feishu_waiting_context(self):
+        return {}
+
+    def _feishu_bot_apps(self):
+        """Optional hostd typed app-mention authority; legacy callers stay empty."""
+        return {}
+
+    def _feishu_defer_context(self, message_id):
+        pass
+
+    def _feishu_root_rows(self, start, window_start, floor):
+        cfg, state, owner, report = self.cfg, self.state, self.clients.owner, self.report
+        def at(seconds): return datetime.fromtimestamp(seconds, tz=timezone.utc)
+        rows, more = owner.messages(cfg["chat_id"], at(start), order="asc", page_limit=FEISHU_PAGE_LIMIT)
+        if more:
+            if not self.skip_backlog:
+                raise GroupSyncError("more Feishu messages since the last round than one round reads; refusing to "
+                                     "skip any (run one round with --skip-backlog to drop them on purpose)")
+            report["backlog_skipped"].append("feishu")
+            for item in list(state.f_unresolved):
+                state.f2b[item] = UNKNOWN if _is_pending(state.f2b.get(item)) else FAILED
+                state.f_unresolved.pop(item)
+            rows = []  # nothing up to now is mirrored, and never read again
+            state.feishu_floor = floor = window_start = self.now_ts
+        return rows, window_start, floor
+
+    def _feishu_process_root(self, mirror, msg, window_start):
+        mirror(msg, None, window_start)
+
+    def _feishu_finish_roots(self):
+        self.state.feishu_since = self.now_ts
+
+    def feishu_to_buzz(self, only_threads: Collection[str] | None = None) -> None:
+        """Mirror Feishu -> Buzz. `only_threads` (hostd, ADR-0025): an event said which threads got replies, so read
+        just those plus the top level; None keeps the round's hot + rotating thread polling."""
         cfg, state, owner, report = self.cfg, self.state, self.clients.owner, self.report
         bot_member_to_pubkey = {self.bot_members[cfg["agents"][pk]["app_id"]]: pk
                                 for pk in self.agents_in_channel() & self.verified_agents
                                 if cfg["agents"][pk]["app_id"] in self.bot_members}
         bot_member_to_pubkey.update({member: pk for pk, member in self._directory_bots().items()})
+        bot_app_to_pubkey = self._feishu_bot_apps()
         allowed_senders = sender_allowlist(cfg)  # read from the config every round: narrowing it takes effect at once
         unmapped_mode = unmapped_sender_mode(cfg)  # so does this
         floor = max(state.floor, state.feishu_floor)
-        window_start = max(state.feishu_since - FEISHU_OVERLAP_SECONDS, floor)
+        window_start = max(state.feishu_since - self._feishu_overlap(), floor)
         mirrored_from_buzz = set(state.b2f.values())
         self._give_up_stale(state.f2b, state.f_unresolved)
-        waiting: dict[str, int] = {}  # a stranger's messages that wait for the re-read window this round: id -> created
+        waiting: dict[str, int] = self._feishu_waiting_context()  # a stranger's messages that wait for the re-read window this round: id -> created
 
         def at(seconds: int) -> datetime:
             return datetime.fromtimestamp(seconds, tz=timezone.utc)
 
-        def mirror(msg: Mapping[str, Any], root: str | None, since: int) -> None:
-            message_id, created = str(msg.get("message_id") or ""), _feishu_ts(msg)
+        def mirror(msg: Mapping[str, Any], root: str | None, since: int, *, source_ts: int | None = None) -> None:
+            # Hostd supplies exact time only after its fresh native source read.
+            # Preserve display create_time for canonical routing/signed content.
+            message_id = str(msg.get("message_id") or "")
+            created = _feishu_ts(msg) if source_ts is None else source_ts
             if not message_id or created is None:
+                return
+            # These messages can never enter the human inbound path. Recover
+            # a bot root only on an actual dependent reply/reaction, rather
+            # than re-reading every historical card's directory and mapping.
+            early_skip = ('deleted' if msg.get('deleted') else 'system' if msg.get('msg_type') == 'system'
+                          else 'bot' if (msg.get('sender') or {}).get('sender_type') != 'user' else None)
+            if early_skip and message_id not in state.f2b:
+                _skip(report, early_skip)
+                return
+            if root is None:
+                root = self._feishu_source_root(msg)
+            if self._recover_feishu_mapping(msg):
                 return
             value = state.f2b.get(message_id)
             if value in (FAILED, UNKNOWN) or _settled(value) or message_id in mirrored_from_buzz:
                 state.f_unresolved.pop(message_id, None)
                 return
-            if _is_pending(value):  # left by a crash mid-send; the Buzz CLI has no idempotency key
+            if _is_pending(value) and not self._feishu_pending_retry(message_id):  # legacy CLI has no idempotency key
                 state.f2b[message_id] = UNKNOWN
                 state.f_unresolved.pop(message_id, None)
                 report["unknown"] += 1
@@ -5277,12 +6000,13 @@ class Round:
                 return  # old messages only feed thread discovery; they are never backfilled
             resolver = (IdResolver(owner, state, report, msg, set(self.bot_members.values()))
                         if self.union_mode else None)
+            first = _marked_time(value) if _is_retry(value) or _is_pending(value) else self.now_ts
             inbound = route_feishu_message(msg, open_id_to_pubkey=self.id_to_pubkey,
                                            bot_member_to_pubkey=bot_member_to_pubkey,
-                                           channel_members=set(self.roles), names=self.names, now=self.now,
+                                           bot_app_to_pubkey=bot_app_to_pubkey,
+                                           channel_members=set(self.roles), names=self.names, now=at(first),
                                            resolve_id=resolver, allowed_senders=allowed_senders,
                                            unmapped_senders=unmapped_mode, ambiguous_ids=frozenset(self.ambiguous_ids))
-            first = _marked_time(value) if _is_retry(value) else self.now_ts
             if resolver is not None and resolver.error and (isinstance(inbound, Inbound) or inbound == "unmapped_sender"):
                 # Asking Feishu who is in this message failed, so nothing was decided and nothing was sent: retry it like
                 # a refused send. That holds when the sender could not be resolved ("unmapped_sender") and also when the
@@ -5306,17 +6030,18 @@ class Round:
                     # again by the next round and then goes out as himself, mentions and all — the way "skip" has always healed.
                     # Until then nothing is written for the message, and it is not counted.
                     waiting[message_id] = created
-                    return
-            elif (inbound.mentions and any(c <= created for c in waiting.values())) or (root is not None and root in waiting):
+                    self._feishu_defer_context(message_id)
+                    return _HELD
+            elif (inbound.mentions and any(mid != message_id and c <= created for mid, c in waiting.items())) or (root is not None and root in waiting):
                 # A member's call to an agent that comes after a waiting stranger's words, or a reply under one, waits with them: said
                 # first, the agent it wakes would not find what it is about (or the reply would land outside the thread). Such a message
                 # is younger than the window like the words it waits for, so the next round reads it again.
-                return
+                return _HELD
             # A stranger's mentions are matched locally against the channel's bots, never against Feishu's identity answer,
             # so a person he @-mentioned that Feishu could not pair costs a context-only message nothing.
             for _ in range(resolver.mentions_unpaired() if resolver is not None and not inbound.context_only else 0):
                 _skip(report, "mention_unpaired")
-            reply_to = buzz_id_for_feishu(state, root) if root else None
+            reply_to = self._feishu_reply_mapping(root)
             files: list[str] = []
             skipped_images: dict[str, int] = {}
             failed_images = 0
@@ -5339,22 +6064,33 @@ class Round:
                         self._skip_image(reason, count)
                     report["images_failed"] += failed_images
 
-                extra = self._approval_tags(inbound, reply_to)
+                extra = self._feishu_tags(msg, root, inbound, reply_to, files)
                 try:
                     if extra is None:
                         event_id = self.clients.buzz.send(cfg["channel_id"], inbound.text, reply_to=reply_to,
                                                           mentions=inbound.mentions, files=tuple(files))
                     else:
                         # The first attempt's time, so a retry after a lost answer is the same event (the relay has it).
-                        tags = ([["h", cfg["channel_id"]], ["e", reply_to, "", "reply"]] + [["p", pk] for pk in inbound.mentions]
+                        tags = ([["h", cfg["channel_id"]]] + ([["e", reply_to, "", "reply"]] if reply_to else [])
+                                + [["p", pk] for pk in inbound.mentions]
                                 + extra)
                         try:
                             event_id = self._mirror_publish(9, tags, inbound.text, created_at=first)
                         except RelayRefused:
                             raise CliError("send", 0, "rejected", definite=True) from None
+                        except MirrorContentConflict:
+                            raise
                         except GroupSyncError:
                             raise CliError("send", -1, "unknown", definite=False) from None
-                        report["approvals_to_buzz"] += 1
+                        if self._counts_approval():
+                            report["approvals_to_buzz"] += 1
+                except MirrorContentConflict:
+                    state.f2b[message_id] = UNKNOWN
+                    state.f_unresolved.pop(message_id, None)
+                    report["unknown"] += 1
+                    report["errors"] += 1
+                    self.persist()
+                    return
                 except CliError as exc:
                     if exc.definite:
                         self._refused("f2b", state.f2b, state.f_unresolved, message_id, created, first)
@@ -5378,6 +6114,7 @@ class Round:
                     report["context_to_buzz"] += 1
                 report["images_to_buzz"] += len(files)
                 settled_images()
+                self._delivery_settled("f2b", message_id, event_id)
             finally:
                 if workdir is not None:
                     shutil.rmtree(workdir, ignore_errors=True)
@@ -5385,17 +6122,7 @@ class Round:
         start = window_start
         if state.f_unresolved:  # reach back far enough to re-read every refused message
             start = max(min(start, min(state.f_unresolved.values())), floor)
-        rows, more = owner.messages(cfg["chat_id"], at(start), order="asc", page_limit=FEISHU_PAGE_LIMIT)
-        if more:
-            if not self.skip_backlog:
-                raise GroupSyncError("more Feishu messages since the last round than one round reads; refusing to "
-                                     "skip any (run one round with --skip-backlog to drop them on purpose)")
-            report["backlog_skipped"].append("feishu")
-            for item in list(state.f_unresolved):
-                state.f2b[item] = UNKNOWN if _is_pending(state.f2b.get(item)) else FAILED
-                state.f_unresolved.pop(item)
-            rows = []  # nothing up to now is mirrored, and never read again
-            state.feishu_floor = floor = window_start = self.now_ts
+        rows, window_start, floor = self._feishu_root_rows(start, window_start, floor)
         recent, _ = owner.messages(cfg["chat_id"], at(max(self.now_ts - THREAD_DISCOVERY_SECONDS, floor)),
                                    order="desc", page_limit=DISCOVERY_PAGE_LIMIT)
         for msg in [*rows, *recent]:
@@ -5404,16 +6131,17 @@ class Round:
                 state.threads[root] = self.now_ts  # a newly seen thread is polled first
                 state.polled.setdefault(root, state.feishu_since)  # its replies since the last round count
         for msg in rows:
-            mirror(msg, None, window_start)
+            self._feishu_process_root(mirror, msg, window_start)
 
         active = [(root, act) for root, act in state.threads.items() if self.now_ts - act <= THREAD_MAX_AGE_SECONDS]
         hot = [root for root, _ in sorted(active, key=lambda kv: kv[1], reverse=True)[:THREAD_HOT]]
         # A thread that keeps failing goes to the back of the rotation instead of blocking it.
         cold = sorted((root for root, _ in active if root not in hot),
                       key=lambda r: max(state.polled.get(r, 0), state.tried.get(r, 0)))[:THREAD_ROTATE]
-        for root in [*hot, *cold]:
+        polled_roots = [*hot, *cold] if only_threads is None else [r for r in dict.fromkeys(only_threads) if r in state.threads]
+        for root in polled_roots:
             # Each thread keeps its own cursor, so a thread polled only now and then loses nothing.
-            since = max(state.polled.get(root, state.feishu_since) - FEISHU_OVERLAP_SECONDS, floor)
+            since = max(state.polled.get(root, state.feishu_since) - self._feishu_overlap(), floor)
             try:
                 replies, more = owner.thread_messages(root)
             except CliError:
@@ -5435,7 +6163,7 @@ class Round:
                 if created is not None:
                     state.threads[root] = max(state.threads[root], min(created, self.now_ts))
                 mirror(msg, root, since)
-        state.feishu_since = self.now_ts  # a message skipped earlier is never backfilled later
+        self._feishu_finish_roots()  # hostd may have retained a bounded discovery slice
 
 
 def _owner_only(meta: os.stat_result) -> bool:
@@ -5468,10 +6196,11 @@ def _lock(state_dir: Path) -> Any:
 
 def round_command(config_path: Path, state_dir: Path, *, base_env: Mapping[str, str], runner: Any = subprocess.run,
                   now: datetime | None = None, allow_bulk_removal: bool = False,
-                  skip_backlog: bool = False, http: Any = None) -> dict[str, Any]:
+                  skip_backlog: bool = False, http: Any = None, take_over: bool = False) -> dict[str, Any]:
     cfg = load_config(config_path)
     if not cfg["chat_id"]:
         raise GroupSyncError("config has no chat_id yet: run create-chat or bind first")
+    auth_clock = (lambda: now) if now else (lambda: datetime.now(timezone.utc))
     now = now or datetime.now(timezone.utc)
     state_dir = Path(state_dir)
     lock = _lock(state_dir)
@@ -5485,23 +6214,31 @@ def round_command(config_path: Path, state_dir: Path, *, base_env: Mapping[str, 
         if unmapped_sender_mode(cfg) == "context":
             report["context_to_buzz"] = 0  # only a channel that mirrors strangers has this count (the report keeps its shape otherwise)
         run = Round(cfg, clients, state, report, now, lambda: save_state(state_dir, state), allow_bulk_removal,
-                    skip_backlog)
+                    skip_backlog, auth_clock=auth_clock)
         try:
             run.verify_identities()
             run.load_people()
-            run.load_directory()
+            verdict = run.check_claims(take_over)
+            if verdict != "lost":
+                run.load_directory()
         except GroupSyncError as exc:
             # Nothing has started, so nothing is written: a round that cannot say who is who (the bridge is
             # down, the signer is not an owner or admin) neither changes a group nor fixes the binding's start.
             exc.report = report
             raise
+        if verdict == "lost":
+            # Another sync holds this binding (ADR-0022): nothing is mirrored, no member changes, no cursor moves.
+            prune_state(state)
+            save_state(state_dir, state)
+            return report
         try:
             # Validate the required sender before any membership mutation, notice, or state baseline.
             run.verify_desk()
             if not state.binding:  # the first verified round starts the binding: nothing older is mirrored
                 state.binding, state.floor = binding, int(now.timestamp()) - FEISHU_OVERLAP_SECONDS
                 state.buzz_since = state.feishu_since = state.react_since = state.floor
-            run.reconcile_members()
+            if verdict != "unreadable":  # two syncs changing each other's members is the worst harm: wait for the claims
+                run.reconcile_members()
             run.introduce_agents()
             run.publish_membership_status()
             run.buzz_to_feishu()
@@ -5542,22 +6279,24 @@ def main(argv: list[str] | None = None, *, base_env: Mapping[str, str] | None = 
     r.add_argument("--state-dir", required=True)
     r.add_argument("--allow-bulk-removal", action="store_true")
     r.add_argument("--skip-backlog", action="store_true")
+    r.add_argument("--take-over", action="store_true")
     args = parser.parse_args(argv)
     env = dict(os.environ if base_env is None else base_env)
     config = Path(args.config)
     try:
         if args.command == "preflight":
-            out: Any = preflight_command(config, args.mode, args.chat_id, base_env=env, runner=runner)
+            out: Any = preflight_command(config, args.mode, args.chat_id, base_env=env, runner=runner, http=http, now=now)
             code = EXIT_OK if out["ok"] else EXIT_BLOCKED
         elif args.command == "create-chat":
-            out, code = create_chat_command(config, args.name, base_env=env, runner=runner), EXIT_OK
+            out, code = create_chat_command(config, args.name, base_env=env, runner=runner, http=http, now=now), EXIT_OK
         elif args.command == "bind":
-            out, code = bind_command(config, args.chat_id, base_env=env, runner=runner), EXIT_OK
+            out, code = bind_command(config, args.chat_id, base_env=env, runner=runner, http=http, now=now), EXIT_OK
         elif args.command == "migrate-desk":
             out, code = migrate_desk_config(config, args.desk_pubkey, apply=args.apply, now=now), EXIT_OK
         else:
             out = round_command(config, Path(args.state_dir), base_env=env, runner=runner, now=now,
-                                allow_bulk_removal=args.allow_bulk_removal, skip_backlog=args.skip_backlog, http=http)
+                                allow_bulk_removal=args.allow_bulk_removal, skip_backlog=args.skip_backlog, http=http,
+                                take_over=args.take_over)
             code = EXIT_ATTENTION if needs_attention(out) else EXIT_OK
     except GroupSyncError as exc:
         if exc.report is not None:

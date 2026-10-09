@@ -22,7 +22,8 @@ description: 给现有服务接 Sentry（自助流程）。开发者声明 4 个
 
 - 应用已经有 `k8s/base/` + `k8s/overlays/{env_keyword}/`
 - 应用 GitLab repo 已把 `Argocd-deploy` 加为 **Reporter**（hard rule #6）；没加 → ArgoCD 拉不到代码报 `repository not found`
-- 目标集群的运维前置已完成（Vault JWT role 允许 `<app>-sentry-onboard` ServiceAccount + sentry admin token + CN AWS NAT egress NodePool）；详见 `references/sentry/README.md`
+- 目标集群通过部署准入且 Sentry 运维前置已完成（精确目标 Vault JWT role、ServiceAccount audience、admin token、镜像与网络）；详见 `references/sentry/README.md`
+- 当前腾讯云 100052802231 staging/tech-service 的 Sentry 自助尚未有完整目标证据：STOP + Ops Todo 核验/补齐对应 recipe。不能把 cn-main 的固定 Vault/mount/image 套到新集群，ESO role 存在也不是 Sentry role 已就绪。
 
 ## Step 1. 解析需求
 
@@ -71,7 +72,7 @@ description: 给现有服务接 Sentry（自助流程）。开发者声明 4 个
 
 [action]
   - 对每 `$target`，从 `references/data/env-keywords.yaml` 读取应用 env 和 cluster，再从 `references/data/clusters.yaml` 读取 cluster.region；以 region 查询 `references/data/sentry-instances.yaml` 的 `regions`，得到 INSTANCE、管理 API URL、server_dsn_host，再按 `ingest` 的 SDK 类型策略选择 DSN_HOST。该文件是 Sentry 路由的唯一数据源，不在 workflow 重复维护实例表。
-  - 新接入 staging/prod 均使用本区域 prod Sentry。按同一数据源的 `environments` 生成 PROJECT_SLUG：staging/prod 均为 `<app>`，通过 SDK environment 区分环境；应用 ENV、Vault 域、schema 和路径不随 Sentry 实例改变。staging-us-data / prod-us-data、staging-eu-data / prod-eu-data 同样使用所在 cluster.region；staging-cn-tke 使用 cn-k8s 的 region=cn、ENV=staging。
+  - 新接入 staging/prod 均使用本区域 prod Sentry。按同一数据源的 `environments` 生成 PROJECT_SLUG：staging/prod 均为 `<app>`，通过 SDK environment 区分环境；应用 ENV、Vault 域、schema 和路径不随 Sentry 实例改变。staging-us-data / prod-us-data、staging-eu-data / prod-eu-data 同样使用所在 cluster.region；staging-cn-tke 使用 cn-tke-staging 的 region=cn、ENV=staging，但仍须通过上述新 TKE 能力门禁。
   - 新 staging 配置显式启用 PROJECT_SLUG 与 DSN_HOST；不要为新应用选择旧 staging 实例，历史实例只用于明确的迁移调查。按 SDK 运行位置选择 ingest：
     - `backend/admin`：使用本区 `server_dsn_host`，从实际应用网络验证。三区 regional relay 为私网入口，不能直接套给移动端或浏览器。
     - staging mobile-app/web-frontend：使用 `<app>` 并保留 `ENV=staging`，但 DSN_HOST 必须显式填写经确认的品牌公网 ingest hostname；可从现有品牌映射取得候选，仍需实际设备/浏览器网络验证。尚未确认品牌、公网 ingest 或实际终端可达时 STOP，禁止回退到 server_dsn_host。staging 的 BRAND 必须省略（非空会被拒绝），品牌 host 通过 DSN_HOST 显式设置。
@@ -80,11 +81,10 @@ description: 给现有服务接 Sentry（自助流程）。开发者声明 4 个
 
   - 对每 `$target` 还要解析：
     - `$target.harbor_url`            sentry-onboard 镜像所在 harbor（查 `references/data/clusters.yaml -> clusters[].harbor_url`）
-    - `$target.sentry_onboard_image`  sentry-onboard 镜像**完整路径（不含 tag）= 本集群 Harbor host + `/base/sentry-onboard`**：取 `$target.harbor_url`（即 `references/data/clusters.yaml -> clusters[].harbor_url`，如 `harbor-00249-us-tech.addx.live`；TKE 是 `harbor-cn.addx.live`）拼上 `/base/sentry-onboard`。统一 `base/` 工具镜像，DEV/base-images 扇出到**所有**集群（含 3 个 staging EKS + eu-prod-data + TKE），EKS / TKE 同一条规则，不分集群。Kyverno `require-harbor-image-path` 全 fleet 放行 `base/`，无需豁免
-    - `$target.vault_addr`            sentry-onboard Job 访问 Vault 的完整 URL（含 `https://`；查 `references/sentry/README.md` 配置表；ops US/EU EKS 用 internal URL，builder staging 用 `vault-<region>.builder.addx.live`，AWS CN 用公网域名走 NAT，TKE 用 `https://vault-cn-internal.addx.live`）
+    - `$target.sentry_onboard_image`  sentry-onboard 镜像**完整路径（不含 tag）= 本集群 Harbor host + `/base/sentry-onboard`**：取 `$target.harbor_url`（即 `references/data/clusters.yaml -> clusters[].harbor_url`，如 `harbor-00249-us-tech.addx.live`；cn-main 是 `harbor-cn.addx.live`，新 TKE 查各自 catalog）拼上 `/base/sentry-onboard`。统一 `base/` 工具镜像，DEV/base-images 负责同步；按当前精确 registry 回读 tag/digest，不能从其他集群推断分发完成，EKS / TKE 同一条规则，不分集群。Kyverno `require-harbor-image-path` 全 fleet 放行 `base/`，无需豁免
+    - `$target.vault_addr`            sentry-onboard Job 访问 Vault 的完整 URL（含 `https://`；查 `references/sentry/README.md` 配置表；ops US/EU EKS 用 internal URL，AWS US/EU builder staging 用 `vault-<region>.builder.addx.live`，仅 TKE cn-main 用 `https://vault-cn-internal.addx.live`）
     - `$target.vault_k8s_mount`       Vault JWT auth mount（查 `references/sentry/README.md` 配置表；如 `jwt-eks-tech-service` / `jwt-eks-prod` 等；前置由运维配）
     - `$target.sentry_dsn_css`        ExternalSecret 读 Sentry DSN 的 ClusterSecretStore（查 `references/sentry/README.md` 配置表；必须和 `$target.vault_addr` 指向同一个 Vault 实例，不能按 `vault-backend` 名字猜 Vault 域）
-    - `$target.is_aws_cn`             cn-prod / cn-tech-service / cn-dev / cn-staging 需要 NAT egress NodePool 调度
 
 [validate]
   - 每 target 都解析到 `$target.sentry_onboard_image`（统一 `<harbor>/base/sentry-onboard`）+ INSTANCE + Sentry URL + Vault 字段 + Sentry DSN ClusterSecretStore
@@ -119,9 +119,9 @@ description: 给现有服务接 Sentry（自助流程）。开发者声明 4 个
 
 [action]
   - **按 `$target.cluster.cloud` 选 recipe 变体**（拆 recipe 避免 hand-edit；详 `references/sentry/README.md` TKE 差异表）：
-    - `cloud == aws`（所有 EKS 集群，含 3 个 staging EKS + eu-prod-data）→ ConfigMap 用 `recipes/sentry/onboard-config-eks.yaml.tmpl`，Job 用 `onboard-job-eks.yaml.tmpl`，`{{image}}=$target.sentry_onboard_image`（统一 `<harbor>/base/sentry-onboard`）
-    - `cloud == tencent`（TKE cn-main）→ ConfigMap 用 `recipes/sentry/onboard-config-tke.yaml.tmpl`，Job 用 `onboard-job-tke.yaml.tmpl`（TKE 变体已**预设**了固定 VAULT_ADDR / `jwt-tke-cn-main` mount / image base/ 前缀 / projected token / nodeSelector / imagePullSecrets）
-    - `cloud == gcp` → 暂未支持 sentry 自助；STOP 产 Ops Todo
+    - `cloud == aws`（当前获准 AWS US/EU EKS 集群）→ ConfigMap 用 `recipes/sentry/onboard-config-eks.yaml.tmpl`，Job 用 `onboard-job-eks.yaml.tmpl`，`{{image}}=$target.sentry_onboard_image`（统一 `<harbor>/base/sentry-onboard`）
+    - `cloud == tencent && cluster.name == cn-k8s`（仅 TKE cn-main / 100014919455）→ ConfigMap 用 `recipes/sentry/onboard-config-tke.yaml.tmpl`，Job 用 `onboard-job-tke.yaml.tmpl`（TKE 变体已**预设**了固定 VAULT_ADDR / `jwt-tke-cn-main` mount / image base/ 前缀 / projected token / nodeSelector / imagePullSecrets）
+    - 其他 `cloud == tencent` 或 `cloud == gcp` → 尚无经过目标验证的自助 recipe；STOP 产 Ops Todo，不能套用 cn-main 固定值
 
   - 用对应 ConfigMap recipe，填槽（EKS）：
       `{{app}}=$app`、`{{platform}}=$platform`、`{{instance}}=$target.instance_key`、
@@ -137,11 +137,6 @@ description: 给现有服务接 Sentry（自助流程）。开发者声明 4 个
 
   - 用对应 Job recipe，填槽：
     - EKS：`{{app}}=$app`、`{{image}}=$target.sentry_onboard_image`（统一 `<harbor>/base/sentry-onboard`，取本集群 `harbor_url` 拼 `/base/sentry-onboard`）、`{{sentry_onboard_image_tag}}=$sentry_onboard_image_tag`
-      - 若 `$target.is_aws_cn == true`，同时填可选槽：
-        `{{aws_cn_node_group}}=$target.aws_cn_node_group`、
-        `{{aws_cn_toleration_key}}=$target.aws_cn_toleration_key`、
-        `{{aws_cn_toleration_value}}=$target.aws_cn_toleration_value`
-      - 非 AWS CN 集群删除 / 保持注释中的 nodeSelector/tolerations 占位，不渲染成生效字段
     - TKE：`{{app}}=$app`、`{{sentry_onboard_image_tag}}=$sentry_onboard_image_tag`（其他字段固定）
     写到 `.../sentry/sentry-onboard-job.yaml`
 
@@ -175,7 +170,7 @@ description: 给现有服务接 Sentry（自助流程）。开发者声明 4 个
   - staging 配置必须是区域 prod INSTANCE、同应用 PROJECT_SLUG、ENV=staging；SDK 必须实际报告 staging（可含区域后缀），不能缺省或标为 production；DSN_HOST 按 `ingest` 策略检查，backend/admin 用已验证 server_dsn_host，移动端/浏览器用已验证品牌公网 host，不能把私网 relay 作为客户端默认值。TKE staging 也写 staging Vault path，不能从 prod 模板继承 ENV=prod
   - ExternalSecret `refreshInterval` 必须是 `1m`，避免 Job 写入 Vault 后 Pod 长时间卡在缺 Secret
   - ConfigMap.VAULT_PATH_SCHEMA 是 `platform`（**必须** 跟 ExternalSecret.remoteRef.key 的 `sentry/application/<app>/project` 路径一致——E2E 实测两端不一致 Job 写新路径 ES 拉旧路径 = `$app-sentry-dsn` Secret 永远空）
-  - ExternalSecret.secretStoreRef.name == `$target.sentry_dsn_css`（不能用通用 `clusters.yaml -> vault_css` 替代；尤其 cn-dev builder cutover 后，普通 app CSS `vault-builder-backend` 指向 builder Vault，必须先确认和 sentry-onboard Job 写入的是同一个 Vault 实例）
+  - ExternalSecret.secretStoreRef.name == `$target.sentry_dsn_css`（不能用 CSS 名称推断 Vault 域；新 TKE staging 的 vault-backend 指向集群内 Vault，必须证明 writer/reader 为同一实例）
 
 [output]
   - 4 个文件 per target
@@ -264,7 +259,7 @@ ArgoCD sync 后：
 - Job vault login 400/403（JWT role 没配 / bound_audiences 错）
 - Job slug collision（Sentry 有同 slug project 但 Vault 无记录：可能是首次共享接入或归属冲突，须核验后由 operator 初始化）
 - Pod SENTRY_DSN 为空（VAULT_PATH_SCHEMA 跟 ES key 不一致）
-- AWS CN Pod 504 timeout（没加 NAT egress NodePool 调度）
+- 历史 AWS CN Pod 504 timeout（只供退役目标调查，不授权修复或新部署）
 
 ## 老应用迁移说明
 

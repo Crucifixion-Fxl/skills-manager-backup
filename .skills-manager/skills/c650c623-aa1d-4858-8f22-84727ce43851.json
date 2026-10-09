@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "c650c623-aa1d-4858-8f22-84727ce43851",
+  "path": "service-catalog-search",
+  "path_key": "service-catalog-search",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/development/service-catalog-search",
+    "branch": null
+  }
+}

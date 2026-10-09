@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "9b4a4948-7236-418c-ab82-091e23847750",
+  "path": "gcp-cli",
+  "path_key": "gcp-cli",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/infrastructure/gcp-cli",
+    "branch": null
+  }
+}

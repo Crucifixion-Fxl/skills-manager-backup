@@ -5,6 +5,10 @@ description: Senior-CTO-grade pre-launch performance review and optimization for
 
 # performance-preflight
 
+> **CN 环境已迁移**：AWS CN 集群弃用；prod = 腾讯云 `100014919455` / cn-main，staging 与 tech-service = `100052802231`。性能取数前先按 [端点路由](references/endpoints.md) 选择具体集群，不能把 CN staging/tech-service 自动送到 prod Thanos。仓内 2026-04 的数量级表是历史快照，迁移后须重新采集。
+
+CN tech-service 的监控域名是待切换目标。`query-helpers.py` 必须收到 `PROMETHEUS_CN_TECH_SERVICE_URL` 中已核验的完整 API base 才发起查询；VMCluster 保留 `/select/0/prometheus`，未配置时不连接旧域名或新目标。
+
 性能前置审查 Skill —— 用资深 CTO 视角 review 一段**即将上线的代码变更**：量化它给现有系统带来的真实增量压力，**提出优化方案**，把"拍脑袋"的数字钉成**契约 (expected value contract)** + **契约违反时的兜底代码**，最后产出可以直接贴进技术方案的 `## 压力评估 + 优化建议` 章节。
 评估和优化都在范围内 —— 像飞机起飞前的 preflight check 一样：**把可能在生产暴露的性能问题在合并前就发现并修掉**，而不是事后补救。
 

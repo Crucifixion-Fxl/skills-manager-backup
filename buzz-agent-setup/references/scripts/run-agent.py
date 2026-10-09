@@ -28,6 +28,7 @@ REQUIRED = frozenset(
         "BUZZ_ACP_AGENT_COMMAND",
         "BUZZ_ACP_BINARY",
         "BUZZ_ACP_BINARY_SHA256",
+        "BUZZ_ACP_RECOVERY_REVISION",
         "BUZZ_ACP_SYSTEM_PROMPT_FILE",
         "BUZZ_RESPONSIBLE_CONFIG",
     }
@@ -328,6 +329,26 @@ def prepare_launch(
     if SHA256.fullmatch(expected_digest) is None:
         raise LauncherError("pinned buzz-acp requires a SHA-256")
     binary = _trusted_path(configured_binary, uid, executable=True, canonical=True)
+
+    # Recovery is mandatory for the canonical launcher, not an opt-in feature.
+    # The upgrade installs the matching controller/revision; missing migration
+    # fails visibly rather than starting an apparently upgraded, unrecoverable Agent.
+    if re.fullmatch(r"[0-9a-f]{40}", env["BUZZ_ACP_RECOVERY_REVISION"]) is None:
+        raise LauncherError("recovery requires the full loaded release revision")
+    recovery_root = home / ".local/state/buzz-recovery"
+    recovery_dir = recovery_root / agent / "runtime"
+    if env.get("BUZZ_ACP_RECOVERY_DIR", str(recovery_dir)) != str(recovery_dir):
+        raise LauncherError("recovery directory must be the canonical per-Agent path")
+    for path in (home / ".local", home / ".local/state", recovery_root, recovery_root / agent, recovery_dir):
+        if not _trusted_directory_chain(path.parent, uid):
+            raise LauncherError("recovery directory ancestor is unsafe")
+        path.mkdir(mode=0o700, exist_ok=True)
+        _trusted_path(str(path), uid, directory=True, canonical=True)
+        if path.is_relative_to(recovery_root):
+            info = path.stat()
+            if info.st_uid != uid or stat.S_IMODE(info.st_mode) != 0o700:
+                raise LauncherError("recovery directory must be owner-only 0700")
+    env["BUZZ_ACP_RECOVERY_DIR"] = str(recovery_dir)
 
     launch_env = dict(env)
     launch_env.update(

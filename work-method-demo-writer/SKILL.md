@@ -96,11 +96,11 @@ description: Create product-demo-style HTML documents for explaining work method
 生成或修改 HTML 后运行：
 
 ```bash
-bash skills/work-method-demo-writer/scripts/validate_html_doc.sh <html-file>
+bash skills/collaboration/work-method-demo-writer/scripts/validate_html_doc.sh <html-file>
 ```
 
 创建或更新 skill 后运行：
 
 ```bash
-uv run python scripts/validate.py --skill skills/work-method-demo-writer
+uv run python scripts/validate.py --skill skills/collaboration/work-method-demo-writer
 ```

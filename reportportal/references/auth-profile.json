@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "tool": "reportportal",
+  "owner": "reportportal",
+  "provider": "delegated",
+  "origin": "https://reportportal.builder.addx.live",
+  "authContract": "saas-access.md",
+  "verification": "source-verified",
+  "runtimeVerification": "pending",
+  "deploymentVersion": "unknown"
+}

@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "tool": "lingxing",
+  "owner": "lingxing-api",
+  "instances": [
+    "https://apidoc.lingxing.com",
+    "https://nocodb.addx.live"
+  ],
+  "nativeRoute": "LingXing docs-site access session + NocoDB API token (two independent systems)",
+  "loginFlow": {
+    "reuseFirst": true,
+    "steps": "先复用合法文档浏览器 session 与 NOCODB_TOKEN；文档站缺访问权限时由用户通过实际网页入口/平台 owner 申请，不能复制旧 SKILL 硬编码 Access Key。NocoDB 原生登录后 API Tokens 页面申请最小权限。",
+    "authorization": "Login, token creation/rotation/revocation and business writes require the current task scope; this discovery performs none."
+  },
+  "tokenMechanism": "文档站 Cookie access mechanism 的发行/expiry 尚未确认；NocoDB xc-token。此 skill 录入路径配置，不直接申请 ERP 业务 app secret。",
+  "subjectPermission": "文档 sidebar/目标 markdown 可读，NocoDB AmazonApi.lingxing 目标表只读去重；两者分别验证，不假设共享身份。",
+  "expiryRevoke": "文档 key 撤销入口待厂商明确；NocoDB Token 页面 revoke。录入仅允许读取类 API 配置，写配置仍按 owner 门禁。",
+  "officialRefs": [
+    "https://apidoc.lingxing.com",
+    "https://nocodb.com/docs/product-docs/account-settings/api-tokens"
+  ],
+  "sources": [
+    {
+      "kind": "owner-contract",
+      "path": "../SKILL.md",
+      "status": "contract-recorded"
+    }
+  ],
+  "versionPolicy": {
+    "researchCommit": null,
+    "deployedCommit": null,
+    "deploymentMatch": "unknown",
+    "refreshTriggers": [
+      "authentication contract change",
+      "deployed version change",
+      "reproducible auth failure"
+    ],
+    "rule": "Candidate source and published contracts do not establish deployed compatibility. Verify the target instance version and read-only supported capabilities before enabling an adapter."
+  },
+  "verification": {
+    "source": "owner-contract-only",
+    "fixture": "not-run-in-this-discovery",
+    "runtime": "not-attempted",
+    "scope": "Read-only documentation/repository discovery; no login, token issuance, credential inspection or business API execution."
+  }
+}

@@ -1,6 +1,6 @@
 """Offline tests for the paprika skill scripts: no network, no Paprika account, no charges.
 
-Run: python3 -m unittest discover -s skills/paprika/tests -p 'test_*.py' -v
+Run: python3 -m unittest discover -s skills/product/paprika/tests -p 'test_*.py' -v
 """
 import contextlib
 import importlib.util

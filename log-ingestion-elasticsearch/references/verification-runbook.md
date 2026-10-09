@@ -1,5 +1,7 @@
 # 验证 Runbook：健康门禁 + 端到端证据链 + 陷阱识别
 
+> **CN 当前路由**：AWS CN 已弃用。prod = `100014919455` / `cn-main`；staging 与 tech-service = `100052802231`。本文 Kafka/Vector 模板仅适用于已验证的存量管道；新 CN staging 是 FluentBit→ES 直写，必须改走 [专用流程](cn-staging-direct-es.md)。新 tech-service 先查实际 OUTPUT，不能套用 prod 管道。
+
 本文档给 Step 7 (分阶段 apply + 健康门禁) 和 Step 8 (端到端证据链) 提供可执行的命令与判据。
 
 ---

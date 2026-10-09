@@ -1,0 +1,21 @@
+# Platform-owned request for a NEW dedicated PostgreSQL RDS in us-eks-prod.
+# Write this only to the reviewed DEV/k8s platform source after the exact-target
+# activation gate in references/app-owned-rds/README.md passes. Never put it in
+# an application repository or namespace. The Composition fixes AWS account,
+# region, tier, SQL grants, Vault paths and administrator delivery.
+#
+# Required slots:
+#   {{app}}               canonical kebab slug, 2–30 chars; also database name
+#   {{engine_version}}    reviewed PostgreSQL 16 minor (16.x)
+#   {{security_group_id}} platform-reviewed private RDS security group
+apiVersion: platform.addx.io/v1alpha1
+kind: Database
+metadata:
+  name: {{app}}
+  namespace: crossplane-system
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false,Delete=false
+spec:
+  app: {{app}}
+  engineVersion: "{{engine_version}}"
+  securityGroupId: {{security_group_id}}

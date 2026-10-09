@@ -66,6 +66,7 @@ This Skill owns the analysis methodology. Select domain Skills such as `k8s-ops`
 
 ### Mode invariants
 
+- 项目/事故的 durable RCA 结论必须按 [`gitlab-issue-sop` 生命周期契约](../../collaboration/gitlab-issue-sop/references/lifecycle-binding.md) 绑定 open、assigned Incident/Problem Issue；紧急可逆缓解可先执行，但必须在首个安全检查点、任何 durable remediation/RCA final/关闭声明前建立或验证 binding。
 - `ISSUE_TRIAGE` never claims a cause. It may end as `TRIAGED` or `ANALYZED_NO_ROOT_CAUSE` without forcing a full RCA.
 - `ROOT_CAUSE_CONFIRMED` requires `ROOT_CAUSE_INVESTIGATION` and every Phase 4 gate below.
 - Facts, inferences, unknowns, uninspected sources, and blocked checks remain distinct.
@@ -258,6 +259,8 @@ Present the conclusion as:
 - **Verification**: how to confirm this is the actual cause
 - **Prevention**: what to change so it doesn't happen again
 - **Open questions**: sub-problems not fully closed, each with an explicit hand-off owner (next session / owner / ticket)
+
+结论持久化时写入 Incident revision、证据 digest、confirmed/killed hypotheses、缓解与恢复状态、未决项、owner 和 next gate，并读回一致性。RCA confirmed、告警消失或恢复表通过都不自动关闭 Root Issue；最终关闭仍要求运行态、业务验收、观察窗口及 required follow-up Tasks 完成。
 
 ### `ROOT_CAUSE_INVESTIGATION` Phase 5: Stuck — Fallback Strategy
 

@@ -16,13 +16,13 @@ import unittest
 from pathlib import Path
 
 SKILL = Path(__file__).resolve().parents[1]
-REPO = SKILL.parents[1]
+REPO = SKILL.parents[2]
 SCRIPT = SKILL / "scripts" / "gitlab_buzz_sync.py"
 REFERENCE = SKILL / "references" / "gitlab-buzz-sync.md"
 PRODUCERS = {
-    "gitlab-mr": REPO / "skills" / "gitlab-mr" / "SKILL.md",
-    "gitlab-issue-sop": REPO / "skills" / "gitlab-issue-sop" / "SKILL.md",
-    "milestone-governance": REPO / "docs" / "standards" / "gitlab-milestone-governance.md",
+    "gitlab-mr": REPO / "skills" / "delivery" / "gitlab-mr" / "SKILL.md",
+    "gitlab-issue-sop": REPO / "skills" / "collaboration" / "gitlab-issue-sop" / "SKILL.md",
+    "milestone-governance": REPO / "docs" / "collaboration" / "standards" / "gitlab-milestone-governance.md",
 }
 CHANNEL = "11111111-2222-4333-8444-555555555555"
 DESK = "a" * 64
@@ -193,8 +193,8 @@ class ProducersOnlyWriteAVerifiedOriginTest(unittest.TestCase):
 
 
 class AdrHumanRootTest(unittest.TestCase):
-    ADR = REPO / "docs" / "05-adr" / "0014-allow-a-human-top-level-message-as-an-origin-root.md"
-    ADR_DIR = REPO / "docs" / "05-adr"
+    ADR = REPO / "docs" / "agent-harness" / "adr" / "0014-allow-a-human-top-level-message-as-an-origin-root.md"
+    ADR_DIR = REPO / "docs" / "agent-harness" / "adr"
 
     def test_adr_0014_is_accepted_and_complete(self):
         """L1-GIS-OP-301 ADR-0014：Accepted、2026-09-20、deciders jchen；至少 A/B/C 三个选项与取舍表；写明谁能影响往哪个话题发消息、回退与关闭办法。"""

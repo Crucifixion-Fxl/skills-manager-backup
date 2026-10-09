@@ -247,7 +247,7 @@ class ChannelRoleTest(unittest.TestCase):
         self.assertEqual(MENTIONS.HUMAN_ROLES, frozenset({"owner", "admin", "member"}))
 
 
-REPO = SKILL.parents[1]
+REPO = SKILL.parents[2]
 SKILL_DOCS = (
     SKILL / "SKILL.md",
     SKILL / "references" / "runtime-setup.md",
@@ -280,8 +280,8 @@ class ResponsibleRoleDocsTest(unittest.TestCase):
         paths = [
             SKILL / "SKILL.md",
             *sorted((SKILL / "references").rglob("*.md")),
-            *sorted((REPO / "docs" / "05-adr").glob("*.md")),
-            REPO / "docs" / "plans" / "2026-09-13-buzz-agent-setup-gitlab-buzz-sync-test-plan.md",
+            *sorted((REPO / "docs" / "agent-harness" / "adr").glob("*.md")),
+            REPO / "docs" / "agent-harness" / "plans" / "2026-09-13-buzz-agent-setup-gitlab-buzz-sync-test-plan.md",
         ]
         for path in paths:
             with self.subTest(document=path.name):

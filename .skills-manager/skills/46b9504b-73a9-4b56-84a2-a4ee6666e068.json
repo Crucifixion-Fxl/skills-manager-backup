@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "46b9504b-73a9-4b56-84a2-a4ee6666e068",
+  "path": "tool-exploration",
+  "path_key": "tool-exploration",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/agent-harness/tool-exploration",
+    "branch": null
+  }
+}

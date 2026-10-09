@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "54f446e7-a376-4a79-9155-d2508144fa28",
+  "path": "trackman-shot-export",
+  "path_key": "trackman-shot-export",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/hardware/trackman-shot-export",
+    "branch": null
+  }
+}

@@ -1,6 +1,6 @@
 # GitLab Issue → Buzz Thread 自动路由
 
-> **已被取代**：GitLab → Buzz 同步的当前方案见 [gitlab-buzz-sync.md](gitlab-buzz-sync.md) 与 [ADR-0004](../../../docs/05-adr/0004-run-gitlab-sync-as-desk-owned-agent-step.md)（`gitlab_buzz_sync.py`，binding 以 GitLab note 为准，路由由 Desk 固定调用的 Canvas gate 负责）。本页的 `issue_thread_router.py` 方案保留作参考，清理阶段删除；public-only 与独立 publisher service 不再是新频道的启用条件。
+> **已被取代**：GitLab → Buzz 同步的当前方案见 [gitlab-buzz-sync.md](gitlab-buzz-sync.md) 与 [ADR-0004](../../../../docs/agent-harness/adr/0004-run-gitlab-sync-as-desk-owned-agent-step.md)（`gitlab_buzz_sync.py`，binding 以 GitLab note 为准，路由由 Desk 固定调用的 Canvas gate 负责）。本页的 `issue_thread_router.py` 方案保留作参考，清理阶段删除；public-only 与独立 publisher service 不再是新频道的启用条件。
 
 以下内容只记录已取代方案，禁止用于新部署。需要「每个 Issue／MR 一个 Thread，并把下一位角色 Agent 指派回原 Thread」时，使用 [gitlab-buzz-sync.md](gitlab-buzz-sync.md)。
 
@@ -172,25 +172,25 @@ NH_DESK_GITLAB_TOKEN=glpat-...
 ### 3. 先离线路由测试，再显式初始化
 
 ```bash
-python3 skills/buzz-agent-setup/scripts/run_offline_tests.py
-python3 skills/buzz-agent-setup/scripts/issue_thread_router.py \
+python3 skills/agent-harness/buzz-agent-setup/scripts/run_offline_tests.py
+python3 skills/agent-harness/buzz-agent-setup/scripts/issue_thread_router.py \
   --config ~/.config/buzz/agents/nh-desk-issue-poller.json \
   --resolve-route feature ready opened
 
 set -a; source ~/.config/buzz/agents/nh-desk.env; set +a
 # 预览“迁移全部存量 Issue”的效果；不迁移时不要带 --bootstrap-existing
-python3 skills/buzz-agent-setup/scripts/issue_thread_router.py \
+python3 skills/agent-harness/buzz-agent-setup/scripts/issue_thread_router.py \
   --config ~/.config/buzz/agents/nh-desk-issue-poller.json \
   --dry-run --bootstrap-existing
 
 # 首次正式建立 baseline；只运行一次，不给存量 Issue 创建 Thread
-python3 skills/buzz-agent-setup/scripts/issue_thread_router.py \
+python3 skills/agent-harness/buzz-agent-setup/scripts/issue_thread_router.py \
   --config ~/.config/buzz/agents/nh-desk-issue-poller.json \
   --initialize
 # 将输出的 pin_deployment_baseline 原样写回 gitlab.deployment_baseline，提交并评审后再启用 schedule
 
 # 只在 Desk reply/mention 已发送并 readback 成功后执行；component 会再次验证 receipt
-python3 skills/buzz-agent-setup/scripts/issue_thread_router.py \
+python3 skills/agent-harness/buzz-agent-setup/scripts/issue_thread_router.py \
   --config ~/.config/buzz/agents/nh-desk-issue-poller.json \
   --ack-action <64-char-action-id>
 ```

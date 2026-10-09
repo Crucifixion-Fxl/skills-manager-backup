@@ -1,0 +1,124 @@
+/*
+ * 共享浅色基座（最小起点）
+ *
+ * tokens.css 里的 atlas 皮肤只重写"颜色和字体"，不重写"版式骨架"——它假定
+ * 宿主页面已经有一层共享基座定义了 .page 的 grid、doc-outline 折叠逻辑、
+ * section/h2/表格/callout 这些结构性规则。多数已经用 HTML-first 写架构文档的仓库
+ * 会已经有这样一层（通常叫 site-css，可能是脚本生成的，不要去改它）。
+ *
+ * 如果所在仓库还没有这样一层，复制这份最小版本作为起点，和 tokens.css 一起内联
+ * 进同一个 <style> 块——两者变量命名不冲突（这份用 --ink/--bg/--line 等不加前缀
+ * 的名字，tokens.css 用 --atlas-* 前缀）。
+ *
+ * 这份文件只负责基础排版骨架，不含任何图语言（状态机图/组件图请看
+ * diagram-language.md 的 .plate 约定；如果仓库另有一套 .dm-* 图语言 SSOT，那是
+ * architect skill 的范畴，不在这里）。
+ */
+
+:root {
+  --ink: #172033;
+  --muted: #5d6678;
+  --bg: #f5f7fb;
+  --panel: #ffffff;
+  --line: #d9deea;
+  --accent: #2b5fd9;
+  --accent-soft: #e7eefc;
+  --green: #15803d;
+  --green-soft: #e3f3eb;
+  --amber: #b45309;
+  --amber-soft: #fdf2e3;
+  --red: #b91c1c;
+  --red-soft: #fbe9e7;
+  --code-bg: #eef2f8;
+  --font: system-ui, -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+}
+/* 这套浅色 token 只在不套 atlas 皮肤的"平实模式"页面里可见；一旦叠加 tokens.css，
+   atlas 的深色规则优先级更高，两套变量并存不冲突。 */
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 15px;
+  line-height: 1.72;
+}
+
+.page {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 24px 20px 72px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 28px;
+}
+.page.single { max-width: 1000px; }
+@media (min-width: 1040px) {
+  .page:not(.single) { grid-template-columns: 220px minmax(0, 1fr); gap: 44px; }
+}
+
+/* 页内大纲：桌面侧栏 sticky，移动端折叠 */
+.doc-outline { font-size: 13.5px; align-self: start; }
+@media (min-width: 1040px) { .doc-outline { position: sticky; top: 20px; } }
+.doc-outline summary { cursor: pointer; font-weight: 700; color: var(--muted); letter-spacing: .06em; }
+.doc-outline nav ol { list-style: none; margin: 10px 0 0; padding: 0; border-left: 1px solid var(--line); display: grid; gap: 2px; }
+.doc-outline nav a { display: block; padding: 3px 0 3px 12px; margin-left: -1px; border-left: 2px solid transparent; color: var(--muted); text-decoration: none; }
+.doc-outline nav a:hover { color: var(--ink); border-left-color: var(--accent); }
+
+main { min-width: 0; display: grid; gap: 40px; align-content: start; }
+
+.crumbs { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 13px; color: var(--muted); padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+.crumbs a { color: var(--accent); text-decoration: none; font-weight: 600; }
+
+header.doc-head { display: grid; gap: 10px; }
+.eyebrow { margin: 0; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+h1 { margin: 0; font-size: 30px; line-height: 1.3; text-wrap: balance; }
+.lead { margin: 0; font-size: 16.5px; max-width: 72ch; }
+.meta { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--muted); }
+.meta b { color: var(--ink); font-weight: 600; }
+
+.badge { display: inline-block; padding: 1px 9px; border-radius: 999px; font-size: 12px; font-weight: 700; white-space: nowrap; line-height: 1.6; }
+.badge.proposed { background: var(--amber-soft); color: var(--amber); }
+.badge.accepted { background: var(--green-soft); color: var(--green); }
+.badge.pending { background: var(--red-soft); color: var(--red); }
+.badge.info { background: var(--accent-soft); color: var(--accent); }
+
+section { display: grid; gap: 14px; scroll-margin-top: 16px; }
+h2 { margin: 0; font-size: 21px; line-height: 1.4; padding-bottom: 6px; border-bottom: 2px solid var(--line); text-wrap: balance; }
+h3 { margin: 6px 0 0; font-size: 16.5px; line-height: 1.5; }
+p { margin: 0; max-width: 74ch; }
+ul, ol { margin: 0; padding-left: 1.3em; display: grid; gap: 5px; max-width: 76ch; }
+a { color: var(--accent); text-underline-offset: 3px; }
+a:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+code { font-family: var(--mono); font-size: .87em; background: var(--code-bg); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+pre { margin: 0; background: var(--code-bg); padding: 12px 14px; border-radius: 8px; overflow-x: auto; font-family: var(--mono); font-size: 13px; line-height: 1.6; }
+pre code { background: none; padding: 0; }
+.muted { color: var(--muted); }
+
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+table { border-collapse: collapse; width: 100%; font-size: 14px; line-height: 1.62; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+tr:last-child td { border-bottom: 0; }
+th { background: var(--bg); color: var(--muted); font-weight: 600; font-size: 12.5px; letter-spacing: .04em; white-space: nowrap; }
+
+.callout { border-radius: 8px; padding: 12px 16px; max-width: 82ch; font-size: 14.5px; line-height: 1.72; }
+.callout > p + p { margin-top: 6px; }
+.callout.warn { background: var(--amber-soft); }
+.callout.risk { background: var(--red-soft); }
+.callout.info { background: var(--accent-soft); }
+
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: grid; gap: 6px; align-content: start; }
+.card .k { font-size: 12px; color: var(--muted); letter-spacing: .06em; }
+.card .v { font-weight: 700; }
+.card p { font-size: 14px; color: var(--muted); }
+
+.steps { list-style: none; padding: 0; counter-reset: s; display: grid; gap: 8px; }
+.steps > li { counter-increment: s; display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 8px; }
+.steps > li::before { content: counter(s); width: 22px; height: 22px; margin-top: 3px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; font: 12px var(--mono); color: var(--muted); }
+
+footer.doc-foot { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 14px; }

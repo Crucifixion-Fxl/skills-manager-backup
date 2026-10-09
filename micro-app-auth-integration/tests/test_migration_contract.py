@@ -24,7 +24,7 @@ class MigrationContractTest(unittest.TestCase):
                     self.assertTrue((document.parent / target.split("#", 1)[0]).is_file())
 
     def test_no_retired_entrypoint_in_consumers(self):
-        repo = SKILL_ROOT.parents[1]
+        repo = next(p for p in Path(__file__).resolve().parents if (p / ".codex-plugin" / "plugin.json").is_file())
         documents = [*repo.glob("skills/**/SKILL.md"), *repo.glob("public/**/*.html")]
         for document in documents:
             if document == SKILL_ROOT / "SKILL.md":

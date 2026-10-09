@@ -1,5 +1,12 @@
 # TDD Platform — Non-Obvious Pitfalls
 
+> CN lifecycle update (2026-09-28): AWS CN is retired. Current staging is Tencent
+> account 100052802231 (`tencent-100052802231-cn-staging`). The Phase 2b CN rollout
+> below is historical evidence only; verify the exact new cluster
+> traffic-manager, demo workloads, access/RBAC and Harbor images before using CN.
+> Do not reuse an AWS kubeconfig/ARN or infer availability from an old CI pass.
+
+
 Things that wasted real time and would silently bite anyone copying the demo into a new service **or a new cluster**. Logged as engineering record so the next team doesn't pay the same cost. Each entry: symptom → root cause → fix.
 
 - **§1–§6 + bonus** — Phase 2a wireup (2026-05, W1–W4): engineering traps building the demo itself (Kafka / Go / PVC / routing / mail). Location-independent.
@@ -97,11 +104,11 @@ Applies to **any** non-root image + RWO PVC (mailpit uses in-memory store so doe
 
 ## 7 · cn-staging firewalls Docker Hub — every image must come from Harbor `base/`
 
-**Symptom**: Copying the demo to cn-eks-staging, the build/test/hook pods hang on `ImagePullBackOff` or `ErrImagePull` for `docker.io/...` images (golang test image, telepresence helm-hook `curlimages/curl` + `busybox`), even though the cluster's `harbor-registry-secret` carries valid Docker Hub creds.
+**Historical symptom (retired AWS CN)**: Copying the demo to cn-eks-staging, the build/test/hook pods hang on `ImagePullBackOff` or `ErrImagePull` for `docker.io/...` images (golang test image, telepresence helm-hook `curlimages/curl` + `busybox`), even though the cluster's `harbor-registry-secret` carries valid Docker Hub creds.
 
-**Root cause**: AWS China blocks docker.io at the network layer. Auth is irrelevant — the route itself is gone. us/eu reach Docker Hub fine, so a config that "works on us" silently breaks only on cn.
+**Historical root cause**: the old AWS CN target could not reach docker.io at the network layer. Auth is irrelevant — the route itself is gone. us/eu reach Docker Hub fine, so a config that "works on us" silently breaks only on cn.
 
-**Fix**: Every image a cn workload pulls must resolve to the local Harbor `base/` project (`harbor-80144-cn-staging.addx.live/base/<img>`), and the tag must be pre-synced via `DEV/base-images` (`images.yaml` MR → fleet sync). Concrete cases hit this session:
+**Fix**: Every image a cn workload pulls must resolve to the local Harbor `base/` project (`harbor-02231-cn-staging.addx.live/base/<img>` for current Tencent staging; the retired AWS host is historical only), and the tag must be pre-synced via `DEV/base-images` (`images.yaml` MR → fleet sync). SG-to-staging synchronization uses `harbor-02231-cn-staging-pub.addx.live`, an external entry to the same registry. Before adopting the private hostname, verify the runner's actual `HARBOR_REGISTRY`, image refs and platform-managed pull-secret auth key for that exact hostname; existing refs/secrets are not automatically migrated. See the [staging Harbor contract and deployment receipt](../cn-tencent-migration.md#staging-harbor-内外网合同). Historical examples:
 - L2.DevLink CI region jobs: image `${HARBOR_REGISTRY}/base/golang:1.25-alpine`, NOT `docker.io/library/golang` (the plain test jobs use docker.io and only ever ran on a generic runner — they'd `ImagePullBackOff` if pinned to a cn-staging runner).
 - telepresence helm hooks: override `hooks.{curl,busybox}.registry` to Harbor `base/`; added `curlimages/curl:8.1.1` + `busybox:1.36` to base-images first.
 

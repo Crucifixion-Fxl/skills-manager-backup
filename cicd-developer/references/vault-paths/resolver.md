@@ -39,7 +39,7 @@ ExternalSecret `remoteRef.key` / `extract.key` 和 PushSecret / ClusterPushSecre
 
 > ⚠️ **首段硬规则**：Vault 路径首段只能是裸 env（`dev`/`staging`/`pre`/`prod`）、`cicd`、或 legacy 的
 > `<app>` 名。**`<env>-<region>` 作首段（`secret/staging-us/...`、`secret/prod-eu/...`）一律禁止**——
-> staging 三区各连各自的 builder Vault 实例（`vault-{us,eu,cn}.builder.addx.live`），region 由实例隐含，
+> US/EU staging 各连对应 Builder Vault；CN 按精确目标 SecretStore/registry 确定实例（新 staging 为集群内 Vault），地域由目标实例合同体现，
 > 写进路径既冗余又违规。**没有独立的 `shared-middleware` 命名空间**：共享中间件凭据折叠进
 > `platform-resource-credential` 的 per-app 路径（`secret/{env}/{platform}/application/{app}/{key}`）。
 > `check_vault_paths.py` 会拦下 env-region 首段。（legacy `secret/<app>/<env>-<region>/...`——app 名在
@@ -109,17 +109,13 @@ prod 使用 Ops Vault；ESO 引用去掉 `secret/` 前缀。此分类规范依�
 workflow 写普通 ExternalSecret / PushSecret 时，直接查
 `references/data/clusters.yaml -> clusters[].vault_css`，不要按 domain 手推。
 
-`vault-backend` 只作为 ops/tech-service 域的默认 Vault store alias。
-builder/dev/staging 集群统一使用 `vault-builder-backend`；dev/staging
-manifest 不得访问 ops Vault。例外：明确部署到 `cn-k8s` / TKE 的
-staging workload 跟随 cn-k8s ops domain，使用 `vault-backend`。
-判断 Vault 域只看 `clusters[].vault` / live `ClusterSecretStore.spec.provider.vault.server`，
-不要从 `secretStoreRef.name` 反推。
-
-当前普通 app SecretStore 约定：
-- ops / tech-service 集群：`vault_css: vault-backend`，实际 server 指向 ops Vault
-- cn-k8s / TKE（包括 staging workload）：`vault_css: vault-backend`，实际 server 指向 ops Vault
-- cn-dev / cn-staging / us-staging / eu-staging builder 集群：manifest 使用 `vault_css: vault-builder-backend`，实际 server 指向 builder Vault
+当前普通 app SecretStore 必须按精确目标取值：
+- ops / tech-service：`vault-backend` 指向区域 ops Vault。
+- cn-main（100014919455，包括历史 staging 工作负载）：`vault-backend` 指向 CN ops Vault。
+- AWS US/EU staging：`vault-builder-backend` 指向对应 builder Vault。
+- CN TKE staging（100052802231）：`vault-backend` 指向 `http://vault-active.vault.svc:8200`。
+  CSS 同名不代表 ops Vault，不能复用旧 AWS CN builder endpoint。
+- 已退役 AWS CN 的映射只供历史排障。完整证据见 `../cn-tencent-migration.md`。
 
 Sentry DSN 是例外：读 `references/sentry/README.md -> SENTRY_DSN_CSS`，因为它必须和 sentry-onboard Job 写入 DSN 的 Vault 实例一致。
 

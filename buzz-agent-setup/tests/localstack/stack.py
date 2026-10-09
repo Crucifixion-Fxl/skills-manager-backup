@@ -483,7 +483,9 @@ def remove_relay_stack() -> list[str]:
             continue
         if proc.stdout.strip() != STACK_ID:
             raise StackError(f"container {name} is not labelled {LABEL_KEY}={STACK_ID}; refusing to remove it")
-        docker("rm", "-f", name, timeout=120)
+        # -v: also the anonymous volumes of this exact container (postgres/redis
+        # data), which would otherwise be left dangling after every run.
+        docker("rm", "-f", "-v", name, timeout=120)
         removed.append(name)
     proc = docker("network", "inspect", "--format", "{{index .Labels \"%s\"}}" % LABEL_KEY,
                   NAMES["network"], check=False, timeout=30)
@@ -502,7 +504,8 @@ def save_container_logs() -> None:
             write_private(LOGS_DIR / f"{key}.log", redact(proc.stdout + proc.stderr))
 
 
-def start_relay_stack(image: str, owner: dict, relay_key: dict) -> dict:
+def start_relay_stack(image: str, owner: dict, relay_key: dict, public_port: int | None = None) -> dict:
+    """public_port: an already bound local front (e.g. a fault proxy) that is the Relay's own URL."""
     label = f"{LABEL_KEY}={STACK_ID}"
     docker("network", "create", "--label", label, NAMES["network"])
     common = ["--label", label, "--network", NAMES["network"]]
@@ -517,7 +520,7 @@ def start_relay_stack(image: str, owner: dict, relay_key: dict) -> dict:
         port, hport = free_port(), free_port()
         if port == hport:
             continue
-        ws_url = f"ws://127.0.0.1:{port}"
+        ws_url = f"ws://127.0.0.1:{public_port or port}"
         env = {
             "DATABASE_URL": f"postgres://buzz:{PG_PASSWORD}@postgres:5432/buzz",
             "REDIS_URL": "redis://redis:6379",
@@ -564,7 +567,8 @@ def start_relay_stack(image: str, owner: dict, relay_key: dict) -> dict:
     except StackError:
         save_container_logs()
         raise
-    return {"image": image, "ws_url": ws_url, "http_url": f"http://127.0.0.1:{port}", "health_url": health_url,
+    return {"image": image, "ws_url": ws_url, "http_url": f"http://127.0.0.1:{public_port or port}",
+            "upstream_port": port, "health_url": health_url,
             "network": NAMES["network"],
             "containers": {k: NAMES[k] for k in ("relay", "postgres", "redis")}}
 

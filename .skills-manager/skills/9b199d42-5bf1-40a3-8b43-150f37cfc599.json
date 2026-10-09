@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "9b199d42-5bf1-40a3-8b43-150f37cfc599",
+  "path": "design-doc-style",
+  "path_key": "design-doc-style",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/development/design-doc-style",
+    "branch": null
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "0971f8ea-9d1d-400f-9aa4-6f5bfdcc4bbb",
+  "path": "jenkins",
+  "path_key": "jenkins",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/delivery/jenkins",
+    "branch": null
+  }
+}

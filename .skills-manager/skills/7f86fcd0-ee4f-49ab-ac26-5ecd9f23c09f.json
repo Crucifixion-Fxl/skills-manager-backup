@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "7f86fcd0-ee4f-49ab-ac26-5ecd9f23c09f",
+  "path": "operations-console-design",
+  "path_key": "operations-console-design",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/product/operations-console-design",
+    "branch": null
+  }
+}

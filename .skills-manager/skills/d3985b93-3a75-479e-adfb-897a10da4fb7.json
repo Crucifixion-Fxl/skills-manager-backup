@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "d3985b93-3a75-479e-adfb-897a10da4fb7",
+  "path": "voc-analysis",
+  "path_key": "voc-analysis",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/customer-care/voc-analysis",
+    "branch": null
+  }
+}

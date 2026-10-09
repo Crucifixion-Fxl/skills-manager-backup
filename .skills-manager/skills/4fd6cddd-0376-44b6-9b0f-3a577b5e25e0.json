@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "4fd6cddd-0376-44b6-9b0f-3a577b5e25e0",
+  "path": "growthbook",
+  "path_key": "growthbook",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/experimentation/growthbook",
+    "branch": null
+  }
+}

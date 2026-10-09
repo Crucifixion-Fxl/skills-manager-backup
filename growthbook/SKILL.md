@@ -9,6 +9,8 @@ description: Query GrowthBook for A/B experiments, feature flags, and experiment
 
 ## Description
 
+首次接入/变更扫描与日常认证入口见 [SaaS 接入](references/saas-access.md)；已有平台业务契约与授权门禁仍在本 Skill 维护。
+
 适用场景：A/B 实验管理、Feature Flag 开关、实验结果分析、指标巡检。
 
 - **前端地址**：`https://us-ab-management.addx.live`（UI）

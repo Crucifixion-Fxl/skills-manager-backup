@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "d14cffc1-8c09-4758-984f-77e2871e3a02",
+  "path": "tencent-cloud-cli",
+  "path_key": "tencent-cloud-cli",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/infrastructure/tencent-cloud-cli",
+    "branch": null
+  }
+}

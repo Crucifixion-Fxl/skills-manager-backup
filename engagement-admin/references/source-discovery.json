@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "tool": "engagement-admin",
+  "owner": "engagement-admin",
+  "repo": "https://gitlab.addx.ai/services/value-added/engagement",
+  "researchCommit": "f7e617b63f5f884e31b216450d8f58152fa749b0",
+  "routeEntries": [
+    "docs/architecture/admin/auth.md",
+    "admin/src/middleware.ts"
+  ],
+  "verification": "local-source-reviewed",
+  "deploymentConsistency": "pending",
+  "needsResearch": [
+    "deployment SHA/version and auth configuration",
+    "subject and resource permissions"
+  ],
+  "apiDiscovery": {
+    "method": "Source route inventory",
+    "routeGlob": "admin/src/app/api/**/route.ts",
+    "crossChecks": [
+      "middleware/auth guards",
+      "admin menus and roles",
+      "publish-order state machine, readback, rollback"
+    ],
+    "contract": "../../engagement-touchpoint-integration/references/cms-block-touchpoint-workflow.md",
+    "coverage": "existing contract; complete route/menu equivalence pending"
+  },
+  "referenceBase": "owner-skill-root for SKILL.md/contractEntrypoints/referenceSources paths; contract field resolves from this JSON directory; upstream repository entrypoints stay repository-relative"
+}

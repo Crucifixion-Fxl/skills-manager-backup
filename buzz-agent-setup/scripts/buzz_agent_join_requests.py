@@ -46,6 +46,7 @@ import subprocess
 import sys
 import time
 import unicodedata
+import urllib.parse
 from typing import Any, Callable, Iterator, TextIO
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -66,9 +67,9 @@ PROMPT_BEGIN = "<!-- buzz-agent-channels:v1 -->"
 PROMPT_END = "<!-- /buzz-agent-channels:v1 -->"
 
 CONFIG_KEYS = frozenset({"version", "owner_pubkey", "buzz", "state_dir", "request_ttl_seconds", "agents",
-                         "accept_feishu_approvals"})
+                         "accept_feishu_approvals", "lark_cli", "feishu_unbound_prompt"})
 AGENT_KEYS = frozenset({"name", "env_file", "unit", "capabilities"})
-AGENT_OPTIONAL_KEYS = frozenset({"log_file"})  # absent: the unit logs to the journal
+AGENT_OPTIONAL_KEYS = frozenset({"log_file", "feishu"})  # log_file absent: the unit logs to the journal
 CAPABILITY_KEYS = frozenset({"summary", "repos"})
 NAME_RE = re.compile(r"[a-z0-9][a-z0-9-]{0,39}")
 UNIT_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9@._-]{0,99}\.service")
@@ -117,8 +118,330 @@ REOPENABLE = frozenset({"LEFT", "WITHDRAWN", "NO_INVITE"})  # a newer invite sta
 STATES = TERMINAL | {"REQUESTED", "APPROVED", "APPLIED", "RESTARTED", "CLOSING"}
 
 
+# ── unbound Feishu groups (ADR-0023) ─────────────────────────────────────────
+
+FEISHU_KEYS = frozenset({"app_id", "lark_config_dir", "lark_data_dir"})
+FEISHU_STATE_FILE = "feishu-invite-state.json"
+INVITE_WATCH_SECONDS = 7 * 86400  # how long a "cannot confirm" is followed up
+INVITE_SCOPE_RECHECK_SECONDS = 86400
+INVITE_SEND_WINDOW_SECONDS = 2700  # Feishu dedupes one idempotency key for about an hour; keep margin
+INVITE_SEND_ATTEMPTS = 3
+INVITE_CHAT_PAGES = 20
+INVITE_SCOPES = {"list": frozenset({"im:chat:readonly", "im:chat"}),
+                 "send": frozenset({"im:message:send_as_bot", "im:message"}),
+                 "read": frozenset({"im:message:readonly", "im:message"})}
+
+
+def invite_binding_status(view: Any, chat_id: str, now: float) -> tuple[str, str]:
+    """(status, detail) of a Feishu group by ADR-0022's claims, the only authority (not this host's configuration):
+    a valid claim on its chat_ref from any declared mirror is "bound"; only expired ones, or claims that could not be
+    read (`view` None), is "unknown" (detail "stale" / "unreadable"); none at all is "unbound"."""
+    if view is None:
+        return "unknown", "unreadable"
+    ref = fgs.chat_ref(chat_id)
+    mine = [c for c in view.claims if c.chat_ref == ref]
+    if any(fgs.claim_valid(c, int(now)) for c in mine):
+        return "bound", ""
+    if mine:
+        return "unknown", "stale"
+    return "unbound", ""
+
+
+def invite_next(told: str, status: str) -> str | None:
+    """What to say now about one invite, given what was said already: the first verdict (unbound or unknown), then once
+    more only when an "unknown" becomes a definite "unbound". Bound is never said; nothing is ever taken back."""
+    if status == "bound" or told == "unbound":
+        return None
+    if status == "unbound":
+        return "unbound"
+    return "unknown" if status == "unknown" and not told else None
+
+
+INVITE_OPENING = "你好，我是 {name}。我收到了进群邀请，但暂时还不能处理这个群里的任务。"
+INVITE_DETAILS = {"unreadable": "读取绑定信息失败", "stale": "这个群的同步已超过 30 分钟没有更新"}
+
+
+def invite_message(status: str, name: str, detail: str = "", *, chat_mode: str = "group", external: bool = False) -> str:
+    """The user-facing text (ADR-0023). No mention, no identifier: the agent name is the configured one."""
+    opening = INVITE_OPENING.format(name=clean(name, NAME_MAX) or "Agent")
+    if status == "unknown":
+        return "\n".join([
+            opening,
+            f"原因：暂时无法确认这个群是否已经和 Buzz 频道绑定（{INVITE_DETAILS.get(detail, '读取绑定信息失败')}）。",
+            "群管理员下一步：如果这个群应该接入 Buzz，请联系负责同步的 Buzz 频道 owner 或管理员确认群同步在运行；"
+            "在那之前群里 @我 可能不会有回复。如果之后确认这个群还没有绑定，我会在这里再说明一次。"])
+    reason = "原因：这个群还没有和任何 Buzz 频道绑定（没有找到有效的群同步绑定），群里的消息不会送到我这里，所以在群里 @我 不会有回复。"
+    if chat_mode != "group" or external:
+        kind = "外部群" if external else "话题群"
+        step = f"群管理员下一步：这个群是{kind}，目前不能绑定到 Buzz 频道；如需使用，请改用内部普通群，并请 Buzz 频道的 owner 或管理员把它绑定到频道。"
+    else:
+        step = ("群管理员下一步：请 Buzz 频道的 owner 或管理员把这个群绑定到一个 Buzz 频道（buzz-agent-setup「Buzz Channel ↔ 飞书群」）。"
+                "绑定后我会在那个频道里发入群申请，经我的 owner 同意后才开始工作。")
+    return "\n".join([opening, reason, step])
+
+
+def missing_invite_scopes(granted: set[str]) -> list[str]:
+    """The capabilities (list / send / read) none of whose scopes the agent's app has been granted."""
+    return [what for what, scopes in INVITE_SCOPES.items() if not scopes & set(granted)]
+
+
+class FeishuInviteClient:
+    """The agent's own lark-cli profile, always as its bot (ADR-0023): the same isolated profile the group sync uses for this
+    agent (`LARKSUITE_CLI_CONFIG_DIR` / `LARKSUITE_CLI_DATA_DIR`), with the group sync's child env allowlist."""
+
+    def __init__(self, cli: str, block: dict[str, str], *, base_env: dict[str, str] | None = None,
+                 runner: Any = subprocess.run) -> None:
+        env = fgs.child_env(dict(os.environ if base_env is None else base_env), {
+            **fgs.LARK_ENV, "LARKSUITE_CLI_CONFIG_DIR": block["lark_config_dir"],
+            "LARKSUITE_CLI_DATA_DIR": block["lark_data_dir"]})
+        self.lark = fgs.LarkCli(cli, env, runner=runner)
+
+    def app_id(self) -> str:
+        return self.lark.identity()[0]
+
+    def scopes(self) -> set[str]:
+        return self.lark.bot_scopes()
+
+    def chats(self) -> dict[str, str]:
+        """{chat_id: name} of every chat the bot is in, all pages; CliError / SyncError when the list is not complete."""
+        found: dict[str, str] = {}
+        token = ""
+        for _ in range(INVITE_CHAT_PAGES):
+            params: dict[str, Any] = {"page_size": 100}
+            if token:
+                params["page_token"] = token
+            data = self.lark.call("bot chats", ["api", "GET", "/open-apis/im/v1/chats", "--params", json.dumps(params),
+                                                "--as", "bot"])
+            for item in data.get("items") or []:
+                chat_id = item.get("chat_id") if isinstance(item, dict) else None
+                if isinstance(chat_id, str) and fgs.CHAT_ID_RE.fullmatch(chat_id):
+                    found[chat_id] = str(item.get("name") or "")
+            token = str(data.get("page_token") or "")
+            if not data.get("has_more"):
+                return found
+            if not token:
+                break
+        raise sync.SyncError("the bot's chat list could not be read to the end")
+
+    def chat(self, chat_id: str) -> dict[str, Any]:
+        return self.lark.call("chat get", ["api", "GET", f"/open-apis/im/v1/chats/{chat_id}", "--as", "bot"])
+
+    def send(self, chat_id: str, text: str, key: str) -> str:
+        return self.lark.send(chat_id, text, key)
+
+    def message(self, message_id: str) -> dict[str, Any] | None:
+        data = self.lark.call("message get", ["api", "GET", f"/open-apis/im/v1/messages/{message_id}", "--as", "bot"])
+        items = data.get("items")
+        return items[0] if isinstance(items, list) and len(items) == 1 and isinstance(items[0], dict) else None
+
+
+class FeishuInvites:
+    """One agent's unbound-group prompts in one run (ADR-0023). `entry` is this agent's part of the invite state."""
+
+    def __init__(self, name: str, block: dict[str, str], client: Any, claims: Callable[[], Any], entry: dict[str, Any],
+                 clock: Callable[[], float], save: Callable[[], None]) -> None:
+        self.name, self.block, self.client, self.claims = name, block, client, claims
+        self.entry, self.clock, self.save = entry, clock, save
+        self.counts: dict[str, Any] = {"capability": entry.get("capability", "unverified"), "chats": 0, "baseline": 0,
+                                       "new": 0, "bound": 0, "told_unbound": 0, "told_unknown": 0, "pending": 0,
+                                       "unknown": 0, "failed": 0, "skipped_p2p": 0, "error": None}
+        self._view: Any = None
+        self._view_read = False
+
+    def _capability(self, value: str) -> None:
+        self.entry["capability"] = self.counts["capability"] = value
+        if value != "ok":
+            self.counts["error"] = f"{self.name}: feishu invite capability {value}"
+
+    def _claims(self) -> Any:
+        if not self._view_read:
+            self._view_read = True
+            try:
+                self._view = self.claims()
+            except Exception:  # noqa: BLE001 - unreadable claims mean "cannot confirm", never "unbound"
+                self._view = None
+        return self._view
+
+    def run(self) -> dict[str, Any]:
+        now = self.clock()
+        entry = self.entry
+        try:
+            app = self.client.app_id()
+        except fgs.CliError:
+            app = ""
+        if app != self.block["app_id"]:
+            self._capability("profile_mismatch")
+            self.save()
+            return self.counts
+        if entry.get("capability") != "ok" or now - entry.get("scopes_checked_at", 0) >= INVITE_SCOPE_RECHECK_SECONDS:
+            try:
+                missing = missing_invite_scopes(self.client.scopes())
+            except fgs.CliError:
+                self._capability("scopes_unreadable")
+                self.save()
+                return self.counts
+            entry["scopes_checked_at"] = int(now)
+            self._capability("scope_missing:" + ",".join(missing) if missing else "ok")
+            self.save()
+            if missing:
+                return self.counts
+        try:
+            listed = self.client.chats()
+        except fgs.CliError as exc:
+            if exc.definite and exc.error_type in ("permission", "authentication"):
+                self._capability("list_refused")
+            self.counts["error"] = f"{self.name}: the bot's chat list could not be read"
+            self.save()
+            return self.counts
+        except sync.SyncError:
+            self.counts["error"] = f"{self.name}: the bot's chat list could not be read"
+            return self.counts
+        chats = entry.setdefault("chats", {})
+        self.counts["chats"] = len(listed)
+        if "initialized_at" not in entry:
+            # Whatever the bot is in before this feature: not an invite this script saw, and not to be spammed.
+            for chat_id in listed:
+                chats[chat_id] = {"state": "BASELINE", "since": int(now)}
+            entry["initialized_at"] = int(now)
+            self.counts["baseline"] = len(listed)
+            self.save()
+            return self.counts
+        for chat_id, rec in chats.items():
+            if chat_id in listed:
+                rec.pop("absent_since", None)
+            elif rec.get("state") != "GONE":
+                rec.setdefault("absent_since", int(now))
+                if now - rec["absent_since"] >= ABSENCE_GRACE_SECONDS:
+                    rec.clear()
+                    rec.update({"state": "GONE", "since": int(now)})  # a pending prompt dies with it: the bot left
+        for chat_id in listed:
+            if chat_id not in chats or chats[chat_id].get("state") == "GONE":
+                chats[chat_id] = {"state": "NEW", "invited_at": int(now), "told": "", "n": 0}
+                self.counts["new"] += 1
+        self.save()
+        for chat_id in sorted(listed):
+            rec = chats[chat_id]
+            if rec.get("state") in ("NEW", "WATCH"):
+                self._evaluate(chat_id, rec, now)
+        if self.counts["failed"] or self.counts["unknown"]:
+            self.counts["error"] = f"{self.name}: a Feishu invite prompt could not be delivered"
+        return self.counts
+
+    def _evaluate(self, chat_id: str, rec: dict[str, Any], now: float) -> None:
+        if rec.get("pending"):
+            self._deliver(chat_id, rec, now)
+            return
+        if "chat_mode" not in rec:
+            try:
+                detail = self.client.chat(chat_id)
+            except fgs.CliError:
+                self.counts["pending"] += 1  # read again next round; nothing is said about a chat not seen properly
+                return
+            mode = detail.get("chat_mode")
+            if mode not in ("group", "topic"):
+                rec.update(state="P2P", chat_mode=str(mode or ""))  # a private chat is never told anything
+                self.counts["skipped_p2p"] += 1
+                self.save()
+                return
+            if detail.get("chat_status") != "normal":
+                rec.update(state="DONE", chat_mode=mode, result="inactive")
+                self.save()
+                return
+            rec.update(chat_mode=mode, external=detail.get("external") is True)
+        if rec["state"] == "WATCH" and now - rec["invited_at"] > INVITE_WATCH_SECONDS:
+            rec.update(state="DONE", result="watch_expired")
+            self.save()
+            return
+        status, detail_code = invite_binding_status(self._claims(), chat_id, now)
+        if status == "bound":
+            rec.update(state="DONE", result="bound")
+            self.counts["bound"] += 1
+            self.save()
+            return
+        say = invite_next(rec.get("told", ""), status)
+        if say is None:
+            return
+        rec["n"] = int(rec.get("n", 0)) + 1
+        digest = hashlib.sha256(f"{self.block['app_id']}|{chat_id}|{rec['invited_at']}|{rec['n']}".encode()).hexdigest()
+        rec["pending"] = {"status": say, "key": "buzz-invite-" + digest[:36], "first": int(now), "attempts": 0,
+                          "uncertain": False, "message_id": "",
+                          "text": invite_message(say, self.name, detail_code, chat_mode=rec["chat_mode"],
+                                                 external=bool(rec.get("external")))}
+        self.save()  # PENDING before the send: a crash or an unknown answer retries this exact message and key
+        self._deliver(chat_id, rec, now)
+
+    def _close(self, rec: dict[str, Any], result: str) -> None:
+        rec.pop("pending", None)
+        rec.update(state="DONE", result=result)
+        self.counts[result] += 1
+        self.save()
+
+    def _deliver(self, chat_id: str, rec: dict[str, Any], now: float) -> None:
+        pending = rec["pending"]
+        if not pending["message_id"]:
+            if now - pending["first"] > INVITE_SEND_WINDOW_SECONDS:
+                # Past the idempotency window a retry could post a second message: maybe delivered, never resent.
+                self._close(rec, "unknown" if pending["uncertain"] else "failed")
+                return
+            try:
+                pending["message_id"] = self.client.send(chat_id, pending["text"], pending["key"])
+            except fgs.CliError as exc:
+                if exc.definite:
+                    pending["attempts"] += 1
+                    if pending["attempts"] >= INVITE_SEND_ATTEMPTS:
+                        self._close(rec, "unknown" if pending["uncertain"] else "failed")
+                        return
+                else:
+                    pending["uncertain"] = True
+                self.counts["pending"] += 1
+                self.save()
+                return
+            self.save()
+        try:
+            message = self.client.message(pending["message_id"])
+        except fgs.CliError:
+            self.counts["pending"] += 1  # read back next round; the message is not sent again
+            return
+        sender = message.get("sender") if isinstance(message, dict) else None
+        if (not isinstance(message, dict) or message.get("chat_id") != chat_id or not isinstance(sender, dict)
+                or sender.get("id") != self.block["app_id"]):
+            self._close(rec, "failed")
+            return
+        told = pending["status"]
+        rec.pop("pending", None)
+        rec.update(told=told, message_id=message.get("message_id") or "", told_at=int(now))
+        rec["state"] = "WATCH" if told == "unknown" else "DONE"
+        if told == "unbound":
+            rec["result"] = "told_unbound"
+        self.counts["told_" + told] += 1
+        self.save()
+
+
+def load_invite_state(state_dir: Path) -> dict[str, Any]:
+    path = Path(state_dir) / FEISHU_STATE_FILE
+    if not path.exists():
+        return {"version": 1, "agents": {}}
+    try:
+        value = json.loads(_read_owner_only(path, "Feishu invite state"))
+    except ValueError:
+        raise sync.SyncError("Feishu invite state is not valid JSON") from None
+    if not isinstance(value, dict) or value.get("version") != 1 or not isinstance(value.get("agents"), dict) or any(
+            not isinstance(entry, dict) or not isinstance(entry.get("chats", {}), dict)
+            for entry in value["agents"].values()):
+        raise sync.SyncError("Feishu invite state is malformed")
+    return value
+
+
+def save_invite_state(state_dir: Path, state: dict[str, Any]) -> None:
+    _atomic_write(Path(state_dir) / FEISHU_STATE_FILE, json.dumps(state, ensure_ascii=False, sort_keys=True), 0o600)
+
+
 class JoinLocked(sync.SyncError):
     """Another run already holds the state directory."""
+
+
+class MirrorDirectoryUnavailable(sync.SyncError):
+    """A service fault, not an invalid command or a denied owner decision."""
 
 
 # ── configuration ────────────────────────────────────────────────────────────
@@ -171,6 +494,18 @@ def validate_config(config: Any) -> None:
         if agent["name"] in names:
             raise sync.SyncError(f"config.agents repeats {agent['name']}")
         names.add(agent["name"])
+    if not isinstance(config.get("feishu_unbound_prompt", True), bool):
+        raise sync.SyncError("config.feishu_unbound_prompt must be true or false")
+    blocks = [agent["feishu"] for agent in agents if "feishu" in agent]
+    if blocks or "lark_cli" in config:
+        _absolute(config.get("lark_cli"), "config.lark_cli")
+        if Path(config["lark_cli"]).name != "lark-cli":
+            raise sync.SyncError("config.lark_cli must point at lark-cli")
+    for key in FEISHU_KEYS:
+        values = [block[key] for block in blocks]
+        if len(set(values)) != len(values):
+            # One app and one profile per agent: a shared one would speak for two agents.
+            raise sync.SyncError(f"config.agents[].feishu.{key} is shared; every agent needs its own")
 
 
 def _validate_agent(agent: Any) -> None:
@@ -181,6 +516,14 @@ def _validate_agent(agent: Any) -> None:
     _absolute(agent["env_file"], "config.agents[].env_file")
     if "log_file" in agent:
         _absolute(agent["log_file"], "config.agents[].log_file")
+    if "feishu" in agent:
+        block = agent["feishu"]
+        if not isinstance(block, dict) or set(block) != FEISHU_KEYS:
+            raise sync.SyncError("config.agents[].feishu must be exactly {app_id, lark_config_dir, lark_data_dir}")
+        if not isinstance(block["app_id"], str) or not fgs.APP_ID_RE.fullmatch(block["app_id"]):
+            raise sync.SyncError("config.agents[].feishu.app_id must be a Feishu app id (cli_...)")
+        _absolute(block["lark_config_dir"], "config.agents[].feishu.lark_config_dir")
+        _absolute(block["lark_data_dir"], "config.agents[].feishu.lark_data_dir")
     if not isinstance(agent["unit"], str) or not UNIT_RE.fullmatch(agent["unit"]):
         raise sync.SyncError("config.agents[].unit must be a systemd unit name ending in .service")
     caps = agent["capabilities"]
@@ -522,6 +865,18 @@ def prompt_row(channel: str, cap: dict[str, Any], join_id: str, when: float) -> 
             "缺权限的请求如实说明并停下，不借别的凭据。 |")
 
 
+def approval_instructions(owner: str, join_id: str) -> str:
+    """Keep commands copyable and distinguish a Thread reply from a new group message."""
+    return (
+        f"{owner}：请决定是否让我加入本群（只有 owner 本人能审批）。\n"
+        "同意：在原入群申请消息上点 ✅；或点该消息的“回复”，在该话题发送下面一整行：\n"
+        f"/approve {join_id}\n"
+        "拒绝：在原入群申请消息上点 ❌；或在同一话题发送下面一整行：\n"
+        f"/deny {join_id}\n"
+        "不需要 @ Agent；不要另发群消息，也不要在命令前后加文字。"
+    )
+
+
 def _ttl_text(ttl: int) -> str:
     if ttl % 86400 == 0:
         return f"{ttl // 86400} 天"
@@ -576,6 +931,7 @@ def load_state(state_dir: Path) -> dict[str, Any]:
             and isinstance(notice.get("code"), str)
             and notice.get("code") in {"unexplained", "discovery", "directory", "mirror", "processing",
                                        "activation", "configuration"}
+            and notice.get("reason") in (None, "mirror_verification")
             and _is_int(notice.get("at"))
             and (notice.get("incident_id") is None
                  or bool(re.fullmatch(r"[0-9a-f]{16}", str(notice.get("incident_id")))))
@@ -744,9 +1100,20 @@ class AgentBuzz(sync.BuzzCli):
         if not bots:
             return set()
         try:
+            verified = self._relay_query(fgs.directory_filters(bots))
+        except sync.SyncError:
+            return None
+        return fgs.parse_trusted_mirrors(verified, bots, roles)
+
+    def _relay_query(self, filters: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """One POST /query signed (NIP-98) as this agent, its NIP-OA auth tag with it. Only events whose id and signature
+        verify are returned; any failure is a SyncError that says nothing about the answer."""
+        try:
             key = fgs.secret_hex(self.env.get("BUZZ_PRIVATE_KEY", ""), "agent env")
-            url = fgs.relay_query_url(self.env.get("BUZZ_RELAY_URL", ""))
-            body = json.dumps(fgs.directory_filters(bots), separators=(",", ":")).encode()
+            relay = urllib.parse.urlsplit(self.env.get("BUZZ_RELAY_URL", ""))
+            query_origin = relay._replace(scheme={"wss": "https", "ws": "http"}.get(relay.scheme, relay.scheme))
+            url = fgs.relay_query_url(query_origin.geturl())
+            body = json.dumps(filters, separators=(",", ":")).encode()
             headers = {"Authorization": fgs.nip98_header(key, "POST", url, dt.datetime.now(dt.timezone.utc), body=body),
                        "Content-Type": "application/json", "Accept": "application/json"}
             if self.env.get("BUZZ_AUTH_TAG"):
@@ -754,11 +1121,14 @@ class AgentBuzz(sync.BuzzCli):
             status, answer = self.http(url, headers, fgs.DIRECTORY_TIMEOUT, body=body)
             events = json.loads(answer) if status == 200 else None
         except (OSError, ValueError, fgs.GroupSyncError):
-            return None
+            raise sync.SyncError("the relay could not be queried") from None
         if not isinstance(events, list):
-            return None
-        verified = [event for event in events if fgs._nip01_event_verified(event)]
-        return fgs.parse_trusted_mirrors(verified, bots, roles)
+            raise sync.SyncError("the relay's answer is not a list of events")
+        return [event for event in events if fgs._nip01_event_verified(event)]
+
+    def binding_claims(self) -> Any:
+        """Every declared mirror's channel-to-group claims (ADR-0022), read as this agent. SyncError when unreadable."""
+        return fgs.read_binding_claims(self._relay_query)
 
 
 def make_agent_buzz_factory(config: dict[str, Any]) -> Callable[[Agent], AgentBuzz]:
@@ -912,7 +1282,8 @@ class AgentRun:
             step()
         except sync.SyncError as exc:
             self.errors.append(f"{ch[:8]}: {exc}")
-            self._report_failure(ch, failure)
+            reason = "mirror_verification" if isinstance(exc, MirrorDirectoryUnavailable) else None
+            self._report_failure(ch, failure, reason=reason)
         except Exception as exc:  # noqa: BLE001 - fixed group text is safe; exception text remains local only
             self.errors.append(f"{ch[:8]}: {type(exc).__name__}")  # the message may carry paths or peer text
             self._report_failure(ch, failure)
@@ -936,7 +1307,12 @@ class AgentRun:
                 return event
         return None
 
-    def _failure_text(self, code: str) -> str:
+    def _failure_text(self, code: str, reason: str | None = None) -> str:
+        if reason == "mirror_verification":
+            return (f"{self.agent.name} 尚未开通：收到的飞书消息暂时无法完成服务端身份校验。\n"
+                    "原因：飞书同步服务的身份资料暂时无法读取或验证，系统还不能确认这条消息的可信来源；不代表审批被拒绝。\n"
+                    "你无需重复发送审批命令或反复点表情；申请未过期时，恢复后会对已收到的消息自动重试，开通成功会另行通知。\n"
+                    "处理方：Agent 维护者，请检查或升级飞书同步身份校验服务。")
         if code == "unexplained":
             return (f"{self.agent.name} 暂时不能处理这次入群：无法确认这次入群是谁发起的，因此没有开通，也没有扩大权限。\n"
                     "失败原因：缺少有效的 bot 邀请记录，或最新记录是自助加入、移除、无 bot 角色。\n"
@@ -979,16 +1355,18 @@ class AgentRun:
         channel = self.channels.get(ch, {})
         reply_to = channel.get("request_event") if isinstance(channel, dict) else None
         event_id = self.buzz.for_channel(ch).send(
-            f"{self._failure_text(notice['code'])}\n{header}", reply_to=reply_to)
+            f"{self._failure_text(notice['code'], notice.get('reason'))}\n{header}", reply_to=reply_to)
         notice.update(event=event_id, pending_at=None)
         self.save()
 
-    def _report_failure(self, ch: str, code: str, *, send: bool = True) -> None:
+    def _report_failure(self, ch: str, code: str, *, send: bool = True, reason: str | None = None) -> None:
         self.failed_this_round.add((ch, code))
         notice = self.notices.get(ch)
         if (not isinstance(notice, dict) or notice.get("code") != code
+                or notice.get("reason") != reason
                 or notice.get("recovering") is True):
             notice = {"code": code, "at": int(self.clock()), "incident_id": secrets.token_hex(8),
+                      "reason": reason,
                       "pending_at": None, "event": None, "recovering": False,
                       "recovery_pending_at": None, "recovery_event": None}
             self.notices[ch] = notice
@@ -1111,9 +1489,13 @@ class AgentRun:
         """
 
         header = join_header(rec["join_id"], "" if kind == "request" else kind)
-        rec["pending_send"] = {"header": header, "at": int(self.clock())}
+        rec["pending_send"] = {"header": header, "at": int(self.clock()), "reply_to": reply_to}
         self.save()
         event_id = self.buzz.for_channel(ch).send(f"{text}\n{header}", reply_to=reply_to, mentions=mentions)
+        # Persist the feedback receipt together with clearing PENDING. Otherwise
+        # a crash before the caller's save sends the same help again next round.
+        if kind.startswith("feedback-"):
+            rec.setdefault("feedback_events", {})[kind.removeprefix("feedback-")] = event_id
         rec["pending_send"] = None
         self.save()
         return {"id": event_id, "created_at": int(self.clock())}
@@ -1126,6 +1508,10 @@ class AgentRun:
             return
         header = pending.get("header", "")
         found = self._find_sent(self.buzz.for_channel(ch), header, pending["at"] - CLOCK_SLACK_SECONDS)
+        if found is not None and "reply_to" in pending:
+            actual = fgs.buzz_thread_root(found) or fgs._buzz_parent(found)
+            if actual != pending["reply_to"]:
+                raise sync.SyncError("pending join message readback has a different Thread")
         rec["pending_send"] = None
         if found is not None:
             kind = header.split(" ")[2] if header.count(" ") >= 2 else "request"
@@ -1140,6 +1526,8 @@ class AgentRun:
                 rec["active_event"] = found["id"]
             elif kind == "closed":
                 rec["closed_event"] = found["id"]
+            elif kind.startswith("feedback-"):
+                rec.setdefault("feedback_events", {})[kind.removeprefix("feedback-")] = found["id"]
         self.save()
 
     # discovery
@@ -1224,7 +1612,17 @@ class AgentRun:
             return newest, "declined"
         if any(["role", "bot"] not in [tag[:2] for tag in sync._tag_values(event, "role")] for event in adds):
             return None, "none"
-        if adders == {self.owner}:
+        # Feishu member sync signs kind 9000 with the configured channel owner/admin key so the relay accepts the
+        # membership change.  That signature proves who operates the bridge, not which Feishu member clicked Add.
+        # Its durable operation/ordering tags therefore keep even an owner-signed add on the approval path.  Treat
+        # any of the origin tags as sufficient: a partially written bridge event must fail closed rather than become
+        # indistinguishable from a direct Buzz owner invite and auto-approve the agent.
+        feishu_origin = any(
+            sync._tag_values(event, marker)
+            for event in adds
+            for marker in ("feishu-member-op", "feishu-member-stream", "feishu-member-seq")
+        )
+        if adders == {self.owner} and not feishu_origin:
             return newest, "auto"
         return newest, "request"
 
@@ -1308,19 +1706,21 @@ class AgentRun:
         lines: list[str]
         mentions: tuple[str, ...] = ()
         if rec["outcome"] == "auto_approved":
-            lines = [f"我是 {me}，owner {owner} 把我拉进了「{room}」，正在开通：我空闲时会重启一次，开通后在这里回复。"]
+            lines = [
+                f"我是 {me}，owner {owner} 把我拉进了「{room}」，正在开通："
+                "我会在没有正在处理任务时刷新频道订阅，不会打断正在进行的工作；订阅生效后在这里回复。"
+            ]
             lines += capability_lines(self.agent, rec["capability"])
         else:
-            lines = [f"我是 {me}（owner：{owner}），收到了加入「{room}」的邀请。这次加入需要 owner 同意；{owner} 同意之前，我不会回应本群的 @。"]
+            lines = [f"我是 {me}（owner：{owner}），收到了加入「{room}」的邀请。这次加入需要 owner 同意；"
+                     f"{owner} 同意之前，我不能执行业务任务；@ 我时只会回复审批提示。"]
             lines += capability_lines(self.agent, rec["capability"])
-            ask = (f"同意请在这条消息上点 ✅，或在本 Thread 回复 /approve {rec['join_id']}；"
-                   f"不同意点 ❌ 或回复 /deny {rec['join_id']}。{_ttl_text(self.ttl)}内没有答复，我会自动退出本群。")
             if roles.get(self.owner) in HUMAN_ROLES:
-                lines.append(f"{owner}：{ask}")
                 mentions = (self.owner,)
             else:
                 lines.append(f"我的 owner {owner} 还不是本群成员：请管理员先把 {owner} 加进来，加进来后我会在这里提醒。")
-                lines.append(f"{owner} {ask}")
+            lines.append(approval_instructions(owner, rec["join_id"]))
+            lines.append(f"{_ttl_text(self.ttl)}内没有答复，我会自动退出本群。")
         sent = self.send_once(ch, rec, "request", "\n".join(lines), reply_to=None, mentions=mentions)
         rec["request_event"] = sent["id"]
         rec["requested_at"] = sent["created_at"] or int(self.clock())
@@ -1335,8 +1735,7 @@ class AgentRun:
         deadline = rec["requested_at"] + self.ttl
         if not rec["owner_notified"] and roles.get(self.owner) in HUMAN_ROLES and now < deadline:
             owner = self.owner_name(scoped)
-            text = (f"{owner}，请决定是否让我加入本群：在上面那条消息上点 ✅ 同意、❌ 不同意，"
-                    f"或回复 /approve {rec['join_id']}、/deny {rec['join_id']}。")
+            text = approval_instructions(owner, rec["join_id"])
             self.send_once(ch, rec, "notify", text, reply_to=rec["request_event"], mentions=(self.owner,))
             rec["owner_notified"] = True
             self.save()
@@ -1356,6 +1755,82 @@ class AgentRun:
         elif now >= deadline:
             rec.update(state="CLOSING", outcome="expired", decided_at=int(now))
             self.save()
+        else:
+            self.pending_feedback(ch, rec, roles)
+
+    def pending_feedback(self, ch: str, rec: dict[str, Any], roles: dict[str, str]) -> None:
+        """Give authenticated members admission help, without dispatching business work.
+
+        Only real mentions or approval attempts for this request receive help.
+        A trusted Feishu mirror may ask for help without approval-author metadata;
+        that never grants it the owner's decision rights. Deduplicate by source ID.
+        """
+        scoped = self.buzz.for_channel(ch)
+        since = int(rec["requested_at"])
+        handled = rec.setdefault("feedback_events", {})
+        owner = self.owner_name(scoped)
+        mirror_trust: dict[str, bool] = {}
+        for event in scoped.channel_messages(since) + scoped.channel_reactions(since):
+            event_id = event.get("id")
+            if (not isinstance(event_id, str) or not sync.HEX64_RE.fullmatch(event_id)
+                    or event_id in handled or event.get("pubkey") == self.agent.pubkey
+                    or not _is_int(event.get("created_at"))
+                    or not since <= event["created_at"] <= self.clock() or not authentic(event)):
+                continue
+            if event.get("kind") == 9 and sync._tag_values(event, "h") != [["h", ch]]:
+                continue
+            text = str(event.get("content") or "").strip().split("\n", 1)[0]
+            if text.startswith("[飞书] "):
+                text = text.partition("：")[2].strip()
+            targets = _e_targets(event)
+            thread = fgs.buzz_thread_root(event) or fgs._buzz_parent(event)
+            in_request = thread == rec["request_event"]
+            command = event.get("kind") == 9 and bool(re.search(r"(?:^|\s)/(?:approve|deny)(?:\s|$)", text))
+            mentioned = event.get("kind") == 9 and any(
+                tag[:2] == ["p", self.agent.pubkey] for tag in sync._tag_values(event, "p"))
+            reaction = (event.get("kind") == 7 and targets == {rec["request_event"]}
+                        and text.replace(VARIATION_SELECTOR, "") in APPROVE_EMOJIS | DENY_EMOJIS)
+            names_request = bool(re.search(rf"(?<![\w-]){re.escape(rec['join_id'])}(?![\w-])", text))
+            attempt = reaction or (command and (in_request or names_request or mentioned))
+            if not (mentioned or attempt):
+                continue
+            author = event.get("pubkey")
+            if roles.get(author) not in HUMAN_ROLES:
+                authors = [tag[1] for tag in sync._tag_values(event, fgs.FEISHU_AUTHOR_TAG) if len(tag) > 1]
+                if (not self.accept_feishu or roles.get(author) != "bot" or len(authors) > 1
+                        or (authors and (not isinstance(authors[0], str)
+                                         or not sync.HEX64_RE.fullmatch(authors[0])))):
+                    continue
+                if author not in mirror_trust:
+                    trusted = scoped.trusted_mirrors({author}, roles)
+                    if trusted is None:
+                        raise MirrorDirectoryUnavailable("trusted mirror directory is temporarily unavailable")
+                    mirror_trust[author] = author in trusted
+                if not mirror_trust[author]:
+                    continue
+                author = authors[0] if authors else None
+            reply_to = rec["request_event"] if reaction else thread or event_id
+            if attempt:
+                parsed_command = re.fullmatch(r"/(?:approve|deny) (JOIN-[0-9a-f]{8})", text) if command else None
+                if not (in_request or reaction):
+                    reason = "这条命令不在原入群申请的话题内；请点原申请消息的“回复”。"
+                elif command and parsed_command is None:
+                    # Malformed mirrored text deliberately has no approval-author tag.
+                    # Explain the observable input error, without guessing the human's identity.
+                    reason = "命令格式不正确；请单独发送下面一整行，不要加 @、说明文字或标点。"
+                elif parsed_command and parsed_command.group(1) != rec["join_id"]:
+                    reason = "审批编号不是当前申请的编号；请复制下面带完整编号的一整行。"
+                elif author != self.owner:
+                    reason = f"只有 owner {owner} 能决定是否让我加入本群；本次未识别为 owner 的有效审批。"
+                else:
+                    reason = "审批编号、格式或来源信息不匹配，请使用当前申请的完整编号和指定操作。"
+                notice = f"审批未生效：{reason}"
+            else:
+                notice = (f"我是 {self.agent.name}，已收到你的 @。本群仍在等待 owner {owner} 同意入群，"
+                          "目前不能执行业务任务。审批通过并开通后，我会在群里通知；这条任务尚未开始，请开通后重新 @ 我。")
+            link = f"buzz://message?channel={ch}&id={rec['request_event']}"
+            notice += f"\n原入群申请：{link}\n{approval_instructions(owner, rec['join_id'])}"
+            self.send_once(ch, rec, f"feedback-{event_id}", notice, reply_to=reply_to)
 
     def _signals(self, scoped: Any, rec: dict[str, Any], deadline: float,
                  roles: dict[str, str] | None = None) -> list[tuple[int, str, str]]:
@@ -1406,7 +1881,7 @@ class AgentRun:
         if relayed:
             trusted = scoped.trusted_mirrors({str(event.get("pubkey")) for event, _ in relayed}, roles or {})
             if trusted is None:
-                raise sync.SyncError("trusted mirror directory is temporarily unavailable")
+                raise MirrorDirectoryUnavailable("trusted mirror directory is temporarily unavailable")
             for event, verdict in relayed:
                 if event.get("pubkey") in trusted and authentic(event):
                     signals.append((event["created_at"], str(event["id"]), verdict))
@@ -1690,17 +2165,25 @@ class AgentRun:
 
 
 def run(config: dict[str, Any], *, state_dir: Path, make_buzz: Any = None, system: Any = None,
-        clock: Callable[[], float] = time.time, sleeper: Callable[[float], None] = time.sleep) -> dict[str, Any]:
+        clock: Callable[[], float] = time.time, sleeper: Callable[[float], None] = time.sleep,
+        make_lark: Any = None) -> dict[str, Any]:
     validate_config(config)
     system = system or SystemOps()
     make_buzz = make_buzz or make_agent_buzz_factory(config)
+    if make_lark is None:
+        def make_lark(block: dict[str, str]) -> FeishuInviteClient:
+            return FeishuInviteClient(config["lark_cli"], block)
     results: dict[str, dict[str, Any]] = {}
     try:
         with state_lock(Path(state_dir)):
             state = load_state(Path(state_dir))
+            invites: dict[str, Any] | None = None
 
             def save() -> None:
                 save_state(Path(state_dir), state)
+
+            def save_invites() -> None:
+                save_invite_state(Path(state_dir), invites)
 
             for agent_config in config["agents"]:
                 name = agent_config["name"]
@@ -1740,6 +2223,20 @@ def run(config: dict[str, Any], *, state_dir: Path, make_buzz: Any = None, syste
                     except Exception as exc:  # noqa: BLE001 - persist and report safely on the next healthy round
                         entry["configuration_pending"] = True
                         counts["error"] = f"{name}: {type(exc).__name__}"
+                    if "feishu" in agent_config and config.get("feishu_unbound_prompt", True):
+                        # A separate path (ADR-0023): the Buzz part failing must not silence the Feishu one, or back.
+                        try:
+                            if invites is None:
+                                invites = load_invite_state(Path(state_dir))
+                            invite_entry = invites["agents"].setdefault(name, {})
+                            buzz = job.buzz if job is not None else make_buzz(agent)
+                            counts["feishu"] = FeishuInvites(
+                                name, agent_config["feishu"], make_lark(agent_config["feishu"]), buzz.binding_claims,
+                                invite_entry, clock, save_invites).run()
+                        except sync.SyncError as exc:
+                            counts["feishu"] = {"error": f"{name}: {exc}"}
+                        except Exception as exc:  # noqa: BLE001 - one agent's bug must not stop the others
+                            counts["feishu"] = {"error": f"{name}: feishu invites: {type(exc).__name__}"}
                 finally:
                     if job is not None:
                         counts["states"] = job.state_counts()
@@ -1747,7 +2244,8 @@ def run(config: dict[str, Any], *, state_dir: Path, make_buzz: Any = None, syste
                 results[name] = counts
     except JoinLocked:
         return {"status": "locked"}
-    status = "error" if any(counts.get("error") for counts in results.values()) else "ok"
+    status = "error" if any(counts.get("error") or (counts.get("feishu") or {}).get("error")
+                            for counts in results.values()) else "ok"
     return {"status": status, "agents": results}
 
 

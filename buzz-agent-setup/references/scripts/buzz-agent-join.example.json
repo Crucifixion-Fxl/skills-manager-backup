@@ -7,6 +7,8 @@
   },
   "state_dir": "/abs/path/.local/state/buzz-join",
   "request_ttl_seconds": 604800,
+  "lark_cli": "/abs/path/.local/bin/lark-cli",
+  "feishu_unbound_prompt": true,
   "agents": [
     {
       "name": "example-dev",
@@ -16,6 +18,11 @@
       "capabilities": {
         "summary": "Example 业务研发：改代码、提 MR、查 CI",
         "repos": ["example-group/example-service", "example-group/example-app"]
+      },
+      "feishu": {
+        "app_id": "cli_00000000000000000",
+        "lark_config_dir": "/abs/path/.config/buzz/lark/example-dev/config",
+        "lark_data_dir": "/abs/path/.config/buzz/lark/example-dev/data"
       }
     }
   ]

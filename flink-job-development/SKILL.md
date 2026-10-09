@@ -9,6 +9,8 @@ description: 通用 Apache Flink 流处理作业开发方法论——覆盖 Data
 
 ## Description
 
+平台登录与认证 SSOT：[flink](../flink/SKILL.md)。本 Skill 保留业务流程与门禁，登录/Token事实只在平台 owner 维护；日常访问调用 `web-access`。
+
 覆盖 4 大编程范式（DataStream API / Flink SQL / Table API / PyFlink / CEP）+ 跨范式工程实践（state / time / checkpoint / savepoint / 测试三层 / Session Mode 部署 / Vault 切分）。内容以 addx 真实生产体系为依据（对账 [`flink-jobs`](https://gitlab.addx.ai/DATA/flink-jobs) + [`flink-addx`](https://gitlab.addx.ai/DATA/flink-addx)），其他体系按各自约定调整。
 
 ## 路由表（先选范式 + 主题，再加载对应 reference）
@@ -192,7 +194,7 @@ EXPLAIN PLAN FOR INSERT INTO sink SELECT ... FROM source;
 -- 配 table.exec.uid.generation = ALWAYS + table.exec.uid.format 让 uid 由 operator name 决定
 ```
 
-更多场景见 [references/](references/) 各 paradigm 的"常见坑"表。
+更多场景见 [references/](references) 各 paradigm 的"常见坑"表。
 
 ## 相关 Skill
 

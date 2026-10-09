@@ -92,7 +92,7 @@ area/backend、area/data、area/infra、area/observability（按需多选）
 flag/blocked（仅存在外部阻塞时）
 ```
 
-完整命名和层级以 [GitLab Label 治理规范](../../../docs/standards/gitlab-label-governance.md) 为准；实施阶段写入 issue checklist，不使用 `lifecycle::*`。
+完整命名和层级以 [GitLab Label 治理规范](../../../../docs/collaboration/standards/gitlab-label-governance.md) 为准；实施阶段写入 issue checklist，不使用 `lifecycle::*`。
 
 issue 标题建议格式：`[<链路>] <gap 简述>`，如：
 - `[链路①] Tracker Manager 注册 3 个事件 schema`

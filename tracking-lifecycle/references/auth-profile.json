@@ -1,0 +1,135 @@
+{
+  "schemaVersion": 1,
+  "tool": "tracking",
+  "provider": "tracking-session",
+  "owner": "tracking-lifecycle",
+  "authContract": "references/platform-auth.md",
+  "verification": "source-verified",
+  "runtimeVerification": "read-only-pilot-verified",
+  "origin": "https://us-analytics-management.theunismart.com",
+  "identity": {
+    "path": "/api/user/getCurrentUser",
+    "subjectPath": "data.userId"
+  },
+  "permissionProbe": "/api/info/getAllApplication",
+  "scope": "explicit applicationId; * requires account-wide authorization",
+  "backendCommit": "d61e1692c3d28224e4d642f7bdf765a6a982ab0d",
+  "frontendCommit": "b6bf12a13bb809f7569a714a67d245cc8dd24bd4",
+  "fixtureVerification": "tests/browser-bridge.test.js",
+  "runtimeEvidence": "references/live-device-host-acceptance.json",
+  "runtimeScope": "7 reads on application2370; full roles/write/publish acceptance remains pending",
+  "tokenResponse": {
+    "successPath": "success",
+    "successValue": true
+  },
+  "tokenIssuers": {
+    "personal": {
+      "authentication": "interactive-cookie",
+      "create": {
+        "method": "POST",
+        "path": "/api/access-tokens",
+        "body": {
+          "name": {
+            "type": "string",
+            "required": true,
+            "maxLength": 80,
+            "pattern": "^.{1,80}$"
+          },
+          "expiryDays": {
+            "type": "integer",
+            "required": true,
+            "enum": [
+              7,
+              14,
+              30
+            ]
+          }
+        }
+      },
+      "listPath": "/api/access-tokens",
+      "listItemsPath": "data",
+      "secretPath": "data.token",
+      "idPath": "data.id",
+      "expiresAtPath": "data.expiresAt",
+      "secretPattern": "^tmt_[A-Za-z0-9_-]{16,512}$",
+      "revoke": {
+        "method": "POST",
+        "path": "/api/access-tokens/{id}/delete",
+        "parameters": {
+          "id": {
+            "type": "string",
+            "required": true,
+            "pattern": "^[0-9]{1,20}$"
+          }
+        }
+      },
+      "authority": "inherits current user roles; no per-application PAT scope",
+      "sourceCommit": "d61e1692c3d28224e4d642f7bdf765a6a982ab0d",
+      "runtimeVerification": "pending",
+      "targetIdentity": {
+        "path": "/api/role/current",
+        "subjectPath": "data.userId",
+        "source": "UserRoleController.getCurrentUserRole resolves FeishuUser.id; token /api/user/getCurrentUser has no userId in ApiTokenAuthFilter"
+      }
+    },
+    "project": {
+      "authentication": "interactive-cookie",
+      "create": {
+        "method": "POST",
+        "path": "/api/project-tokens",
+        "body": {
+          "name": {
+            "type": "string",
+            "required": true,
+            "maxLength": 80,
+            "pattern": "^.{1,80}$"
+          },
+          "expiryDays": {
+            "type": "integer",
+            "required": true,
+            "enum": [
+              30,
+              90,
+              180
+            ]
+          },
+          "appId": {
+            "type": "integer",
+            "required": true,
+            "minimum": 1,
+            "maximum": 9007199254740991
+          }
+        }
+      },
+      "listPath": "/api/project-tokens",
+      "listItemsPath": "data",
+      "secretPath": "data.token",
+      "idPath": "data.id",
+      "expiresAtPath": "data.expiresAt",
+      "secretPattern": "^tmp_[A-Za-z0-9_-]{16,512}$",
+      "revoke": {
+        "method": "POST",
+        "path": "/api/project-tokens/{id}/delete",
+        "parameters": {
+          "id": {
+            "type": "string",
+            "required": true,
+            "pattern": "^[0-9]{1,20}$"
+          }
+        }
+      },
+      "authority": "read-only, application bound",
+      "sourceCommit": "d61e1692c3d28224e4d642f7bdf765a6a982ab0d",
+      "runtimeVerification": "pending",
+      "resourceField": "appId",
+      "targetIdentity": {
+        "path": "/api/role/current",
+        "subjectPath": "data.userId",
+        "source": "UserRoleController.getCurrentUserRole resolves FeishuUser.id; token /api/user/getCurrentUser has no userId in ApiTokenAuthFilter"
+      }
+    }
+  },
+  "tokenEnv": "TMT_TOKEN",
+  "authDiscovery": "references/auth-discovery.json",
+  "sourceDiscovery": "references/source-discovery.json"
+}

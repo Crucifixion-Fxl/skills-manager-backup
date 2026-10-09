@@ -410,6 +410,11 @@ class FeishuAdds(TwoWay):
 
         self.assertEqual(report["agent_intros_sent"], 1)
         self.assertEqual([(c["app"], c["as"]) for c in intros], [(AGENT2_APP, "bot")])
+        self.assertIn('--content', intros[0]['args'])
+        card = json.loads(intros[0]['args'][intros[0]['args'].index('--content') + 1])
+        self.assertEqual(card['header']['title']['tag'], 'plain_text')
+        self.assertIn('skill-dev', card['header']['title']['content'])
+        self.assertEqual(card['elements'][0]['text']['tag'], 'plain_text')
         self.assertIn("群里的任何成员", text_of(intros[0]))
         env.round(w)
         w.members = [m for m in w.members if m["pubkey"] != AGENT2_PK]
@@ -474,6 +479,28 @@ class FeishuAdds(TwoWay):
         self.assertEqual(first["args"][first["args"].index("--idempotency-key") + 1],
                          second["args"][second["args"].index("--idempotency-key") + 1])
         self.assertEqual(recovered["agent_intros_sent"], 1)
+
+    def test_pending_legacy_text_intro_keeps_its_format_and_key_after_upgrade(self):
+        w = self.world()
+        w.members = [m for m in w.members if m['pubkey'] != AGENT2_PK]
+        w.bot_members[AGENT2_APP] = AGENT2_BOT_MEMBER
+        w.relay_events = [public_profile(AGENT2_PK, FOREIGN_OWNER_PK, name='review-agent', about='public ability'),
+                          policy(FOREIGN_OWNER_PK, AGENT2_PK, AGENT2_APP)]
+        env = self.settled(w)
+        state = FGS.load_state(env.state_dir)
+        state.agent_intros[AGENT2_PK] = 'pending:' + str(base.ts(NOW))
+        state.agent_intro_senders[AGENT2_PK] = DESK_APP
+        state.agent_intro_formats.pop(AGENT2_PK, None)
+        FGS.save_state(env.state_dir, state)
+        w.members.append({'pubkey': AGENT2_PK, 'role': 'bot'})
+        report = env.round(w)
+        calls = [c for c in w.lark_sends() if any('agent-intro-' in a for a in c['args'])]
+        self.assertEqual(report['agent_intros_sent'], 1)
+        self.assertEqual(len(calls), 1)
+        self.assertIn('--text', calls[0]['args'])
+        import hashlib
+        expected = 'agent-intro-' + hashlib.sha256(f'{CHANNEL}\0{base.CHAT}\0{AGENT2_PK}'.encode()).hexdigest()[:36]
+        self.assertIn(expected, calls[0]['args'])
 
     def test_someone_elses_agent_is_found_through_the_published_app_ids(self):
         """L2-1-FGS-823: 拉进群的是别人的 agent（本机没配置、也不在频道里）：全量读一次 kind:30177 建 app_id → pubkey 的反查表，找到它就加进频道。"""

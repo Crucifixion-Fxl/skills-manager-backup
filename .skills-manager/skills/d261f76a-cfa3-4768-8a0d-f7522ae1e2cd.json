@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "d261f76a-cfa3-4768-8a0d-f7522ae1e2cd",
+  "path": "grafana",
+  "path_key": "grafana",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/observability/grafana",
+    "branch": null
+  }
+}

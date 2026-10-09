@@ -46,8 +46,8 @@ AWS RDS 的 `storageEncrypted` / `username` / `dbName` / `engine` 等字段创�
 [validate]
   - 5 项 checklist 全 yes
   - `$target` 是单一 target
-  - 如果 `$target.cluster` 是 shared-middleware 集群（6 个：`{us,eu,cn}-eks-staging` +
-    `{us,eu,cn}-eks-tech-service`；按 cluster 名判，非 `$target.env`——tech-service env=prod，见 #29）：
+  - 如果 `$target.cluster` 是 shared-middleware 集群（6 个：`{us,eu}-eks-staging` +
+    `{us,eu}-eks-tech-service + cn-tke-staging + cn-tke-tech-service`；按 cluster 名判，非 `$target.env`——tech-service env=prod，见 #29）：
     必须在 cd-requirements.md 写明这是 legacy/迁移例外，并列出迁出到 shared-middleware 的计划；
     否则 STOP，按 hard rule #29 拒绝（这些集群新应用只能消费 shared-middleware，无 app-owned RDS 可迁）
 
@@ -58,17 +58,27 @@ AWS RDS 的 `storageEncrypted` / `username` / `dbName` / `engine` 等字段创�
 
 [precondition]
   - Step 1 完成
+  - 本会话已准确授权此单一 target 的破坏性操作；本 workflow 文字不是线上操作授权。
 
 [action]
-  - 联系运维执行（开发者无 kubectl 权限）：
+  - 任何 patch 前，从准确集群的 live RDS CR identity（group/kind/namespace/name/UID）、
+    Argo tracking 与 Application 资源清单确认唯一管理者，冻结 `$owner_application`、
+    `$owner_application_namespace`、`$owner_kube_context`、repo/revision/source path 及原 automated 配置。
+    runtime/infra 分离后应命中管理该 RDS 的 infra Application；legacy 混合入口保留真实 owner。
+    不按业务 `$app` 猜 Application 名；无 owner、多 owner、tracking 与 source 不一致均 STOP。
+    若由父 Application 管理它，还须确认父级不会回写 automated；不能暂停错的 runtime App。
+  - Steps 2/7/8 只能操作这个冻结身份；其余 kubectl/AWS 检查也使用本次冻结 target。
+    保存原 `spec.syncPolicy.automated` 值供 Step 8 原样恢复。原来不存在则保持手动，不新增自动同步。
+  - 联系运维执行（开发者无 kubectl 权限；仅原 automated 存在时）：
       ```
-      kubectl -n argo-cd patch application <app> --type json \
+      kubectl --context "$owner_kube_context" -n "$owner_application_namespace" patch application "$owner_application" --type json \
         -p '[{"op":"remove","path":"/spec/syncPolicy/automated"}]'
       ```
   - **原因**：不关 auto-sync，删 CR / 临时 patch `managementPolicies` 后 ArgoCD selfHeal 会立刻 recreate / 把字段 patch 回 git 值，把流程打乱
 
 [validate]
-  - `kubectl -n argo-cd get app <app> -o jsonpath='{.spec.syncPolicy}'` 不含 `automated`
+  - 对冻结 context/namespace/name 回读 Application 的 `spec.syncPolicy`，确认不含 `automated`；
+    再核对 owner/source identity 未变，且父级没有恢复自动同步，之后才继续删除流程
 
 [output]
   - ArgoCD app 进入手动 sync 状态
@@ -175,8 +185,11 @@ AWS RDS 的 `storageEncrypted` / `username` / `dbName` / `engine` 等字段创�
 
 [action]
   - 改 RDS Instance CR 所在的 git manifest 把目标 immutable 字段改成 `$new_value`：
-    新契约位置 = 应用仓 `k8s/overlays/<env>/rds-instance.yaml`；存量 legacy 实例
-    在 `crossplane-infra/<cluster_dir>/<app>-rds.yaml`（以 live CR 实际由哪个 ArgoCD app 管为准）
+    使用 Step 2 在删除前冻结并验证的唯一管理者 repo/revision/source path，回读确认
+    Application 身份未变；此时 CR 已删除，不能重新猜其 owner。新方案使用应用仓
+    独立 infra render/shared app-data-plane。根 workload overlay 或 crossplane-infra 内路径
+    仅用于定位历史存量，不在 immutable 修复时顺便改 ownership/Project。职责拆分须独立评审，
+    见 [资源职责拆分](../references/application-resource-split.md)。
   - prod target 的话也别忘记把 `managementPolicies` 恢复到 `["Observe","Create","Update","LateInitialize"]`（如 Step 5 改过）
   - 同 commit 把 deletionProtection / skipFinalSnapshot 恢复到原 git 值（按 cost-tiering/rds.yaml）
   - commit + push + MR
@@ -190,15 +203,19 @@ AWS RDS 的 `storageEncrypted` / `username` / `dbName` / `engine` 等字段创�
 ## Step 8. MR 合并后恢复 ArgoCD auto-sync
 
 [precondition]
-  - Step 7 MR 已合并到 master
+  - Step 7 MR 已合并到冻结 owner source 实际跟踪的目标分支，并确认包含本次提交；不假定分支名为 master
 
 [action]
-  - 联系运维执行：
+  - 回读冻结 owner 的 context/namespace/name 与 source 合同，确认没有并发变更；
+    曾移除 automated 时，将 Step 2 原始值构造成只恢复 `/spec/syncPolicy/automated` 的
+    JSON patch 文件 `$owner_sync_policy_restore_patch`，由运维执行：
       ```
-      kubectl -n argo-cd patch application <app> --type=merge \
-        -p '{"spec":{"syncPolicy":{"automated":{"prune":true,"selfHeal":true}}}}'
+      kubectl --context "$owner_kube_context" -n "$owner_application_namespace" patch application "$owner_application" --type=json \
+        --patch-file "$owner_sync_policy_restore_patch"
       ```
-  - ArgoCD 自动 sync → Crossplane reconcile → 调 AWS CreateDBInstance 建新实例（10-15 min）
+    原来没有 automated 则不执行此 patch；不能固定启用 prune/selfHeal。
+  - 依原同步策略与准确操作授权同步这个 owner Application（原手动仍手动），
+    Crossplane reconcile → 调 AWS CreateDBInstance 建新实例（10-15 min）
   - 同 identifier 复用 → 新 RDS endpoint hostname 跟旧的一样
   - 应用 Pod 通过 ExternalSecret 读到 DB_HOST 跟之前一样（不需要 rollout）
 

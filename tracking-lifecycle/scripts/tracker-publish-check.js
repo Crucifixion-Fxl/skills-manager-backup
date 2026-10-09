@@ -13,7 +13,7 @@
  *     --specs=<point1,point2,point3>
  *
  *   可选：
- *     --base-url=<url>          默认 https://us-analytics-management.theunismart.com
+ *     --base-url=<url>          默认使用 TRACKING_PLATFORM_BASE_URL；必须是实际 HTTPS 管理 API
  *     --token-env=<NAME>        默认 TMT_TOKEN
  *
  * 输入语义：
@@ -39,7 +39,7 @@
 const https = require('https');
 const http = require('http');
 
-const DEFAULT_BASE_URL = 'https://us-analytics-management.theunismart.com';
+const { reviewedHttpsEndpoint } = require('../cli/src/endpoint');
 const RELEASED_STATUS_CODE = 3; // tracker.management.enums.ReleaseStatusEnum.RELEASED
 
 // --- 参数解析 ---
@@ -116,7 +116,12 @@ async function main() {
     process.exit(3);
   }
 
-  const baseUrl = args['base-url'] || DEFAULT_BASE_URL;
+  let baseUrl;
+  try { baseUrl = reviewedHttpsEndpoint(args['base-url'] || process.env.TRACKING_PLATFORM_BASE_URL); }
+  catch (error) {
+    console.error(JSON.stringify({ error: error.message }));
+    process.exit(3);
+  }
   const tokenEnv = args['token-env'] || 'TMT_TOKEN';
   const token = process.env[tokenEnv];
   if (!token) {

@@ -453,7 +453,7 @@ class DirectoryRound(TmpCase):
 
 
 SKILL_DIR = Path(__file__).resolve().parent.parent
-REPO = SKILL_DIR.parents[1]
+REPO = SKILL_DIR.parents[2]
 
 
 def _read(path):
@@ -499,7 +499,7 @@ class DirectoryDocs(unittest.TestCase):
         self.assertIn("buzz_agent_feishu_app.py", readme)
         self.assertIn("ADR-0019", readme)
         self.assertIn("kind:30177", _read(SKILL_DIR / "SKILL.md"))
-        index = _read(REPO / "docs" / "05-adr" / "README.md")
+        index = _read(REPO / "docs" / "agent-harness" / "adr" / "README.md")
         self.assertIn("(0019-publish-agent-feishu-app-ids-in-kind-30177-and-relay-by-default.md)", index)
 
     def test_the_two_way_guide_defines_the_public_one_time_intro_and_failure_ux(self):

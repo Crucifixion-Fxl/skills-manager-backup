@@ -93,7 +93,7 @@ GitLab 降级用：`GITLAB_TOKEN`（read_api scope）+ `GITLAB_HOST`（内部 Gi
 
 ## 反过来：你在某个服务/库/应用仓里干活时（写配置让目录收录）
 
-不是查目录、而是**让你这个仓被目录正确收录** —— 用 **`service-catalog-onboarding` skill**（producer 侧）：仓根要放什么（`catalog-info.yaml` 的 C 类字段 + `a4x.io/cicd-app-name` join key + 关联注解、`mkdocs.yml` + `mermaid_hook.py` + `docs/index.md`、CI 里 `.api`/`.proto` → OpenAPI 生成 / stdlib http 手写 OpenAPI → `API.spec.definition.$text`），什么不归你仓的活（System/Domain/Group、ArgoCD App、IAM/IRSA、运行态数据 —— 自动）。门户的 GitLab discovery 扫各仓默认分支根目录的 `catalog-info.yaml` 自动注册，不用「去门户里注册」。新建仓走 `infra/backstage` 的 scaffolder 模板会直接带上这些。
+不是查目录、而是**让你这个仓被目录正确收录** —— 用 **`service-catalog-onboarding` skill**（producer 侧）：仓根要放什么（`catalog-info.yaml` 的 C 类字段 + `a4x.io/cicd-app-name` join key + 关联注解、`mkdocs.yml` + `mermaid_hook.py` + `docs/catalogue.md`、CI 里 `.api`/`.proto` → OpenAPI 生成 / stdlib http 手写 OpenAPI → `API.spec.definition.$text`），什么不归你仓的活（System/Domain/Group、ArgoCD App、IAM/IRSA、运行态数据 —— 自动）。门户的 GitLab discovery 扫各仓默认分支根目录的 `catalog-info.yaml` 自动注册，不用「去门户里注册」。新建仓走 `infra/backstage` 的 scaffolder 模板会直接带上这些。
 
 ## references / scripts
 

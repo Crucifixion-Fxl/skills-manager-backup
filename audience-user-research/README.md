@@ -1,8 +1,7 @@
 # User Research Skill
 
-此安装包以 canonical `lli/user-research-skill` main `9e691064` 为基础，并保留尚未合并的
-!144 (`14dab06`) 安全、兼容与原生 VOC 改动；不是 canonical main 的字节级镜像。
-精确来源见 [semantic owner](contracts/semantic-owner.json)。
+此安装包同步自 canonical [`lli/user-research-skill` main `cfa63481`](https://gitlab.addx.ai/lli/user-research-skill/-/commit/cfa634819672701a9eb58e42781d95a4e707dc57)。
+精确来源见 [semantic owner](contracts/semantic-owner.json)；共享仓只调整发布名称、安装路径和格式。
 
 这是一个可独立安装的 **Skill + Audience Personal API 客户端**。冷启动 Agent 使用完整仓库、
 Python 3.9+ 和安全注入的 Project Personal key，从 self-context 发现 Project，并按公开契约执行。
@@ -30,8 +29,8 @@ Reddit、Amazon 等仅是候选样例，不是白名单。Agent 不推断 `produ
 
 ```bash
 npx skills add git@gitlab.addx.ai:engineering/skills.git --skill audience-user-research
-python3 /absolute/path/to/skills/audience-user-research/scripts/preflight.py
-python3 /absolute/path/to/skills/audience-user-research/scripts/api.py capabilities
+python3 /absolute/path/to/skills/product/audience-user-research/scripts/preflight.py
+python3 /absolute/path/to/skills/product/audience-user-research/scripts/api.py capabilities
 ```
 
 完整 clone 必须保留 `SKILL.md`、`references/`、`scripts/`、`src/` 和 `contracts/`。

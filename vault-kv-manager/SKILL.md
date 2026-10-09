@@ -16,7 +16,7 @@ description: Manage HashiCorp Vault KV secrets and app-owned Vault access across
 
 ## Vault 实例全景
 
-A4x 有 **6 个 Vault 实例**（每个区域 Ops + Builder 各一个），分两套体系：
+A4x 按 **Ops / Builder** 分域管理 Vault。实例和服务集群会随迁移变化，不以固定实例数量或地区名推断密钥去向；先查目标集群的 ClusterSecretStore 与应用 registry。
 
 ### Ops 域 Vault（线上 prod 密钥）—— 运维专属
 
@@ -24,23 +24,44 @@ A4x 有 **6 个 Vault 实例**（每个区域 Ops + Builder 各一个），分�
 |------|------|---------|------|
 | US | `vault-us-new.addx.live` | us-prod, us-prod-gke, us-data | C 端 prod 密钥 |
 | EU | `vault-eu.addx.live` | eu-prod, eu-data | C 端 prod 密钥 |
-| CN | `vault-cn.addx.live` | cn-prod, cn-k8s, sg-devops | C 端 prod 密钥 |
+| CN | `vault-cn.addx.live` | 腾讯云 prod `100014919455` / cn-main；新 tech-service `100052802231` 的 `vault-backend` 也指向此地址 | 按实际路径和 registry 判定密钥域 |
 
 > **开发者无法登录 Ops Vault**——Ops Vault 只配置运维相关 policy，没有开发者角色。应用读取 prod 密钥通过 K8s ExternalSecret + ClusterSecretStore `vault-backend` 间接完成，Pod 不直连 Vault API。
 
-### Builder 域 Vault（开发者自助）—— 每区域单实例，不分 prod/nonprod
+### Builder 域 Vault（开发者自助）—— 以 registry 和实际实例为准
 
 | 区域 | 公网地址 | 集群内访问（同集群 Pod） | 服务集群 |
 |------|---------|---------|---------|
 | US | `vault-us.builder.addx.live` | 同集群优先 `http://vault-builder-active.vault-builder.svc.cluster.local:8200` | us-staging 等 Builder 域集群 |
 | EU | `vault-eu.builder.addx.live` | 同集群优先 `http://vault-builder-active.vault-builder.svc.cluster.local:8200` | eu-staging 等 Builder 域集群 |
-| CN | `vault-cn.builder.addx.live` | 同集群：`vault-builder-active.vault-builder.svc.cluster.local:8200`；跨集群（如 cn-dev → cn-tech）：`https://vault-cn-internal.builder.addx.live` | cn-tech-service, cn-dev, cn-staging |
+| CN staging | 不从 Builder tech-service 域名推断 staging 入口 | 新 staging 的 `vault-backend` 指向 `http://vault-active.vault.svc:8200`；这是 Pod 内地址，本机须先发现服务再 port-forward 或使用已核验的登录入口 | 腾讯云 `100052802231` / cn-staging；应用 registry 见 `k8s/builder/cn-staging` |
+| CN tech-service（目标） | `vault-cn.builder.addx.live`（`pending-cutover`） | 新 TKE 的 Builder 部署、Store 和集群内地址均待核验 | 腾讯云 `100052802231` / cn-tech-service 的目标归属；不能据旧 URL/DNS 宣称已迁移 |
 
-> Builder 域已覆盖 CN/US/EU。`gitlab-vault-sync` 目前按 `k8s/{builder,ops}/{cn,us,eu}/apps-registry.yaml` 分域、分区域注册应用；不要再假设海外 Builder Vault 只是占位。
+> Builder 域已覆盖 CN/US/EU。`gitlab-vault-sync` 按域与部署目录管理应用 registry，不能再假设所有 CN 应用共用 `k8s/builder/cn`。新 staging 的 ArgoCD Application 已指向 `k8s/builder/cn-staging`，需继续读取其 Kustomize 引用以定位实际 registry。不要自行复制旧 registry 或密钥。
+
+**CN 迁移核对（2026-09-28）**：AWS CN 已弃用；prod = `tencent-100014919455-cn-main`，staging = `tencent-100052802231-cn-staging`，tech-service = `tencent-100052802231-cn-tech-service`。详见 [CN 集群清单](../../infrastructure/k8s-ops/references/cn-tencent-inventory.md)。
+
+| 当前集群 | `vault-backend` Git 声明 | 认证挂载 |
+|----------|--------------------------|----------|
+| cn-main | `https://vault-cn-internal.addx.live` | 读取本集群 ClusterSecretStore 验证 |
+| 新 cn-staging | `http://vault-active.vault.svc:8200` | Kubernetes `kubernetes`，role `external-secrets` |
+| 新 cn-tech-service | `https://vault-cn.addx.live` | JWT `jwt-tke-cn-tech-service-2231`，role `external-secrets` |
+
+来源为 `k8s/clusters/<完整集群名>/cicd/external-secrets-config/cluster-secret-store.yaml` 和 `argocd-apps/tencent-100052802231-cn-staging/gitlab-vault-sync-builder-cn-staging.yaml`。Git 声明不等于认证已可用，写入前核实实际 SecretStore、registry、挂载和路径。
+
+用户指定 `vault-cn.builder.addx.live` 为 cn-tech-service Builder **目标入口，待切换**；
+它与上述 Ops `vault-backend` 是两个身份/权限域，不能把 Ops server 改为 Builder。
+旧 Builder URL 的存在不证明实例已迁入 TKE，旧 `vault-cn-internal.builder.addx.live` 也不是新集群默认入口。
+[固定声明与迁移边界](../../infrastructure/k8s-ops/references/cn-tencent-inventory.md#cn-tech-service-目标域名待切换)
+保留 AWS Builder 历史回执及新 tech-service Ops 的真实声明；执行前须核验 Builder 部署归属、
+registry、登录方式和 Store 的完整 auth 合同，未核实就暂停，不自动连接旧 AWS 或切到 Ops。
+域名更新不改 Ops 的 `jwt-tke-cn-tech-service-2231`、KV 前缀、role/SA/audience；
+Builder mount/issuer/role/audience/SA 尚无新 TKE 证据。SG 同步器的 `jwt-eks-sg-devops`、
+人员 CLI 的 `jwt-casdoor` 分属其他调用身份，也不能据域名改名统一替换。
 
 KV engine 统一：`secret/` (KV v2)。
 
-> **默认 Vault = 先按目标环境/集群判定域**。prod/tech/data/sg-devops 等 Ops 域负载通常用 `vault-{us-new,eu,cn}.addx.live`；dev/staging/sandbox 等 Builder 域集群用 `vault-{us,eu,cn}.builder.addx.live`。历史应用可保留 Ops Vault 老路径；新应用和自助权限以 `gitlab-vault-sync` registry 为准。
+> **默认 Vault = 目标应用 registry + 目标集群 SecretStore + 密钥实际权限**。不要仅按 prod/staging/tech 环境名拼接域名；新 CN staging 和 tech-service 的路由见上表。历史应用可保留 Ops Vault 老路径；新应用和自助权限以 `gitlab-vault-sync` registry 为准。
 
 ## 密钥分级与操作主体
 
@@ -65,33 +86,44 @@ KV engine 统一：`secret/` (KV v2)。
 
 | 场景 | 认证方式 | 备注 |
 |------|---------|------|
-| 运维操作 Ops Vault | userpass | 用运维个人账号登录，AI 操作时从浏览器复制 token（见下方说明） |
+| 运维操作 Ops Vault | userpass | 用运维个人账号在本机安全页面登录，已授权任务经私密通道注入 Token（见下方说明） |
 | 运维操作 Builder Vault | userpass 或 OIDC | 同上；Builder Vault 也可用 OIDC admin role |
 | 开发者操作 Builder/Ops app-owned Vault | OIDC 飞书 SSO | 权限来自 gitlab-vault-sync 同步的 Identity Group；登录后以 token policies 为准 |
 | CI/CD 同步 | AppRole | role_id/secret_id 在 GitLab CI Variables |
 | K8s ESO 读取 | JWT | `external-secrets` ServiceAccount，ClusterSecretStore 自动处理 |
 
-### AI 辅助操作 Vault 的标准方式：浏览器复制 token
+### AI 辅助操作 Vault 的标准方式：本机登录与私密注入
 
-AI 没有 Vault 账号，**不能直接登录**。运维/开发者需要先在浏览器登录 Vault，把 token 复制给 AI，AI 用这个 token 做 API 调用。
+用户在已核验目标实例的本机安全页面完成登录。已明确授权的任务允许 AI 辅助正常 OIDC/OAuth 导航和登录检测，并将浏览器私有会话凭据或 credential provider 的 Token 经私密 stdin／进程内存、加密 SSH stdin 注入 native 消费者；不得要求用户把 Token 发到聊天，不把凭据放入 argv、文件、日志或输出。已有授权涵盖的正常登录步骤不重复申请批准；密码、MFA、验证码仍由用户直接在本机页面输入。未获授权不主动代持个人凭据，不改变用户选择的身份或认证方式。保留官方 Vault CLI/API 与 `X-Vault-Token`，网页辅助与原生访问并存。
 
-**复制 token 步骤**：
+**本机登录步骤**：
 
 1. 浏览器打开目标 Vault UI：
    - Ops Vault 示例: `https://vault-us-new.addx.live/ui`、`https://vault-eu.addx.live/ui`、`https://vault-cn.addx.live/ui`
-   - Builder Vault 示例: `https://vault-{us,eu,cn}.builder.addx.live/ui`
+   - US/EU Builder Vault 示例: `https://vault-{us,eu}.builder.addx.live/ui`
+   - CN staging：先核验 `100052802231` 目标集群的 `vault-backend`、实际 Service 和认证配置，再使用该实例已核验的登录入口；若只有集群内地址，按下方「CN staging 登录入口核验」建立本机转发。不能回退到旧 CN Builder 域名。
+   - CN tech-service Builder：目标 UI 为 `https://vault-cn.builder.addx.live/ui`，当前 `pending-cutover`。先核实新 TKE 实例、登录方式/回调和权限域；未核实前不发起登录，不将它替换为 Ops `vault-cn.addx.live`。
 2. 选认证方式登录：
    - 运维用 userpass（Method → Username）
    - 开发者用 OIDC 飞书 SSO（Method → OIDC；如实例要求 Role，使用平台提供的通用 OIDC role，不再手建每 app role）
-3. 登录成功后，右上角头像 → **Copy token**
-4. 把 token 粘贴给 AI（形如 `hvs.XXXXXXXXXXXXX...`）
+3. 登录成功后核验目标实例及预期身份；已授权任务由安全浏览器会话或 credential provider 私密注入 native Token。
+4. 按下方最小身份与权限检查继续；用户无需在聊天复制任何 Token。缺安全注入能力时保留网页登录结果并说明 native 未覆盖，不要求发送凭据。
 
 **安全规则**：
 
-- Token 有 TTL（OIDC 默认 8h，userpass 默认 24h），过期需重新复制
-- AI 收到 token 后**不得在任何输出中回显 token 明文**（日志、总结、确认消息均不可）
-- 任务结束后 token 自然过期即可。**UI 的 "Log out" 只清浏览器 session，不会 revoke token**；如需提前作废，必须用 token 调 API：`curl -sH "X-Vault-Token: $TOKEN" -X POST "$VAULT/v1/auth/token/revoke-self"`
-- **严禁让用户把账号密码直接发给 AI** —— AI 代登录会导致个人凭据泄漏
+- Token TTL 取实际认证配置与 lookup 响应，不按认证方式假定固定期限；过期时走正常登录或已有安全凭据刷新流程。
+- Token 只经已授权私密注入，**不得在任何输出中回显 Token 明文**；stdin 不回显，消费者只输出允许的字段和脱敏错误类别。
+- **UI 的 "Log out" 只退出浏览器 session，不自动 revoke native 认证 Token**。准确记录实际退出响应、临时进程／SSH资源和任务独立 profile 的清理；任务结束清理自己的临时资源，不影响既有会话。Token 撤销仅在对应用户授权或明确生命周期约定下使用官方 `POST /v1/auth/token/revoke-self`，不追加“撤销后请求必须拒绝”的验证。
+- **严禁让用户在聊天发送账号密码、MFA、验证码或 Token**；需要用户操作时将安全登录页置前提醒，完成后检测登录继续已授权任务。
+
+### CN staging 登录入口核验
+
+`http://vault-active.vault.svc:8200` 是 ESO 的集群内入口，不是开发者公网登录地址。
+先用已核验属于 `100052802231/cn-staging` 的 context 读取 `vault-backend` 和对应 Service，
+确认 server、namespace、端口及目标实例。需要本机访问时，将已核验的 Service 端口
+转发到仅监听 `127.0.0.1` 的空闲本机端口，再使用该转发的 `/ui`。
+转发只解决连通性：须另行核验此实例的登录方式；OIDC 还需允许该实际回调地址。
+登录方式、回调或实例身份未核实就暂停认证，补齐目标证据，不能尝试旧 Builder/Ops 地址作为 fallback。
 
 ## Builder Vault 路径规范（开发者必读）
 
@@ -157,13 +189,15 @@ gitlab-vault-sync 自动把 GitLab repo 权限同步成 Vault Identity Group 和
 
 ### 场景 A：AI 代运维做 Vault CRUD
 
-#### Step A1：向用户要 token（不要要密码）
+#### Step A1：安全登录、私密注入与最小核验
 
-明确告诉用户复制 token 的步骤（见上方"AI 辅助操作 Vault 的标准方式"）。收到后验证：
+按上方本机登录与私密注入方法获得已授权会话。先用官方 `GET /v1/auth/token/lookup-self` 私有处理响应，最小投影仅保留 `display_name`、`policies`、`ttl`、`renewable` 等本任务确需字段，省略 `id`、`accessor`、`entity_id` 及原始 metadata。`display_name` 匹配不等于已证明 OIDC claim 绑定或业务资源权限；结合目标实例的服务端身份契约和确切路径 capabilities/policy 核验，未覆盖处明确标注。身份／权限验收不读取 KV value，也不通过写入测试权限。
+
+下列 API 示例由安全注入器将 Token 置于当前进程内存，`printf` 必须是 shell builtin、禁止 xtrace／管道日志，安全注入器须拒绝凭据 CR/LF 并正确转义 curl 配置中的引号与反斜杠；header 通过 curl 私密配置 stdin 而非 `-H` argv，禁用会打印请求的 debug/verbose 模式；真实消费者优先直接在进程内构造 `X-Vault-Token`。
 
 ```bash
-# 验证 token 有效（替换 VAULT 和 TOKEN 为实际值，TOKEN 不回显）
-curl -sH "X-Vault-Token: $TOKEN" "$VAULT/v1/auth/token/lookup-self" | jq '.data.policies'
+# VAULT 是已核验目标；TOKEN 由安全注入器提供，不从聊天或凭据文件读取
+printf 'header = "X-Vault-Token: %s"\n' "$TOKEN" | curl -s --config - "$VAULT/v1/auth/token/lookup-self" | jq '.data.policies'
 ```
 
 如返回的 policies 不含对目标路径的写权限，先判断目标 app 是否已在对应域/区域 registry 注册，再判断用户在 GitLab repo 中是否是 Maintainer+（写）或 Developer+（读）。
@@ -171,48 +205,46 @@ curl -sH "X-Vault-Token: $TOKEN" "$VAULT/v1/auth/token/lookup-self" | jq '.data.
 #### Step A2：CRUD（KV v2 API）
 
 ```bash
-# 前置（每次脚本前 export）：
-# export TOKEN=hvs.xxxxxxxxxxxxxxxx   # 用户从浏览器复制的
-# export VAULT=https://vault-us-new.addx.live   # 目标 Vault 地址
+# 前置：目标 VAULT 已核验；TOKEN 经授权私密注入，不硬编码或写凭据文件
 
 # 读
-curl -sH "X-Vault-Token: $TOKEN" "$VAULT/v1/secret/data/<path>"
+printf 'header = "X-Vault-Token: %s"\n' "$TOKEN" | curl -s --config - "$VAULT/v1/secret/data/<path>"
 
 # 写（KV v2：先读后合并再写，否则丢失已有 key）
-curl -sH "X-Vault-Token: $TOKEN" -X POST \
+printf 'header = "X-Vault-Token: %s"\n' "$TOKEN" | curl -s --config - -X POST \
   -d '{"data":{"k1":"v1","k2":"v2"}}' \
   "$VAULT/v1/secret/data/<path>"
 
 # 写（大 payload 必走此模式：从临时文件 binary 读取，避免 argv 长度限制和空白归一化）
 # 适用：path 已有几百个 key、单个 value 是几百 KB 的 base64/cert，或目标是 CN Vault
 TMPFILE=$(mktemp)
-curl -sH "X-Vault-Token: $TOKEN" "$VAULT/v1/secret/data/<path>" \
+printf 'header = "X-Vault-Token: %s"\n' "$TOKEN" | curl -s --config - "$VAULT/v1/secret/data/<path>" \
   | jq --arg s "$NEW_VALUE" '{data: (.data.data | ."target.key" = $s)}' > "$TMPFILE"
-curl -sH "X-Vault-Token: $TOKEN" -H "Content-Type: application/json" -X POST \
+printf 'header = "X-Vault-Token: %s"\n' "$TOKEN" | curl -s --config - -H "Content-Type: application/json" -X POST \
   --data-binary @"$TMPFILE" "$VAULT/v1/secret/data/<path>"
 rm -f "$TMPFILE"
 
 # 列 key
-curl -sH "X-Vault-Token: $TOKEN" -X LIST "$VAULT/v1/secret/metadata/<path>"
+printf 'header = "X-Vault-Token: %s"\n' "$TOKEN" | curl -s --config - -X LIST "$VAULT/v1/secret/metadata/<path>"
 
 # 软删（可恢复）
-curl -sH "X-Vault-Token: $TOKEN" -X DELETE "$VAULT/v1/secret/data/<path>"
+printf 'header = "X-Vault-Token: %s"\n' "$TOKEN" | curl -s --config - -X DELETE "$VAULT/v1/secret/data/<path>"
 
 # 永久删（不可恢复，谨慎）
-curl -sH "X-Vault-Token: $TOKEN" -X DELETE "$VAULT/v1/secret/metadata/<path>"
+printf 'header = "X-Vault-Token: %s"\n' "$TOKEN" | curl -s --config - -X DELETE "$VAULT/v1/secret/metadata/<path>"
 ```
 
 ### 场景 B：开发者自助通过 UI 操作 Builder Vault
 
-**默认让开发者自己通过 UI 操作**——AI 不代持开发者 OIDC token。
+默认由开发者在本机 UI 完成密码／MFA 和自助操作；已授权 AI 辅助任务可按上方私密注入方法使用该身份，未授权不主动代持 OIDC Token。
 
 **指引开发者**：
 
-1. 打开 `https://vault-{region}.builder.addx.live/ui`
-2. Method: **OIDC**
-3. 登录后用 token lookup 确认是否包含 `app-{app-name}-owner` 或 `app-{app-name}-developer`
-4. 点 "Sign in with OIDC Provider" → 飞书 SSO → 回跳完成登录
-5. 进入 Secret Engine `secret/` → 按规范路径 `dev/app/{app}/{key}` 创建
+1. 先核验目标应用 registry 和集群 SecretStore。US/EU Builder 可用上表对应 UI；CN staging 按「CN staging 登录入口核验」进入实际实例，不能按 `region` 拼域名。
+2. 核验该实例已配置开发者 **OIDC** 登录及回调地址；尚未配置则先补齐目标认证条件，不能改登其他 Vault。
+3. 点 "Sign in with OIDC Provider" → 飞书 SSO → 回跳完成登录。
+4. 登录后用 token lookup 确认是否包含 `app-{app-name}-owner` 或 `app-{app-name}-developer`。
+5. 进入 Secret Engine `secret/` → 按实际环境路径（如 `staging/app/{app}/{key}`）操作。
 
 如果开发者**没有对应的 app-owner policy**（登录后仍 denied），走「场景 C」。
 
@@ -238,6 +270,11 @@ curl -sH "X-Vault-Token: $TOKEN" -X DELETE "$VAULT/v1/secret/metadata/<path>"
 |----|------|------|
 | Builder | US/EU/CN | `k8s/builder/{us,eu,cn}/apps-registry.yaml` |
 | Ops | US/EU/CN | `k8s/ops/{us,eu,cn}/apps-registry.yaml` |
+
+以上为 registry 文件，不等同于 ArgoCD 部署目录。新 CN staging 的实际入口是
+`gitlab-vault-sync/k8s/builder/cn-staging/kustomization.yaml`；本次核验其 `resources: [../cn]`
+仍共享 `k8s/builder/cn/apps-registry.yaml`。修改前沿目标 Application 的 Kustomize 引用确认
+当前 registry 和消费实例，不要新建假定的 `cn-staging/apps-registry.yaml`，也不要凭共享 registry 推断登录地址。
 
 **流程**：
 
@@ -285,7 +322,7 @@ MR 合并后等待下一轮 gitlab-vault-sync reconcile（约 15 分钟），再
 
 ## 安全规则
 
-- **AI 不代登录**——让用户在浏览器登录后复制 token 给 AI；严禁要求用户发账号密码
+- **本机安全登录与授权私密注入**——可辅助正常 OAuth/OIDC；密码／MFA由用户页面输入，未授权不主动代持个人凭据，禁止聊天发送 Token。
 - **禁止回显 token/密码明文**——日志、总结、确认消息都不行
 - **禁止打印 KV value**——向用户展示结果只说"写入了哪些 key"
 - **禁止把任何凭据写入 skill 文档 / Git 仓库**——包括测试用的密码、token、AppRole id
@@ -302,14 +339,14 @@ MR 合并后等待下一轮 gitlab-vault-sync reconcile（约 15 分钟），再
 用户：我想在 Vault 上加个 KV
 AI：请提供你的 Vault 用户名和密码。
 ```
-**问题**：个人账号密码不应离开用户的本地环境。正确做法是让用户在浏览器登录 Vault UI，Copy token 发给 AI。
+**问题**：个人账号密码不应离开用户的本地环境。正确做法是用户在本机安全页面登录，已授权任务使用私密会话／credential provider 注入，禁止把 Token 发到聊天。
 
 **2. 代替开发者登录 Builder Vault OIDC**
 ```
 开发者：我 Vault 写不进去
 AI：把你的飞书账号密码给我，我帮你登录...
 ```
-**问题**：OIDC token 是个人身份，AI 不能代持。正确做法是指导开发者自己登录 UI，并排查 registry / GitLab 权限 / token policies。
+**问题**：密码应由用户在本机页面输入；个人 Token 仅能在明确授权的任务中经私密通道使用。指导正常 OIDC 登录并检查 registry、GitLab 权限和 Token policies，不通过聊天收集凭据。
 
 **3. 回显 token/密码明文**
 ```
@@ -320,7 +357,7 @@ AI：已收到 token hvs.ABCDEF12345...，开始执行
 **4. KV v2 POST 覆盖已有 key**
 ```bash
 # 路径已有 api_key=xxx, api_secret=yyy
-curl -sH "X-Vault-Token: $T" -X POST \
+printf 'header = "X-Vault-Token: %s"\n' "$T" | curl -s --config - -X POST \
   -d '{"data":{"db_host":"10.0.1.100"}}' \
   "$VAULT/v1/secret/data/dapp/prod"
 # 结果：新版本只剩 db_host，api_key/api_secret 丢失
@@ -337,14 +374,14 @@ curl -sH "X-Vault-Token: $T" -X POST \
 
 ### ✅ Good
 
-**1. 让用户在浏览器复制 token**
+**1. 本机安全登录后私密注入 Token**
 ```
-用户：帮我在 staging Builder Vault 上加个 KV 到 dev/app/my-app/config
-AI：需要你先在浏览器登录 Vault 把 token 复制给我：
-    1. 打开 https://vault-cn.builder.addx.live/ui
-    2. Method: OIDC 登录
-    3. 登录成功后，右上角头像 → Copy token
-    4. 把 token 粘贴给我（形如 hvs.XXXXX）
+用户：帮我在 CN staging Builder Vault 上加个 KV 到 staging/app/my-app/config
+AI：先核验应用 registry、100052802231/cn-staging 的 vault-backend 和目标实例权限。
+    使用该实例已核验的 UI；只有集群内地址时，按「CN staging 登录入口核验」
+    建立本机转发并核验实际登录方式及 OIDC 回调。
+    目标登录入口或认证未确认前暂停，不能改用旧 CN Builder 域名。
+    登录并确认目标路径权限后，按场景 A 的私密注入流程操作，不发送或回显 Token。
 ```
 
 **2. 引导开发者自助登录排障（场景 B）**
@@ -362,11 +399,11 @@ AI：先排除路径问题——你的路径 staging/app/scm/config 格式正确
 **3. KV v2 安全写入（先读后合并）**
 ```bash
 # Step 1: 读
-EXISTING=$(curl -sH "X-Vault-Token: $TOKEN" "$VAULT/v1/secret/data/dapp/prod" | jq .data.data)
+EXISTING=$(printf 'header = "X-Vault-Token: %s"\n' "$TOKEN" | curl -s --config - "$VAULT/v1/secret/data/dapp/prod" | jq .data.data)
 # Step 2: 合并新 key
 MERGED=$(echo "$EXISTING" | jq '. + {db_host:"10.0.1.100",db_port:"5432"}')
 # Step 3: 写
-curl -sH "X-Vault-Token: $TOKEN" -X POST \
+printf 'header = "X-Vault-Token: %s"\n' "$TOKEN" | curl -s --config - -X POST \
   -d "{\"data\":$MERGED}" "$VAULT/v1/secret/data/dapp/prod"
 ```
 

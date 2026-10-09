@@ -25,9 +25,7 @@ pip install --upgrade tccli
 ### 配置 Profile
 
 ```bash
-# 配置默认 profile
-tccli configure
-
+# 仅在没有可用的已授权配置时创建具名 profile；不要覆盖默认账号
 # 配置指定 profile
 tccli configure --profile <profileName>
 ```
@@ -57,7 +55,10 @@ tccli 没有内置的 switch 命令，建议始终在命令中显式指定 `--pr
 # 检查版本
 tccli --version
 
-# 测试 API 调用（查看地域列表）
+# 核对主账号身份：prod=100014919455，staging/tech-service=100052802231
+tccli sts GetCallerIdentity --profile <profileName> --region ap-beijing
+
+# 查看地域列表仅验证 API 连通性，不能代替账号校验
 tccli cvm DescribeRegions --profile <profileName>
 ```
 

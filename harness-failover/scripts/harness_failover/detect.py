@@ -149,12 +149,56 @@ def family_health(events, now) -> Health:
 
 
 # ───────────────────────────── codex ─────────────────────────────
-def codex_health(logged_in, now) -> Health:
+def codex_quota_events(lines, sigs, cutoff, model):
+    """One codex rollout (<CODEX_HOME>/sessions/YYYY/MM/DD/rollout-*.jsonl) → [(ts, 'quota'|'ok', until|None, code)].
+
+    Different models have different quotas (e.g. a premium model can be used up while the fleet model is fine), so
+    only turns run on `model` count: each `turn_context` names the model of the turns that follow it, and a turn
+    seen before any `turn_context` (a tail read that starts mid-file) is not attributed at all. A turn ends with
+    `event_msg/task_complete`: `error` set → classified (only quota counts); no error and a non-empty final
+    message → ok (an empty/missing/odd message is neither: it must not mask an earlier quota error)."""
+    events, cur = [], None
+    for line in lines:
+        if '"turn_context"' not in line and '"task_complete"' not in line:
+            continue
+        try:
+            o = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(o, dict):
+            continue
+        p = o.get("payload") if isinstance(o.get("payload"), dict) else {}
+        if o.get("type") == "turn_context":
+            cur = p.get("model")
+            continue
+        if o.get("type") != "event_msg" or p.get("type") != "task_complete" or cur != model:
+            continue
+        ts = _ts(o.get("timestamp"))
+        if not ts or ts < cutoff:
+            continue
+        err = p.get("error")
+        if err:
+            m = classify(json.dumps(err, ensure_ascii=False), sigs, harness="codex", after=ts)
+            if m and m.kind == "quota":
+                events.append((ts, "quota", m.until, m.id))
+        else:
+            final = p.get("last_agent_message")
+            if isinstance(final, str) and final.strip():  # only a real final reply proves the model answered
+                events.append((ts, "ok", None, ""))
+    events.sort(key=lambda e: e[0])
+    return events
+
+
+def codex_health(logged_in, now, events=()) -> Health:
+    """Login state first (a logged-out home is unavailable whatever its history says), then the same
+    latest-event-wins rule as the claude family over this profile's own model."""
     if logged_in is False:
         return Health("unavailable", "codex 未登录（需要人工 `CODEX_HOME=<home> codex login`）")
     if logged_in is None:
         return Health("unknown", "无法判断 codex 登录状态")
-    return Health("unknown", "已登录，但没有可分析的额度历史")
+    if not events:
+        return Health("unknown", "已登录，但近期没有本 profile 模型的 codex turn 记录")
+    return family_health(events, now)
 
 
 # ───────────────────────── agent logs / learning ─────────────────────────

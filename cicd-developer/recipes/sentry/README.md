@@ -10,17 +10,17 @@ app-scoped manifest，必须一起使用。ConfigMap 和 Job 各有 EKS / TKE �
 | `onboard-config-eks.yaml.tmpl` | ConfigMap（**EKS**：填 8 个槽位含 instance / vault_addr 完整 URL / mount / env） |
 | `onboard-config-tke.yaml.tmpl` | ConfigMap（**TKE cn-main**：固定 INSTANCE=cn-prod / VAULT_ADDR=vault-cn-internal / MOUNT=jwt-tke-cn-main；填 app / platform / team / sentry_app_type / target.env，staging 不得继承 ENV=prod）|
 | `onboard-sa.yaml.tmpl` | ServiceAccount（EKS/TKE 通用；填 app，生成 `<app>-sentry-onboard`）|
-| `onboard-job-eks.yaml.tmpl` | Job（**EKS**：填 app / image / is_aws_cn；AWS CN 4 个 EKS target 加 NAT egress NodePool）|
+| `onboard-job-eks.yaml.tmpl` | Job（**EKS**：填 app / image；仅当前准入 EKS，AWS CN 已退役）|
 | `onboard-job-tke.yaml.tmpl` | Job（**TKE cn-main**：固定 harbor-cn/base/ image + projected vault-token + 显式 imagePullSecrets；填 app / 不可变 sentry_onboard_image_tag）|
 | `externalsecret.yaml.tmpl` | ExternalSecret（EKS/TKE 通用；填 app / env / namespace / cluster_secret_store）从 Vault 拉 DSN 渲染 K8s Secret `<app>-sentry-dsn` |
 
-workflow `add-sentry.md` Step 4 按 `cluster.cloud` 路由：`aws` → EKS 变体；`tencent` → TKE 变体。
+workflow `add-sentry.md` Step 4 按 `cluster.cloud` 路由：获准 `aws` → EKS 变体；仅 `tencent` cn-main → TKE 变体；100052802231 新 TKE 尚缺自助能力证据，STOP + Ops Todo。
 
 ExternalSecret 的 ClusterSecretStore **不可按目标集群默认 CSS 猜**。Sentry DSN
 由 sentry-onboard Job 写入 ConfigMap `VAULT_ADDR` 指向的 Vault；ExternalSecret
-必须读同一个 Vault 实例。builder dev/staging 普通 app Secret 使用
-`vault-builder-backend` 指向 builder Vault；cn-dev Sentry DSN 若仍由 Job 写入
-ops Vault，就必须配置同实例 DSN CSS。填 `{{cluster_secret_store}}` 时必须查
+必须读同一个 Vault 实例。AWS US/EU staging 普通 app Secret 使用
+`vault-builder-backend`；当前 TKE staging 使用 `vault-backend` 指向集群内 Vault，
+需要单独验证 Sentry writer/reader 合同。cn-dev 仅保留退役历史，不再新接入。填 `{{cluster_secret_store}}` 时必须查
 `references/sentry/README.md` 的
 `SENTRY_DSN_CSS`，不能从 `clusters.yaml -> vault_css` 或 store 名字推断。
 
@@ -83,21 +83,24 @@ Pod env SENTRY_DSN 拿到（用 secretKeyRef）
 
 ## ⚠️ 镜像路径：所有集群统一 `base/sentry-onboard`
 
-sentry-onboard 现在是**每个集群都有的统一 `base/` 工具镜像**（由 DEV/base-images 扇出到全部 15 个目标 Harbor，含 3 个 staging EKS + eu-prod-data + TKE + 2 个 GKE）。**不再按集群挑路径**——一条规则覆盖全 fleet。（注：GKE Harbor 也收到镜像，但 `cloud==gcp` 的 Sentry 自助是独立的、当前仍未支持项 → STOP，见 workflows/add-sentry.md，与镜像无关。）一条规则：
+sentry-onboard 的统一工具镜像路径是 `base/sentry-onboard`，由 DEV/base-images 同步。
+每次接入都要确认精确目标 Harbor 已收到批准的 tag/digest；不能从旧 fleet 数量、旧 AWS CN
+sync job 或 cn-main 的成功结果推断新账号 staging/tech-service 已完成分发。
+GKE 以及新账号 TKE 的自助前置仍按 `workflows/add-sentry.md` 单独核验，镜像存在不代表可接入。
 
 ```
 <local-harbor>/base/sentry-onboard:<approved-sha>
 ```
 
-- `<local-harbor>` = 本集群自己的 Harbor 主机（如 `harbor-00249-us-tech.addx.live`；TKE 是 `harbor-cn.addx.live`）。查 `references/data/clusters.yaml -> clusters[].harbor_url` 取本集群 host，拼上 `/base/sentry-onboard`。
+- `<local-harbor>` = 本集群自己的 Harbor 主机（如 `harbor-00249-us-tech.addx.live`；仅 cn-main 是 `harbor-cn.addx.live`，新 TKE 使用各自 registry）。查 `references/data/clusters.yaml -> clusters[].harbor_url` 取本集群 host，拼上 `/base/sentry-onboard`。
 - tag = 平台批准的不可变 SHA（当前 `a5b195bd9ea97e78bcb488c946d7c734cd22118a`，由 workflow 填 `{{sentry_onboard_image_tag}}`）；**禁止 `latest`**。
 - Kyverno `require-harbor-image-path` 全 fleet 放行 `base/`（只拦 flat `cicd/<app>` 与 `library/`），统一 `base/` 路径合规、无需任何豁免。
 
-> 历史：早先 sentry-onboard 走 per-cluster `cicd/<env>-<region>/sentry-onboard`，且 staging EKS / eu-prod-data 因 CI 无对应 build job 而**无镜像 → STOP**。现已被 base-images 扇出统一为 `base/`，**那个 staging / eu-data 缺口已修复，这些集群现在可以正常接 Sentry**。
+> 历史：早先 sentry-onboard 走 per-cluster `cicd/<env>-<region>/sentry-onboard`，且 staging EKS / eu-prod-data 因 CI 无对应 build job 而**无镜像 → STOP**。历史缺口曾由 base-images 统一 `base/` 路径修复；当前仍须核验目标镜像和全部前置，不能推断新 TKE 已就绪。
 
-## ⚠️ AWS CN 4 个 EKS target 必须 NAT egress 调度
+## 历史排障：已退役 AWS CN 的 NAT egress 调度
 
-`cn-prod` / `cn-tech-service` / `cn-dev` / `cn-staging` 的 Pod 默认走节点 EIP 出网，**不在** Sentry CLB 白名单里，会 timeout/504。Job 模板必须加 NodePool 调度：
+以下仅解释历史故障，禁止用于新 Build 或当前 TKE。旧 AWS CN `cn-prod` / `cn-tech-service` / `cn-dev` / `cn-staging` 的 Pod 当时默认走节点 EIP 出网，**不在** Sentry CLB 白名单里，会 timeout/504。历史 Job 通过以下 NodePool 调度；当前 recipe 不再生成这些槽位：
 
 | 集群 | nodeSelector | toleration |
 |---|---|---|

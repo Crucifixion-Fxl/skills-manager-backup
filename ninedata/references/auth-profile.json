@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "tool": "ninedata",
+  "provider": "delegated",
+  "owner": "ninedata",
+  "authContract": "references/openapi-auth.md",
+  "verification": "source-verified",
+  "runtimeVerification": "pending",
+  "authDiscovery": "references/auth-discovery.json"
+}

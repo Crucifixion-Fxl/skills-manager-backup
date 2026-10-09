@@ -9,11 +9,13 @@ description: Query Sentry errors, triage issues, and check release health via RE
 
 ## Description
 
+首次接入/变更扫描与日常认证入口见 [SaaS 接入](references/saas-access.md)；已有平台业务契约与授权门禁仍在本 Skill 维护。
+
 适用场景：线上错误排查、Issue triage、Release 健康检查、崩溃分析。
 
 - **三区 prod Sentry 实例**承接 production 和 staging 共享应用项目（旧后缀项目保留历史），API 基础路径均为 `/api/0/`；旧 staging 实例仅作迁移历史调查，是否仍存在需实时核验
 - **组织 slug**：`sentry`（各实例相同）
-- **环境变量**：存储在 `skills/sentry/.env`（已 gitignore），使用前 `source skills/sentry/.env`
+- **环境变量**：存储在 `skills/observability/sentry/.env`（已 gitignore），使用前 `source skills/observability/sentry/.env`
 
 | 环境 | 区域 | URL 变量 | Token 变量 |
 |------|------|----------|------------|
@@ -109,3 +111,10 @@ AI：查询 vh-android 项目 Release 2.85.0 相关 Issue...
   2. 查看未解决 Issue，按影响用户数排序
   3. 查看 top Issue 堆栈 → 定位代码
 ```
+
+
+## 网页会话并存的只读验证
+
+保留已有获准 Token/CLI 为首选；未创建 Token 不等于已登录网页无法读取。使用正常登录产生的会话时，先观察目标实例本人接口及精确业务 GET，再将 Cookie 经私密 stdin／加密 SSH stdin 仅驻留进程内存，不放 argv、文件或报告，不输出原始 headers。身份预检须在业务查询前核对预期账户和有效状态，禁止重定向携带凭据到其他目标。此方式与原生 Token 权限独立，任务级两个 GET 的验证不能宣称普适 Session 客户端或 Token 已验收。
+
+项目列表的默认 API 范围、`all_projects` 与网页 My Teams 范围分别记录；只比较实际相同范围或明确的可见子集，不将子集匹配写成全部数量一致。分页 `Link` 中 next/results 只投影续页布尔值，缺失 header 记 UNKNOWN；不保存或跟随任意 URL，不推断全局所有项目。仅读元数据，不加载原始错误堆栈/事件/用户上下文或点击修改 Issue。完成后正常 Sign out，核验回到登录页再关闭任务标签；最终独立浏览器清理另行核验。

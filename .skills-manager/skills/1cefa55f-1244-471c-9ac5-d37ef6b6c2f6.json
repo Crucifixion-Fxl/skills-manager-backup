@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "1cefa55f-1244-471c-9ac5-d37ef6b6c2f6",
+  "path": "addx-nexus-usage",
+  "path_key": "addx-nexus-usage",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/delivery/addx-nexus-usage",
+    "branch": null
+  }
+}

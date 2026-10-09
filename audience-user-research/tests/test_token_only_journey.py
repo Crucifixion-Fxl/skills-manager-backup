@@ -541,7 +541,7 @@ class TokenOnlyJourneyTests(unittest.TestCase):
         owner = json.loads((ROOT / "contracts/semantic-owner.json").read_text())
         self.assertEqual(owner["repository"], "lli/user-research-skill")
         evaluations = json.loads((ROOT / "evals/evals.json").read_text())
-        self.assertEqual(evaluations["contract"]["case_count"], 19)
+        self.assertEqual(evaluations["contract"]["case_count"], 20)
         self.assertEqual(
             {case["slug"] for case in evaluations["evals"]},
             {
@@ -564,6 +564,7 @@ class TokenOnlyJourneyTests(unittest.TestCase):
                 "uj-resume-history-results-matrix",
                 "uj-recoverable-exceptions",
                 "project-shared-research-reuse",
+                "published-shared-form-update-confirmation",
             },
         )
         for script in ("update_operation_registry.py", "update_source_lock.py"):
@@ -627,7 +628,7 @@ class TokenOnlyJourneyTests(unittest.TestCase):
         try:
             with tempfile.TemporaryDirectory() as directory:
                 temporary = Path(directory)
-                installed = temporary / "skills" / "user-research"
+                installed = temporary / "skills" / "product" / "user-research"
                 shutil.copytree(
                     ROOT,
                     installed,
@@ -663,7 +664,7 @@ class TokenOnlyJourneyTests(unittest.TestCase):
         try:
             with tempfile.TemporaryDirectory() as directory:
                 temporary = Path(directory)
-                installed = temporary / "skills" / "user-research"
+                installed = temporary / "skills" / "product" / "user-research"
                 shutil.copytree(
                     ROOT,
                     installed,

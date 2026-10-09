@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "423453b8-3370-491a-a76a-e40960eccc3c",
+  "path": "micro-app",
+  "path_key": "micro-app",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/development/micro-app",
+    "branch": null
+  }
+}

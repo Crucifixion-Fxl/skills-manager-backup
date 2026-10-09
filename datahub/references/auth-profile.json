@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "tool": "datahub",
+  "provider": "delegated",
+  "owner": "datahub",
+  "authContract": "SKILL.md",
+  "verification": "source-verified",
+  "runtimeVerification": "pending",
+  "authDiscovery": "references/auth-discovery.json"
+}

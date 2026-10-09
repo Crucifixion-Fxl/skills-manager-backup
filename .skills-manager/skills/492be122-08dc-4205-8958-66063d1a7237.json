@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "492be122-08dc-4205-8958-66063d1a7237",
+  "path": "contract-verify",
+  "path_key": "contract-verify",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/quality/contract-verify",
+    "branch": null
+  }
+}

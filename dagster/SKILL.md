@@ -9,6 +9,8 @@ description: Dagster 数据编排平台操作。查询 Pipeline/Job 运行状态
 
 ## Description
 
+首次接入/变更扫描与日常认证入口见 [SaaS 接入](references/saas-access.md)；已有平台业务契约与授权门禁仍在本 Skill 维护。
+
 适用场景：数据 Pipeline 运行状态查询、Job 失败排查、Asset 物化监控、Schedule/Sensor 管理、手动触发 Job 执行。
 
 Dagster 使用 **GraphQL API（非 REST）**，所有操作通过 `/graphql` 端点发送 POST 请求。

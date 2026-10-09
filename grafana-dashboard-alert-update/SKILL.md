@@ -22,14 +22,16 @@ Workflow for updating Grafana: edit dashboard template and alert rules, run form
 
 ## Environment overview (公司研发须知)
 
-- **AWS**：区域为 **cn**、**eu**、**us**；每个区域均有 **staging**、**pre**、**prod** 三类环境。配置 Grafana 数据源、Prometheus job 与告警部署时需按区域与环境区分（如 `staging-cn-*`、`prod-us-*`）。
+- **AWS**：当前集群用于海外区域（如 **eu**、**us**），AWS CN 集群已弃用。环境、job 与账号以对应 GitOps 目录和实际采集标签为准。
+- **腾讯云 CN**：prod = `100014919455` / `cn-main`；staging 与 tech-service = `100052802231`，分别为 `cn-staging`、`cn-tech-service`。配置 Grafana 数据源与告警时必须区分三个集群，不能把 CN 当成 AWS 或共用 prod 数据源。详见 [CN 集群清单](../../infrastructure/k8s-ops/references/cn-tencent-inventory.md)。
 - **GCP**：算法等项目在 GCP 上另有 **staging**、**pre**、**prod** 三个环境，若需在 Grafana 中监控 GCP 上的服务，需单独配置对应数据源与 job。
 
-**当前数据源（供检查 Dashboard 使用）**：
-- **AWS**：**thanos-us**、**thanos-eu**、**thanos-cn**（各区域最新 Thanos 数据源）。
-- **GCP**：**us-gcp-prometheus**。
+**数据源发现（不能把历史名称当作当前映射）**：
+- 海外已有名称示例：`thanos-us`、`thanos-eu`；GCP 示例：`us-gcp-prometheus`。实际 datasource UID、URL、覆盖范围先通过 Grafana 读取验证。
+- CN prod 的存量 `thanos-cn` 属腾讯云 `100014919455`，同时有 VictoriaMetrics 迁移部署；需确认目标 job 已迁移且查询时间范围完整。
+- 新 CN staging 是 vmsingle（`argocd-apps/tencent-100052802231-cn-staging/victoria-metrics-k8s-stack-application.yaml`）；新 tech-service 是 VictoriaMetrics 集群（`k8s/clusters/tencent-100052802231-cn-tech-service/victoria-metrics-stack/values-override.yaml`）。从 Grafana/实际 Service 发现对应数据源，不能编造 UID 或复用旧 AWS CN 数据源。
 
-研发可先在面板中选用上述数据源验证 Dashboard 是否正常出数。若选对数据源后仍无数据，需向运维确认：该服务的指标是否已被 Prometheus/Thanos 采集（如 job、scrape 配置是否覆盖该实例）。
+研发先在面板中选用已核实对应集群的数据源验证 Dashboard 是否正常出数。若选对数据源后仍无数据，需向运维确认：该服务的指标是否已被 Prometheus/Thanos 采集（如 job、scrape 配置是否覆盖该实例）。
 
 部署脚本中的 `ENV_CONFIG`、datasource UID 与 job 命名需与上述环境对应；新实例或新区域接入时先跑 `detect` 再填配置。
 
@@ -38,7 +40,7 @@ Workflow for updating Grafana: edit dashboard template and alert rules, run form
 - Metrics defined in your codebase (e.g. Go `promauto`, or Prometheus client in Python/Java/etc.)
 - Dashboard template JSON (e.g. `grafana/**/template.json`)
 - Alert rules config (e.g. `grafana/**/alerts/rules.json`)
-- A formatter script for dashboard JSON and a deploy script for dashboard + alerts — see [reference.md](reference.md) for full **format** and **deploy** script logic and API usage.
+- A formatter script for dashboard JSON and a deploy script for dashboard + alerts — see [reference.md](references/reference.md) for full **format** and **deploy** script logic and API usage.
 
 ## Workflow
 
@@ -160,7 +162,7 @@ Edit your dashboard template. Add a **row header** and panels under it. Typical:
 
 ### Step 4: Format Dashboard JSON
 
-After editing the template, run your formatter so panel IDs and `gridPos` are correct (sort by row sections, sequential IDs, 2-column layout). Run before committing or deploying. **Format script usage and full implementation**: [reference.md § Format Script](reference.md#1-format-script-fmtpy).
+After editing the template, run your formatter so panel IDs and `gridPos` are correct (sort by row sections, sequential IDs, 2-column layout). Run before committing or deploying. **Format script usage and full implementation**: [reference.md § Format Script](references/reference.md#1-format-script-fmtpy).
 
 ### Step 5: Add Alert Rules
 
@@ -205,7 +207,7 @@ Edit your `rules.json` (or equivalent) and add entries to the `rules` array.
 
 ### Step 6: Deploy
 
-Use your deploy script with **staging first**, then prod (guard prod with an env flag or CI). Commands: after `fmt`, run `deploy-dashboard`; run `deploy-alerts` (use `--dry-run` first to inspect generated JSON). **Deploy script commands, config shape, and API usage (dashboard, legacy/unified/Provisioning alerts)**: [reference.md § Deploy Script](reference.md#2-deploy-script-deploypy).
+Use your deploy script with **staging first**, then prod (guard prod with an env flag or CI). Commands: after `fmt`, run `deploy-dashboard`; run `deploy-alerts` (use `--dry-run` first to inspect generated JSON). **Deploy script commands, config shape, and API usage (dashboard, legacy/unified/Provisioning alerts)**: [reference.md § Deploy Script](references/reference.md#2-deploy-script-deploypy).
 
 ---
 

@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "tool": "firmware-mgr",
+  "owner": "firmware-mgr",
+  "instances": [
+    "https://firmware-mgr.addx.live",
+    "https://firmware-mgr-test.addx.live"
+  ],
+  "nativeRoute": "Firmware native SSO browser cookie token → token HTTP header",
+  "loginFlow": {
+    "reuseFirst": true,
+    "steps": "复用 FIRMWARE_MGR_TOKEN/FIRMWARE_MGR_TEST_TOKEN；缺失由用户在正确域网页 SSO 登录，宿主安全注入 token cookie 到进程变量，禁止 echo/聊天索要明文。现有契约没有证明 IdP 是 Casdoor。",
+    "authorization": "Login, token creation/rotation/revocation and business writes require the current task scope; this discovery performs none."
+  },
+  "tokenMechanism": "token header（不是 Authorization Bearer）；Cookie 本身不足 API 认证；所有业务 POST JSON {}。",
+  "subjectPermission": "POST /api/get_models 或 get_versions，result=0 是有效凭据/该读取权限；不能当稳定 subject 证明。get_user_info 既有 header/body bug 不能直接作探针。admin/developer/product 权限单独核验。",
+  "expiryRevoke": "result 10001/no auth 失效或权限不足；不盲重试；expiry/revoke 与稳定 subject 字段待源码/部署确认。",
+  "officialRefs": [],
+  "sources": [
+    {
+      "kind": "owner-contract",
+      "path": "../SKILL.md",
+      "status": "contract-recorded"
+    },
+    {
+      "kind": "repository",
+      "repository": "https://gitlab.addx.ai/DEV/firmware-mgr-server",
+      "researchCommit": "ac2c999b5e68540330d9c8f2544697636a2cf6c0",
+      "entries": [
+        "app.py",
+        "service_auth.py",
+        "tests/test_service_auth.py"
+      ],
+      "status": "source-verified"
+    }
+  ],
+  "versionPolicy": {
+    "researchCommit": "ac2c999b5e68540330d9c8f2544697636a2cf6c0",
+    "deployedCommit": null,
+    "deploymentMatch": "unknown",
+    "refreshTriggers": [
+      "authentication contract change",
+      "deployed version change",
+      "reproducible auth failure"
+    ],
+    "rule": "Candidate source and published contracts do not establish deployed compatibility. Verify the target instance version and read-only supported capabilities before enabling an adapter."
+  },
+  "verification": {
+    "source": "source-verified",
+    "fixture": "not-run-in-this-discovery",
+    "runtime": "not-attempted",
+    "scope": "Read-only documentation/repository discovery; no login, token issuance, credential inspection or business API execution."
+  }
+}

@@ -15,14 +15,14 @@ App / Engagement SDK 打开 paywallId
 
 H5 模板代码不直接请求 Marketing CMS，不读取 raw Payload document，也不自行获取价格。
 
-## 当前两类配置
+## 按配置形态核对
 
 执行时必须读取 Marketing CMS 最新 `Paywalls.staging.ts`、对应 validator 和 Engagement 的 `templateKeys.ts`，不要把本页当成永不变化的 schema。
 
 | 类型 | `templateKey` | CMS 数据 | 适用场景 |
 |---|---|---|---|
 | 标准 Paywall | 留空，运行时解析为标准模板 | `components`、商品容器、按钮区等 | CMS blocks 能表达的通用购买页 |
-| 个性化 Paywall | 当前注册的个性化 key | `offerMatrix` 与分群配置 | Figma 按用户分群、设备档位和 Offer 展示 |
+| 矩阵 Paywall | 当前已注册且符合内容模型的 key | `offerMatrix`、候选、默认项及对应元数据 | 个性化、绑定或启动等已支持场景 |
 
 新 key 必须同时在 Engagement template catalog 和 Marketing CMS 的选项 / validator / transformer 中存在。Skill 不修改这些源文件，也不假设只改 H5 manifest 就能上线。
 
@@ -30,7 +30,7 @@ H5 模板代码不直接请求 Marketing CMS，不读取 raw Payload document，
 
 当前代码的关键维度包括：
 
-- audience：`LAPSED` 或 `NEVER`；
+- audience / segment：按当前 editor 和 validator 支持的场景核对；不要把旧个性化的 LAPSED / NEVER 当作所有模板的全集；
 - segment：由当前 validator 定义；
 - device tier：`SINGLE`、`DUAL`、`MULTI`；
 - Lapsed 还包含目标商品 tier type；
@@ -40,6 +40,8 @@ H5 模板代码不直接请求 Marketing CMS，不读取 raw Payload document，
 - 订阅商品的月份必须与商品目录一致，一次性商品不能伪装成订阅。
 
 不要手工猜测完整矩阵行数或枚举。创建草稿前从当前 validator 和 Admin editor 读取规则，使用 CMS 自带初始化能力，再按业务输入替换商品和 Offer。
+
+动态 UI 开发前取得 App 真实 CMS 返回，详见 [运行时输入](runtime-data-input.md)。CMS 候选可包含挽留或比价商品；主页面展示用途由已批准的 H5 场景规则确定。Offer ID 当前留空不等于后台永久禁止填写。
 
 ## 安全写入顺序
 
@@ -59,6 +61,7 @@ Transfer 没有通用回滚 API，Draft 也不会被常规 App 读取。不得�
 |---|---|
 | 文案、图片、已有 blocks、商品和 Offer | Marketing CMS |
 | 布局、视觉组件、动画、模板私有展示 | H5 模板目录 |
+| 模板固定文案及其多语言资源 | H5 代码仓 locale 资源包（`src/i18n/`，见 SKILL「实现 Figma UI」一节）；CMS 翻译流程只覆盖 CMS 可配字段 |
 | 新字段、通用 schema、校验和转换 | Owner 评审后的 Marketing CMS 代码 |
 | 价格、支付、Bridge、基础埋点 | 既有 Paywall 框架，不由业务模板实现 |
 

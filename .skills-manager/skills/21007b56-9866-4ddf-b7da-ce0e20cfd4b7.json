@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "21007b56-9866-4ddf-b7da-ce0e20cfd4b7",
+  "path": "sentry-onboarding",
+  "path_key": "sentry-onboarding",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/observability/sentry-onboarding",
+    "branch": null
+  }
+}

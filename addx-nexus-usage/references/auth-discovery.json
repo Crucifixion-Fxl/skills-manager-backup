@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "tool": "nexus",
+  "owner": "addx-nexus-usage",
+  "instance": {
+    "selection": "Use target/environment mapping in owner SKILL; never enumerate unrelated profiles or silently fall back.",
+    "contract": "SKILL.md",
+    "currentVersion": "unknown; historical values are not runtime evidence",
+    "addressEvidence": "Owner SKILL.md environment tables are the address SSOT; credential variables and exceptions in auth.nativeCredentialPath are selected-instance constraints."
+  },
+  "auth": {
+    "nativeCredentialPath": "NEXUS_URL=https://nexus-sg.addx.live; anonymous download inside network allowlist; upload Basic NEXUS_USER/NEXUS_PASSWD (legacy NEXUS_PASS only existing Java templates).",
+    "missingCredentialWorkflow": "No Feishu SSO. Request upload account from 邓力恺 (华佗); CI uses team account. Anonymous download failure first checks VPN/allowlist/repository URL, not SSO.",
+    "subjectAndResourcePermissionVerification": "Target repository read/download and admin-supplied user/role repository privileges; anonymous success does not identify upload subject. No stable self-subject API established.",
+    "issuanceConsumptionRevocation": "Owner/admin issues, rotates, disables local upload account/password; realm/user tokens only if enabled and proven for this community deployment.",
+    "credentialHandling": "Private injection only; never print/store secrets in repository, command arguments, chat or receipts. Discovery itself performs no login/token creation."
+  },
+  "nativeRoute": {
+    "business": "Owner SKILL + version-matched official CLI/API documentation",
+    "loginRecovery": "web-access for human web interaction; official CLI only where explicitly documented",
+    "refresh": "platform-onboarding only for concrete auth/version/interface drift",
+    "runtimeProvider": "delegated",
+    "adapterStatus": "delegated contract only; no new runnable provider or full API mirror implemented"
+  },
+  "referenceSources": [
+    {
+      "kind": "owner-contract",
+      "path": "SKILL.md"
+    },
+    {
+      "kind": "primary-official",
+      "url": "https://help.sonatype.com/en/authentication.html",
+      "checkedOn": "2026-10-07",
+      "use": "authentication discovery; match actual deployed version before business calls",
+      "status": "retrieved",
+      "limitation": "Official documentation does not prove instance compatibility."
+    }
+  ],
+  "versionPolicy": {
+    "probe": "Repository Manager 3 community recorded; precise version via UI About/deployment image/admin owner. Do not infer edition/features from latest docs.",
+    "compatibility": "Unknown deployment version requires non-mutating capability evidence before business usage; do not promote latest upstream docs to deployed compatibility."
+  },
+  "verification": {
+    "source": "source-verified",
+    "fixture": "not-run: reference-only changes",
+    "runtime": "pending",
+    "sourceCandidate": "8d736bd81ab8500e51cf6be3d71d1ffa70937cae",
+    "scope": "Owner repository contract and primary documentation research only. No credential inspection, login, token issuance/revocation or online business calls.",
+    "pendingReasons": [
+      "Target deployment version, selected subject and exact resource permissions have not been runtime verified.",
+      "Token/login workflow needs independently authorized selected-instance validation; no runnable unified provider is claimed."
+    ]
+  }
+}

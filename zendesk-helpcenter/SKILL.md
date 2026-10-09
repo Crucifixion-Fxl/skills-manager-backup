@@ -81,15 +81,7 @@ Zendesk Help Center 是公司的客户自助服务平台，用于发布产品文
 
 **禁止直接使用 curl 调用 Zendesk API。** 所有操作必须通过本 Skill 目录下的 `zendesk_helper.py` 脚本执行。
 
-该脚本通过 AWS Secrets Manager 在运行时获取 Zendesk API Token，凭证仅存在于脚本进程内存中，不出现在命令行参数、环境变量或标准输出中。
-
-#### 前置条件
-
-使用者需满足以下条件（公司统一配置，一次性设置）：
-
-1. `~/.aws/credentials` 中配置有可 AssumeRole 到 `cs-tools-role` 的 profile
-2. 设置环境变量 `AWS_PROFILE`（如 `cstools-dev`）
-3. Python 环境中已安装 `boto3` 和 `requests`
+认证与前置配置唯一正本：[Zendesk 平台 owner](../zendesk/SKILL.md)的[Help Center 原生认证路径](../zendesk/references/helpcenter-auth.md)。本 Skill 仅调用现有私有客户端，不复制获取凭据流程；其身份与admin OAuth不能静默互换。
 
 #### 验证认证
 

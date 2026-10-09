@@ -18,6 +18,7 @@ description: 给现有服务加 K8s Ingress 把流量从外面（公网 / office
 
 - 应用已部署（K8s Service 存在）
 - 用户已说明：暴露场景（c-end 公网 / office VPN / 内网 / feishu webhook）
+- 本 workflow 的 `ingress.yaml.tmpl` 是 AWS ALB recipe。`cloud != aws` 时 STOP + Ops Todo，先读取目标 TKE/GKE 已审定 controller/证书/SG/WAF 合同并补专用 recipe。当前 CN 全为 TKE，不能只补 TLS 或保留 ALB annotation 伪装成腾讯 CLB。
 
 ## Step 1. 解析需求
 
@@ -55,9 +56,8 @@ description: 给现有服务加 K8s Ingress 把流量从外面（公网 / office
 [action]
   - 按 CLAUDE.md 全局规则 #3 + `references/data/stop-conditions.yaml`：
   - 如果应用属于 **内部工具**（管理后台、可观测面板、中间件 UI、数据库控制台、内部门户等）：
-      - 必须有 SG **或** WAF **或** 应用层 SSO 三选一
-      - 三件套都没有 → **STOP**，要求改 exposure 方案
-      - 推荐 office 限制 + 业务层 SSO（最稳）
+      - 必须有实际附着 SG 的 office/VPN 来源限制和应用层认证；office 限制场景不强制 WAF
+      - 核验每个附着 SG 的有效 ingress，不得有任何组放行公网全网；缺少任一保护 → **STOP**
   - 如果应用是 **面向 C 端的公开服务**：
       - 来源 IP 不限定，但 **WAF 必须挂**（`alb.ingress.kubernetes.io/wafv2-acl-arn`）
       - 业务层身份认证（OAuth / JWT）也建议有，但不强制（C 端用户没法预签）
@@ -86,15 +86,26 @@ description: 给现有服务加 K8s Ingress 把流量从外面（公网 / office
       - `c-end-public`：不加 `ingress.addx.io/sg` label；annotation 加 `alb.ingress.kubernetes.io/wafv2-acl-arn: $waf_arn`
       - `office` / `internal` / `feishu-webhook`：加 `ingress.addx.io/sg: <scenario>` label
       - `internal`：annotation 加 `alb.ingress.kubernetes.io/scheme: internal`
-  - 如目标集群是 TKE（`$target.cluster == cn-k8s`）：加 `spec.tls` 段（腾讯云 qcloud Ingress 强制要求，即使 80 端口也得有）
+  - 不得把本 ALB recipe 写入 TKE；非 AWS 目标在进入条件处已停止
   - 写到 `k8s/overlays/{$target.env_keyword}/ingress.yaml`
   - 加到 kustomization resources 列表
+  - **应用还要对外暴露 gRPC（HTTP/2，如官方 SDK 直连）时**，按下面做，不要和 HTTP 端口挤在同一个 host 上按路径分流：
+      - **独立 host**：在主 host 的服务名后加 `-grpc`，如主入口 `my-app-staging-us.addx.live` → gRPC `my-app-grpc-staging-us.addx.live`，暴露场景、SG label 与主入口相同；客户端连 `https://<grpc host>:443`
+      - **同一个 Ingress 加第二条 host rule**，共用一个 ALB 和 `*.addx.live` 通配证书；不另开 ALB
+      - **gRPC 后端用独立 Service**（如 `my-app-grpc`，只暴露 gRPC 端口），把协议注解写在这个 Service 上，只对它的 target group 生效，不影响 HTTP 后端：
+        `alb.ingress.kubernetes.io/backend-protocol-version: GRPC`
+      - 健康检查：模板在 Ingress 上设了 `healthcheck-path: {{health_path}}`（HTTP 路径），它会套到同一 Ingress 下所有 target group，所以 gRPC Service 上**必须显式覆盖**（Service 注解优先于 Ingress）：
+        `alb.ingress.kubernetes.io/healthcheck-path: /AWS.ALB/healthcheck` + `alb.ingress.kubernetes.io/success-codes: '12'`
+        （AWS 对 GRPC 的约定：调这个不存在的方法，后端回 12 = UNIMPLEMENTED 即算存活，应用不用实现健康检查方法）；应用有 gRPC 健康方法时也可改成 `/<package>.<Service>/<Method>` + `success-codes: '0'`
+      - ALB 只在 HTTPS 监听器上支持 gRPC（以 AWS 文档为准）：落地时核实 Kyverno 给该 ALB 注入的 listener 是 HTTPS 443；`feishu-webhook` 的独立 ALB 不承载 gRPC
+      - 为什么不按路径分流：gRPC 路径是 `/<package>.<Service>/<Method>`，要列全后端的所有 gRPC 服务名，上游新增服务就会漏路由；按 host 分没有这个问题
+      - 首个按此落地的是 infra/ai-data-platform 的 Hub（`addx-rerun-hub`，2026-09）；真实集群验证后如有出入，回来修订本节
 
 [validate]
   - 文件存在；YAML 可解析；`kustomize build` 成功
   - 公网 c-end → wafv2-acl-arn 已填
   - internal → scheme=internal 已加
-  - TKE → spec.tls 已加
+  - 目标 `cloud=aws`，无 TKE/GKE 混用 ALB recipe
 
 [output]
   - k8s/overlays/{$target.env_keyword}/ingress.yaml
@@ -155,4 +166,5 @@ ArgoCD sync 后：
 - ALB 一直 pending（无 DNS name）→ ALB Controller 没装 / IAM 缺权限 / 子网未标 `kubernetes.io/role/elb` tag
 - 公网 c-end 用户访问 5xx → 跳 `troubleshooting/pod-runtime-crash.md`（健康检查失败 = ALB 摘后端）
 - office SG 没生效（office 同事访问超时）→ 看 ALB 的 SG 列表里有没有 from-office，没有 = Kyverno mutation 没注入（label 写错？）
-- TKE Ingress 报 `spec.tls is required` → Step 3 漏加 TLS 段
+- gRPC 客户端连不上 / target unhealthy → 看 gRPC target group 的协议版本是不是 `GRPC`（注解要写在 gRPC 的 Service 上）、健康检查是不是被 Ingress 级 `healthcheck-path` 覆盖成了 HTTP 路径、客户端是否走 443 TLS
+- TKE Ingress 报 `spec.tls is required` → 核验该目标 controller 的专用 Ingress/证书合同；本文 AWS ALB recipe 不适用，不能回 Step 3 补 TLS 后套用。没有已核验的 TKE recipe 则 STOP + Ops Todo。

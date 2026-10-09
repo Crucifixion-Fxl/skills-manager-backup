@@ -62,8 +62,10 @@ def resolve_target(
         name = entry.get("name")
         if not isinstance(name, str) or not name.strip() or name in clusters:
             raise ValueError("cluster names must be non-empty and unique")
-        if entry.get("deployment_status") not in ("allowed", "retired"):
+        if entry.get("deployment_status") not in ("allowed", "retired", "blocked"):
             raise ValueError(f"cluster {name}: missing or invalid deployment_status")
+        if "endpoint_status" in entry and entry["endpoint_status"] not in ("pending-cutover", "verified"):
+            raise ValueError(f"cluster {name}: invalid endpoint_status; expected pending-cutover or verified")
         evidence = entry.get("lifecycle_evidence")
         if entry["deployment_status"] == "retired" and (
             not isinstance(evidence, str) or not evidence.strip()
@@ -82,7 +84,10 @@ def resolve_target(
         raise ValueError(f"unknown cluster: {cluster_name}")
     target = clusters[cluster_name]
     if target["deployment_status"] != "allowed":
-        raise ValueError(f"cluster {cluster_name} is retired; no new or extended deployment")
+        reason = target.get("admission_reason", "no new or extended deployment")
+        raise ValueError(f"cluster {cluster_name} is {target['deployment_status']}; {reason}")
+    if target.get("endpoint_status") == "pending-cutover":
+        raise ValueError(f"cluster {cluster_name}: endpoint cutover is pending; verify readiness before Build")
     return target
 
 

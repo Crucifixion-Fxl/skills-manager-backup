@@ -1,13 +1,16 @@
 ---
 name: argocd-fleet-scan
-description: 扫描全部 EKS/TKE/GKE 集群的 ArgoCD Application 异常状态（Sync failed / Degraded / OutOfSync / 长期 Progressing），按"集群基础设施 vs 业务应用"分级，渲染成可过滤/搜索的 HTML 静态页（App 名直接点击跳转该集群 ArgoCD UI）。用于日常健康巡检、变更后批量验证、值班 oncall 一眼摸排 fleet 状态。
+description: 扫描全部 EKS/TKE/GKE 集群的 ArgoCD Application 异常状态（Sync failed / Degraded / OutOfSync / 长期 Progressing），按"集群基础设施 vs 业务应用"分级，渲染成可过滤/搜索的 HTML 静态页（入口已核验的 App 可点击跳转该集群 ArgoCD UI）。用于日常健康巡检、变更后批量验证、值班 oncall 一眼摸排 fleet 状态。
 ---
+
+平台认证与接入唯一正本：[argocd-fleet-scanner](../argocd-fleet-scanner/SKILL.md)。本流程保留业务授权与执行门禁，不复制登录或 Token 申请方式。
+
 
 # argocd-fleet-scan
 
-本地 fallback 扫描工具：直接 `kubectl` 读 16 个集群 `argo-cd` ns 下的 Application CRD，避开逐个 ArgoCD token / SSO 登录。并行扫描，按状态 × 组件类型分类，输出单文件 HTML 报告（可过滤、可搜索、可直接点 App 跳转到该集群 ArgoCD UI 的 resource tree 视图）。
+本地 fallback 扫描工具：直接 `kubectl` 读当前目标集群 `argo-cd` ns 下的 Application CRD，避开逐个 ArgoCD token / SSO 登录。并行扫描，按状态 × 组件类型分类，输出单文件 HTML 报告（可过滤、可搜索；入口已核验的 App 可点击跳转到该集群 ArgoCD UI 的 resource tree 视图）。
 
-> 日常主入口优先使用在线服务 `argocd-fleet-scanner`：`https://argocd-fleet.addx.live`，部署在 `sg-devops`，每 5 分钟通过 ArgoCD REST API 扫 16 集群并推送 P0/P1 增量飞书告警。本 skill 只在以下场景使用：在线服务不可达、需要离线 HTML、需要验证 `kubectl` RBAC/context、或变更后想从本机做一次独立复核。
+> 日常主入口优先使用在线服务 `argocd-fleet-scanner`：`https://argocd-fleet.addx.live`，部署在 `sg-devops`，每 5 分钟通过 ArgoCD REST API 扫其已配置集群并推送 P0/P1 增量飞书告警。本 skill 只在以下场景使用：在线服务不可达、需要离线 HTML、需要验证 `kubectl` RBAC/context、或变更后想从本机做一次独立复核。
 
 **适用场景：**
 
@@ -18,9 +21,9 @@ description: 扫描全部 EKS/TKE/GKE 集群的 ArgoCD Application 异常状态�
 
 ## 调用方式
 
-- 全量扫描：默认行为，扫全部 16 个集群（约 30~60 秒）
+- 全量扫描：默认行为，扫全部当前活跃目标集群（以本次核验清单为准）
 - 指定范围：用户自然语言传入，例如：
-  - "扫一下所有 prod 集群"  → 仅 prod-tier 6 个
+  - "扫一下所有 prod 集群"  → 按本次目标清单中的 prod-tier 筛选
   - "扫 us 区"  → us-prod / us-tech-service / us-data / us-staging / us-prod-gke / us-tech-service-gke
   - "只看 cn-staging"  → 单集群
   - "只看 staging"  → us-staging / eu-staging / cn-staging
@@ -136,6 +139,8 @@ description: 扫描全部 EKS/TKE/GKE 集群的 ArgoCD Application 异常状态�
 
 ## 集群列表
 
+CN 已全部迁至腾讯云：prod=100014919455（cn-main），staging / tech-service=100052802231，详见 [CN 腾讯云环境事实与核验入口](../k8s-ops/references/cn-tencent-inventory.md)。下表当前有 14 个目标；执行前核验最新 active inventory。在线 scanner 若仍有 AWS CN 或旧腾讯账号目标，属于配置陈旧，应报告差异；不能据旧扫描结果声称覆盖当前 CN。CN context 变量必须先核验账号、集群 ID 和 API server。
+
 | 区域 | 集群 | tier | kubectl context |
 |------|------|------|-----------------|
 | US | us-prod | prod | `arn:aws:eks:us-east-1:302571458622:cluster/us-eks` |
@@ -148,11 +153,9 @@ description: 扫描全部 EKS/TKE/GKE 集群的 ArgoCD Application 异常状态�
 | EU | eu-tech-service | prod | `arn:aws:eks:eu-central-1:010840394398:cluster/eu-eks-tech-service` |
 | EU | eu-data | prod | `arn:aws:eks:eu-central-1:769494896000:cluster/eu-prod-data` |
 | EU | eu-staging | staging | `arn:aws:eks:eu-central-1:390709477306:cluster/eu-eks-staging` |
-| CN | cn-prod | prod | `arn:aws-cn:eks:cn-north-1:741924744516:cluster/cn-eks` |
-| CN | cn-tech-service | prod | `arn:aws-cn:eks:cn-north-1:589899215075:cluster/cn-eks-tech-service` |
-| CN | cn-main (TKE) | prod | `tke-cn-k8s` |
-| CN | cn-staging | staging | `arn:aws-cn:eks:cn-north-1:801447536674:cluster/cn-eks-staging` |
-| CN | cn-dev | dev | `arn:aws-cn:eks:cn-north-1:801447536674:cluster/cn-eks-dev` |
+| CN | tencent-100052802231-cn-tech-service | prod | 已核验的 `$CN_TECH_CONTEXT`（100052802231） |
+| CN | cn-main（prod，TKE） | prod | `tke-cn-k8s` |
+| CN | tencent-100052802231-cn-staging | staging | 已核验的 `$CN_STAGING_CONTEXT`（100052802231） |
 | SG | sg-devops | shared | `arn:aws:eks:ap-southeast-1:125710977284:cluster/sg-eks` |
 
 **ArgoCD namespace 统一为 `argo-cd`**。所有集群都启用 App of Apps，所以扫 Application CRD 即覆盖所有 GitOps 管理的资源。
@@ -161,16 +164,19 @@ description: 扫描全部 EKS/TKE/GKE 集群的 ArgoCD Application 异常状态�
 
 | Cluster | ArgoCD host | App 链接格式 |
 |---------|-------------|-------------|
-| us-prod / eu-prod / cn-prod | `argocd-{us,eu,cn}.addx.live` | `https://<host>/applications/argo-cd/<app>?view=tree` |
-| {us,eu,cn}-tech-service | `argocd-{us,eu,cn}-tech-service.addx.live` | 同上 |
+| us-prod / eu-prod | `argocd-{us,eu}.addx.live` | `https://<host>/applications/argo-cd/<app>?view=tree` |
+| {us,eu}-tech-service | `argocd-{us,eu}-tech-service.addx.live` | 同上 |
 | {us,eu}-data | `argocd-{us,eu}-data.addx.live` | 同上 |
-| cn-main (TKE) | `argocd-cn-k8s.addx.live` | 同上 |
-| {us,eu,cn}-staging | `argocd-{us,eu,cn}-staging.addx.live` | 同上 |
-| cn-dev | `argocd-cn-dev.addx.live` | 同上 |
+| cn-main（prod，TKE） | `argocd-cn-k8s.addx.live` | 同上 |
+| tencent-100052802231-cn-tech-service | **目标，待切换**：`argocd-cn-tech-service-tke.addx.live` | 报告仅显示待切换目标；不生成 App/集群链接 |
+| {us,eu}-staging | `argocd-{us,eu}-staging.addx.live` | 同上 |
+| tencent-100052802231-cn-staging | `argocd-cn-staging.addx.live` | 同上 |
 | sg-devops | `argocd-sg-devops.addx.live` | 同上 |
 | us-prod-gke / us-tech-service-gke | `argocd-us-prod-gke.addx.live` / `argocd-us-tech-service-gke.addx.live` | 同上 |
 
-完整映射写在 `generate_report.py` 的 `CLUSTER_ARGOCD` 字典里，新集群上线时同步两处（SKILL.md 表格 + python 字典）。
+可点击入口写在 `generate_report.py` 的 `CLUSTER_ARGOCD` 字典里。tech-service 入口暂为 `None`，`PENDING_CLUSTER_ARGOCD` 只供展示待切换目标，不用于连接或生成链接；扫描仍通过已核验的 K8s context，结果与统计正常保留。域名切换及访问验证完成后再更新映射和测试；旧声明与新目标见 [CN 域名切换清单](../k8s-ops/references/cn-tencent-inventory.md#cn-tech-service-目标域名待切换)。
+
+cn-main 的无歧义旧 TKE 别名经 `CLUSTER_ALIASES` 归一化；新账号 staging / tech-service 扫描记录必须保存完整腾讯云目录 ID。旧 AWS CN / cn-dev，以及无账号证据的 `cn-staging` / `cn-tech-service` 短名归档保留统计但不提供链接，避免跳到新账号。新集群上线时同步表格、映射及验证。
 
 **踩坑注意**：us-staging / eu-staging 在 Phase 3 cleanup 完成前还保留老 hostname `argocd-staging-{us,eu}.addx.live`，但新报告统一指向新 hostname（`argocd-{us,eu}-staging.addx.live`），不要混用。
 
@@ -182,16 +188,22 @@ description: 扫描全部 EKS/TKE/GKE 集群的 ArgoCD Application 异常状态�
 
 ### Step 1：并行扫描全部目标集群
 
-每个集群一个后台进程并行跑，避免串行等 16 次 RTT。每个进程把异常 App 序列化成单行 JSON 写入临时文件，主进程聚合。
+每个集群一个后台进程并行跑，避免串行等待每个集群。每个进程把异常 App 序列化成单行 JSON 写入临时文件，主进程聚合。
 
 ```bash
+# 以下为全量扫描示例；裁剪扫描范围时也同步裁剪这些前置检查。
+: "${CN_PROD_CONTEXT:?先核验 100014919455 prod context}"
+: "${CN_STAGING_CONTEXT:?先核验 100052802231 staging context}"
+: "${CN_TECH_CONTEXT:?先核验 100052802231 tech-service context}"
 THRESHOLD_SECONDS=900       # 长 Progressing 阈值 + selfHeal 卡住阈值（15 min）
 NOISE_THRESHOLD_SECONDS=1800 # P3 噪音档阈值：automated+OutOfSync 且 opAge < 30min 算瞬时
 TMPDIR=$(mktemp -d)
 
 scan_cluster() {
   local NAME=$1 CTX=$2 TIER=$3
-  kubectl --context="$CTX" -n argo-cd get applications -o json 2>/dev/null | \
+  (
+    set -o pipefail
+    kubectl --context="$CTX" -n argo-cd get applications -o json | \
     jq -r --arg cluster "$NAME" --arg tier "$TIER" --argjson th $THRESHOLD_SECONDS '
       .items[] | (.status.sync.revision // "") as $sync_rev | {
         cluster: $cluster,
@@ -253,7 +265,11 @@ scan_cluster() {
         }
       | select(.anomaly | length > 0)
       | @json
-    ' > "$TMPDIR/$NAME.json" 2>"$TMPDIR/$NAME.err" &
+    ' > "$TMPDIR/$NAME.json" || {
+      printf '%s\n' "scan_error: $NAME" >&2
+      : > "$TMPDIR/$NAME.json"
+    }
+  ) 2>"$TMPDIR/$NAME.err" &
 }
 
 # 调度（按用户指定的范围裁剪此列表）
@@ -267,11 +283,9 @@ scan_cluster eu-prod               arn:aws:eks:eu-central-1:740315635167:cluster
 scan_cluster eu-tech-service       arn:aws:eks:eu-central-1:010840394398:cluster/eu-eks-tech-service    prod
 scan_cluster eu-data               arn:aws:eks:eu-central-1:769494896000:cluster/eu-prod-data           prod
 scan_cluster eu-staging            arn:aws:eks:eu-central-1:390709477306:cluster/eu-eks-staging         staging
-scan_cluster cn-prod               arn:aws-cn:eks:cn-north-1:741924744516:cluster/cn-eks                prod
-scan_cluster cn-tech-service       arn:aws-cn:eks:cn-north-1:589899215075:cluster/cn-eks-tech-service   prod
-scan_cluster cn-main               tke-cn-k8s                                                            prod
-scan_cluster cn-staging            arn:aws-cn:eks:cn-north-1:801447536674:cluster/cn-eks-staging        staging
-scan_cluster cn-dev                arn:aws-cn:eks:cn-north-1:801447536674:cluster/cn-eks-dev            dev
+scan_cluster tencent-100052802231-cn-tech-service       "${CN_TECH_CONTEXT:?先核验 100052802231 tech-service context}"   prod
+scan_cluster cn-main               "$CN_PROD_CONTEXT"                                                            prod
+scan_cluster tencent-100052802231-cn-staging            "${CN_STAGING_CONTEXT:?先核验 100052802231 staging context}"        staging
 scan_cluster sg-devops             arn:aws:eks:ap-southeast-1:125710977284:cluster/sg-eks               shared
 
 wait
@@ -281,7 +295,10 @@ cat "$TMPDIR"/*.json 2>/dev/null > "$TMPDIR/all.ndjson"
 
 # 报告每个集群的"扫不通"状况（context 错 / kubeconfig 没权限）
 for f in "$TMPDIR"/*.err; do
-  [ -s "$f" ] && echo "WARN: $(basename $f .err) context unreachable:" && head -3 "$f"
+  if [ -s "$f" ]; then
+    echo "WARN: $(basename "$f" .err) context unreachable:"
+    head -3 "$f"
+  fi
 done
 ```
 
@@ -336,9 +353,9 @@ jq -c --arg ire "$INFRA_RE" --arg xre "$APP_EXCLUDE_RE" '
 把 `classified.ndjson` 喂给本 skill 自带的 `generate_report.py`，产出一个**自包含的 HTML 静态页**（embedded CSS + 轻量 JS，无外部 CDN，可离线打开）：
 
 ```bash
-SKILL_DIR="$HOME/.codex/skills/argocd-fleet-scan"
-# 兜底：装在源仓库 ~/Project/A4x/skills/skills/argocd-fleet-scan 也能跑
-[ ! -f "$SKILL_DIR/generate_report.py" ] && SKILL_DIR="$HOME/Project/A4x/skills/skills/argocd-fleet-scan"
+SKILL_DIR="$HOME/.codex/skills/delivery/argocd-fleet-scan"
+# 兜底：装在源仓库 ~/Project/A4x/skills/skills/delivery/argocd-fleet-scan 也能跑
+[ ! -f "$SKILL_DIR/generate_report.py" ] && SKILL_DIR="$HOME/Project/A4x/skills/skills/delivery/argocd-fleet-scan"
 
 OUT="/tmp/argocd-fleet-scan-$(date +%Y%m%d-%H%M).html"
 UNREACH=$(for f in "$TMPDIR"/*.err; do [ -s "$f" ] && basename "$f" .err; done | paste -sd,)
@@ -360,7 +377,7 @@ echo "Open: file://$OUT"
 5. **主表**：Sev / Cluster (→ 该集群 applications 列表) / **App** (→ 该集群 resource tree 视图) / Category / Anomaly chips / Sync·Health / Age / Last Op Msg / Rev
    - app 链接格式见上文「ArgoCD UI 入口」表
    - anomaly chips 按异常类型上色（Degraded 红、SyncFailed 橙、ComparisonError 紫、OutOfSync 蓝）
-6. **集群汇总表**：全部 16 集群 P0/P1/P2 计数，不可达集群标黄 pill
+6. **集群汇总表**：全部本次目标集群 P0/P1/P2 计数，不可达集群标黄 pill
 7. **底栏 footnote**：解释链接行为 + 严重度规则 + chip 含义
 
 **报告位置约定**：`/tmp/argocd-fleet-scan-YYYYMMDD-HHMM.html`，告诉用户 `file://` 路径直接浏览器打开，无需起服务器。
@@ -414,7 +431,7 @@ echo "Open: file://$OUT"
 ```
 "扫一下 prod 集群"
 → 仅扫 us-prod / us-tech-service / us-data / us-prod-gke / us-tech-service-gke /
-       eu-prod / eu-tech-service / eu-data / cn-prod / cn-tech-service / cn-main = 11 个 prod-tier
+       eu-prod / eu-tech-service / eu-data / cn-tech-service / cn-main = 10 个 prod-tier
 → HTML 报告: 顶栏严重度按钮默认 All；用户用集群下拉细看，或 P0 按钮先看红的
 → 文本回复里给 P0 + P1 真异常的简短摘要 + 报告 file:// 路径
 ```
@@ -429,11 +446,11 @@ echo "Open: file://$OUT"
 ```
 报告里 1 个集群 "context unreachable"，主流程不挂
 → HTML 顶部黄色 banner 列不可达集群名，集群汇总表里该行打 unreachable pill
-→ 告诉用户该集群对应的 kubeconfig 可能要 refresh（`aws eks update-kubeconfig` 等）
+→ 按该集群的实际云平台和身份合同检查 kubeconfig：AWS EKS 才使用其已授权的 `aws eks update-kubeconfig` 流程；CN TKE 使用已核验的新账号接入合同，不能套用 AWS 命令或旧 context
 ```
 
 ```
-新加了一个集群（e.g. cn-eks-staging-2）
+新加了一个集群（例如另一个已核验账号下的 TKE staging）
 → 同时改两处：SKILL.md「ArgoCD UI 入口」表 + generate_report.py 的 CLUSTER_ARGOCD 字典
 → 不改 python 字典: 报告里该集群 App 列不可点击（degrade 但不报错）
 → 不改 SKILL.md 表: 后续维护人不知道这集群有 ArgoCD，文档失真

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "9e9bf6d8-edfd-4f95-aa24-cf5fbd18a305",
+  "path": "data-review-analysis",
+  "path_key": "data-review-analysis",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/data/data-review-analysis",
+    "branch": null
+  }
+}

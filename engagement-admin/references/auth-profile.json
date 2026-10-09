@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "tool": "engagement-admin",
+  "owner": "engagement-admin",
+  "provider": "delegated",
+  "authContract": "references/saas-access.md",
+  "verification": "source-verified",
+  "runtimeVerification": "pending",
+  "deploymentVersion": "unknown",
+  "origin": "https://engagement-admin.addx.live"
+}

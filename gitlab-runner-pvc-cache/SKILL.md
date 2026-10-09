@@ -67,7 +67,7 @@ The `k8s` and `argocd-apps` changes must merge and sync first. The PVC should be
 Run the bundled validator before asking for review:
 
 ```bash
-bash skills/gitlab-runner-pvc-cache/validators/validate.sh \
+bash skills/delivery/gitlab-runner-pvc-cache/validators/validate.sh \
   <k8s-repo-path>/clusters/.../cicd/gitlab-runner \
   <argocd-apps-repo-path>/<cluster-dir> \
   <business-project-repo-path>
@@ -78,7 +78,7 @@ MVP validation catches mechanical mistakes: unreplaced placeholders, PVCs that a
 When changing the validator itself, run:
 
 ```bash
-bash skills/gitlab-runner-pvc-cache/validators/test/run-tests.sh
+bash skills/delivery/gitlab-runner-pvc-cache/validators/test/run-tests.sh
 ```
 
 ## Common Symptoms

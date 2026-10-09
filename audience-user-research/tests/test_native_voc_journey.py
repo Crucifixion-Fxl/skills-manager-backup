@@ -289,6 +289,18 @@ class _Handler(BaseHTTPRequestHandler):
                     "has_more": False,
                     "items": [{"reviewText": "page-two-review"}],
                 }
+            elif platform.scenario == "large_items":
+                next_offset = offset + 20
+                page = {
+                    "offset": offset,
+                    "count": 20,
+                    "total": 720,
+                    "next_offset": next_offset if next_offset < 720 else None,
+                    "has_more": next_offset < 720,
+                    "items": [
+                        {"reviewText": "Activation was confusing " + "x" * 2920} for _ in range(20)
+                    ],
+                }
             elif platform.scenario == "no_excerpts":
                 page = {
                     "offset": 0,
@@ -609,7 +621,7 @@ class NativeVocJourneyTests(unittest.TestCase):
         try:
             with tempfile.TemporaryDirectory() as directory:
                 temporary = Path(directory)
-                installed = temporary / "skills" / "user-research"
+                installed = temporary / "skills" / "product" / "user-research"
                 shutil.copytree(
                     ROOT,
                     installed,
@@ -720,6 +732,23 @@ class NativeVocJourneyTests(unittest.TestCase):
         self.assertIn(b"page-two-review", saved)
         self.assertNotIn("page-one-review", completed.stdout)
         self.assertNotIn("page-two-review", completed.stdout)
+
+    def test_large_items_snapshot_remains_publishable_within_shared_limit(self) -> None:
+        results, platform = self._run("large_items", publish=True)
+        completed, snapshot = results[-1]
+        self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+        self.assertGreater(len(snapshot["native-voc-items-native-loop.json"]), 2 * 1024 * 1024)
+        self.assertEqual(
+            json.loads(completed.stdout)["result"]["analysis_status"],
+            "published_and_downloaded",
+        )
+        self.assertEqual(platform.operations.count("dataset_items"), 36)
+
+    def test_dataset_items_bound_rejects_oversized_serialization(self) -> None:
+        runner = self._runner_module()
+        oversized_items = [{"unknownActorText": "x" * (runner.DATASET_ITEMS_MAX_BYTES + 1)}]
+        with self.assertRaisesRegex(runner.JourneyError, "^native_voc_dataset_items_too_large$"):
+            runner.dataset_items_bytes(oversized_items)
 
     def test_read_5xx_uses_discovery_and_does_not_restart(self) -> None:
         results, platform = self._run("read_unavailable")
@@ -844,6 +873,20 @@ class NativeVocJourneyTests(unittest.TestCase):
             state = Path(directory) / "state.json"
             state.write_bytes(b"x" * (70 * 1024))
             self.assertEqual(len(runner.regular_bytes(state, runner.STATE_MAX_BYTES)), 70 * 1024)
+
+    def test_cli_attachment_allows_transport_timeout_without_widening_json_calls(self) -> None:
+        runner = self._runner_module()
+        completed = subprocess.CompletedProcess(
+            args=["api.py"], returncode=0, stdout='{"result":{}}', stderr=""
+        )
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch.object(runner.subprocess, "run", return_value=completed) as run,
+        ):
+            runner.cli("project_voc_native_start")
+            self.assertEqual(run.call_args.kwargs["timeout"], 70)
+            runner.cli("project_voc_native_dataset_export", output=Path(directory) / "data.jsonl")
+            self.assertGreater(run.call_args.kwargs["timeout"], 2 * 120)
 
     def test_publish_rerun_uses_saved_revision_without_a_second_post(self) -> None:
         results, platform = self._run("happy", publish=True, publish_repeats=2)
@@ -1007,6 +1050,52 @@ class NativeVocJourneyTests(unittest.TestCase):
                 os.environ["USER_RESEARCH_NATIVE_VOC_VOICES_PATH"] = str(invented)
                 with self.assertRaisesRegex(runner.JourneyError, "^invalid_native_voc_voices$"):
                     runner.load_representative_voices(output_dir, [])
+            finally:
+                if previous is None:
+                    os.environ.pop("USER_RESEARCH_NATIVE_VOC_VOICES_PATH", None)
+                else:
+                    os.environ["USER_RESEARCH_NATIVE_VOC_VOICES_PATH"] = previous
+
+    def test_metadata_only_items_do_not_require_or_authorize_voices(self) -> None:
+        runner = self._runner_module()
+        metadata_items = [
+            {
+                "review_id": "review-123",
+                "author": "A reviewer",
+                "reviewerName": "Another reviewer",
+                "metadata": {"arbitraryText": "Platform metadata, not an excerpt"},
+                "createdAt": "2026-09-23T12:00:00Z",
+                "profileUrl": "https://example.com/profile",
+            }
+        ]
+        leaves = runner.citable_leaves(metadata_items)
+        self.assertEqual(leaves, [])
+        self.assertEqual(
+            runner.citable_leaves([{"unfamiliarActorField": "An actual customer excerpt"}]),
+            ["An actual customer excerpt"],
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            output_dir = Path(directory)
+            previous = os.environ.get("USER_RESEARCH_NATIVE_VOC_VOICES_PATH")
+            try:
+                os.environ.pop("USER_RESEARCH_NATIVE_VOC_VOICES_PATH", None)
+                self.assertEqual(runner.load_representative_voices(output_dir, leaves), [])
+                voices_path = output_dir / "metadata-voice.json"
+                voices_path.write_text(
+                    json.dumps(
+                        [
+                            {
+                                "text": "A reviewer",
+                                "theme": "invented",
+                                "translation": {"locale": "zh-CN", "text": "不可引用元数据"},
+                            }
+                        ]
+                    ),
+                    encoding="utf-8",
+                )
+                os.environ["USER_RESEARCH_NATIVE_VOC_VOICES_PATH"] = str(voices_path)
+                with self.assertRaisesRegex(runner.JourneyError, "^invalid_native_voc_voices$"):
+                    runner.load_representative_voices(output_dir, leaves)
             finally:
                 if previous is None:
                     os.environ.pop("USER_RESEARCH_NATIVE_VOC_VOICES_PATH", None)

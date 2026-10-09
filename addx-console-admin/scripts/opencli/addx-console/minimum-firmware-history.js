@@ -1,0 +1,4 @@
+import {cli,Strategy} from '@jackwener/opencli/registry';
+import {identity,request} from './native.mjs';
+import {historyArgs,historyRows} from './minimum-firmware-records.mjs';
+cli({site:'addx-console',name:'minimum-firmware-history',access:'read',description:'Read one existing model history IDs/timestamps; omit operator and content; backend unpaginated',strategy:Strategy.LOCAL,browser:false,args:[{name:'model',type:'string',required:true,help:'Exact existing modelNo from minimum-firmwares'},{name:'limit',type:'int',default:10,help:'Local output limit 1 to 20; server response unpaginated'}],columns:['id','model','operatedAt','returnedTotal','truncated'],func:async(args)=>{const {model,limit}=historyArgs(args);await identity();return historyRows(await request('/factory/firmware/log/'+encodeURIComponent(model),'GET'),model,limit);}});

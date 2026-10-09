@@ -46,8 +46,8 @@ The same family pattern, with `prod` replaced by the env name. Examples:
 | test | `test-cn-iot-service` (CN region has a `test` env) | `cn-test-kiss` |
 
 ### Region with multiple non-prod envs (CN)
-CN has `prod / staging / test / pre` simultaneously — confirm which one the dev means before querying.
-CN 同时有 `prod / staging / test / pre` 四套，查询前先确认开发者说的是哪一套。
+CN historical job names include `prod / staging / test / pre`; they do not imply one shared cluster or endpoint.
+CN 历史 job 名包含 `prod / staging / test / pre`，不能证明采集位置或账号。当前 prod 在腾讯云 `100014919455`，新 staging/tech-service 在 `100052802231`；但 cn-main 的 VictoriaMetrics 配置仍声明 `cn-staging-kiss`、`cn-staging-kafka-metrics`。先按 [端点路由](endpoints.md) 核实 scrape 配置、资源归属、时间范围和实际数据源；`metrics <job> <target>` 对 `cn-staging-*` / `staging-cn-*` 必须显式指定 `cn`（已核验的 cn-main 存量指标）或 `cn-staging`（新集群），两边都不默认猜测。test/pre 同样不能只按历史 job 名推断；K8s 资源还需核对 Application destination。
 
 ## 3. Special label conventions inside a job
 ## 3. Job 内部的 label 约定

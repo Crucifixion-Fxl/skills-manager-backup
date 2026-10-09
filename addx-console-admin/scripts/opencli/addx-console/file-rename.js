@@ -1,0 +1,3 @@
+import {cli,Strategy} from '@jackwener/opencli/registry';
+import {runFileMetadataWrite,fileMetadataArgs,fileMetadataColumns} from './file-metadata-write-runtime.mjs';
+cli({site:'addx-console',name:'file-rename',access:'write',description:'Plan API-supported file name change only; status/version/upload/release excluded; submit disabled',strategy:Strategy.LOCAL,browser:false,args:[...fileMetadataArgs,{name:'file-id',required:true,valueRequired:true,help:'Existing exact file ID in selected type'},{name:'file-name',required:true,valueRequired:true,help:'Proposed nonblank file name'}],columns:fileMetadataColumns,func:args=>runFileMetadataWrite('rename',args)});

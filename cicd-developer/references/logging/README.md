@@ -7,7 +7,7 @@ label 正确当作日志入库 PASS。** 新应用的 label 由 `new-service.md`
 
 ## 先识别目标链路
 
-下表是 2026-09-17 对照 Git desired state 的结果，不是线上健康证明。
+下表是 2026-09-28 对照 Git desired state 的结果，不是线上健康证明。
 先从目标 Application 的 source path / Helm valueFiles 找到实际 collector 配置，
 再读 filter、output 和 frontend；集群名字中的 `staging` 不足以决定链路。
 
@@ -15,13 +15,11 @@ label 正确当作日志入库 PASS。** 新应用的 label 由 `new-service.md`
 |---|---|---|
 | AWS `us-eks-staging` | 共享 fluent-bit Lua filter → 直写本区 AWS OpenSearch；无 Kafka / Vector hop | 日索引 `addx-us-staging-YYYY.MM.DD`，按 pod/app 元数据过滤 |
 | AWS `eu-eks-staging` | 共享 fluent-bit Lua filter → 直写本区 AWS OpenSearch；无 Kafka / Vector hop | 写 alias `addx-eu-staging`；不要假设每 app 一个日索引 |
-| AWS `cn-eks-staging` | 共享 fluent-bit Lua filter → 直写 AWS China OpenSearch | 日索引 `addx-cn-staging-YYYY.MM.DD`，按 pod/app 元数据过滤 |
-| `tencent-100050722703-cn-staging` 的配置 | 独立 fluent-bit → 集群内自建 Elasticsearch；该配置没有共享 Lua business namespace gate | 日索引 `addx-cn-staging-YYYY.MM.DD`；检查 input 的 Exclude_Path |
+| `tencent-100052802231-cn-staging` 的配置 | 独立 fluent-bit → 集群内自建 Elasticsearch；该配置没有共享 Lua business namespace gate | 日索引 `addx-cn-staging-YYYY.MM.DD`；检查 input 的 Exclude_Path |
 | 配置为 Kafka output 的集群（如 TKE cn-main、AWS prod/tech） | fluent-bit → Kafka → 实际配置的 Vector / 下游消费者 → ES/OpenSearch | 从实际 topic 与 consumer mapping 查 canonical / shadow index |
 
-腾讯云 staging 的 Git 配置存在，不代表 `staging-cn` 或 `staging-cn-tke`
-已经获准改路由：环境解析仍遵循 `data/env-keywords.yaml` 和集群准入门禁。
-AWS 与腾讯云 CN staging 的 frontend 清单都使用 `logs-cn-staging.addx.live`；
+`staging-cn` / `staging-cn-tke` 当前路由到腾讯云 100052802231。
+旧 AWS CN 和旧腾讯目录保留不代表仍可部署。CN staging 入口为 `logs-cn-staging.addx.live`；
 只凭域名不能判定当前 DNS/CLB 的后端或集群生命周期，验收时必须核对。
 
 ## 应用侧 label 合同
@@ -53,7 +51,7 @@ Rollout。StatefulSet / Deployment 是内置资源，并非 CRD；本 workflow �
 - `namespace_name == default`，或以 `staging-` / `pre-` / `prod-` / `canary-` /
   `test-` 开头才放行；其他 namespace 直接 drop。
 - 判断早于 annotation / label；`logging.addx.io/kafka-topic` 不能绕过 gate。
-- AWS 三个 staging 的 direct OpenSearch output 仍调用该 Lua，因此 gate 仍生效。
+- AWS US/EU staging 的 direct OpenSearch output 仍调用该 Lua，因此 gate 仍生效。
 - 腾讯云独立 staging 的现有 fluent-bit 配置未调用该 Lua，不能套用同一 drop 结论。
 
 非 business namespace 若确实被目标 Lua 过滤，ES 入库断言记
@@ -109,12 +107,11 @@ Git 配置分别为 `https://logs-us-staging.addx.live`、
 ## 来源与关联
 
 本参考的 collector/topology 证据固定于
-[DEV/k8s 1882119f](https://gitlab.addx.ai/DEV/k8s/-/tree/1882119f9bd620b70342ac82b3e7126276e402b7)：
+[DEV/k8s cf0a1feb](https://gitlab.addx.ai/DEV/k8s/-/tree/cf0a1febe5491f660933056260011853f4277c37)：
 
 - `cicd/apps/fluent-bit/values.yaml`：共享 Lua gate 和 topic 解析。
-- `clusters/aws-390709477306-{us,eu}-staging/fluent-bit-universal/values-override-*.yaml`、
-  `clusters/aws-801447536674-cn-staging/fluent-bit-universal/values-override-*.yaml`：直写 output。
-- `clusters/tencent-100050722703-cn-staging/logging/fluent-bit.yaml`、
+- `clusters/aws-390709477306-{us,eu}-staging/fluent-bit-universal/values-override-*.yaml`：直写 output。
+- `clusters/tencent-100052802231-cn-staging/logging/fluent-bit.yaml`、
   `log-frontend/values-override.yaml`：独立 TKE staging 采集与入口。
 - `clusters/tencent-100014919455-cn-main/fluent-bit-universal/values-override.yaml`：Kafka output。
 - `docs/runbooks/staging-logging-opensearch.md`：AWS staging 运维路径；其中历史 live 日期

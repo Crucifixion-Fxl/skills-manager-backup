@@ -11,7 +11,7 @@
 │  └─ "type mismatch field X" → 参数类型不匹配，检查 string/integer/boolean
 ├─ 既不在 /good 也不在 /bad？
 │  ├─ Namespace 配置是否正确？（App 扫码 / 后端代码写入）
-│  ├─ SDK collector URL 是否指向沙盒？（https://us-prod-log-sandbox.theunismart.com）
+│  ├─ SDK collector URL 是否指向本次实际沙盒？Micro 查询入口是否匹配 `TRACKING_SANDBOX_BASE_URL`？
 │  ├─ 测试用例是否实际触发了目标操作？
 │  └─ 网络是否可达？（防火墙 / 代理 / VPN）
 └─ 在 /good 但字段不对？
@@ -88,3 +88,13 @@ Client/Backend SDK
 | Collector → S3 | 秒级 |
 | S3 → Athena | 分钟级 |
 | Athena → MySQL (验证表) | 5-10 分钟 |
+
+## 平台定义写入失败
+
+| 现象 | 核查与处理 |
+|------|------------|
+| `JsonSchemaEnum::getTypeByName:name 5 doesn't exist!`，或其他数字码解析失败 | 回读完整事件，检查 valueType 是否为名称；禁止按数字猜测业务类型。保存写前快照及当前值，请平台负责人定向恢复正确类型，再核验实际 schema 和工单创建结果；关联 tracker-management #3 |
+| 写入 HTTP 000 / 超时 / 连接中断，但参数回读存在 | 结果不确定，可能部分写入；暂停发布，核对完整参数及 schema 定义/版本，勿仅依据记录存在宣布成功或盲目重试 |
+| HTTP 200 但 JSON `code=500、success=false` | 按业务失败处理，读取 errorMessage；成功需业务信封通过，再核对完整事件与 schema |
+
+详细类型契约与失败回读见 [API 参考](api-reference.md#写入结果与失败回读)。后端 MR !108 的部署状态需独立核验，Skill 修正不等于线上数据已恢复。

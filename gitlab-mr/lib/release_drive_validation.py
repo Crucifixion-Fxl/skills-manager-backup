@@ -64,7 +64,7 @@ def require_current_git_head(expected_sha: str) -> None:
         raise PolicyError(f"head_sha {expected_sha} does not match Git HEAD {actual}")
 
 
-def require_no_remote_staging_branch(branch: str) -> None:
+def remote_branch_exists(branch: str) -> bool:
     result = subprocess.run(
         ["git", "ls-remote", "--heads", "origin", f"refs/heads/{branch}"],
         capture_output=True,
@@ -75,7 +75,11 @@ def require_no_remote_staging_branch(branch: str) -> None:
         raise PolicyError(
             f"cannot verify remote staging branch absence: {result.stderr.strip()}"
         )
-    if result.stdout.strip():
+    return bool(result.stdout.strip())
+
+
+def require_no_remote_staging_branch(branch: str) -> None:
+    if remote_branch_exists(branch):
         raise PolicyError(
             f"origin/{branch} exists; production-non-promotion is not allowed"
         )

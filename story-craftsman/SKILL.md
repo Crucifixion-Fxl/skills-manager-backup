@@ -3,6 +3,8 @@ name: story-craftsman
 description: 专业用户故事(User Story)与文档体系构建。协助编写高质量 US 文档，通过引导式访谈挖掘需求背景与验收标准，并将文档精准放置到规范的 docs 目录结构中。在用户请求编写 US、描述功能需求、或需要初始化项目文档结构时触发。
 ---
 
+**写入 memory 时**：遵循 [极简写入规约](../../agent-harness/dev-infra/references/memory-writing.md)：只增量写长期约束与入口，默认≤5条/≤10行/约≤200字，语义去重；保留既有授权边界和安全门禁，详情留文档。此规约不新增写入授权。
+
 # Story Craftsman
 
 此技能践行「需求即代码」(Everything is Code) 的工程理念，帮助你在提交 MR 时同步产出高质量的用户故事及其配套文档。
@@ -21,6 +23,7 @@ description: 专业用户故事(User Story)与文档体系构建。协助编写�
 6. **本 skill 是 US 文档结构的 SSOT**：覆盖访谈协议、Epic-first 结构纪律、优先级表达规则、推荐骨架与反例。`architect` skill 在 Step 1 委派到这里，本节是规范的唯一来源——避免规范分裂。详见下方 [Step 3](#step-3生成用户故事文件) 完整 Epic-first 纪律
 7. **Requirements review-only 模式**：被 `requirements-analysis-agent` 调用时，只返回 Why/Who/What、scope/non-goals、AC/NFR 的 findings 与合并问题；不得写文件、不得自行向用户逐轮访谈、不得宣称 PO 已接受、不得启动设计或编码。文档生成模式只在上游提供 accepted REQUIREMENTS Artifact 后使用。
 8. **Direct raw intake guard**：direct raw requirement（新想法、功能描述、PRD 草稿或行为变更）必须先转交 `requirements-analysis-agent`，不得直接执行访谈或 Step 3 写文件。An explicit document-write request is not PO acceptance；只有 exact Artifact ID/hash 已被 PO ACCEPT，或本 Skill 明确处于 Requirements `review_only=true` pass，才可继续对应模式。
+9. **项目 US 绑定同一 Issue identity**：生成项目文件前按 [`gitlab-issue-sop` 生命周期契约](../../collaboration/gitlab-issue-sop/references/lifecycle-binding.md) 验证 Root Issue、当前仓 Work Item 与 accepted Requirements Artifact 属于同一 binding。缺失或漂移时返回 `ISSUE_BINDING_UNVERIFIED` / `REQUIREMENTS_GATE_REQUIRED`；纯模板教学且不写项目文件时可豁免。
 
 ## Review-only mode
 
@@ -69,7 +72,7 @@ description: 专业用户故事(User Story)与文档体系构建。协助编写�
 您可以简要描述，我会负责将其转化为标准的专业文档格式。
 ```
 
-访谈前先做 **source_issue 硬门禁**：无 GitLab issue 链接时先停下——请用户提供链接，或先走 `gitlab-issue-sop` 查重 + 创建 issue；拿到链接前不开始写 US。生成的 US 文档 header 必须带必填字段 `source_issue`（issue URL）。（#61 G-1，详见 docs/architecture/skill-artifact-delivery-implementation.html §10）
+访谈前先做 **source_issue 硬门禁**：无 GitLab issue 链接时先停下——请用户提供链接，或先走 `gitlab-issue-sop` 查重 + 创建 issue；拿到链接前不开始写 US。生成的 US 文档 header 必须带必填字段 `source_issue`（issue URL）。（#61 G-1，详见 docs/development/architecture/skill-artifact-delivery-implementation.html §10）
 
 ### Step 3：生成用户故事文件
 
@@ -215,21 +218,9 @@ docs/
 
 ```markdown
 # docs/
-
-本目录为项目文档根目录，按研发生命周期分层组织。
-
-## 目录结构
-
-- `product/user-stories/`：用户故事 HTML，命名规范：`{feature-name}.html`
-- `architecture/`：系统架构设计、技术选型、ADR（架构决策记录）HTML
-- `testing/`：测试策略与测试场景 HTML
-- `deployment/`：部署与本地开发环境 HTML
-- `user-guide/`：面向最终用户的操作手册与使用说明 HTML
-
-## 维护约定
-
-- 用户故事按功能模块创建独立 `.html` 文件
-- 架构/目录级变更后同步更新本文件
+- 文档默认 HTML；用户故事按功能放 `product/user-stories/{feature-name}.html`。
+- 架构/测试/部署/手册分别放 `architecture/`、`testing/`、`deployment/`、`user-guide/`。
+- 架构或目录用途变更时增量更新本指引，不复制项目根规则。
 ```
 
 ---

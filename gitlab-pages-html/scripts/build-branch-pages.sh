@@ -59,7 +59,7 @@ pages_rows="${pages_work_dir}/rows.html"
 while IFS=$'\t' read -r pages_row_slug pages_row_ref; do
   [ -n "${pages_row_slug}" ] || continue
   pages_escaped_ref=$(printf '%s' "${pages_row_ref}" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e 's/"/\&quot;/g')
-  printf '<li><a href="%s/docs/">%s</a> <code>/%s/docs/</code></li>\n' \
+  printf '<li><a href="%s/docs">%s</a> <code>/%s/docs/</code></li>\n' \
     "${pages_row_slug}" "${pages_escaped_ref}" "${pages_row_slug}" >> "${pages_rows}"
 done < "${pages_map_file}"
 

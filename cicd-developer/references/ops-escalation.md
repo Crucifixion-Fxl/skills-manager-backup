@@ -23,7 +23,7 @@ log pipeline downstream 丢数据、runner 或集群基础设施、平台 Vault/
 切换到其他人的账号或取得额外权限。
 
 用户指定 Buzz，或当前已有可用的 Buzz 协作上下文时，可复用 Task 的既有 Channel / Thread
-与当前 Agent 身份，按 [buzz-agent-setup](../../buzz-agent-setup/SKILL.md) 的发送和回读流程执行。
+与当前 Agent 身份，按 [buzz-agent-setup](../../../agent-harness/buzz-agent-setup/SKILL.md) 的发送和回读流程执行。
 通知人类负责人使用该 skill 的 `buzz_send_with_responsible_mentions.py`，从结构化负责人或
 可信 Canvas 映射解析收件人；不得自行拼接 mention 或猜 pubkey。该 helper 不用于唤醒 bot：
 运维 AI 接单沿用已有受控角色路由，回复沿用该 runtime 的当前线程回复能力，不直接指派 executor。

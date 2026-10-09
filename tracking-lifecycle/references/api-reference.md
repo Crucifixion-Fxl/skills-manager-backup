@@ -1,13 +1,15 @@
 # Tracker Manager API Reference
 
-> Base URL: `https://us-analytics-management.theunismart.com`
-> 认证: Personal Access Token（PAT）
+> 以下 URL 是 2026-03-03 捕获的 US 平台 API 示例。运行 CLI 时从实际应用所在的管理 API 配置 `TRACKING_PLATFORM_BASE_URL`，不把此历史 URL 当作区域默认值。
+> 当前认证与完整接口清单（2026-10-03 源码核对）：[平台鉴权](platform-auth.md)、[Controller 全集](platform-api-catalog.md)、[Base/Context API](base-context-api.md)。下文历史示例不等于当前完整清单。
 > 捕获时间: 2026-03-03
 > 捕获方式: Chrome DevTools 网络拦截
 
 ## 认证
 
-使用 Personal Access Token（PAT）在请求头中携带：
+查询优先使用只读 Project Token（`tmp_`），写操作使用有权限的 Personal Access Token（`tmt_`）。两者均通过 Bearer header；当前平台源码没有 JWT 签发/验签接口，账号登录是飞书 OAuth + HttpSession。凭据获取、只读边界与 CLI 能力见 [平台鉴权](platform-auth.md)。
+
+以下历史 curl 示例展示 header 形状；不要将展开后的凭据放入进程 argv。实际运行采用鉴权 reference 的 stdin header 或进程内 API 客户端。
 
 ```bash
 curl -H "Authorization: Bearer $TMT_TOKEN" \
@@ -321,13 +323,15 @@ Token 仅在创建时返回明文，请妥善保存到环境变量或文件中�
 
 **字段枚举映射：**
 
-| 字段 | 请求值（字符串） | 平台值（数字） |
+| 字段 | 请求值（字符串） | 平台存储格式 |
 |------|----------------|--------------|
 | type | PAGE / MODULE / COMPONENT / SELF_DEFINE | 1 / 2 / 3 / 4 |
 | trackerType | BASE / CLK / EXP | 0 / 1 / 2 |
-| valueType | string / integer / float / boolean / array / object | 5 / 4 / 4 / 1 / 3 / 2 |
+| valueType | string / integer / number / float / boolean / array / object / null | **名称字符串**；仅批量接口将 float 转为 number，禁止提交数字码 |
 
 parentPage / parentModule 使用 point 名称引用（非数字 ID），可引用本批次中的其他事件或数据库已有事件。
+
+`valueType` 提交用名称，数字码仅是后端内部枚举标识，不能用于请求体；内部 `4=number、6=integer`，不能把 `"4"` 自动推断为 integer。单事件、基础 Schema、Context 的参数都应使用标准名称；`float` 仅是批量接口的 number 别名。发现回读类型为数字码时，应保留快照并请平台负责人依据原定义修复，勿直接 round-trip 脏类型。
 
 **响应示例：**
 ```json
@@ -377,7 +381,7 @@ parentPage / parentModule 使用 point 名称引用（非数字 ID），可引�
 因此补一个参数必须传**完整参数列表（已有参数 + 新参数）**，只传新参数会丢掉旧参数。
 推荐 round-trip：先 `GET /api/info/getEventDetail?eventId={id}` 取回当前完整定义，把新参数 append 到 `parameters` 后整体回传。
 
-**字段格式（注意与 `batchCreateEvents` 的字符串枚举不同，这里用数字码）：**
+**字段格式：`type` / `trackerType` 使用数字枚举；`valueType` 始终使用类型名称，不是数字码字符串。**
 
 | 字段 | 说明 | 取值 |
 |------|------|------|
@@ -390,7 +394,7 @@ parentPage / parentModule 使用 point 名称引用（非数字 ID），可引�
 | `baseSchemas` | base schema **ID 列表** | `List<Long>`（注意 getEventDetail 返回的是对象列表，回传时要取 `id`） |
 | `parameters[].eventId` | 必填，须等于事件 `id` | 数字 |
 | `parameters[].trackerType` | 埋点类型 | 0=base / 1=clk / 2=exp |
-| `parameters[].valueType` | 值类型（**数字码字符串**） | "0"=null / "1"=boolean / "2"=object / "3"=array / "4"=number / "5"=string |
+| `parameters[].valueType` | JSON Schema 类型名称（精确匹配） | `null` / `boolean` / `object` / `array` / `number` / `string` / `integer`；这里 `null` 是字符串 `"null"`，不是 JSON null |
 | `parameters[].isRequired` | 是否必填 | 0=否 / 1=是 |
 | `parameters[].name` | 参数名（snake_case） | 字符串 |
 
@@ -406,8 +410,8 @@ parentPage / parentModule 使用 point 名称引用（非数字 ID），可引�
   "category": "账号",
   "baseSchemas": [101],
   "parameters": [
-    { "eventId": 2399, "trackerType": 0, "name": "source",       "valueType": "5", "isRequired": 0, "description": "页面来源" },
-    { "eventId": 2399, "trackerType": 0, "name": "device_count", "valueType": "4", "isRequired": 0, "description": "设备数量" }
+    { "eventId": 2399, "trackerType": 0, "name": "source",       "valueType": "string", "isRequired": 0, "description": "页面来源" },
+    { "eventId": 2399, "trackerType": 0, "name": "device_count", "valueType": "number", "isRequired": 0, "description": "设备数量" }
   ]
 }
 ```
@@ -433,6 +437,13 @@ curl -X POST \
 | 非 app owner | 权限拦截 |
 
 > 仅当事件由**之前已发布工单**继承（point 不可改）时才退化为「新建事件」；对当前活跃工单内的事件，本接口可直接原地补参数，无需 UI 操作。
+
+## 写入结果与失败回读
+
+- HTTP 2xx 不代表业务成功，必须检查 JSON 错误信封：`code=200` 且 `success` 不为 false 才能判定响应成功；业务错误可通过 HTTP 200 携带 `code=500、success=false` 返回。
+- HTTP 000、连接中断、超时、无响应或错误信封均不能判定写入完成。参数记录可能已写入，而 schema 生成失败；仅 `getParametersByEventId` 看到记录不能证明整个写入成功。
+- 失败时暂停后续发布，保留请求、写前快照及时间；回读完整事件并核对所有参数名称和类型，再核对实际 schema 的参数定义及版本。无法确认产物或部分写入时，标记结果不确定并反馈平台负责人，勿盲目重复创建或自行批量转换数字码。
+- [tracker-management #3](https://gitlab.addx.ai/TRAC/tracker-management/-/issues/3) 记录了数字类型码导致应用创建工单失败的故障；后端拦截修复在 [MR !108](https://gitlab.addx.ai/TRAC/tracker-management/-/merge_requests/108)，未核验部署前不能声称线上已具备该白名单。
 
 ## 工单状态（releaseStatus）
 
@@ -495,7 +506,7 @@ curl -X POST \
 | **一个应用同一时刻只能有一个活跃工单**（建工单前不能已有活跃工单） | 已存在 releaseStatus ∈ {0,1,2} 的工单时再建 | `当前有未发布的工单!` |
 | 已发布(3)的工单不可废弃；已废弃(4)不可重复废弃 | 对应状态执行废弃 | `已发布的工单无法废弃` / `工单已经是废弃状态` |
 | 工单 version 格式 `\d+-\d+-\d+`（如 `1-0-x`，x=上版本+1，只增不退） | 格式不符 | 前端「版本号格式有误」 |
-| 审批 / 发布 / 废弃 等状态流转走 UI（需飞书审批），AI 不替用户操作 | — | 见 SKILL.md Rule 5.3 |
+| 审批 / 发布 / 废弃 等状态流转有 REST 入口，但须遵守业务权限和审批 | — | 当前生产发布以 SKILL.md 受保护发行分支、受限 CI 身份和完整回读门禁为准；不是必须走 UI，也不能直接 curl 绕过门禁 |
 
 > 权限：`saveOrUpdateApplicationInfo`（建应用）需 ADMIN；`saveOrUpdateEventInfo` 需该应用 app owner / admin。`deleteEventDetail`、`batchCreateEvents`、baseSchema/context/tag 写接口当前**后端未在 Controller 层强制鉴权**（MCP 走 API Key 注入 `mcp-system`≈admin），但 skill 仍应按"需 app owner"语义自律，不引导越权操作。
 

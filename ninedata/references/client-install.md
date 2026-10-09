@@ -22,7 +22,7 @@ Use `NINEDATA_SKILL_CONFIG=/absolute/path/config.json` when a different external
 Installation path example:
 
 ```text
-~/.codex/skills/ninedata-skill/
+~/.codex/skills/data/ninedata-skill/
 ```
 
 Validation prompt:
@@ -36,7 +36,7 @@ Use the NineData Skill to list my MySQL datasources.
 Installation path example:
 
 ```text
-~/.claude/skills/ninedata-skill/
+~/.claude/skills/data/ninedata-skill/
 ```
 
 Validation prompt:
@@ -50,7 +50,7 @@ Use ninedata-skill to list available NineData datasources.
 Installation path example:
 
 ```text
-~/.cursor/skills/ninedata-skill/
+~/.cursor/skills/data/ninedata-skill/
 ```
 
 ## Open Claw
@@ -58,7 +58,7 @@ Installation path example:
 Installation path example:
 
 ```text
-~/.openclaw/skills/ninedata-skill/
+~/.openclaw/skills/data/ninedata-skill/
 ```
 
 ## Hermes Agent
@@ -66,7 +66,7 @@ Installation path example:
 Installation path example:
 
 ```text
-~/.hermes/skills/ninedata-skill/
+~/.hermes/skills/data/ninedata-skill/
 ```
 
 ## Qoder
@@ -74,7 +74,7 @@ Installation path example:
 Installation path example:
 
 ```text
-~/.qoder/skills/ninedata-skill/
+~/.qoder/skills/data/ninedata-skill/
 ```
 
 ## Trae
@@ -82,7 +82,7 @@ Installation path example:
 Installation path example:
 
 ```text
-~/.trae/skills/ninedata-skill/
+~/.trae/skills/data/ninedata-skill/
 ```
 
 ## Open Code
@@ -90,7 +90,7 @@ Installation path example:
 Installation path example:
 
 ```text
-~/.opencode/skills/ninedata-skill/
+~/.opencode/skills/data/ninedata-skill/
 ```
 
 ## Minimal Script Validation

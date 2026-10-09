@@ -8,9 +8,19 @@ description: 从零部署一个无状态服务。产出 k8s manifest、ArgoCD Ap
 本文的主运行态 Application 不代表一仓只能有一个 Application。若权限职责或生命周期
 需要分离，先提出独立 runtime/infra 渲染与唯一资源管理者方案，再为各 Application
 登记已有且批准的 Project、source/path/destination 合同；不能隐式多生成一个 Application。
-平台 claim 可按现有合同留 runtime，owner 专属 Project 未获批准前不可使用。
+平台 claim 按合同留 runtime；业务资源分别使用共享 app-runtime/app-data-plane，不新建 owner Project。
 存量资源拆分需独立 ownership/prune/finalizer/回滚评审，不能套用只改 Project 的迁移。
 详见 [权限与部署划分合同](../references/data/permission-boundaries.yaml)。
+
+## CN 迁移能力门禁
+
+当前 CN 路由见 `references/cn-tencent-migration.md`：prod 为 `cn-k8s`（100014919455），
+staging/tech-service 为 `cn-tke-staging` / `cn-tke-tech-service`（100052802231）。
+AWS CN 已退役。下文 AWS shared-middleware 的已上线证明不能覆盖新 TKE；生成 `Database` /
+`KafkaScramCredential` 前必须核验精确目标的 served API、Composition/ProviderConfig、共享实例、
+Vault writer/reader 和 per-app 凭据交付，缺任一证据则 STOP + Ops Todo。消费策略仍适用，
+不得回退到旧 AWS broker/ARN、共享 root 或 app-owned/self-hosted staging 数据库。
+AWS 托管资源 recipe 仅用于 `cloud=aws`；腾讯云请求转对应原生能力或 Ops Todo。
 
 ## 目的
 
@@ -108,8 +118,8 @@ workflow；未知资源进入 Ops Todo，不让用户自己记下一步该跑什
   - 新部署应用的 staging target 只能使用独立 staging 集群：
     - `staging-us` 必须解析到 `us-eks-staging`
     - `staging-eu` 必须解析到 `eu-eks-staging`
-    - `staging-cn` 必须解析到 `cn-eks-staging`
-    - `staging-cn-tke` / tech-service staging 只允许 legacy/迁移场景；新应用命中则 STOP，要求改到 `staging-cn`
+    - `staging-cn` / `staging-cn-tke` 必须解析到腾讯云 `cn-tke-staging`（100052802231）
+    - tech-service staging 只允许已有工作负载迁移；新应用使用对应独立 staging 集群
 
 [output]
   - 内存变量
@@ -142,6 +152,7 @@ workflow；未知资源进入 Ops Todo，不让用户自己记下一步该跑什
 [validate]
   - 每个 `$target` 上述字段都已填
   - 每个 `$target.harbor_image_path`（部署侧字面）匹配 `/cicd/(dev|staging|pre|prod)-[a-z]+/{$app}$`
+  - `$target.runner_tags` 必须非空且按架构已验证；`runner_status: not_verified` 时 STOP + Ops Todo，禁止猜旧 AWS CN runner tag。
   - 每个 `$target.runner_tags` 按 clusters.yaml 解析出的 harbor_url == `$target.harbor_url`（CI push 与部署侧同 Harbor）
   - `$runtime_profile=static-web` 时，每个 `$target.harbor_image_path` 唯一；两个 target
     解析到相同 image identity → STOP，不能共享或 retag 已打包 bundle
@@ -182,7 +193,12 @@ workflow；未知资源进入 Ops Todo，不让用户自己记下一步该跑什
 
 ## Step 4. 写每个 target 的 overlay
 
-按 `$targets` 循环跑这一步。
+按 `$targets` 循环跑这一步。本 workflow 的生成模板使用标准 runtime 入口
+`k8s/overlays/{$target.env_keyword}`；记录 `$target.runtime_source_path` 为该路径，
+后续 Step 5 的 `$target.source_path` 必须与之相等。通用拆分合同允许其它流程使用获批
+自定义入口，但不能在本流程仍生成标准目录时仅替换 Application path。若目标已有获批
+自定义 runtime 入口，先交付该入口的准确生成/渲染适配方案，经独立评审后再执行；
+不能覆盖它或悄悄退回标准目录。raw/shared 分支均使用各自已冻结的 runtime 入口。
 
 [precondition]
   - Step 3 完成
@@ -499,8 +515,8 @@ workflow；未知资源进入 Ops Todo，不让用户自己记下一步该跑什
     - 纯 workload metadata 能力（例如 logging labels）可继续；不得因此改变既有
       `service` profile 的资源 chaining。
   - 先按 target 过滤 hard rule #29 + #30。**shared-middleware target** = `$target.cluster ∈
-    {us,eu,cn}-eks-staging + {us,eu,cn}-eks-tech-service`（6 个；**按 cluster 名判，不用 `$target.env`**——
-    tech-service env=prod 会与真 prod 混，见 #29）：
+    {us,eu}-eks-staging + {us,eu}-eks-tech-service + cn-tke-staging + cn-tke-tech-service`（6 个；**按 cluster 名判，不用 `$target.env`**——
+    tech-service env=prod 会与真 prod 混，见 #29）。新 CN TKE 必须先通过本文 CN 能力门禁；未通过则 STOP + Ops Todo，不能进入下述“已上线”分支：
     - `rds` / `aurora` / `redis` / `elasticache` / `documentdb` / `msk` / `kafka` / `clickhouse`
       对 shared-middleware target **不 chain** app-owned `add-*` workflow，也不生成 crossplane-infra
       单 app 资源，**也不允许**用 StatefulSet+PVC 自托管（#30）。
@@ -518,13 +534,15 @@ workflow；未知资源进入 Ops Todo，不让用户自己记下一步该跑什
       workload/main container，并保留其它 target/容器/env；渲染后执行对应
       `check_workload_secret.py` 精确检查。ExternalSecret 存在不等于已消费；多个 SQL
       连接不能同时覆盖 DB_*，必须先确认应用接受的独立消费映射，保留已有 primary。
-    - **已上线自助（msk / kafka SCRAM credential）**：指引 user 写
+    - **AWS US/EU 已上线自助（MSK SCRAM credential）**：仅对该 AWS 支持路径，指引 user 写
       `kind: KafkaScramCredential {app, env, region}`，Composition 在该集群共享 MSK 上创建
       per-app SCRAM username/password，并把 AWS 原生 `bootstrapBrokersSaslScram` `:9096`
       endpoint 作为 `bootstrap_brokers_sasl_scram` 写入
       `secret/{env}/kafka/application/{app}/sasl`，app 写 ExternalSecret 消费并映射
       `KAFKA_BROKERS`。topic/ACL workflow 仍 planned，需要显式 topic/ACL/consumer group
-      治理时写 Ops Todo。**凭据本身不再 Ops Todo**。
+      治理时写 Ops Todo。该 AWS 路径前置满足后，凭据申请可继续自助。
+      **CN TKE Kafka** 必须采用上述能力门禁已核验的腾讯云 API、listener、认证方式与凭据交付合同；
+      不套用 MSK ARN、broker、`:9096` 端口或 AWS 字段映射。缺少任一目标合同则 STOP + Ops Todo。
     - 任何 shared Database 候选都执行
       [producer identity gate](../references/shared-middleware/README.md#producer-identity-gate)，
       按准确 target 取得 fresh all-namespaces DatabaseList，并对该 target 完整渲染执行
@@ -533,10 +551,14 @@ workflow；未知资源进入 Ops Todo，不让用户自己记下一步该跑什
       无准确库存可以交付候选与 pending，但禁止宣布可部署或继续 Step 11 注册。
     - **尚无消费 Composition（aurora / mariadb-RDS / documentdb / clickhouse）**：STOP 并写 Ops Todo：
       "<resource> on <env>-<region>：补可复用 kind:Database 消费 Composition + 自动 per-app 凭据交付"（注：documentdb /
-      clickhouse 共享实例已部署 6 集群，仅消费层未落地；不让单 app 自建、不用 StatefulSet 自托管）。
-    - 同一个 resource 若还有 **非 shared-middleware 集群 target（真 prod `*-eks-prod`/`*-prod-data`/TKE/dev；
+      clickhouse 共享实例历史部署覆盖含已退役 AWS CN 的六集群；当前 CN TKE 实例须重新核验，仅消费层未落地；不让单 app 自建、不用 StatefulSet 自托管）。
+    - 同一个 resource 若还有 **非 shared-middleware 集群 target（真 prod `*-eks-prod`/`*-prod-data`/cn-k8s（TKE prod）；
       tech-service 不在此列）**，只把这些 targets 交给对应 `add-*` workflow 继续生成 app-owned 资源；
       不要因为有 shared-middleware target 就阻断它们。
+  - raw 数据面先按 [资源职责拆分](../references/application-resource-split.md) 登记独立 infra
+    source/Application 与共享 app-data-plane 合同；Step 5/11 只处理共享 app-runtime 的
+    runtime 注册，不自动生成 infra Application。缺少独立交付或跨 App 就绪证据时保留
+    精确 handoff，不将 raw 资源加入 runtime root，也不把整组迁入数据面。
   - 对每个已声明且有 workflow 的资源，按依赖顺序继续执行（**IRSA 必须先于 S3**：`add-s3-bucket` 的进入条件与 Step 4 都要求 app 的 IRSA Role 已存在——它给现有 Role 挂 S3 权限，IRSA 没建好会 STOP）：
     1. `rds` → `workflows/add-rds.md`
     2. `aurora` → `workflows/add-aurora.md`
@@ -554,7 +576,7 @@ workflow；未知资源进入 Ops Todo，不让用户自己记下一步该跑什
 
     | 资源 | candidate 阶段执行 | Step 11.5 的 runtime 恢复点 |
     |---|---|---|
-    | app-owned RDS | add-rds Steps 1–13；Step 10 只核对渲染的 sync-wave 并登记待验收 | add-rds Step 10 的 Secret/Instance live 验收 |
+    | app-owned RDS | add-rds Step 1 分流；新建专用 PostgreSQL 16 / us-eks-prod 先过平台 live gate、独立 IAM MR 与受控平台请求 MR，应用仓只生成受限连接 consumer；仅命名例外执行旧 Steps 2–13 | 新路径按 app-owned-rds README 验收 XR、Instance、Access、Vault、Secret 与受限登录；命名例外回到旧 add-rds Step 10 |
     | shared DB/Redis、Aurora、managed Redis | 生成 claim/密码链/consumer 引用，离线验证；登记各自出口的 live 条件 | 目标 claim/资源 Ready、凭据交付、准确容器引用 |
     | IRSA → S3、CI IRSA、Sentry、logging | 按依赖完成文件和离线验证；IRSA Role 可由同轮独立平台 MR 声明，平台 MR 必须先于 consumer 同步 | 核对各自出口的 Role/SA/凭据/日志等运行态条件 |
     | DB migration | 仅核对需求并排队，暂不生成或加入 PreSync Job；新 DB Secret 尚不存在 | DB/Secret Ready 后从 add-db-migration Step 1 开始，独立后续 MR |
@@ -570,13 +592,17 @@ workflow；未知资源进入 Ops Todo，不让用户自己记下一步该跑什
 
 ### 首次资源初始化（仅全新服务且声明首次 migration）
 
+raw 数据面先由独立 infra Application 交付并通过生产链就绪验收，不能装回下面的
+runtime 初始化 render。下面两次同步只针对 runtime Application；高层 Database claim
+依照已批准产品合同可随 runtime 初始化，raw DB/A1 生产链不在其中。
+
 1. 只在准确 target 尚无本应用 Application、workload、Service/Ingress 的只读证据完整时
    启用。发现已运行资源或身份不明时 STOP，不能通过删除引用、scale-to-zero 或 prune
    现有服务套用此流程。记录原计划 replicas，不假定 replicas=0 会使 Rollout Healthy。
 2. 先完成完整业务候选的离线 render/精确容器检查，记录准备在第二次 MR 启用的资源、
    patches、镜像和 migration command。然后将**同一个**
-   `k8s/overlays/<target>/kustomization.yaml` 的首次 resources 改为初始化所需的
-   DB/密码链/consumer ExternalSecret、SA/配置等已声明资源；不引用含新 workload/Service
+   `{$target.runtime_source_path}/kustomization.yaml`（与 Step 5 的 source_path 一致）的首次 resources 改为初始化所需的
+   已批准的高层 Database claim、consumer ExternalSecret、SA/配置等 runtime 资源；不引用含新 workload/Service
    的 `../../base`，不引用 Ingress、PreSync migration 或其它依赖业务 schema 的 Job。
    同时暂不启用只针对这些未渲染资源的 patches/replacements。文件可以保留在 Git，
    但首次最终 render 不得出现它们；其它 target 的 Kustomization 不变。
@@ -612,7 +638,8 @@ workflow；未知资源进入 Ops Todo，不让用户自己记下一步该跑什
     同一个 app MR。子 workflow 产生的其它仓库 MR 保持独立，并已合并/ready 或明确列为
     阻塞 Application 的 Ops Todo。
   - Step 10 完成后的全部 app repo validators 已通过；candidate 阶段已完成，
-    runtime 验收仍 pending 不阻塞首次 Application 注册。
+    同一 runtime 的消费验收 pending 不阻塞其首次注册；raw infra 的独立交付及生产链
+    Ready/Vault 交付前置不能用这个 pending 例外跳过。
   - 写 Application 前，Step 5 的准确已有 project 合同和 namespace 前置已就绪；
     相关权限 MR 已独立合并同步，否则只交付 app MR 与阻塞注册的 Ops Todo。
 
@@ -690,7 +717,9 @@ workflow；未知资源进入 Ops Todo，不让用户自己记下一步该跑什
 [action]
   - 在已获准的首次同步后，按依赖恢复 `$delivery_phase=runtime`：先平台权限/IRSA，
     再 DB/Redis 等资源与 Secret，接着 DB migration，再 NineData 和其它 consumer 验收。
-  - RDS 回到 add-rds Step 10；其它已生成资源执行原子流程出口的 live 检查。只读取
+  - RDS 按 add-rds Step 1 的分支恢复：平台受限账号路径执行
+    references/app-owned-rds/README.md 的 live 验收，命名例外回到旧 Step 10；
+    其它已生成资源执行原子流程出口的 live 检查。只读取
     Secret 的存在、key 名和 Ready 状态，不输出凭据值。失败保留准确 pending/failed
     记录并进入对应 Troubleshoot，不把离线通过替代实际验收。
   - 首次资源初始化模式必须先确认首次 sync operation `Succeeded` 且 DB/Secret Ready，

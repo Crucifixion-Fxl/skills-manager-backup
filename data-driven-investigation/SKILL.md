@@ -11,6 +11,8 @@ description: >
   中择优时，一定要调。不适合单次简单 SQL 或已有 dashboard 能直接看到答案的场景。
 ---
 
+**写入 memory 时**：遵循 [极简写入规约](../../agent-harness/dev-infra/references/memory-writing.md)：只增量写长期约束与入口，默认≤5条/≤10行/约≤200字，语义去重；保留既有授权边界和安全门禁，详情留文档。此规约不新增写入授权。
+
 # Data-Driven Investigation
 
 > **核心主张**：把"看一下数据"升级成**假设驱动 + 方法选型 + 循环迭代 + 证据纪律**的结构化调查。

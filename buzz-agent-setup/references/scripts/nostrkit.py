@@ -1,5 +1,6 @@
 """Pure-python BIP-340 schnorr + bech32 (nsec/npub) — no external deps."""
 import hashlib, secrets
+from functools import lru_cache
 
 p = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F
 n = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
@@ -15,18 +16,64 @@ def point_add(P1, P2):
     if P2 is None: return P1
     if P1[0] == P2[0] and P1[1] != P2[1]: return None
     if P1 == P2:
-        lam = (3 * P1[0] * P1[0] * pow(2 * P1[1], p - 2, p)) % p
+        lam = (3 * P1[0] * P1[0] * (pow(2 * P1[1], -1, p) if (2 * P1[1]) % p else 0)) % p
     else:
-        lam = ((P2[1] - P1[1]) * pow(P2[0] - P1[0], p - 2, p)) % p
+        lam = ((P2[1] - P1[1]) * (pow(P2[0] - P1[0], -1, p) if (P2[0] - P1[0]) % p else 0)) % p
     x3 = (lam * lam - P1[0] - P2[0]) % p
     return (x3, (lam * (P1[0] - x3) - P1[1]) % p)
 
 def point_mul(P, k):
-    R = None
+    # Preserve legacy inputs outside the canonical field-point/integer lane.
+    canonical = (P is None or (type(P) is tuple and len(P) == 2
+        and all(type(v) is int and 0 <= v < p for v in P)
+        and (P[1] * P[1] - P[0] * P[0] * P[0] - 7) % p == 0))
+    if not canonical or not isinstance(k, int):
+        R = None
+        for i in range(256):
+            if (k >> i) & 1: R = point_add(R, P)
+            P = point_add(P, P)
+        return R
+
+    infinity = (0, 1, 0)
+
+    def double(A):
+        x, y, z = A
+        if z == 0 or y == 0: return infinity
+        yy = y * y % p
+        s = 4 * x * yy % p
+        m = 3 * x * x % p
+        nx = (m * m - 2 * s) % p
+        ny = (m * (s - nx) - 8 * yy * yy) % p
+        return nx, ny, 2 * y * z % p
+
+    def add(A, B):
+        x1, y1, z1 = A
+        x2, y2, z2 = B
+        if z1 == 0: return B
+        if z2 == 0: return A
+        z1z1, z2z2 = z1 * z1 % p, z2 * z2 % p
+        u1, u2 = x1 * z2z2 % p, x2 * z1z1 % p
+        s1, s2 = y1 * z2 * z2z2 % p, y2 * z1 * z1z1 % p
+        if u1 == u2:
+            return double(A) if s1 == s2 else infinity
+        h, r = (u2 - u1) % p, (s2 - s1) % p
+        hh = h * h % p
+        hhh, v = h * hh % p, u1 * hh % p
+        nx = (r * r - hhh - 2 * v) % p
+        ny = (r * (v - nx) - s1 * hhh) % p
+        return nx, ny, h * z1 * z2 % p
+
+    R = infinity
+    Q = infinity if P is None else (P[0], P[1], 1)
+    # Exact same 256 scalar bits, including negatives and high-bit truncation.
     for i in range(256):
-        if (k >> i) & 1: R = point_add(R, P)
-        P = point_add(P, P)
-    return R
+        if (k >> i) & 1: R = add(R, Q)
+        Q = double(Q)
+    x, y, z = R
+    if z == 0: return None
+    inverse = pow(z, -1, p)
+    square = inverse * inverse % p
+    return x * square % p, y * square * inverse % p
 
 def bytes_from_int(x): return x.to_bytes(32, 'big')
 def has_even_y(P): return P[1] % 2 == 0
@@ -61,6 +108,21 @@ def schnorr_sign(msg32: bytes, seckey: bytes, aux: bytes = None) -> bytes:
     return bytes_from_int(R[0]) + bytes_from_int((k + e * d) % n)
 
 def schnorr_verify(msg32: bytes, pubkey32: bytes, sig: bytes) -> bool:
+    # Only immutable, fixed-size public proof bytes enter this bounded cache.
+    # Callers still check event IDs, authorization and freshness on every read.
+    if (type(msg32) is bytes and len(msg32) == 32
+            and type(pubkey32) is bytes and len(pubkey32) == 32
+            and type(sig) is bytes and len(sig) == 64):
+        return _verified_public_signature(msg32, pubkey32, sig)
+    return _schnorr_verify(msg32, pubkey32, sig)
+
+
+@lru_cache(maxsize=4096)
+def _verified_public_signature(msg32: bytes, pubkey32: bytes, sig: bytes) -> bool:
+    return _schnorr_verify(msg32, pubkey32, sig)
+
+
+def _schnorr_verify(msg32: bytes, pubkey32: bytes, sig: bytes) -> bool:
     P = lift_x(int.from_bytes(pubkey32, 'big'))
     if P is None: return False
     r = int.from_bytes(sig[:32], 'big'); s = int.from_bytes(sig[32:], 'big')

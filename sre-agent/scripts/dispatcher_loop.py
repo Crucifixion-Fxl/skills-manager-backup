@@ -36,7 +36,11 @@ MAX_INVESTIGATION_RETRIES = 2
 # environment 提取 fallback 关键词映射
 _ENV_KEYWORDS = {
     "prod-us": "US", "us-prod": "US", "prod-eu": "EU",
-    "eu-prod": "EU", "cn-main": "CN", "cn-prod": "CN",
+    "eu-prod": "EU",
+    # Keep the current CN clusters distinct; generic CN/staging loses the account boundary.
+    "cn-tech-service": "cn-tech-service",
+    "cn-staging": "cn-staging", "staging-cn": "cn-staging",
+    "cn-main": "cn-prod", "cn-prod": "cn-prod", "prod-cn": "cn-prod",
     "staging": "staging",
 }
 from alert_correlator import correlate_incidents, normalize_title

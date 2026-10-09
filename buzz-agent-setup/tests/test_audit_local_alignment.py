@@ -28,6 +28,19 @@ LAUNCHER = SKILL_ROOT / "references/scripts/run-agent.py"
 GAP_TAXONOMY = SKILL_ROOT / "references/local-alignment-gap-taxonomy.md"
 EXPECTED = "a" * 40
 OLD = "b" * 40
+# Some CI images are minimal enough not to ship git (audit_local_alignment.py
+# hardcodes /usr/bin/git, never resolved via PATH, matching its convention
+# for every other trusted binary) -- skip the tests that need a real git
+# mirror there rather than false-fail, same precedent as this project's
+# existing bwrap skip (skills!985).
+HAS_GIT = os.path.exists("/usr/bin/git")
+JOIN_CHANNEL_TABLE = """
+<!-- buzz-agent-channels:v1 -->
+| Channel | ID | 性质 |
+| --- | --- | --- |
+| demo | `00000000-0000-4000-8000-000000000001` | owner 已批准 |
+<!-- /buzz-agent-channels:v1 -->
+"""
 
 
 def load_module():
@@ -114,6 +127,7 @@ class LocalAlignmentFixture(unittest.TestCase):
             "gitlab_todo_sync.py": "# fixture\n",
             "buzz_send_with_responsible_mentions.py": "# fixture\n",
             "buzz_agent_join_requests.py": "# fixture\n",
+            "recovery_controller.py": "# fixture\n",
             "buzz_acp_media_proxy.py": "# media proxy fixture\n",
         }
         for name, body in scripts.items():
@@ -229,7 +243,7 @@ class LocalAlignmentFixture(unittest.TestCase):
                 *contract["dev"]["required"],
             ]
         )
-        self.write(self.agents / "demo-dev.prompt.md", prompt)
+        self.write(self.agents / "demo-dev.prompt.md", prompt + JOIN_CHANNEL_TABLE)
         self.write(
             self.agents / "demo-dev.env",
             "\n".join(
@@ -240,6 +254,8 @@ class LocalAlignmentFixture(unittest.TestCase):
                     "BUZZ_ACP_CHANNELS=00000000-0000-4000-8000-000000000001",
                     f"BUZZ_ACP_BINARY={buzz_acp}",
                     f"BUZZ_ACP_BINARY_SHA256={buzz_acp_digest}",
+                    f"BUZZ_ACP_RECOVERY_REVISION={'a' * 40}",
+                    f"BUZZ_ACP_RECOVERY_DIR={self.home / '.local/state/buzz-recovery/demo-dev/runtime'}",
                     f"BUZZ_ACP_AGENT_COMMAND={proxy}",
                     f"BUZZ_ACP_MEDIA_ADAPTER_COMMAND={adapter}",
                     f"BUZZ_ACP_MEDIA_BUZZ_CLI={cli}",
@@ -481,6 +497,7 @@ class LocalAlignmentFixture(unittest.TestCase):
                     "owner_pubkey": "1" * 64,
                     "buzz": {"cli_path": str(cli), "cli_sha256": self.cli_digest},
                     "state_dir": str(self.home / ".local/state/buzz/join"),
+                    "lark_cli": str(self.home / ".local/bin/lark-cli"),
                     "agents": [
                         {
                             "name": "demo-dev",
@@ -488,12 +505,29 @@ class LocalAlignmentFixture(unittest.TestCase):
                             "unit": "buzz-local-demo-dev.service",
                             "log_file": str(self.agents / "demo-dev.log"),
                             "capabilities": {"summary": "demo", "repos": []},
+                            "feishu": {
+                                "app_id": "cli_demodev00000000001",
+                                "lark_config_dir": str(self.home / ".config/buzz/lark/demo-dev/config"),
+                                "lark_data_dir": str(self.home / ".config/buzz/lark/demo-dev/data"),
+                            },
                         }
                     ],
                 }
             ) + "\n",
             0o600,
         )
+        # ADR-0023: the agent's own lark-cli profile (owner-only directories) and the runner's verified capability.
+        for directory in ("config", "data"):
+            profile = self.home / ".config/buzz/lark/demo-dev" / directory
+            profile.mkdir(parents=True, exist_ok=True)
+            self.trust_directories(profile.parent)
+            profile.chmod(0o700)
+        self.write(
+            self.home / ".local/state/buzz/join/feishu-invite-state.json",
+            json.dumps({"version": 1, "agents": {"demo-dev": {"capability": "ok", "scopes_checked_at": 1}}}),
+            0o600,
+        )
+        (self.home / ".local/state/buzz/join").chmod(0o700)
         self.write(
             self.units / "buzz-agent-join.service",
             "[Service]\nType=oneshot\nUMask=0077\nNoNewPrivileges=yes\n"
@@ -510,13 +544,34 @@ class LocalAlignmentFixture(unittest.TestCase):
             "[Install]\nWantedBy=timers.target\n",
             0o644,
         )
+        self.write(
+            self.home / ".config/buzz/recovery/config.json",
+            json.dumps({"version": 1, "owner_pubkey": "1" * 64,
+                        "relay_url": "wss://relay.example.test", "relay_pubkey": "3" * 64,
+                        "owner_env_file": str(self.home / ".config/buzz/env"),
+                        "state_dir": str(self.home / ".local/state/buzz-recovery/controller"),
+                        "agents": [{"name": "demo-dev", "pubkey": "2" * 64,
+                                    "unit": "buzz-local-demo-dev.service",
+                                    "env_file": str(self.agents / "demo-dev.env"),
+                                    "journal_dir": str(self.home / ".local/state/buzz-recovery/demo-dev/runtime"),
+                                    "revision": EXPECTED,
+                                    "binary_sha256": hashlib.sha256(Path('/usr/bin/true').read_bytes()).hexdigest()}]}),
+            0o600,
+        )
+        self.write(self.units / "buzz-agent-recovery.service",
+                   "[Unit]\nAfter=network-online.target\n[Service]\nType=oneshot\nUMask=0077\nNoNewPrivileges=yes\n"
+                   "TimeoutStartSec=5min\nEnvironment=PATH=/usr/bin:/bin\n"
+                   f"ExecStart=/usr/bin/python3 -I {self.release}/scripts/recovery_controller.py --config %h/.config/buzz/recovery/config.json\n", 0o644)
+        self.write(self.units / "buzz-agent-recovery.timer",
+                   "[Timer]\nOnActiveSec=1min\nOnBootSec=2min\nOnUnitActiveSec=15s\nPersistent=true\n"
+                   "Unit=buzz-agent-recovery.service\n[Install]\nWantedBy=timers.target\n", 0o644)
 
     def _write_plugins(self) -> None:
         install = self.home / ".claude-buzz/plugins/cache/addx/addx/revision"
         manifest = json.loads(
             (self.release / ".release-manifest.json").read_text(encoding="utf-8")
         )
-        skill_root = install / "skills/buzz-agent-setup"
+        skill_root = install / "skills/agent-harness/buzz-agent-setup"
         for relative, record in manifest["files"].items():
             source = self.release / relative
             target = skill_root / relative
@@ -547,6 +602,27 @@ class LocalAlignmentFixture(unittest.TestCase):
 
 
 class LocalAlignmentAuditTest(LocalAlignmentFixture):
+    def test_missing_generic_recovery_service_is_failure_not_not_applicable(self):
+        (self.units / "buzz-agent-recovery.service").unlink()
+        report = self.run_audit()
+        self.assertTrue(any(c["category"] == "recovery_release" and c["status"] == "fail" for c in report["checks"]))
+
+    def test_recovery_inventory_must_cover_every_canonical_agent(self):
+        config = self.home / ".config/buzz/recovery/config.json"
+        value = json.loads(config.read_text())
+        value["agents"] = []
+        config.write_text(json.dumps(value))
+        report = self.run_audit()
+        self.assertTrue(any(c["category"] == "recovery_release" and c["status"] == "fail" for c in report["checks"]))
+
+    def test_recovery_revision_mismatch_fails_upgrade_audit(self):
+        config = self.home / ".config/buzz/recovery/config.json"
+        value = json.loads(config.read_text())
+        value["agents"][0]["revision"] = OLD
+        config.write_text(json.dumps(value))
+        report = self.run_audit()
+        self.assertTrue(any(c["category"] == "recovery_release" and c["status"] == "fail" for c in report["checks"]))
+
     def run_audit(self):
         module = load_module()
         return module.audit_home(self.home, EXPECTED)
@@ -603,6 +679,7 @@ class LocalAlignmentAuditTest(LocalAlignmentFixture):
                 "feishu_services": 1,
                 "todo_services": 1,
                 "join_services": 1,
+                "recovery_services": 1,
                 "harnesses": 1,
                 "buzz_cli_binaries": 1,
                 "transient_services": 0,
@@ -629,6 +706,7 @@ class LocalAlignmentAuditTest(LocalAlignmentFixture):
         self.assertEqual(
             [
                 "buzz-agent-join.timer",
+                "buzz-agent-recovery.timer",
                 "buzz-feishu-demo.timer",
                 "gitlab-buzz-sync-demo.timer",
                 "gitlab-todo-sync-owner.timer",
@@ -676,6 +754,106 @@ class LocalAlignmentAuditTest(LocalAlignmentFixture):
             report,
         )
 
+    def test_admission_requires_one_ordered_prompt_channel_table(self) -> None:
+        prompt = self.agents / "demo-dev.prompt.md"
+        original = prompt.read_text()
+        begin, end = "<!-- buzz-agent-channels:v1 -->", "<!-- /buzz-agent-channels:v1 -->"
+        invalid = ["", JOIN_CHANNEL_TABLE.replace(begin, ""), JOIN_CHANNEL_TABLE + begin,
+                   JOIN_CHANNEL_TABLE.replace(begin, "TEMP").replace(end, begin).replace("TEMP", end)]
+        for table in invalid:
+            with self.subTest(table=table):
+                self.write(prompt, original.replace(JOIN_CHANNEL_TABLE, table))
+                report = self.run_audit()
+                self.assertFalse(report["ok"], report)
+                self.assertTrue(any(c["category"] == "agent_prompt" and c["status"] == "fail"
+                                    and c["code"] == "admission_channel_table_invalid"
+                                    for c in report["checks"]), report)
+        self.write(prompt, original)
+        self.assertTrue(self.run_audit()["ok"])
+
+    def test_admission_table_must_cover_env_channels_inside_the_table(self) -> None:
+        prompt = self.agents / "demo-dev.prompt.md"
+        original = prompt.read_text()
+        channel = "00000000-0000-4000-8000-000000000001"
+        invalid = [JOIN_CHANNEL_TABLE.replace(channel, "00000000-0000-4000-8000-000000000002"),
+                   JOIN_CHANNEL_TABLE.replace(f"| demo | `{channel}` | owner 已批准 |", ""),
+                   JOIN_CHANNEL_TABLE.replace("<!-- /buzz-agent-channels:v1 -->", f"| duplicate | `{channel}` | owner |\n<!-- /buzz-agent-channels:v1 -->")]
+        for table in invalid:
+            with self.subTest(table=table):
+                self.write(prompt, original.replace(JOIN_CHANNEL_TABLE, table) + f"\n非表格引用：{channel}\n")
+                report = self.run_audit()
+                self.assertFalse(report["ok"], report)
+                self.assertTrue(any(c["code"] == "admission_channel_table_mismatch" and c["status"] == "fail"
+                                    for c in report["checks"]), report)
+
+    def test_admission_table_is_not_required_for_platform_or_executor(self) -> None:
+        module = load_module()
+        for role in ("platform-desk", "executor"):
+            with self.subTest(role=role):
+                auditor = module.Auditor(self.home, EXPECTED)
+                auditor.prompt_roles = {"demo-dev": role}
+                contract = module.load_prompt_contract()
+                text = "\n".join(m.replace("<RELEASE>", str(self.release))
+                                 for m in contract["common"]["required"] + contract[role]["required"])
+                prompt = self.agents / "demo-dev.prompt.md"
+                self.write(prompt, text)
+                auditor.audit_prompt("demo-dev", prompt)
+                self.assertFalse(any(c["status"] in {"fail", "unknown"} for c in auditor.checks), auditor.checks)
+
+    def test_admission_table_requires_a_complete_channel_id_cell(self) -> None:
+        module = load_module()
+        channel = "00000000-0000-4000-8000-000000000001"
+        for cell in (f"`{channel}", f"{channel}`", f"prefix{channel}", f"{channel}suffix"):
+            with self.subTest(cell=cell):
+                auditor = module.Auditor(self.home, EXPECTED)
+                table = JOIN_CHANNEL_TABLE.replace(f"`{channel}`", cell)
+                self.assertFalse(auditor.audit_admission_channel_table("agent:demo-dev", table, channel))
+                self.assertEqual(auditor.checks[-1]["code"], "admission_channel_table_mismatch")
+
+    def test_admission_table_matches_all_channels_without_order_dependence(self) -> None:
+        module = load_module()
+        first = "00000000-0000-4000-8000-000000000001"
+        second = "00000000-0000-4000-8000-000000000002"
+        table = JOIN_CHANNEL_TABLE.replace("<!-- /buzz-agent-channels:v1 -->",
+            f"| second | {second} | owner 已批准 |\n<!-- /buzz-agent-channels:v1 -->")
+        for channels, expected in ((f"{second}, {first}", True), (first, False), (second, False), ("", False)):
+            with self.subTest(channels=channels):
+                auditor = module.Auditor(self.home, EXPECTED)
+                self.assertEqual(auditor.audit_admission_channel_table("agent:demo-dev", table, channels), expected)
+                if not expected:
+                    self.assertEqual(auditor.checks[-1]["code"], "admission_channel_table_mismatch")
+
+    def test_admission_table_accepts_the_launchers_quoted_env_values(self) -> None:
+        env = self.agents / "demo-dev.env"
+        original = env.read_text()
+        channel = "00000000-0000-4000-8000-000000000001"
+        for quote in ("'", '"'):
+            with self.subTest(quote=quote):
+                self.write(env, original.replace(f"BUZZ_ACP_CHANNELS={channel}",
+                                                f"BUZZ_ACP_CHANNELS={quote}{channel}{quote}"))
+                report = self.run_audit()
+                self.assertTrue(report["ok"], [c for c in report["checks"] if c["status"] != "pass"])
+
+    def test_admission_readiness_does_not_lint_display_cells_or_headers(self) -> None:
+        """Only the complete ID cells and their approved set govern this read-only gate."""
+        prompt = self.agents / "demo-dev.prompt.md"
+        original = prompt.read_text()
+        channel = "00000000-0000-4000-8000-000000000001"
+        variants = (
+            JOIN_CHANNEL_TABLE.replace("| demo |", "| |"),
+            JOIN_CHANNEL_TABLE.replace("| owner 已批准 |", "| |"),
+            JOIN_CHANNEL_TABLE.replace("| Channel | ID | 性质 |\n| --- | --- | --- |\n", ""),
+        )
+        for table in variants:
+            with self.subTest(table=table):
+                self.write(prompt, original.replace(JOIN_CHANNEL_TABLE, table))
+                self.assertTrue(self.run_audit()["ok"])
+                self.write(prompt, original.replace(JOIN_CHANNEL_TABLE, table.replace(channel, "invalid")))
+                report = self.run_audit()
+                self.assertFalse(report["ok"])
+                self.assertTrue(any(c["status"] == "fail" and c["code"] == "admission_channel_table_mismatch"
+                                    for c in report["checks"]), report)
+
     def test_a_business_agent_requires_the_join_service_by_default(self) -> None:
         """A shipped join flow must not disappear behind an absent optional timer."""
         (self.units / "buzz-agent-join.service").unlink()
@@ -720,6 +898,54 @@ class LocalAlignmentAuditTest(LocalAlignmentFixture):
         self.assertTrue(any(item["category"] == "join_release"
                             and item["code"] == "agent_binding_mismatch"
                             and item["status"] == "fail" for item in report["checks"]), report)
+
+    def feishu_invite_failure(self, report, code):
+        return [item for item in report["checks"] if item["category"] == "join_release" and item["status"] == "fail"
+                and item["code"] == code]
+
+    def test_every_managed_agent_needs_its_own_feishu_profile_for_unbound_group_prompts(self) -> None:
+        """L1-JOIN-U20 (ADR-0023): 入群申请里没有 `feishu` 块的 agent 是失败项（带整改说明），不是「不适用」。"""
+        config = self.home / ".config/buzz/join/config.json"
+        value = json.loads(config.read_text(encoding="utf-8"))
+        del value["agents"][0]["feishu"]
+        config.write_text(json.dumps(value), encoding="utf-8")
+        report = self.run_audit()
+        self.assertFalse(report["ok"], report)
+        (failure,) = self.feishu_invite_failure(report, "feishu_invite_profile_missing") or [None]
+        self.assertIsNotNone(failure, report)
+        self.assertIn("demo-dev", failure.get("detail", ""))
+        self.assertIn("feishu", failure.get("detail", ""))
+        self.assertFalse(any(item["category"] == "join_release" and item["status"] == "not_applicable"
+                             and "feishu" in item["subject"] for item in report["checks"]))
+
+    def test_the_prompt_switch_may_not_be_off(self) -> None:
+        """L1-JOIN-U21: 全局 `feishu_unbound_prompt: false` 是失败项。"""
+        config = self.home / ".config/buzz/join/config.json"
+        value = json.loads(config.read_text(encoding="utf-8"))
+        value["feishu_unbound_prompt"] = False
+        config.write_text(json.dumps(value), encoding="utf-8")
+        report = self.run_audit()
+        self.assertFalse(report["ok"], report)
+        self.assertTrue(self.feishu_invite_failure(report, "feishu_invite_prompt_disabled"), report)
+
+    def test_the_runner_must_have_verified_the_capability(self) -> None:
+        """L1-JOIN-U22: runner 写回的能力状态不是 ok（缺 scope、profile 不符、列群被拒）是失败项并带出原因；从没核实过（没有状态文件或
+        没有这个 agent）也是失败项；profile 目录不是本人 0700 目录也是失败项。"""
+        state = self.home / ".local/state/buzz/join/feishu-invite-state.json"
+        state.write_text(json.dumps({"version": 1, "agents": {"demo-dev": {"capability": "scope_missing:send"}}}),
+                         encoding="utf-8")
+        report = self.run_audit()
+        gaps = self.feishu_invite_failure(report, "feishu_invite_capability_gap")
+        self.assertTrue(gaps, report)
+        self.assertIn("scope_missing:send", gaps[0].get("detail", ""))
+        state.unlink()
+        report = self.run_audit()
+        self.assertTrue(self.feishu_invite_failure(report, "feishu_invite_capability_unverified"), report)
+        state.write_text(json.dumps({"version": 1, "agents": {"demo-dev": {"capability": "ok"}}}), encoding="utf-8")
+        state.chmod(0o600)
+        (self.home / ".config/buzz/lark/demo-dev/data").chmod(0o755)
+        report = self.run_audit()
+        self.assertTrue(self.feishu_invite_failure(report, "feishu_invite_profile_invalid"), report)
 
     def test_business_agent_requires_channels_for_default_on_join_management(self) -> None:
         env = self.agents / "demo-dev.env"
@@ -832,7 +1058,7 @@ class LocalAlignmentAuditTest(LocalAlignmentFixture):
         installed = (
             self.home
             / ".claude-buzz/plugins/cache/addx/addx/revision"
-            / "skills/buzz-agent-setup/scripts/gitlab_buzz_sync.py"
+            / "skills/agent-harness/buzz-agent-setup/scripts/gitlab_buzz_sync.py"
         )
         original = installed.read_text(encoding="utf-8")
         installed.write_text(
@@ -1516,6 +1742,18 @@ class LocalAlignmentAuditTest(LocalAlignmentFixture):
             report,
         )
 
+    def test_repo_less_responsible_config_is_valid_v2(self) -> None:
+        path = self.agents / "demo/responsible/demo-dev.json"
+        value = json.loads(path.read_text(encoding="utf-8"))
+        value["gitlab"]["projects"] = []
+        self.write(path, json.dumps(value))
+        auditor = load_module().Auditor(self.home, EXPECTED)
+        auditor.audit_responsible_config("demo-dev", path)
+        self.assertFalse(
+            any(item["status"] in {"fail", "unknown"} for item in auditor.checks),
+            auditor.checks,
+        )
+
     def test_responsible_config_validation_never_imports_the_deployed_helper(self) -> None:
         marker = self.home / "deployed-helper-ran"
         helper = self.release / "scripts/buzz_send_with_responsible_mentions.py"
@@ -1658,6 +1896,17 @@ class LocalAlignmentAuditTest(LocalAlignmentFixture):
                 ]
             ]
             original = "\n".join(required) + "\n"
+            if role in module.JOIN_MANAGED_PROMPT_ROLES:
+                original += JOIN_CHANNEL_TABLE
+            with self.subTest(role=role, phase="complete baseline"):
+                self.write(prompt, original)
+                auditor = module.Auditor(self.home, EXPECTED)
+                auditor.prompt_roles = {"demo-dev": role}
+                auditor.audit_prompt("demo-dev", prompt)
+                self.assertFalse(
+                    any(item["status"] in {"fail", "unknown"} for item in auditor.checks),
+                    auditor.checks,
+                )
             for marker in required:
                 with self.subTest(role=role, marker=marker):
                     self.write(prompt, original.replace(marker, "REMOVED"))
@@ -1665,7 +1914,8 @@ class LocalAlignmentAuditTest(LocalAlignmentFixture):
                     auditor.prompt_roles = {"demo-dev": role}
                     auditor.audit_prompt("demo-dev", prompt)
                     self.assertTrue(
-                        any(item["status"] == "fail" for item in auditor.checks),
+                        any(item["status"] == "fail" and item["code"] == "required_markers_missing"
+                            for item in auditor.checks),
                         auditor.checks,
                     )
 
@@ -1740,7 +1990,7 @@ class LocalAlignmentAuditTest(LocalAlignmentFixture):
             0o644,
         )
         self.write(
-            codex_install / "skills/buzz-agent-setup/SKILL.md",
+            codex_install / "skills/agent-harness/buzz-agent-setup/SKILL.md",
             "---\nname: buzz-agent-setup\n---\n",
             0o644,
         )
@@ -1820,7 +2070,7 @@ class LocalAlignmentAuditTest(LocalAlignmentFixture):
         grok_home = self.home / ".grok"
         grok_install = grok_home / "installed-plugins/skills-fixture"
         self.write(
-            grok_install / "skills/buzz-agent-setup/SKILL.md",
+            grok_install / "skills/agent-harness/buzz-agent-setup/SKILL.md",
             "---\nname: buzz-agent-setup\n---\n",
             0o644,
         )
@@ -1880,7 +2130,7 @@ class LocalAlignmentAuditTest(LocalAlignmentFixture):
             0o644,
         )
         self.write(
-            unused_target / "skills/buzz-agent-setup/SKILL.md",
+            unused_target / "skills/agent-harness/buzz-agent-setup/SKILL.md",
             "---\nname: buzz-agent-setup\n---\n",
             0o644,
         )
@@ -2272,6 +2522,182 @@ class LocalAlignmentAuditTest(LocalAlignmentFixture):
         )
         self.assertEqual(2, completed.returncode)
         self.assertIn("clean environment", completed.stderr)
+
+    def _git_env(self) -> dict[str, str]:
+        return {
+            "HOME": str(self.home),
+            "PATH": "/usr/bin:/bin",
+            "GIT_CONFIG_NOSYSTEM": "1",
+            "GIT_CONFIG_GLOBAL": "/dev/null",
+            "GIT_AUTHOR_NAME": "t",
+            "GIT_AUTHOR_EMAIL": "t@example.invalid",
+            "GIT_COMMITTER_NAME": "t",
+            "GIT_COMMITTER_EMAIL": "t@example.invalid",
+        }
+
+    def _git(self, cwd: Path, *args: str) -> str:
+        completed = subprocess.run(
+            ["/usr/bin/git", "-C", str(cwd), *args],
+            env=self._git_env(),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=True,
+        )
+        return completed.stdout.decode("utf-8").strip()
+
+    def _build_ancestry_fixture(self) -> tuple[object, str, str, str]:
+        """Real upstream history: older -> newer (descendant); an unrelated
+        commit with no shared ancestor; and a trusted mirror of it whose
+        recorded remote matches the module's canonical constant."""
+        module = load_module()
+        upstream = self.home / "upstream-src"
+        upstream.mkdir()
+        self._git(upstream, "init", "--quiet", "--initial-branch=main")
+        (upstream / "f").write_text("1\n")
+        self._git(upstream, "add", "f")
+        self._git(upstream, "commit", "--quiet", "-m", "older")
+        older = self._git(upstream, "rev-parse", "HEAD")
+        (upstream / "f").write_text("2\n")
+        self._git(upstream, "add", "f")
+        self._git(upstream, "commit", "--quiet", "-m", "newer")
+        newer = self._git(upstream, "rev-parse", "HEAD")
+
+        unrelated_src = self.home / "unrelated-src"
+        unrelated_src.mkdir()
+        self._git(unrelated_src, "init", "--quiet", "--initial-branch=main")
+        (unrelated_src / "g").write_text("1\n")
+        self._git(unrelated_src, "add", "g")
+        self._git(unrelated_src, "commit", "--quiet", "-m", "unrelated")
+        unrelated = self._git(unrelated_src, "rev-parse", "HEAD")
+
+        mirror = self.home / ".local/share/buzz-agent-setup/git-mirror/skills.git"
+        mirror.parent.mkdir(parents=True, exist_ok=True)
+        self.trust_directories(mirror.parent)
+        subprocess.run(
+            ["/usr/bin/git", "clone", "--quiet", "--mirror", str(upstream), str(mirror)],
+            env=self._git_env(),
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        # The unrelated commit lives only in a second remote-less repo; fetch
+        # it into the mirror too so "unrelated, but present" is distinct from
+        # "absent from the mirror entirely".
+        subprocess.run(
+            ["/usr/bin/git", "--git-dir", str(mirror), "fetch", "--quiet", str(unrelated_src), "main"],
+            env=self._git_env(),
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        subprocess.run(
+            [
+                "/usr/bin/git", "--git-dir", str(mirror), "remote", "set-url", "origin",
+                module.CANONICAL_SKILLS_REMOTE,
+            ],
+            env=self._git_env(),
+            check=True,
+        )
+        mirror.chmod(0o700)
+        return module, older, newer, unrelated
+
+    @unittest.skipUnless(HAS_GIT, "/usr/bin/git not installed in this image")
+    def test_descendant_revision_is_accepted_only_with_a_trusted_canonical_mirror(self) -> None:
+        module, older, newer, unrelated = self._build_ancestry_fixture()
+        auditor = module.Auditor(self.home, older)
+        self.assertTrue(auditor.is_expected_or_trusted_descendant(older))
+        self.assertTrue(auditor.is_expected_or_trusted_descendant(newer))
+        self.assertFalse(auditor.is_expected_or_trusted_descendant(unrelated))
+        self.assertFalse(auditor.is_expected_or_trusted_descendant("f" * 40))
+        self.assertFalse(auditor.is_expected_or_trusted_descendant(None))
+        self.assertFalse(auditor.is_expected_or_trusted_descendant(123))
+
+    @unittest.skipUnless(HAS_GIT, "/usr/bin/git not installed in this image")
+    def test_descendant_is_rejected_when_mirror_remote_is_not_canonical(self) -> None:
+        module, older, newer, _unrelated = self._build_ancestry_fixture()
+        mirror = self.home / ".local/share/buzz-agent-setup/git-mirror/skills.git"
+        subprocess.run(
+            ["/usr/bin/git", "--git-dir", str(mirror), "remote", "set-url", "origin", "git@attacker.example:x.git"],
+            env=self._git_env(),
+            check=True,
+        )
+        auditor = module.Auditor(self.home, older)
+        self.assertFalse(auditor.is_expected_or_trusted_descendant(newer))
+        # Exact match never needs the mirror at all.
+        self.assertTrue(auditor.is_expected_or_trusted_descendant(older))
+
+    @unittest.skipUnless(HAS_GIT, "/usr/bin/git not installed in this image")
+    def test_descendant_is_rejected_when_mirror_directory_is_not_owner_only(self) -> None:
+        module, older, newer, _unrelated = self._build_ancestry_fixture()
+        mirror = self.home / ".local/share/buzz-agent-setup/git-mirror/skills.git"
+        mirror.chmod(0o750)
+        try:
+            auditor = module.Auditor(self.home, older)
+            self.assertFalse(auditor.is_expected_or_trusted_descendant(newer))
+        finally:
+            mirror.chmod(0o700)
+
+    def test_descendant_is_rejected_when_mirror_is_missing(self) -> None:
+        module = load_module()
+        auditor = module.Auditor(self.home, OLD)
+        self.assertFalse(auditor.is_expected_or_trusted_descendant(EXPECTED))
+
+    @unittest.skipUnless(HAS_GIT, "/usr/bin/git not installed in this image")
+    def test_claude_plugin_accepts_a_trusted_mirror_proven_descendant_revision(self) -> None:
+        module, older, newer, _unrelated = self._build_ancestry_fixture()
+        revision_release = self.home / ".local/share/buzz-agent-setup/releases" / older
+        skill = revision_release / "SKILL.md"
+        self.write(skill, "---\nname: buzz-agent-setup\n---\n", 0o444)
+        self.write(
+            revision_release / ".release-manifest.json",
+            json.dumps({
+                "version": 1,
+                "commit": older,
+                "files": {"SKILL.md": {"mode": 0o444, "sha256": hashlib.sha256(skill.read_bytes()).hexdigest()}},
+            }),
+            0o444,
+        )
+        revision_release.chmod(0o555)
+
+        # Reuse the fixture's already-trusted, already-enabled .claude-buzz
+        # and wrapper; only the plugin registry's recorded revision and
+        # install path change, to a descendant of `older` rather than an
+        # exact match.
+        claude_root = self.home / ".claude-buzz"
+        install = claude_root / "plugins/cache/addx/addx/descendant"
+        self.write(install / "skills/agent-harness/buzz-agent-setup/SKILL.md", "---\nname: buzz-agent-setup\n---\n", 0o644)
+        self.write(
+            claude_root / "plugins/installed_plugins.json",
+            json.dumps({
+                "version": 2,
+                "plugins": {
+                    "addx@addx": [
+                        {
+                            "installPath": str(install),
+                            "gitCommitSha": newer,
+                            "version": "descendant",
+                            "scope": "user",
+                        }
+                    ]
+                },
+            }),
+            0o644,
+        )
+
+        auditor = module.Auditor(self.home, older)
+        auditor.audit_claude_plugin(
+            json.dumps([
+                "demo-dev",
+                str(self.home / ".local/bin/claude-buzz"),
+                str(claude_root),
+                str(self.workdir),
+                f"{self.home / '.local/bin'}:/usr/bin:/bin",
+            ])
+        )
+        self.assertTrue(
+            any(item["category"] == "plugin_revision" and item["status"] == "pass" for item in auditor.checks),
+            auditor.checks,
+        )
 
 
 if __name__ == "__main__":

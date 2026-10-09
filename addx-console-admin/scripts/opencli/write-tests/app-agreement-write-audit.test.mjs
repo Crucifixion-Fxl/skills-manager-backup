@@ -1,0 +1,12 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {assessAgreementIntent} from '../addx-console/app-agreement-write-audit-core.mjs';
+const row={policyId:'p1',templateId:'t1',tenantId:'tenant',iotHostDomain:'host.example',appCustomer:'c1',publishStatus:1,policyStatus:0};
+const s={source:'active-policy-cards',rows:[row]};const i={mode:'dry-run',action:'policy-edit-draft',policyId:'p1',templateId:'t1',tenantId:'tenant',host:'host.example'};
+test('default no network payload',()=>assert.equal(assessAgreementIntent().canBuildPayload,false));
+test('submit/publish/proof/body fields refuse',()=>{for(const x of [{...i,mode:'submit'},{...i,publish:false},{...i,permissionProof:'approved'},{...i,policyHtml:'secret'}])assert.throws(()=>assessAgreementIntent(x,s))});
+test('draft against published template still S3 publish risk',()=>{let r=assessAgreementIntent(i,s);assert.equal(r.status,'BLOCKED_DRAFT_CAN_PUBLISH_S3');assert.equal(r.publishParameterHonored,false)});
+test('unpublished template does not resolve race/ownership/CAS',()=>{let r=assessAgreementIntent(i,{...s,rows:[{...row,publishStatus:0}]});assert.equal(r.status,'BLOCKED_RAW_STATE_AUTHORITY_AND_CAS');assert.equal(r.canBuildPayload,false)});
+test('placeholder cannot be edited as saved policy',()=>{let p={...row};delete p.policyId;assert.throws(()=>assessAgreementIntent(i,{...s,rows:[p]}));let r=assessAgreementIntent({...i,action:'policy-create',policyId:undefined},{...s,rows:[p]});assert.equal(r.placeholderIsSaved,false);assert.equal(r.canBuildPayload,false)});
+test('exact id tenant host template alignment and uniqueness required',()=>{for(const rows of [[{...row,tenantId:'other'}],[{...row,iotHostDomain:'other'}],[{...row,templateId:'other'}],[row,row]])assert.throws(()=>assessAgreementIntent(i,{...s,rows}))});
+test('policy delete binding error cannot be pretended executable',()=>{let r=assessAgreementIntent({...i,action:'policy-delete'},s);assert.equal(r.status,'BLOCKED_PATH_VARIABLE_BINDING_MISMATCH');assert.equal(r.externalS3DeletionPossible,true)});
+test('template group operations require full all-language and policy scope beyond list',()=>{let r=assessAgreementIntent({mode:'dry-run',action:'template-delete-by-name',templateName:'family'},{source:'template-rows',rows:[{templateId:'t1',templateName:'family'},{templateId:'t2',templateName:'family',templateContent:'private'}]});assert.equal(r.observedTemplateCount,2);assert.equal(r.status,'BLOCKED_ALL_POLICIES_HOSTS_ENVIRONMENTS_SCOPE');assert.equal(JSON.stringify(r).includes('private'),false)});

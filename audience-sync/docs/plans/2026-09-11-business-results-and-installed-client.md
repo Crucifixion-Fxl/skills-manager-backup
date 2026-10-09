@@ -2,7 +2,7 @@
 
 Users need the plan name, actual criteria, snapshot partition, stage-specific counts, status and usable Audience/Brevo links. Execution identifiers and preview attestation remain internal binding/recovery evidence; normal replies and confirmations must not dump API payloads.
 
-The installed skills/audience-sync directory contains its Python standard-library client, source and contracts. It runs relative to its own SKILL.md without another clone or pip install.
+The installed skills/experimentation/audience-sync directory contains its Python standard-library client, source and contracts. It runs relative to its own SKILL.md without another clone or pip install.
 
 ## Brevo List readback
 

@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "tool": "worktime",
+  "owner": "worktime",
+  "status": "source-reviewed-runtime-pending",
+  "contract": "../../worktime-filing/references/worktime-h5-api.md",
+  "notes": "复用 owner login.py 的随机 loopback state 校验；WORKTIME_TOKEN 使用服务原生 wktok_ Bearer，不是飞书 access token。所有写操作沿用原 Skill 预览及新的顶层用户确认门禁。源码发现不激活 delegated provider。",
+  "sources": [
+    {
+      "kind": "repository",
+      "repository": "https://gitlab.addx.ai/empowered-efficiency/worktime-h5",
+      "researchCommit": "46f828c00758a303ee75f6e31b66bcbfee0c5866",
+      "entries": [
+        "app.py",
+        "feishu_auth.py",
+        "utils/cli_token.py"
+      ],
+      "status": "source-verified"
+    }
+  ],
+  "identityProbe": {
+    "route": "GET /api/user/info",
+    "subjectFields": [
+      "user_id",
+      "open_id"
+    ],
+    "rule": "身份来自 Feishu user_info 或 token 创建时保存的身份快照，不自动刷新。必须 cookie-free 校验 Bearer 并私下绑定身份；已有 session.user_info 优先，混合 cookie/Bearer 请求不能证明 Bearer subject。"
+  },
+  "tokenLifecycle": {
+    "mechanism": "wktok_ prefix; 32 random bytes; only SHA256 hash stored server-side",
+    "expiry": "Default 90 days, clamped 1–365 days; checked on each verification; no refresh route found.",
+    "routes": [
+      "POST /api/auth/cli-tokens",
+      "GET /api/auth/cli-tokens",
+      "DELETE /api/auth/cli-tokens/<token_id>"
+    ],
+    "revoke": "Matching current user_id is required; deleting the token record causes subsequent cookie-free verification to fail.",
+    "limitation": "Creation accepts user_id or open_id, but list/revoke and 10-token-per-user cap use user_id; open_id-only lifecycle remains unvalidated.",
+    "logout": "/auth/logout clears the browser Flask session only and does not revoke CLI tokens."
+  },
+  "loginCapture": "/auth/cli-redirect issues a 90-day token to exact http://127.0.0.1:<port>/callback with state. Keep owner-native random-state loopback login; capture privately and suppress callback URL/query/token logs. No broad browser-cache harvesting.",
+  "permission": "/api/worktime/check-permission resolves open_id and enabled departments; project membership and DELETE_ADMIN_OPEN_IDS are separate resource/write checks. Identity does not prove current permission.",
+  "credentialHandling": "No login, secret reads, token issuance, or SaaS business calls performed. Raw tokens never enter chat, SSOT, repository or fixtures; private owner credential storage only.",
+  "deploymentConsistency": "Research SHA is not a deployed SHA; effective deployment/auth configuration and cookie-free identity fixtures remain pending. Current Node/local documentation validation is not online verification.",
+  "referenceBase": "owner-skill-root for SKILL.md/contractEntrypoints/referenceSources paths; contract field resolves from this JSON directory; upstream repository entrypoints stay repository-relative"
+}

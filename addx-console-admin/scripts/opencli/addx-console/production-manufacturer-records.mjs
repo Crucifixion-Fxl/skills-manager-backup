@@ -1,0 +1,6 @@
+import {ArgumentError,CommandExecutionError,EmptyResultError} from '@jackwener/opencli/errors';
+function bad(){throw new CommandExecutionError('Console production manufacturer metadata contract changed');}
+function text(v){if(v===null||v===undefined)return null;if(typeof v!=='string'||v.length>8192)bad();return v;}
+export function manufacturerLimit(a){const n=Number(a.limit);if(!Number.isSafeInteger(n)||n<1||n>100)throw new ArgumentError('limit must be 1 to 100');return n;}
+export function manufacturerArgs(a){const limit=manufacturerLimit(a);const type=a.type===undefined?'all':String(a.type);if(a.type===null||!['all','0','1'].includes(type))throw new ArgumentError('type must be all, 0 or 1');return{limit,type,path:'/worker/consumer/list'+(type==='all'?'':'?type='+type)};}
+export function manufacturerRows(d,n,selected='all'){if(!Array.isArray(d)||d.length>10000)bad();if(!d.length)throw new EmptyResultError('addx-console production-manufacturers','No production manufacturer metadata returned');return d.map(r=>{if(!r||!Number.isSafeInteger(r.id)||r.id<1||(r.type!==0&&r.type!==1)||(selected!=='all'&&r.type!==Number(selected)))bad();return{id:r.id,name:text(r.name),companyCode:text(r.code),type:r.type,typeLabel:r.type===0?'工厂厂测':'供应商厂测',returnedTotal:d.length};}).slice(0,n);}

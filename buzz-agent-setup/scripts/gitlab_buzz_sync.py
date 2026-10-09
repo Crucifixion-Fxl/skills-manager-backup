@@ -2105,6 +2105,19 @@ def render_record(record: dict[str, Any]) -> str:
     style = INSTANT_STYLE.get((record["object"], record["event"]), ("🔔", "通知"))
     icon, phrase = _style_with_pipeline_id(record, style)
     title = _md_escape(str(record.get("title") or record["object"]))
+    if record["object"] == "tag" and record.get("ref"):
+        from gitlab_tag_batches import ref_label, valid_ref
+        if valid_ref(record["ref"]):
+            phrase = {"tag_created": "新建 tag", "tag_deleted": "删除 tag", "pushed": "移动 tag"}.get(record["event"])
+            if phrase:
+                body = [f"{ref_label(record['ref'])} · 🏷 **{phrase}**", record["url"], f"ref: {record['ref']}"]
+                if record.get("title") and record["title"] != record["ref"]:
+                    body.append("commit: " + title)
+                if record.get("actor") not in (None, "", "-", "?"):
+                    body.append(f"by: {record['actor']}")
+                if record.get("commits"):
+                    body.append(f"commits: {record['commits']}")
+                return _notice(body, header)
     pipeline_id = f"#{record['source_id']}" if (
         record.get("object") == "pipeline" and _positive_int(record.get("source_id"))
     ) else ""
@@ -3947,6 +3960,8 @@ class Syncer:
         self._stalled_records: dict[int, list[dict[str, Any]]] = {}
         self._retained_groups: dict[tuple[int, str, int], list[dict[str, Any]]] = {}
         self._previous_groups: dict[tuple[int, str, int], list[dict[str, Any]]] = {}
+        self._isolated_pending_projects: set[int] = set()
+        self._independent_comment_id: str | None = None
 
     def _check_run_budget(self) -> None:
         check = getattr(self.gitlab, "check_budget", None)
@@ -4118,10 +4133,49 @@ class Syncer:
         ]
         self._write_outbox(ledger)
 
+    def _isolatable_pipeline(self, item: dict[str, Any]) -> int | None:
+        """Only a standalone, attempted pipeline failure has a proven unrelated topic."""
+        payload = item.get("payload")
+        if (item.get("kind") != "buzz_message" or item.get("attempted") is not True
+                or item.get("status") != "PENDING" or not isinstance(payload, dict)
+                or "group_id" in item or "group_index" in item
+                or set(payload) != {"content", "reply_to", "mentions", "project_id"}
+                or payload.get("reply_to") is not None):
+            return None
+        header = parse_header(payload.get("content"))
+        if (not header or set(header) != {"object", "event", "project", "events"}
+                or header["object"] != "pipeline" or header["event"] != "failed"
+                or header["project"] not in self.config["gitlab"]["projects"]
+                or payload["project_id"] not in (None, header["project"])
+                or len(header["events"]) != 1
+                or not re.fullmatch(r"pipeline-[1-9][0-9]*-failed", header["events"][0])
+                or not isinstance(payload["mentions"], list)
+                or any(not isinstance(pub, str) or not HEX64_RE.fullmatch(pub)
+                       for pub in payload["mentions"])
+                or item.get("change_id") != delivery_change_id(self.channel, "buzz_message", payload)):
+            return None
+        return int(header["project"])
+
+    def _check_outbox_start(self, kind: str, payload: dict[str, Any]) -> None:
+        """Check durable truth before dispatch, including direct and group paths."""
+        change_id = delivery_change_id(self.channel, kind, payload)
+        pending = self._read_outbox()["pending"]
+        same = [item for item in pending if item.get("change_id") == change_id]
+        if len(same) > 1 or any(item.get("attempted") is not False for item in same):
+            raise SyncError("durable outbox action was already attempted; readback is required")
+        others = [item for item in pending if item.get("change_id") != change_id
+                  and item.get("kind") != "summary_request"]
+        if self._isolated_pending_projects or any(item.get("attempted") is not False for item in others):
+            if (kind != "buzz_message" or change_id != self._independent_comment_id
+                    or any("group_id" in item or "group_index" in item for item in same)
+                    or not others or any(self._isolatable_pipeline(item) is None for item in others)):
+                raise SyncError("durable outbox topic remains blocked")
+
     def _deliver(
         self, kind: str, payload: dict[str, Any], action: Any, *, discard_rejected: bool = True,
     ) -> Any:
         self._check_run_budget()
+        self._check_outbox_start(kind, payload)
         if kind in {"buzz_message", "buzz_edit", "buzz_reaction", "buzz_diff", "gitlab_note"}:
             self._check_delivery_gates(kind, payload)
         change_id = self._queue_delivery(kind, payload)
@@ -4257,7 +4311,11 @@ class Syncer:
         kind, payload = item.get("kind"), item.get("payload")
         if not isinstance(payload, dict):
             raise SyncError("durable outbox queued payload is invalid")
+        if (item.get("attempted") is not False
+                or item.get("change_id") != delivery_change_id(self.channel, str(kind), payload)):
+            raise SyncError("durable outbox queued action is not an exact unattempted operation")
         self._check_run_budget()
+        self._check_outbox_start(str(kind), payload)
         self._check_delivery_gates(str(kind), payload)
         change_id = str(item.get("change_id") or "")
         self._mark_delivery_attempted(change_id)
@@ -4290,10 +4348,17 @@ class Syncer:
 
     def _reconcile_pending(self) -> int:
         recovered = 0
-        for item in list(self._read_outbox()["pending"]):
+        pending = list(self._read_outbox()["pending"])
+        # Mixed, grouped, or unknown scopes retain the original global barrier.
+        isolatable = bool(pending) and all(self._isolatable_pipeline(item) is not None for item in pending)
+        for item in pending:
             change_id = item.get("change_id")
             if not isinstance(change_id, str) or not HEX64_RE.fullmatch(change_id):
                 raise SyncError("durable outbox pending change_id is invalid")
+            if isinstance(item.get("payload"), dict) and "tag_batch" in item["payload"]:
+                from gitlab_tag_batches import TagBatches
+                TagBatches(self, globals()).reconcile(item)
+                continue
             if item.get("kind") == "summary_request":
                 # Desk and the restricted publisher own this semantic phase.
                 # Sync must neither publish machine prose nor ACK it on their behalf.
@@ -4314,6 +4379,9 @@ class Syncer:
                 # so they are safe to retry after a negative readback.
                 # Buzz messages and diffs cannot be retried without risking a second
                 # externally visible event; those remain fail-closed.
+                if isolatable:
+                    self._isolated_pending_projects.add(self._isolatable_pipeline(item))
+                    continue
                 if item.get("kind") not in {"gitlab_note", "buzz_reaction"}:
                     raise SyncError(f"durable outbox delivery {change_id[:12]} is still pending")
                 if item.get("kind") == "gitlab_note":
@@ -4479,6 +4547,8 @@ class Syncer:
     def _run_locked(self, dry_run: bool) -> dict[str, Any]:
         # A Syncer may run more than once; nothing from an earlier run may leak into this one.
         self._degraded = []
+        self._isolated_pending_projects = set()
+        self._independent_comment_id = None
         self._display_names, self._name_fallbacks = None, 0
         self._stalled_objects, self._stalled_records = set(), {}
         self._origin_fallbacks = []
@@ -4522,6 +4592,12 @@ class Syncer:
             # behind newer externally visible writes.
             self._check_run_budget()
             summary["recovered"] += self._reconcile_pending()
+            if self._isolated_pending_projects:
+                # Never advance the shared cursor over the unresolved source.
+                self._resume_independent_issue_comments(projects, updated_after, summary)
+                summary["status"] = "degraded"
+                self._degraded.append("pending pipeline delivery; only independent existing Issue comments resumed")
+                return summary
             self._check_run_budget()
             summary["summary_requests"] = self._pending_summary_requests()
             if summary["summary_requests"]:
@@ -4561,6 +4637,69 @@ class Syncer:
             # some records to digest. Timer and desk runner already accept this status as success.
             summary["status"] = "degraded"
         return summary
+
+    def _resume_independent_issue_comments(
+        self, projects: dict[int, dict[str, Any]], cursor: str, summary: dict[str, Any],
+    ) -> None:
+        """Keep root, lifecycle, MR/diff and top-level scheduling paused during UNKNOWN."""
+        for project_id in projects:
+            for listed in self.gitlab.issues(project_id, cursor):
+                self._check_run_budget()
+                iid = listed.get("iid")
+                if not _positive_int(iid):
+                    raise SyncError("independent Issue scan has an invalid identity")
+                issue = self.gitlab.issue(project_id, iid)
+                fact = _object_data(issue_fact, issue, project_id)
+                if fact["issue"] != iid:
+                    raise SyncError("independent Issue readback changed identity")
+                if not _object_data(issue_selected, issue, self.config)[0]:
+                    continue
+                notes = self.gitlab.notes(project_id, iid)
+                root = parse_binding(notes, self.bot_user_id, project_id, "issue", iid, self.channel)
+                if root is None:
+                    continue
+                events = self._thread(root, project_id, "issue", iid)
+                root_event = next((event for event in events if event.get("id") == root), {})
+                header = parse_header(root_event.get("content"))
+                plaque = plaque_url(root_event.get("content"))
+                ident = plaque_identity(plaque) if plaque else None
+                own_header = (header and header.get("object") == "issue"
+                              and header.get("project") == project_id and header.get("issue") == iid)
+                own_plaque = (header is None and ident and ident.get("object") == "issue"
+                              and ident.get("iid") == iid)
+                tags = root_event.get("tags") or []
+                if (root_event.get("pubkey") != self.publisher or root_event.get("kind") != 9
+                        or [tag[1] for tag in tags if len(tag) > 1 and tag[0] == "h"] != [self.channel]
+                        or any(tag and tag[0] == "e" for tag in tags) or not (own_header or own_plaque)):
+                    continue
+                if any(origin != root for origin in self._resolve_origin_roots(
+                        issue, notes, subject="issue", project_id=project_id)):
+                    continue
+                previous = previous_fact_from_thread(events, self.publisher, project_id, iid)
+                if classify_change(previous, fact) is not None:
+                    continue  # A comment snapshot must not hide unpublished state changes.
+                for note in pending_comments(notes, events, self.publisher, self.bot_user_id, self.config["since"]):
+                    commenter = (note.get("author") or {}).get("username")
+                    author = (issue.get("author") or {}).get("username")
+                    mentions = self._attention(
+                        project_id,
+                        [*attention_candidates("gitlab.assignees", fact["assignees"], exclude=[commenter]),
+                         *attention_candidates("gitlab.author", [author] if isinstance(author, str) else [],
+                                               exclude=[commenter])], note=note,
+                    )[0]
+                    content = render_comment_message(fact, note)
+                    if mentions:
+                        content = with_notified_line(
+                            content, notified_tokens(list(mentions), self.people, self._member_display_names()))
+                    payload = {"content": content, "reply_to": root, "mentions": list(mentions), "project_id": None}
+                    self._independent_comment_id = delivery_change_id(self.channel, "buzz_message", payload)
+                    try:
+                        self._deliver("buzz_message", payload,
+                                      lambda: self.buzz.send(content, reply_to=root, mentions=mentions))
+                    finally:
+                        self._independent_comment_id = None
+                    summary["activity"] += 1
+                    self._link(summary, root)
 
     def _with_stalled(self, project_id: int, object_kind: str, listed: list[dict[str, Any]],
                       previously_stalled: list[tuple[int, str, int]]) -> list[dict[str, Any]]:
@@ -6450,7 +6589,10 @@ class Syncer:
         posted = posted_keys([event for event in scanned if not _tag_values(event, "e")], self.publisher)
         posted |= self._acked_summary_keys()
         fresh = [record for record in records if record["key"] not in posted]
-        for record in (record for record in fresh if record["placement"] == "instant"):
+        from gitlab_tag_batches import TagBatches
+        aggregated = TagBatches(self, globals()).sync(
+            [record for record in records if record["placement"] == "instant"], summary, dry_run)
+        for record in (record for record in fresh if record["placement"] == "instant" and record["key"] not in aggregated):
             if not dry_run:
                 self._send_message(render_record(record), mentions=self._record_attention(project_id, record))
             summary["notified"]["instant"] += 1

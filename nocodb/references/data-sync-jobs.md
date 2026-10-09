@@ -496,29 +496,29 @@ curl -s -X PATCH "https://nocodb.addx.live/api/v1/db/data/v1/data_sync/jobs/${JO
 ```bash
 # 1) dest_table 后缀规则一致性：日级口径必须统一为"无后缀"，禁止出现"后缀不强制"
 grep -nE "past day.*(后缀不强制|无后缀)" \
-  skills/nocodb/SKILL.md skills/nocodb/references/data-sync-jobs.md
+  skills/data/nocodb/SKILL.md skills/data/nocodb/references/data-sync-jobs.md
 # 期望：仅出现"无后缀"，无"后缀不强制"
 
 # 2) jobs 表 id 不得硬编码（只允许在文末"参考"区做样例标注）
 grep -nE "md_4prd5u3stmz9ah" \
-  skills/nocodb/SKILL.md skills/nocodb/references/data-sync-jobs.md
+  skills/data/nocodb/SKILL.md skills/data/nocodb/references/data-sync-jobs.md
 # 期望：仅红线 #9 + 参考区有提及；其它工作流步骤一律用 <jobs_table_id> 占位 + 反查命令
 
 # 3) 文首红线编号 1–9 各出现一次（文末不应再有"安全红线"小节）
-awk '/^## 红线（先看！/,/^## 项目和表/' skills/nocodb/references/data-sync-jobs.md \
+awk '/^## 红线（先看！/,/^## 项目和表/' skills/data/nocodb/references/data-sync-jobs.md \
   | grep -E "^[0-9]+\." | awk -F. '{print $1}' | sort | uniq -c
 # 期望：1–9 各 1 次；文末"安全红线"小节应已并入文首
-grep -c "^## 安全红线" skills/nocodb/references/data-sync-jobs.md
+grep -c "^## 安全红线" skills/data/nocodb/references/data-sync-jobs.md
 # 期望：0（文末安全红线已删除，避免与文首红线漂移）
 
 # 4) 跨文档锚点齐全（SKILL.md 引用的 references 小节都存在）
 for anchor in "选择器字段菜单" "dest_database 业务域参考" "停用旧任务 SOP" "Step 4" "只读映射查询"; do
-  grep -q "$anchor" skills/nocodb/references/data-sync-jobs.md \
+  grep -q "$anchor" skills/data/nocodb/references/data-sync-jobs.md \
     && echo "✅ $anchor" || echo "🔴 missing: $anchor"
 done
 
 # 5) 必填字段口径同步：SKILL.md 与 references 都说 7 项必填
-grep -nE "这 ?7 ?项" skills/nocodb/SKILL.md skills/nocodb/references/data-sync-jobs.md
+grep -nE "这 ?7 ?项" skills/data/nocodb/SKILL.md skills/data/nocodb/references/data-sync-jobs.md
 # 期望：SKILL.md 红线 #2 + references 红线 #2 + references 文末安全红线 #2 共 3 处一致
 ```
 

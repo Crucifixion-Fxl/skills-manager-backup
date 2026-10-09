@@ -26,7 +26,7 @@ annotations:
 
 分支 = 仓当前 catalog dev 分支（如 `add-catalog-info`），merge 到 `main` 后批量改 `main`。**实战样板**：`services/value-added/engagement` 的 `catalog-info.yaml`（4 Component + 4 Resource 全部显式覆盖；MR !126）。
 
-## TechDocs 注解 — 见 [techdocs-setup.md](./techdocs-setup.md)（Approach A vs B + `techdocs-entity` 深链规则）
+## TechDocs 注解 — 见 [techdocs-setup.md](techdocs-setup.md)（Approach A vs B + `techdocs-entity` 深链规则）
 
 ## 其它注解（按需）
 

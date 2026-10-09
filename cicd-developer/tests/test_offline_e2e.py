@@ -24,7 +24,14 @@ from test_vmalert_rules import RuleTests as TestRegisteredVMAlertRules  # noqa: 
 
 
 SKILL_ROOT = Path(__file__).resolve().parents[1]
-REPO_ROOT = SKILL_ROOT.parents[1]
+REPO_ROOT = next(
+    parent
+    for parent in Path(__file__).resolve().parents
+    if (parent / ".codex-plugin" / "plugin.json").is_file()
+)
+if str(REPO_ROOT / "scripts") not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT / "scripts"))
+from gitlab_ci_config import load_merged, merged_text  # noqa: E402
 REFERENCE_ROOT = SKILL_ROOT / "references"
 VALIDATOR_ROOT = SKILL_ROOT / "validators"
 SCRIPT_ROOT = SKILL_ROOT / "scripts"
@@ -230,6 +237,9 @@ DEFAULT_SLOT_VALUES = {
     "active_deadline_seconds": "3600",
     "allocated_storage": "20",
     "app": "my-app",
+    "audience": "sts.cloud.tencent.com",
+    "role_arn": "qcs::cam::uin/100000000001:roleName/my-app-runtime",
+    "security_group_id": "sg-0123456789abcdef0",
     "consumer_secret_name": "my-app-db-secret",
     "app_platforms": "linux/amd64,linux/arm64",
     "app_type": "c-end",
@@ -787,6 +797,12 @@ def matches_recipe_token(recipe_token: str, recipe_ids: set[str]) -> bool:
 
 
 BUILD_CASES = [
+    {
+        "id": "OFF-BUILD-TKE-COS",
+        "prompt": "tke pod identity access tencent cos",
+        "workflow": "workflows/add-tencent-cos.md",
+        "terms": ["serviceaccount-tke.yaml.tmpl", "oidc:sub", "临时凭据", "应用适配待完成"],
+    },
     {
         "id": "OFF-BUILD-ROLLBACK-PIN",
         "prompt": "prepare a rollback pin MR for my service",
@@ -1437,10 +1453,15 @@ def test_rendered_recipe_workspace_passes_validators(tmp_path: Path) -> None:
     static_k8s_recipe = (
         RECIPE_ROOT / "victoriametrics/gke-managed-dcgm-exporter-vm-pod-scrape.yaml.tmpl"
     )
+    platform_rds_request = (
+        RECIPE_ROOT / "crossplane/app-owned-postgres-database-request.yaml.tmpl"
+    )
+    # This platform request has its own exact-path validator below; the generic
+    # workspace validator models the older shared Database claim contract.
     for template in RECIPE_TEMPLATE_FILES:
         if (
             not template.name.endswith((".yaml.tmpl", ".yml.tmpl"))
-            or template == static_k8s_recipe
+            or template in (static_k8s_recipe, platform_rds_request)
         ):
             continue
         output_path = rendered_recipe_output_path(template, tmp_path)
@@ -2586,7 +2607,7 @@ def test_shared_msk_broker_contract_stays_vault_based() -> None:
 
 
 def test_gitlab_ci_pins_uv_version() -> None:
-    ci = (REPO_ROOT / ".gitlab-ci.yml").read_text(encoding="utf-8")
+    ci = merged_text(REPO_ROOT)
 
     assert 'UV_VERSION: "0.10.8"' in ci
     assert 'pip install -q "uv==${UV_VERSION}"' in ci
@@ -2594,7 +2615,7 @@ def test_gitlab_ci_pins_uv_version() -> None:
 
 
 def test_security_ci_scans_all_skill_artifacts() -> None:
-    ci = (REPO_ROOT / ".gitlab-ci.yml").read_text(encoding="utf-8")
+    ci = merged_text(REPO_ROOT)
     security_job = ci.split("validate:security:", 1)[1].split(
         "cicd-developer:offline-e2e:", 1
     )[0]
@@ -2618,9 +2639,13 @@ def test_stateful_and_sentry_workflow_branches_are_explicit() -> None:
     assert "k8s/base/statefulset.yaml" in sentry_workflow
     assert "k8s/base/deployment.yaml" in sentry_workflow
     assert "$pvc_storage_class" in stateful_workflow
-    assert "AWS=`gp3`" in stateful_workflow
-    assert "GCP=`standard-rwo`" in stateful_workflow
-    assert "Tencent=`cbs`" in stateful_workflow
+    # StorageClass is an exact-target input: TKE clusters do not share one default.
+    for storage_class in ("gp3", "standard-rwo", "cbs", "cbs-topo"):
+        statefulset = yaml.safe_load(render_recipe_template(
+            RECIPE_ROOT / "clickhouse/statefulset.yaml.tmpl",
+            overrides={"storage_class": storage_class},
+        ))
+        assert statefulset["spec"]["volumeClaimTemplates"][0]["spec"]["storageClassName"] == storage_class
     assert "$target.ephemeral_storage_limits" in stateful_workflow
     assert "storageClassName: gp3" in clickhouse_statefulset
 
@@ -4197,10 +4222,10 @@ def test_target_cluster_migration_recipe_preserves_gitops_source_slots() -> None
 
 
 def test_cicd_developer_ci_keeps_legacy_target_validators_in_coverage_command() -> None:
-    ci_text = (REPO_ROOT / ".gitlab-ci.yml").read_text(encoding="utf-8")
+    ci_text = merged_text(REPO_ROOT)
     job = ci_text.split("cicd-developer:offline-e2e:", 1)[1].split("\n\n", 1)[0]
     coverage_command = next(
-        line for line in job.splitlines() if "--cov=skills/cicd-developer/validators" in line
+        line for line in job.splitlines() if "--cov=skills/delivery/cicd-developer/validators" in line
     )
 
     for validator in (
@@ -4210,12 +4235,12 @@ def test_cicd_developer_ci_keeps_legacy_target_validators_in_coverage_command() 
         "check_legacy_target_live_empty.py",
         "check_legacy_reference_provenance.py",
     ):
-        assert f"skills/cicd-developer/validators/{validator}" in job
+        assert f"skills/delivery/cicd-developer/validators/{validator}" in job
     assert "-n 2 --dist load" in coverage_command
     assert "--cov-report=" in coverage_command
-    assert "skills/cicd-developer/tests/test_offline_e2e.py" in coverage_command
+    assert "skills/delivery/cicd-developer/tests/test_offline_e2e.py" in coverage_command
     assert (
-        "skills/cicd-developer/tests/test_legacy_target_migration_repairs.py"
+        "skills/delivery/cicd-developer/tests/test_legacy_target_migration_repairs.py"
         in coverage_command
     )
     assert "coverage report" in job
@@ -4223,8 +4248,9 @@ def test_cicd_developer_ci_keeps_legacy_target_validators_in_coverage_command() 
 
 
 def test_ci_deduplicates_open_merge_requests_and_preserves_side_effects() -> None:
-    config = yaml.safe_load((REPO_ROOT / ".gitlab-ci.yml").read_text(encoding="utf-8"))
+    config = load_merged(REPO_ROOT)
     assert config["workflow"]["rules"] == [
+        {"if": '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "docs/skill-hub"'},
         {"if": '$CI_PIPELINE_SOURCE == "merge_request_event"'},
         {
             "if": '$CI_PIPELINE_SOURCE == "push" && $CI_OPEN_MERGE_REQUESTS',
@@ -4241,7 +4267,7 @@ def test_ci_deduplicates_open_merge_requests_and_preserves_side_effects() -> Non
 def test_legacy_target_design_clarifies_slot_name_only_compatibility() -> None:
     design = (
         REPO_ROOT
-        / "docs/03-detailed-design/cicd-developer-legacy-target-migration.md"
+        / "docs/delivery/design/cicd-developer-legacy-target-migration.md"
     ).read_text(encoding="utf-8")
     compact = " ".join(design.split())
 
@@ -4253,10 +4279,10 @@ def test_legacy_target_design_clarifies_slot_name_only_compatibility() -> None:
 def test_legacy_target_user_story_has_acceptance_traceability() -> None:
     story_path = (
         REPO_ROOT
-        / "docs/04-user-stories/cicd-developer-legacy-target-migration.md"
+        / "docs/delivery/requirements/cicd-developer-legacy-target-migration.md"
     )
     story = story_path.read_text(encoding="utf-8")
-    design_index = (REPO_ROOT / "docs/03-detailed-design/README.md").read_text(
+    design_index = (REPO_ROOT / "docs/development/design/README.md").read_text(
         encoding="utf-8"
     )
 
@@ -4265,18 +4291,18 @@ def test_legacy_target_user_story_has_acceptance_traceability() -> None:
         assert f"**{acceptance_id} —" in story
         assert f"| {acceptance_id} |" in story
     assert "| AC | Observable acceptance evidence | Failure outcome |" in story
-    assert "../03-detailed-design/cicd-developer-legacy-target-migration.md" in story
-    assert "../04-user-stories/cicd-developer-legacy-target-migration.md" in design_index
+    assert "../design/cicd-developer-legacy-target-migration.md" in story
+    assert "../../delivery/requirements/cicd-developer-legacy-target-migration.md" in design_index
 
 
 def test_legacy_target_user_story_keeps_implementation_in_detailed_design() -> None:
     story = (
         REPO_ROOT
-        / "docs/04-user-stories/cicd-developer-legacy-target-migration.md"
+        / "docs/delivery/requirements/cicd-developer-legacy-target-migration.md"
     ).read_text(encoding="utf-8")
     design = (
         REPO_ROOT
-        / "docs/03-detailed-design/cicd-developer-legacy-target-migration.md"
+        / "docs/delivery/design/cicd-developer-legacy-target-migration.md"
     ).read_text(encoding="utf-8")
 
     implementation_details = (
@@ -5191,11 +5217,11 @@ def test_cronjob_route_cannot_leave_planned_state_without_complete_safe_workflow
     validate = validate_path.read_text(encoding="utf-8")
     assert '"check_cronjob.py"' in validate
 
-    ci = ci_path.read_text(encoding="utf-8")
+    ci = merged_text(REPO_ROOT)
     assert "validators/check_cronjob.py" in ci
-    assert "pytest skills/cicd-developer/tests/test_offline_e2e.py" in ci
-    assert "validators/check_routes.py skills/cicd-developer" in ci
-    assert "validators/validate.sh skills/cicd-developer" in ci
+    assert "pytest skills/delivery/cicd-developer/tests/test_offline_e2e.py" in ci
+    assert "validators/check_routes.py skills/delivery/cicd-developer" in ci
+    assert "validators/validate.sh skills/delivery/cicd-developer" in ci
 
 
 def test_planned_routes_stop_without_workflow_invention() -> None:
@@ -6303,13 +6329,13 @@ def test_cluster_env_and_vault_facts_are_consistent() -> None:
     vaults = load_yaml(REFERENCE_ROOT / "vault-paths/instances.yaml")["vaults"]
 
     cluster_by_name = {cluster["name"]: cluster for cluster in clusters}
-    assert len(cluster_by_name) == 16
+    assert len(cluster_by_name) == 18
     assert len(cluster_by_name) == len(clusters)
 
     tech_service_clusters = [
         cluster for cluster in clusters if "tech-service" in cluster["name"]
     ]
-    assert len(tech_service_clusters) == 4
+    assert len(tech_service_clusters) == 5
     for cluster in tech_service_clusters:
         assert cluster["domain"] == "ops", cluster["name"]
         assert cluster["vault"] == f"vault-{cluster['region']}-prod", cluster["name"]
@@ -6318,10 +6344,14 @@ def test_cluster_env_and_vault_facts_are_consistent() -> None:
     builder_clusters = [
         cluster for cluster in clusters if cluster["domain"] == "builder"
     ]
-    assert len(builder_clusters) == 4
+    assert len(builder_clusters) == 5
     for cluster in builder_clusters:
-        assert cluster["vault"] == f"vault-{cluster['region']}-builder", cluster["name"]
-        assert cluster["vault_css"] == "vault-builder-backend", cluster["name"]
+        if cluster["name"] == "cn-tke-staging":
+            assert cluster["vault"] == "vault-cn-tke-staging"
+            assert cluster["vault_css"] == "vault-backend"
+        else:
+            assert cluster["vault"] == f"vault-{cluster['region']}-builder", cluster["name"]
+            assert cluster["vault_css"] == "vault-builder-backend", cluster["name"]
 
     for cluster in clusters:
         assert cluster["domain"] in {"ops", "builder", "cicd-infra"}
@@ -6345,8 +6375,12 @@ def test_cluster_env_and_vault_facts_are_consistent() -> None:
             assert any(tag.endswith("arm64") for tag in cluster["runner_tags"])
         else:
             assert cluster["build_mode"] == "single-arch-amd64"
-            assert cluster["runner_tags"]
-            assert all(tag.endswith("amd64") for tag in cluster["runner_tags"])
+            if cluster.get("runner_status") == "not_verified":
+                assert cluster["deployment_status"] == "blocked"
+                assert cluster["runner_tags"] == []
+            else:
+                assert cluster["runner_tags"]
+                assert all(tag.endswith("amd64") for tag in cluster["runner_tags"])
 
     aws_cn_clusters = {
         cluster["name"]: cluster
@@ -6392,7 +6426,7 @@ def test_cluster_env_and_vault_facts_are_consistent() -> None:
         target_cluster = cluster_by_name[spec["cluster"]]
         if spec["env"] in {"dev", "staging"} and spec["cluster"] not in OPS_MIXED_ENV_CLUSTERS:
             assert target_cluster["domain"] == "builder", keyword
-            assert target_cluster["vault_css"] == "vault-builder-backend", keyword
+            assert target_cluster["vault_css"] == ("vault-backend" if spec["cluster"] == "cn-tke-staging" else "vault-builder-backend"), keyword
         if spec["cluster"] in {"us-prod-data", "eu-prod-data"}:
             assert target_cluster["domain"] == "ops", keyword
             assert target_cluster["vault_css"] == "vault-backend", keyword
@@ -11699,6 +11733,67 @@ def test_k8s_boundary_rejects_business_claim(kind: str, tmp_path: Path) -> None:
     assert "business application claims belong in the application repository" in result.stdout
 
 
+def app_owned_postgres_request() -> dict:
+    template = RECIPE_ROOT / "crossplane/app-owned-postgres-database-request.yaml.tmpl"
+    return yaml.safe_load(
+        render_recipe_template(template, overrides={"engine_version": "16.6"})
+    )
+
+
+def test_k8s_boundary_allows_only_reviewed_app_rds_request(tmp_path: Path) -> None:
+    target = (
+        tmp_path
+        / "clusters"
+        / "aws-302571458622-us-prod"
+        / "platform-apis"
+        / "app-owned-rds"
+        / "requests"
+    )
+    target.mkdir(parents=True)
+    request = app_owned_postgres_request()
+    write_yaml(target / "my-app.yaml", [request])
+
+    result = run_repo_boundary(tmp_path, "k8s")
+
+    assert result.returncode == 0, result.stdout
+
+
+@pytest.mark.parametrize(
+    ("mutation", "other_path"),
+    [
+        ("admin-field", False),
+        ("other-namespace", False),
+        ("other-engine", False),
+        ("missing-delete-guard", False),
+        ("mismatched-app", False),
+        ("other-region-path", True),
+    ],
+)
+def test_k8s_boundary_rejects_unreviewed_app_rds_request(
+    mutation: str, other_path: bool, tmp_path: Path
+) -> None:
+    cluster = "aws-390709477306-us-staging" if other_path else "aws-302571458622-us-prod"
+    target = tmp_path / "clusters" / cluster / "platform-apis" / "app-owned-rds" / "requests"
+    target.mkdir(parents=True)
+    request = app_owned_postgres_request()
+    if mutation == "admin-field":
+        request["spec"]["adminUsername"] = "admin"
+    elif mutation == "other-namespace":
+        request["metadata"]["namespace"] = "prod-my-app"
+    elif mutation == "other-engine":
+        request["spec"]["engineVersion"] = "15.8"
+    elif mutation == "missing-delete-guard":
+        request["metadata"].pop("annotations")
+    elif mutation == "mismatched-app":
+        request["spec"]["app"] = "other-app"
+    write_yaml(target / "my-app.yaml", [request])
+
+    result = run_repo_boundary(tmp_path, "k8s")
+
+    assert result.returncode == 1, result.stdout
+    assert "business application claims belong in the application repository" in result.stdout
+
+
 @pytest.mark.parametrize(
     ("api_version", "kind"),
     [
@@ -11949,7 +12044,7 @@ def test_validate_sh_propagates_k8s_repo_context(tmp_path: Path) -> None:
 
 
 def test_code_review_routes_dev_k8s_to_platform_boundary_scan() -> None:
-    code_review = (REPO_ROOT / "skills/code-review/SKILL.md").read_text(
+    code_review = (REPO_ROOT / "skills/quality/code-review/SKILL.md").read_text(
         encoding="utf-8"
     )
 
@@ -21403,8 +21498,8 @@ def test_deployment_target_preserves_historical_lookup_without_admission() -> No
     envs = load_yaml(REFERENCE_ROOT / "data/env-keywords.yaml")
     assert envs["env_keywords"]["dev-cn"]["cluster"] == "cn-eks-dev"
     for target in clusters["clusters"]:
-        if target["deployment_status"] == "retired":
-            with pytest.raises(ValueError, match="retired"):
+        if target["deployment_status"] != "allowed":
+            with pytest.raises(ValueError, match=target["deployment_status"]):
                 validator.resolve_target(clusters, envs, cluster_name=target["name"])
         else:
             assert validator.resolve_target(clusters, envs, cluster_name=target["name"]) == target
@@ -21442,3 +21537,21 @@ def test_deployment_target_cli_rejects_duplicate_yaml_keys(tmp_path: Path, dupli
     assert result.returncode == 2, result.stdout + result.stderr
     assert "duplicate catalog key" in result.stdout
     assert "PASS:" not in result.stdout
+
+
+@pytest.mark.parametrize("key,accepted", [
+    ("staging/linode/application/collect-gateway/credentials", True),
+    ("staging/linode/application/addx-rerun-hub/credentials", True),
+    ("prod/linode/application/collect-gateway/credentials", True),
+    ("prod/linode/application/addx-rerun-hub/credentials", True),
+    ("secret/staging/linode/application/collect-gateway/credentials", False),
+    ("staging-us/linode/application/collect-gateway/credentials", False),
+    ("staging/linode-typo/application/collect-gateway/credentials", False),
+    ("staging/linode/shared/credentials", False),
+    ("staging/linode/application/credentials", False),
+    ("staging/app/shared/credentials", False),
+])
+def test_linode_platform_vault_references(tmp_path: Path, key: str, accepted: bool) -> None:
+    write_yaml(tmp_path / "linode.yaml", [external_secret_with_vault_keys([key])])
+    result = run_validator("check_vault_paths.py", tmp_path)
+    assert (result.returncode == 0) == accepted, result.stdout

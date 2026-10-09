@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "tool": "typeform",
+  "owner": "typeform",
+  "status": "source-reviewed-runtime-pending",
+  "contract": "saas-access.md",
+  "notes": "direct路径：现有survey executor从宿主TYPEFORM_ACCESS_TOKEN消费Bearer PAT，TYPEFORM_API_BASE允许官方US/EU API base（以原脚本allowlist为准），默认api.typeform.com。官方Personal tokens中按最小scopes创建、regenerate、delete；这些操作须明确授权。当前subject、region、表单归属、计划权限、期限及撤销效果pending。throughAudience路径：Audience project key由Audience平台代管Typeform身份，严格沿Audience owner；禁止切到本地Typeform token或仅拆form_id直接调用。",
+  "runtimeCallsPerformed": false,
+  "credentialHandling": "No login, credential reads, token issuance, global installation or SaaS business calls performed.",
+  "credentialEnv": "TYPEFORM_ACCESS_TOKEN"
+}

@@ -5,7 +5,7 @@ description: 让你的仓被公司内部开发者门户（Backstage/RHDH，infra
 
 # service-catalog-onboarding —— 你的仓要做什么才算「正确接入了服务 & 能力目录」
 
-> **规范 SSOT**：本仓 [`public/dev-standards/architecture/catalog-schema.html`](../../public/dev-standards/architecture/catalog-schema.html)（字段三分法 A/B/C；2026-08-11 从 `engineering/architecture` 仓迁入）+ `infra/backstage` 的 `docs/deployment/ci.md`（A 类字段的 CI 约定）。能力 / Domain 的语义说明 + Ubiquitous Language 在本仓 [`public/dev-standards/architecture/catalog-glossary.html`](../../public/dev-standards/architecture/catalog-glossary.html)（**不再**是命名白名单 —— catalog 本身是 SSOT）。5 层 / Domain 名规范见本仓 [`public/dev-standards/architecture/backend-service-architecture.html`](../../public/dev-standards/architecture/backend-service-architecture.html)。
+> **规范 SSOT**：本仓 [`docs/development/standards/reference-pages/architecture/catalog-schema.html`](../../../docs/development/standards/reference-pages/architecture/catalog-schema.html)（字段三分法 A/B/C；2026-08-11 从 `engineering/architecture` 仓迁入）+ `infra/backstage` 的 `docs/deployment/ci.md`（A 类字段的 CI 约定）。能力 / Domain 的语义说明 + Ubiquitous Language 在本仓 [`docs/development/standards/reference-pages/architecture/catalog-glossary.html`](../../../docs/development/standards/reference-pages/architecture/catalog-glossary.html)（**不再**是命名白名单 —— catalog 本身是 SSOT）。5 层 / Domain 名规范见本仓 [`docs/development/standards/reference-pages/architecture/backend-service-architecture.html`](../../../docs/development/standards/reference-pages/architecture/backend-service-architecture.html)。
 
 ---
 
@@ -29,7 +29,7 @@ description: 让你的仓被公司内部开发者门户（Backstage/RHDH，infra
 6. **`docs/` 镜像 catalog 层级，项目文档 authoring SSOT 统一 HTML**（§4）：`docs/index.html` = Domain 入口、`docs/architecture/<system>/<component>/index.html` = Component overview、ADR 落 `adrs/`（option C，§4.2）。Markdown 只允许作为门户兼容构建产物，不作为人工维护的源文档。
 7. **TechDocs Approach B + API 契约从代码生成 + drift gate**（§5/§6）：仓根唯一 `mkdocs.yml`，host Component 用 `techdocs-ref: dir:.`，其它用 `techdocs-entity` + `techdocs-entity-path` 深链；`providesApis`/`consumesApis` 引用合法性用 `service-catalog-search` 反查 catalog（catalog 是 SSOT）。
 
-**一键起步（cp 模板到你仓根）**：见 [`scripts/`](scripts/) 目录的 `catalog-info.yaml.template` / `mkdocs.yml.template` / `mermaid_hook.py` / `api-drift/` / `gitlab-ci-snippets/api-drift.yml`。完整使用步骤在 `scripts/README.md`（如果没有就照各模板顶部注释操作）。
+**一键起步（cp 模板到你仓根）**：见 [`scripts/`](scripts) 目录的 `catalog-info.yaml.template` / `mkdocs.yml.template` / `mermaid_hook.py` / `api-drift/` / `gitlab-ci-snippets/api-drift.yml`。完整使用步骤在 `scripts/README.md`（如果没有就照各模板顶部注释操作）。
 
 填好 `catalog-info.yaml`（按 §2 / §3 checklist）+ push → `add-catalog-info` 分支 → GitLab discovery 自动扫到 → 门户实体页生成。
 
@@ -191,7 +191,7 @@ description: 让你的仓被公司内部开发者门户（Backstage/RHDH，infra
 
 ### 文件顶部规范
 
-- [ ] 注释指向规范：`# Backstage Software Catalog —— A4x 原生 System Model（见 engineering/skills 仓 public/dev-standards/architecture/catalog-schema.html）`
+- [ ] 注释指向规范：`# Backstage Software Catalog —— A4x 原生 System Model（见 engineering/skills 仓 docs/development/standards/reference-pages/architecture/catalog-schema.html）`
 
 > **不归你仓声明**：`kind: Group` / `User`（待 GitLab org discovery 自动生成）；ArgoCD `Application`（在 `DEV/argocd-apps`）；IAM/IRSA Role（在 `DEV/crossplane-infra`）；**`kind: Domain` 见 §1（有 owning repo 的就在你这）**；`kind: System` 在主 Component 仓声明。
 
@@ -278,7 +278,7 @@ docs/architecture/verticals/<vertical>/
 
 ### 4.2 ADR 规范（option C：per-Component + repo-wide 双轨）
 
-**ADR 内容规范参考 [`../architect/references/adr-format.md`](../architect/references/adr-format.md)**（5 H2 段和状态字段），但项目内 ADR 文件必须是 HTML authoring SSOT。本节 = 业务侧的接入规则。
+**ADR 内容规范参考 [`../../development/architect/references/adr-format.md`](../architect/references/adr-format.md)**（5 H2 段和状态字段），但项目内 ADR 文件必须是 HTML authoring SSOT。本节 = 业务侧的接入规则。
 
 | ADR 影响范围 | 路径 |
 |---|---|
@@ -395,7 +395,7 @@ metadata:
 2. **新加 API 实体无需预先去清单注册** —— owning repo 加 `kind: API`、push 即生效。
 3. **同 MR 内新增的 API 算合法**（避 ingestion 时延误报）：CI 先 `git diff` 抽本 MR 新加的 `kind: API metadata.name` 当 allowlist；只对"既不在 catalog 也不在本 diff"的引用 fail。
 4. **防长尾命名重复（同语义、不同名）是 PR review 的责任**（`code-review` skill 已加 check），不是 CI 的责任。
-5. **本仓 [`public/dev-standards/architecture/catalog-glossary.html`](../../public/dev-standards/architecture/catalog-glossary.html)**：能力的**语义说明 + Ubiquitous Language**，**不是**命名白名单。新能力上线后 PR 补进 glossary（可选推荐）。
+5. **本仓 [`docs/development/standards/reference-pages/architecture/catalog-glossary.html`](../../../docs/development/standards/reference-pages/architecture/catalog-glossary.html)**：能力的**语义说明 + Ubiquitous Language**，**不是**命名白名单。新能力上线后 PR 补进 glossary（可选推荐）。
 
 CI 校验范本见 [`references/api-refs-check.md`](references/api-refs-check.md)。核心：对每个 ref，本 MR 新加列表里有 → valid，否则查 catalog REST API 必须命中。放 `lint` stage，`rules: changes: [catalog-info.yaml]` + nightly schedule 兜底。
 

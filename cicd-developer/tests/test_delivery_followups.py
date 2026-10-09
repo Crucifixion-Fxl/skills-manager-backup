@@ -53,6 +53,75 @@ def build(path: Path) -> list[dict]:
     return list(yaml.safe_load_all(result.stdout))
 
 
+@pytest.mark.parametrize("engine", ["rds", "aurora"])
+def test_generated_master_password_secret_uses_orphan_lifecycle(
+    tmp_path: Path, engine: str,
+) -> None:
+    password = recipe(f"crossplane/{engine}-password-external-secret.yaml.tmpl")
+    assert password["spec"]["refreshPolicy"] == "CreatedOnce"
+    assert password["spec"]["target"] == {
+        "name": f"my-app-{engine}-password",
+        "creationPolicy": "Orphan",
+        "deletionPolicy": "Retain",
+        "immutable": True,
+    }
+    write(tmp_path / "password.yaml", password)
+    assert run_validator("check_db_resource_contracts.py", tmp_path).returncode == 0
+
+    # Retain alone does not stop Kubernetes garbage collection of an Owner target.
+    password["spec"]["target"]["creationPolicy"] = "Owner"
+    write(tmp_path / "password.yaml", password)
+    result = run_validator("check_db_resource_contracts.py", tmp_path)
+    assert result.returncode == 1
+    assert "spec.target.creationPolicy='Orphan'" in result.stdout
+
+
+@pytest.mark.parametrize("field", ["refreshPolicy", "deletionPolicy", "immutable"])
+def test_generated_master_password_requires_stable_lifecycle(
+    tmp_path: Path, field: str,
+) -> None:
+    password = recipe("crossplane/rds-password-external-secret.yaml.tmpl")
+    if field == "refreshPolicy":
+        password["spec"][field] = "Periodic"
+    else:
+        password["spec"]["target"][field] = False if field == "immutable" else "Delete"
+    write(tmp_path / "password.yaml", password)
+    result = run_validator("check_db_resource_contracts.py", tmp_path)
+    assert result.returncode == 1
+    assert field in result.stdout
+
+
+@pytest.mark.parametrize(
+    "broken", ["version", "target", "generator", "generator_kind", "rewrite", "template", "extra_data"]
+)
+def test_generated_master_password_requires_exact_generator_binding(
+    tmp_path: Path, broken: str,
+) -> None:
+    password = recipe("crossplane/rds-password-external-secret.yaml.tmpl")
+    if broken == "version":
+        password["apiVersion"] = "external-secrets.io/v1beta1"
+    elif broken == "target":
+        password["spec"]["target"]["name"] = "unrelated-secret"
+    elif broken == "generator":
+        password["spec"]["dataFrom"][0]["sourceRef"].pop("generatorRef")
+    elif broken == "generator_kind":
+        password["spec"]["dataFrom"][0]["sourceRef"]["generatorRef"]["kind"] = "Fake"
+    elif broken == "rewrite":
+        password["spec"]["dataFrom"][0]["rewrite"] = [
+            {"regexp": {"source": "^password$", "target": "renamed"}}
+        ]
+    elif broken == "template":
+        password["spec"]["target"]["template"] = {
+            "data": {"renamed": "{{ .password }}"}
+        }
+    else:
+        password["spec"]["data"] = [{"secretKey": "other", "remoteRef": {"key": "other"}}]
+    write(tmp_path / "password.yaml", password)
+    result = run_validator("check_db_resource_contracts.py", tmp_path)
+    assert result.returncode == 1
+    assert "ExternalSecret/my-app-rds-password" in result.stdout
+
+
 @pytest.mark.parametrize("first_migration", [False, True])
 @pytest.mark.parametrize("workload_wave", [2, 7])
 def test_new_prod_rds_candidate_can_render_before_connection_secret_exists(

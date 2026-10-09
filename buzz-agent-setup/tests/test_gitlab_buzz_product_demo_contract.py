@@ -16,11 +16,11 @@ import unittest
 
 
 SKILL = Path(__file__).resolve().parents[1]
-REPO = SKILL.parents[1]
+REPO = SKILL.parents[2]
 MANIFEST = SKILL / "tests" / "fixtures" / "gitlab_buzz_product_demo" / "scenarios.json"
-SCENARIO_DOC = REPO / "docs" / "testing" / "scenarios" / "tech-gitlab-buzz-bridge.html"
-ADR = REPO / "docs" / "05-adr" / "0003-buzz-agent-setup-canvas-desk-routing.md"
-DESK_OWNED_ADR = REPO / "docs" / "05-adr" / "0004-run-gitlab-sync-as-desk-owned-agent-step.md"
+SCENARIO_DOC = REPO / "docs" / "agent-harness" / "testing" / "scenarios" / "tech-gitlab-buzz-bridge.html"
+ADR = REPO / "docs" / "agent-harness" / "adr" / "0003-buzz-agent-setup-canvas-desk-routing.md"
+DESK_OWNED_ADR = REPO / "docs" / "agent-harness" / "adr" / "0004-run-gitlab-sync-as-desk-owned-agent-step.md"
 NATIVE_E2E = SKILL / "tests" / "integration" / "test_routing_e2e.py"
 COMPAT_E2E = SKILL / "tests" / "integration" / "test_route_reply_e2e.py"
 

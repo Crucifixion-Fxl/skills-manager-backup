@@ -154,7 +154,7 @@ Git-SSOT 路径下，YAML 变更经 CI MR，可挂 AI review job 做语义审查
 ```yaml
 include:
   - project: engineering/skills
-    file: skills/observability-design/scripts/metrics-review.gitlab-ci.yml
+    file: skills/observability/observability-design/scripts/metrics-review.gitlab-ci.yml
     ref: main
 ```
 

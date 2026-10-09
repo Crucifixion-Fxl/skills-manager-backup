@@ -1,0 +1,4 @@
+import {cli,Strategy} from '@jackwener/opencli/registry';
+import {identity,request} from './native.mjs';
+import {ownMonthArgs,ownMonthRows} from './own-registration-month-records.mjs';
+cli({site:'addx-console',name:'own-registration-months',access:'read',strategy:Strategy.LOCAL,browser:false,description:'Read only current authenticated own-company monthly device-type registration counts; no customer override, identifiers or mutations',args:[{name:'page',type:'int',default:1,help:'Requested month page 1 to 10000'},{name:'limit',type:'int',default:10,help:'Months per page 1 to 20, not flattened row count'}],columns:['month','deviceType','deviceTypeLabel','registerCount','totalMonths','requestedPage'],func:async args=>{const body=ownMonthArgs(args);await identity();return ownMonthRows(await request('/device/cuid/register/query','POST',body),body);}});

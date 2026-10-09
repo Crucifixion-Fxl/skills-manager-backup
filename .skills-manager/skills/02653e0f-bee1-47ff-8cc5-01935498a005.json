@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "02653e0f-bee1-47ff-8cc5-01935498a005",
+  "path": "buzz-data-access-admin",
+  "path_key": "buzz-data-access-admin",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/security/buzz-data-access-admin",
+    "branch": null
+  }
+}

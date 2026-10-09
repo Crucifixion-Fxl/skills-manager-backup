@@ -1,6 +1,6 @@
 # Business image rollback contract
 
-Human-facing source: [业务镜像快速回滚规范](../../../public/dev-standards/cicd/business-image-rollback.html).
+Human-facing source: [业务镜像快速回滚规范](../../../../docs/development/standards/reference-pages/cicd/business-image-rollback.html).
 This bundled reference is the operational contract when the published page is unavailable.
 Read it for release-history queries, rollback planning, pin MRs, and release MRs.
 

@@ -1,0 +1,22 @@
+{
+  "agent_reply_s": 32.6,
+  "b2f_s": 6.2,
+  "binding": "naturehood",
+  "checks": {
+    "agent_reply_in_thread_from_own_bot": true,
+    "b2f_arrived": true,
+    "b2f_sent_by_sync_bot": true,
+    "f2b_arrived": true,
+    "f2b_by_mirror_agent": true,
+    "f2b_signed_feishu_name": true,
+    "reaction_f2b_arrived": false
+  },
+  "f2b_s": 3.1,
+  "failed_checks": [
+    "reaction_f2b_arrived"
+  ],
+  "ok": false,
+  "probe": "hostd-l4-smoke",
+  "reaction_f2b_s": null,
+  "t": 1791124901
+}

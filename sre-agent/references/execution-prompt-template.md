@@ -67,6 +67,8 @@ cat {state_dir}/approvals/{cg_id}-solution-{solution_idx}.json
 这是纵深防御：正常架构下 dispatcher 只会为 status=approved 的方案派发 Execution，但此检查能在 dispatcher 逻辑变更、手工干预、状态文件被污染等边缘场景下保护生产环境。
 
 ### Step 1: 前置验证（MUST）
+先核对方案的云账户、集群与当前资源归属。CN 当前 prod 为腾讯云 `100014919455` / `cn-main`，staging、tech-service 为 `100052802231` 的独立集群，AWS CN 已弃用。若旧方案仍指向已弃用的 AWS CN 或错误腾讯账户，记录目标失效并停止此方案，交回调查更新；不能悄悄把既有方案的账号/context 改成新目标后执行。当前映射见 `references/infra/cloud-accounts.md` 与 `k8s-contexts.md`。
+
 在执行任何变更前，先验证故障实体的当前实际状态。使用 solution 中的 `verify_cmd` 查询（PromQL 或 kubectl 命令），确认问题是否仍然存在。
 - 问题已不存在 → 跳过执行，写 result.json（status: `skipped_self_healed`） → 退出
 - 问题仍存在 → 继续执行

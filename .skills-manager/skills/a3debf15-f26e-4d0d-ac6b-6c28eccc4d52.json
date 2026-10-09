@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "a3debf15-f26e-4d0d-ac6b-6c28eccc4d52",
+  "path": "kb-bird-encyclopedia",
+  "path_key": "kb-bird-encyclopedia",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/data/kb-bird-encyclopedia",
+    "branch": null
+  }
+}

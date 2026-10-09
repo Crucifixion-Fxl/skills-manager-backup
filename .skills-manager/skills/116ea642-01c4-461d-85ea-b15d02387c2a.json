@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "116ea642-01c4-461d-85ea-b15d02387c2a",
+  "path": "prom-grafana-dev",
+  "path_key": "prom-grafana-dev",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/observability/prom-grafana-dev",
+    "branch": null
+  }
+}

@@ -1,0 +1,82 @@
+{
+  "checkedOn": "2026-10-06T12:15:21.442Z",
+  "identity": {
+    "userId": 34,
+    "name": "陈敬敏"
+  },
+  "application": {
+    "id": 2370,
+    "name": "device-cloud-host",
+    "point": "device_cloud_host"
+  },
+  "scope": "live read-only pilot; no write/publish acceptance",
+  "checks": [
+    {
+      "name": "saas-auth.ensure",
+      "state": "READY",
+      "subject": "34",
+      "applicationId": "2370"
+    },
+    {
+      "name": "context-list",
+      "state": "API_ACKNOWLEDGED",
+      "count": 0
+    },
+    {
+      "name": "base-schema-get-all-base-schemas",
+      "state": "API_ACKNOWLEDGED",
+      "count": 1
+    },
+    {
+      "name": "tracker-info-get-all-page-by-application-id",
+      "state": "API_ACKNOWLEDGED",
+      "count": 0
+    },
+    {
+      "name": "tracker-info-get-all-self-define",
+      "state": "API_ACKNOWLEDGED",
+      "count": 7
+    },
+    {
+      "name": "tracker-info-search",
+      "state": "API_ACKNOWLEDGED",
+      "count": 7
+    },
+    {
+      "name": "release-get-all-release",
+      "state": "API_ACKNOWLEDGED",
+      "count": 1
+    },
+    {
+      "name": "user-role-is-app-owner",
+      "state": "API_ACKNOWLEDGED"
+    },
+    {
+      "name": "foreign-application",
+      "state": "REFUSED",
+      "code": "RESOURCE_MISMATCH"
+    },
+    {
+      "name": "raw-write",
+      "state": "REFUSED",
+      "code": "READ_ONLY_BRIDGE"
+    },
+    {
+      "name": "disconnect",
+      "state": "REVOKED"
+    },
+    {
+      "name": "request-after-disconnect",
+      "state": "REFUSED",
+      "code": "REVOKED"
+    }
+  ],
+  "manualViewerVerification": {
+    "platform": "Mac SSH → remote noVNC browser",
+    "userConfirmation": "done",
+    "rendering": "real 1280x800 frame inspected; no CSP violations after fix",
+    "sessionRetention": "once",
+    "profileRemoved": true,
+    "ownedServicesStopped": true
+  }
+}

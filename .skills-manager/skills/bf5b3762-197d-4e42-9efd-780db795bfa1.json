@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "bf5b3762-197d-4e42-9efd-780db795bfa1",
+  "path": "meeting-issue-notes",
+  "path_key": "meeting-issue-notes",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/collaboration/meeting-issue-notes",
+    "branch": null
+  }
+}

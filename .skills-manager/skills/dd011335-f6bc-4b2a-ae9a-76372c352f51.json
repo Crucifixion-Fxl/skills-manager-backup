@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "dd011335-f6bc-4b2a-ae9a-76372c352f51",
+  "path": "superset",
+  "path_key": "superset",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/data/superset",
+    "branch": null
+  }
+}

@@ -6,7 +6,8 @@
  * 背景：POST /api/info/saveOrUpdateEventInfo（带 id 更新）对参数列表是**全量覆盖**——
  * 服务端先删除该事件的全部旧参数，再写入请求体 parameters。若 payload 漏带了某个
  * 已有参数，后端**不报错、直接把它删掉**（静默数据丢失）。本脚本在提交前做硬卡控：
- * 对比 getEventDetail 的现有参数与待提交 payload，少了任何已有参数就 FAIL。
+ * 对比 getEventDetail 的现有参数与待提交 payload，少了任何已有参数就 FAIL；
+ * 同时要求所有 valueType 为 JSON Schema 名称，禁止数字码和单事件 float 别名。
  *
  * 用法：
  *   node check-event-update.js --current=<getEventDetail.json> --payload=<update-payload.json>
@@ -14,10 +15,11 @@
  *   --current   GET /api/info/getEventDetail?eventId={id} 的响应（可含/不含外层 {code,data}）
  *   --payload   即将 POST 给 saveOrUpdateEventInfo 的请求体 JSON
  *
- * 退出码：0=通过；1=会丢参数或 id 不一致（卡住，不要提交）；2=输入错误
+ * 退出码：0=通过；1=会丢参数、id 不一致或 valueType 非法（卡住，不要提交）；2=输入错误
  */
 
 const fs = require('fs');
+const VALID_VALUE_TYPES = new Set(['null', 'boolean', 'object', 'array', 'number', 'string', 'integer']);
 
 function parseArgs(argv) {
   const args = {};
@@ -46,7 +48,7 @@ function paramNames(obj) {
 }
 
 /**
- * 核心比对：返回 { droppedParams, idMismatch, currentId, payloadId }
+ * 核心比对：返回 { droppedParams, idMismatch, currentId, payloadId, invalidTypeParams }
  * droppedParams = 现有参数里、payload 没带的（会被静默删除）
  */
 function diffUpdate(current, payload) {
@@ -60,7 +62,11 @@ function diffUpdate(current, payload) {
   // 更新场景：payload 必须带 id，且需与现有事件 id 一致
   const idMismatch = payloadId == null || (currentId != null && String(currentId) !== String(payloadId));
 
-  return { droppedParams, idMismatch, currentId, payloadId };
+  const invalidTypeParams = (Array.isArray(payload?.parameters) ? payload.parameters : [])
+    .flatMap((parameter, index) => VALID_VALUE_TYPES.has(parameter?.valueType)
+      ? [] : [{ index, name: parameter?.name ?? null }]);
+
+  return { droppedParams, idMismatch, currentId, payloadId, invalidTypeParams };
 }
 
 function readJson(p, label) {
@@ -85,7 +91,7 @@ function main() {
   const current = readJson(args.current, 'current');
   const payload = readJson(args.payload, 'payload');
 
-  const { droppedParams, idMismatch, currentId, payloadId } = diffUpdate(current, payload);
+  const { droppedParams, idMismatch, currentId, payloadId, invalidTypeParams } = diffUpdate(current, payload);
   const problems = [];
   if (idMismatch) {
     problems.push(
@@ -98,6 +104,9 @@ function main() {
       `补参数必须回传"已有参数 + 新增参数"的完整列表（先 getEventDetail 取回再 append）`);
   }
 
+  if (invalidTypeParams.length > 0) {
+    problems.push('Invalid valueType: use exact JSON Schema type names (null, boolean, object, array, number, string, integer); numeric codes and float are not accepted by the single-event endpoint.');
+  }
   const result = problems.length > 0 ? 'FAIL' : 'PASS';
   console.log(JSON.stringify({
     result,
@@ -105,6 +114,7 @@ function main() {
     payloadId,
     droppedParams,
     idMismatch,
+    invalidTypeParams,
     problems,
   }, null, 2));
   process.exit(result === 'FAIL' ? 1 : 0);

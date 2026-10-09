@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "a995d2d1-e9f2-467c-8662-a307b9d419ac",
+  "path": "stripe-product",
+  "path_key": "stripe-product",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/business-operations/stripe-product",
+    "branch": null
+  }
+}

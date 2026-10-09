@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "tool": "argocd-fleet-scanner",
+  "owner": "argocd-fleet-scanner",
+  "provider": "delegated",
+  "origin": "https://argocd-fleet.addx.live",
+  "authContract": "saas-access.md",
+  "verification": "source-verified",
+  "runtimeVerification": "pending",
+  "deploymentVersion": "unknown"
+}

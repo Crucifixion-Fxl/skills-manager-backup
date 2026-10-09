@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "tool": "feishu-project",
+  "owner": "feishu-project",
+  "instances": [
+    "https://project.feishu.cn/open_api/"
+  ],
+  "nativeRoute": "Feishu Project Plugin Token + authorized X-USER-KEY OR official Project OAuth MCP",
+  "loginFlow": {
+    "reuseFirst": true,
+    "steps": "复用 FEISHU_PLUGIN_ID/SECRET/USER_KEY 且代理用户已授权 → owner Python/local MCP；不完整则仅使用已授权官方 Project OAuth MCP authenticate。普通 lark-cli 与业务 feishu-auth 都不能替代 Project 身份。",
+    "authorization": "Login, token creation/rotation/revocation and business writes require the current task scope; this discovery performs none."
+  },
+  "tokenMechanism": "Plugin token 客户端内存缓存 2h，X-USER-KEY 是实际用户；Plugin 权限 ∩ 安装空间 ∩ 用户权限；local MCP 固定 FEISHU_PROJECT_KEY。",
+  "subjectPermission": "Plugin 先核对授权 user key 并读取目标空间/字段；OAuth MCP current_login_user；不同路径 identity 不能互换。",
+  "expiryRevoke": "预过期刷新；401 不自动重试，调用方重建 client/受控刷新一次；插件凭据由开放平台管理，OAuth 撤销走官方授权管理。",
+  "officialRefs": [],
+  "sources": [
+    {
+      "kind": "owner-contract",
+      "path": "../SKILL.md",
+      "status": "contract-recorded"
+    }
+  ],
+  "versionPolicy": {
+    "researchCommit": null,
+    "deployedCommit": null,
+    "deploymentMatch": "unknown",
+    "refreshTriggers": [
+      "authentication contract change",
+      "deployed version change",
+      "reproducible auth failure"
+    ],
+    "rule": "Candidate source and published contracts do not establish deployed compatibility. Verify the target instance version and read-only supported capabilities before enabling an adapter."
+  },
+  "verification": {
+    "source": "owner-contract-only",
+    "fixture": "not-run-in-this-discovery",
+    "runtime": "not-attempted",
+    "scope": "Read-only documentation/repository discovery; no login, token issuance, credential inspection or business API execution."
+  }
+}

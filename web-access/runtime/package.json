@@ -1,0 +1,24 @@
+{
+  "name": "@a4x/saas-access",
+  "version": "0.3.0",
+  "private": true,
+  "description": "Local SaaS authentication and registered operation companion",
+  "type": "commonjs",
+  "main": "src/index.js",
+  "bin": {
+    "web-access": "bin/web-access.js",
+    "web-view": "bin/web-view.js",
+    "platform-onboard": "bin/platform-onboard.js"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.js"
+  },
+  "engines": {
+    "node": ">=20.18.1"
+  },
+  "dependencies": {
+    "@jackwener/opencli": "1.8.8",
+    "@novnc/novnc": "1.7.0",
+    "ws": "8.18.0"
+  }
+}

@@ -1,6 +1,6 @@
 # 架构坏味道速查（AI 摘要）
 
-> 正本：`public/dev-standards/architecture/architecture-smells.html`。本文件是给 AI 的摘要，改规则先改正本再同步这里。编号永久不变：M = 单仓内，X = 服务间。分组与正本一致：A 对照正本 · B 结构问题 · C 演化信号 · D 服务间 · E 命名。
+> 正本：`docs/quality/standards/reference-pages/architecture/architecture-smells.html`。本文件是给 AI 的摘要，改规则先改正本再同步这里。编号永久不变：M = 单仓内，X = 服务间。分组与正本一致：A 对照正本 · B 结构问题 · C 演化信号 · D 服务间 · E 命名。
 
 脚本给出的是**候选**（超过怀疑线），AI 复核后才上报：核证据 → 排误报 → 排序 → 合并同根因 → 写第一步。
 

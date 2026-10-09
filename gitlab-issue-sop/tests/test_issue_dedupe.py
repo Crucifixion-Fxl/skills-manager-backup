@@ -1,6 +1,8 @@
 import importlib.util
+import os
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "issue_dedupe.py"
@@ -14,6 +16,33 @@ def u(value):
 
 
 class IssueDedupeTest(unittest.TestCase):
+    def test_gitlab_repo_uses_company_host_for_bare_paths(self):
+        with patch.dict(os.environ, {"GITLAB_BASE_URL": ""}):
+            self.assertEqual(
+                issue_dedupe.gitlab_repo_ref("DEV/argocd-apps"),
+                "https://gitlab.addx.ai/DEV/argocd-apps",
+            )
+        self.assertEqual(
+            issue_dedupe.gitlab_repo_ref("https://gitlab.addx.ai/infra/ai-data-platform"),
+            "https://gitlab.addx.ai/infra/ai-data-platform",
+        )
+
+    def test_gitlab_repo_host_can_be_overridden(self):
+        with patch.dict(os.environ, {"GITLAB_BASE_URL": "https://gitlab.example.com/"}):
+            self.assertEqual(
+                issue_dedupe.gitlab_repo_ref("DEV/argocd-apps"),
+                "https://gitlab.example.com/DEV/argocd-apps",
+            )
+
+    @patch.dict(os.environ, {"GITLAB_BASE_URL": ""})
+    @patch.object(issue_dedupe, "run", return_value="[]")
+    def test_gitlab_fetch_passes_host_qualified_repo_to_glab(self, run):
+        issue_dedupe.fetch_gitlab("services/user-center", "all", 20)
+        self.assertEqual(
+            run.call_args.args[0],
+            ["glab", "issue", "list", "--output", "json", "--per-page", "20", "--all", "--repo", "https://gitlab.addx.ai/services/user-center"],
+        )
+
     def test_battery_banner_candidate_ranks_above_unrelated_issue(self):
         title = u("\\u7535\\u6c60\\u4fe1\\u606f\\u65e0\\u6cd5\\u83b7\\u53d6\\u7684\\u8b66\\u544a\\u5173\\u95ed\\u540e\\u4e0b\\u6b21\\u4ecd\\u7136\\u5c55\\u793a")
         body = u("\\u7528\\u6237\\u5173\\u95ed\\u540e\\uff0c\\u91cd\\u65b0\\u8fdb\\u5165\\u9875\\u9762\\u4ecd\\u7136\\u5c55\\u793a\\u7535\\u6c60\\u8b66\\u544a\\u6a2a\\u5e45")

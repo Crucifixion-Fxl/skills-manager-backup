@@ -9,6 +9,8 @@ description: DataHub 数据目录操作。搜索数据资产（表、列、Dashb
 
 ## Description
 
+首次接入/变更扫描与日常认证入口见 [SaaS 接入](references/saas-access.md)；已有平台业务契约与授权门禁仍在本 Skill 维护。
+
 适用场景：搜索表/列/Dashboard/Pipeline、查看表 Schema 和字段描述、追踪数据血缘（上下游依赖）、浏览数据目录层级、查看数据 Ownership。
 
 - **内部地址**：`https://datahub.addx.live`
@@ -63,3 +65,7 @@ count 设 10~20 合理分页 → 响应快
 选取 name, platform.name, properties.description → 结果可读
 拿到 URN 后再查详情（schema、ownership、lineage）→ 分步操作，按需深入
 ```
+
+### 网页认证辅助与目标核验
+
+无已授权原生 Token 时，从选定 DataHub 真实入口启动登录，跟随实际部署的 OIDC/SSO 跳转，不预设 Casdoor、飞书或 LDAP 表单。需要本人账号密码或 MFA 时将真实任务页置前并自动有界检测，不读取秘密输入。IdP 登录完成后还必须在 DataHub 目标身份探针核验用户，再核对当前部署可用的 GraphQL 只读 query；不能将登录页消失算作平台授权完成。若需要 PAT，先确认当前 UI 支持的权限、期限及撤销方式，获得该范围授权后创建；网页 Cookie 与 GMS Bearer 分别验证，不混用。

@@ -6,17 +6,18 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import sys
 import tempfile
 
 import pytest
 
 
 SKILL_ROOT = Path(__file__).resolve().parents[1]
-REPOSITORY_ROOT = SKILL_ROOT.parents[1]
+REPOSITORY_ROOT = SKILL_ROOT.parents[2]
 SCRIPT = SKILL_ROOT / "scripts" / "validate_manifest.py"
 QUALITY_WRITER = SKILL_ROOT / "scripts" / "write_quality_gate.py"
 REPORT_CONTRACT = SKILL_ROOT / "references" / "report-contract.md"
-WEEKLY_SKILL = SKILL_ROOT.parent / "weekly-report" / "SKILL.md"
+WEEKLY_SKILL = REPOSITORY_ROOT / "skills/collaboration/weekly-report/SKILL.md"
 FILTER_SOURCES = (
     SKILL_ROOT / "filters" / "claude-session-evidence.jq",
     SKILL_ROOT / "filters" / "codex-session-evidence.jq",
@@ -29,6 +30,22 @@ QUALITY_POLICY_SOURCES = (
     SKILL_ROOT / "policies" / "report-quality-v1.json",
     SKILL_ROOT / "evals" / "evals.json",
 )
+
+
+def _load_package_plugin(module_name: str):
+    module_path = REPOSITORY_ROOT / "scripts" / "package_plugin.py"
+    spec = importlib.util.spec_from_file_location(module_name, module_path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    original_path = sys.path[:]
+    try:
+        sys.path.insert(0, str(REPOSITORY_ROOT))
+        spec.loader.exec_module(module)
+    finally:
+        sys.path[:] = original_path
+    return module
+
+
 BASELINE_REPORT = b"baseline report"
 CANDIDATE_REPORT = b"candidate report"
 WEEKLY_REPORT = b"<html>private weekly report draft</html>"
@@ -178,7 +195,7 @@ def _load_quality_writer():
 
 
 def _candidate(*, outcome: str = "extend-existing-under-review") -> dict:
-    testing_skill = SKILL_ROOT.parent / "testing-strategy" / "SKILL.md"
+    testing_skill = REPOSITORY_ROOT / "skills/quality/testing-strategy/SKILL.md"
     return {
         "id": "SP-1",
         "method": "turn evaluator gaps into regression assets",
@@ -203,7 +220,7 @@ def _candidate(*, outcome: str = "extend-existing-under-review") -> dict:
         "addx_skill_comparison": [
             {
                 "skill": "testing-strategy",
-                "path": "skills/testing-strategy/SKILL.md",
+                "path": "skills/quality/testing-strategy/SKILL.md",
                 "skill_digest": "sha256:"
                 + hashlib.sha256(testing_skill.read_bytes()).hexdigest(),
                 "coverage": "partial",
@@ -1220,11 +1237,7 @@ def test_v3_addx_comparison_binds_a_real_current_skill_file():
 def test_v3_addx_comparison_uses_the_packaged_read_only_catalog(
     tmp_path, monkeypatch
 ):
-    packager_path = REPOSITORY_ROOT / "scripts" / "package_plugin.py"
-    spec = importlib.util.spec_from_file_location("package_plugin_catalog", packager_path)
-    assert spec and spec.loader
-    packager = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(packager)
+    packager = _load_package_plugin("package_plugin_catalog")
     state_root = tmp_path / "stable-user-state"
     monkeypatch.setenv("ADDX_WORK_METHOD_STATE_DIR", str(state_root))
     destination = tmp_path / "analytics-plugin-v1"
@@ -1234,19 +1247,17 @@ def test_v3_addx_comparison_uses_the_packaged_read_only_catalog(
     packager._stage_analytics_plugin(REPOSITORY_ROOT, destination)
     packager._stage_analytics_plugin(REPOSITORY_ROOT, destination_v2)
 
-    assert not (destination / "skills" / "testing-strategy").exists()
+    assert not (destination / "skills" / "quality" / "testing-strategy").exists()
     staged_validator = _load_validator(
         destination
-        / "skills"
-        / "work-method-retrospective"
+        / "skills" / "work-method-retrospective"
         / "scripts"
         / "validate_manifest.py"
     )
     staged_validator.validate_manifest(_as_v3(_manifest()))
     staged_validator_v2 = _load_validator(
         destination_v2
-        / "skills"
-        / "work-method-retrospective"
+        / "skills" / "work-method-retrospective"
         / "scripts"
         / "validate_manifest.py"
     )

@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "tool": "dittofeed",
+  "owner": "dittofeed",
+  "repo": "https://gitlab.addx.ai/CLOUD/dittofeed",
+  "researchCommit": "569d774632c2dbac933d6e57d90b87a2dc9ac728",
+  "routeEntries": [
+    "k8s/overlays/prod-us/ingress.yaml",
+    "k8s/overlays/staging-us/ingress.yaml",
+    "k8s/overlays/prod-us/configmap.yaml",
+    "packages/api/src/buildApp.ts",
+    "packages/api/src/buildApp/router.ts",
+    "packages/api/src/buildApp/adminAuth.ts"
+  ],
+  "verification": "source-verified",
+  "deploymentConsistency": "pending",
+  "officialReferences": [
+    "https://docs.dittofeed.com/guide/accessing-admin-api",
+    "https://docs.dittofeed.com/contributing/updating-api-docs"
+  ],
+  "needsResearch": [
+    "deployed image tag/digest (overlay does not pin tag)",
+    "prod/staging deployments vs research branch",
+    "admin subject, workspaceId and role/cross-workspace scope",
+    "generated OpenAPI vs registered private controllers"
+  ],
+  "apiDiscovery": {
+    "method": "fork全API入口为router.ts注册的controllers和buildApp.ts Fastify Swagger；`/documentation`及`/documentation/json`为部署OpenAPI发现入口，源码types和controller schema补齐AddX私有路由。对照dashboard菜单、workspace role、journey approval状态、发送副作用与回读。官方Admin API先查官方ref，AddX fork差异以研究commit为准。默认仅研究/只读；发送broadcast、写events、journey发布、创建key均为副作用写且需用户明确授权。只有能解析的只读用户/workspace探针并获得对应权限后才运行，不虚构通用 `/me`。",
+    "coverage": "official route or fork entry located; deployed runtime not verified"
+  },
+  "deploymentEvidence": {
+    "repo": "https://gitlab.addx.ai/DEV/argocd-apps",
+    "researchCommit": "b9173bec59b0a81c76bf4ace95302bc6a4edddc6",
+    "paths": [
+      "aws-769494896000-us-data/dittofeed-prod-us.yaml",
+      "aws-769494896000-us-data/dittofeed-staging-us.yaml"
+    ],
+    "serviceRepo": "https://gitlab.addx.ai/CLOUD/dittofeed",
+    "serviceRevisions": [
+      "deploy/addx-prod",
+      "deploy/addx-staging"
+    ],
+    "servicePaths": [
+      "k8s/overlays/prod-us",
+      "k8s/overlays/staging-us"
+    ]
+  },
+  "runtimePrerequisites": [
+    "Review debug logging/redaction in packages/api/src/buildApp/adminAuth.ts: source debug statements include actualKey/apiKeys; do not enable live key probes until raw credentials cannot enter logs."
+  ]
+}

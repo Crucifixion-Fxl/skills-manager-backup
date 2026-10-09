@@ -856,7 +856,7 @@ Body:
 
 Response (200):
 ```json
-{"code":0,"msg":"","data":{"userId":389,"userToken":"2bd27bf8172b4669ad83f24fc6a7d5dc","phone":"","email":"jchen@a4x.io","ldapCn":"jchen","userName":"陈敬敏","type":88,"customerType":-1,"cuid":"","manufacturerId":0,"companyName":"A4X","isServerUser":true,"userPermission":{"lastUpdateTime":1772503583024,"enablePageIds":["ModelDetail","partsGroupManagement","testItemLogs","testItemManagement","production","testItemDetail","CheckPartGroupDetail","product","editTestItem","partsManagement","CheckPartDet
+{"code":0,"msg":"","data":{"userId":389,"userToken":"[REDACTED]","phone":"","email":"jchen@a4x.io","ldapCn":"jchen","userName":"陈敬敏","type":88,"customerType":-1,"cuid":"","manufacturerId":0,"companyName":"A4X","isServerUser":true,"userPermission":{"lastUpdateTime":1772503583024,"enablePageIds":["ModelDetail","partsGroupManagement","testItemLogs","testItemManagement","production","testItemDetail","CheckPartGroupDetail","product","editTestItem","partsManagement","CheckPartDet
 ```
 
 ---

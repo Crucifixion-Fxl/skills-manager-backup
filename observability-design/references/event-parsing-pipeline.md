@@ -47,7 +47,7 @@ graph LR
 - 字段列表：name、类型（trino_type）、是否必填、描述
 - 关联的 context schema（如 `com.base/base-schema`、`com.smart_device/base-schema`）
 
-**委派**：具体操作委派 `tracker-manager` skill（API 查询、创建工单、审核发布）。本 reference 只讲解析侧如何消费这份 schema。
+**委派**：具体操作委派 `tracking-lifecycle` skill（API 查询、创建工单、审核发布）。本 reference 只讲解析侧如何消费这份 schema。
 
 ## 步骤 2：Snowplow 采集 → `dwd_base_hi`
 
@@ -189,7 +189,7 @@ Event schemas 在 Tracker Manager 注册后，parser 各自产出一张表：
 
 ## 检查清单（新增事件时）
 
-- [ ] schema 已在 Tracker Manager 注册并发布（委派 `tracker-manager` skill）
+- [ ] schema 已在 Tracker Manager 注册并发布（委派 `tracking-lifecycle` skill）
 - [ ] `event_vendor` / `event_name` 和 SDK 调用一致（不一致会进 bad_events）
 - [ ] 必须的全局 context（base-schema、smart_device schema）SDK 已注册
 - [ ] CI/Dagster 的 parser 已重跑，`dwd_app_<event>_hi` 已生成并物化
@@ -242,7 +242,7 @@ dwm_<system>_funnel
 ## 参考
 
 - Snowplow 官方 Schema/Iglu 文档：<https://docs.snowplow.io/docs/understanding-tracking-design/>
-- `tracker-manager` skill — schema 注册 SSOT
+- `tracking-lifecycle` skill — schema 注册 SSOT
 - dbt `on_schema_change='sync_all_columns'` — 列增减自动同步
 - Athena JSON 函数：`json_query` / `json_extract` / `json_extract_scalar`
 - **SeaTunnel** 官方文档：<https://seatunnel.apache.org/docs/> — JDBC source / Iceberg sink

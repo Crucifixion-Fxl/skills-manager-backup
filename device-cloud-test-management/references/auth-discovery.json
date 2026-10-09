@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "tool": "device-cloud",
+  "owner": "device-cloud-test-management",
+  "instances": [],
+  "nativeRoute": "DeviceCloudAuthClient Casdoor SSO / operating-system refresh credential",
+  "loginFlow": {
+    "reuseFirst": true,
+    "steps": "优先 owner CLI 的同进程 session、系统 keyring refresh；缺失由 CLI 读取 /auth/cli/config，仅一个进程打开用户授权浏览器，校验 loopback state 后 POST /auth/cli/token。缺少安全 keyring 直接失败。",
+    "authorization": "Login, token creation/rotation/revocation and business writes require the current task scope; this discovery performs none."
+  },
+  "tokenMechanism": "Access token 仅内存；refresh token 只存系统 keyring/Windows Credential Manager，轮换原地更新；不降级明文。PAT 是另一候选自动化链，不擅自切换。",
+  "subjectPermission": "GET /auth/userinfo 校验 email；服务端签名/iss/aud/exp 验证；GraphQL 资源容量与 Job 权限分别核验；GitLab 用例仓只读权限另验证。",
+  "expiryRevoke": "POST /auth/cli/refresh 复用 refresh；撤销/CLI logout 尚需确认可支持版本，不虚构命令。",
+  "officialRefs": [],
+  "sources": [
+    {
+      "kind": "owner-contract",
+      "path": "cli-contract.md",
+      "status": "contract-recorded"
+    },
+    {
+      "kind": "repository",
+      "repository": "https://gitlab.addx.ai/DEVT/device-cloud-server",
+      "researchCommit": "1ec859351d2735ea6b6353b819e9bcba483cbcc8",
+      "entries": [
+        "src/main/java/com/addx/devicecloudserver/controller/AuthController.java",
+        "src/main/java/com/addx/devicecloudserver/controller/PersonalAccessTokenController.java",
+        "docs/03-detailed-design/2026-08-16-personal-access-token-automation-api.md"
+      ],
+      "status": "source-verified"
+    }
+  ],
+  "versionPolicy": {
+    "researchCommit": "1ec859351d2735ea6b6353b819e9bcba483cbcc8",
+    "deployedCommit": null,
+    "deploymentMatch": "unknown",
+    "refreshTriggers": [
+      "authentication contract change",
+      "deployed version change",
+      "reproducible auth failure"
+    ],
+    "rule": "Candidate source and published contracts do not establish deployed compatibility. Verify the target instance version and read-only supported capabilities before enabling an adapter."
+  },
+  "verification": {
+    "source": "source-verified",
+    "fixture": "not-run-in-this-discovery",
+    "runtime": "not-attempted",
+    "scope": "Read-only documentation/repository discovery; no login, token issuance, credential inspection or business API execution."
+  }
+}

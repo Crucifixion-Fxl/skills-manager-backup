@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "tool": "jenkins",
+  "provider": "delegated",
+  "owner": "jenkins",
+  "authContract": "SKILL.md",
+  "verification": "source-verified",
+  "runtimeVerification": "pending",
+  "authDiscovery": "references/auth-discovery.json"
+}

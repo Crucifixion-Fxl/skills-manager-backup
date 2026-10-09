@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "9203f0d1-50dd-40b3-ba23-af6b9198533b",
+  "path": "sentry",
+  "path_key": "sentry",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/observability/sentry",
+    "branch": null
+  }
+}

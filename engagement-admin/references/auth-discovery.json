@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "tool": "engagement-admin",
+  "owner": "engagement-admin",
+  "status": "source-reviewed-runtime-pending",
+  "contract": "../../engagement-touchpoint-integration/references/admin-api-auth.md",
+  "notes": "网页admin_session与CLI Bearer purpose独立；复用engagement-touchpoint-integration/scripts/admin_api.mjs；staging实例必须明确指定，production rules推进另行审批。研究源码与已记录CLI handoff部署一致性待核验。",
+  "credentialHandling": "No login, secret reads, token issuance, or SaaS business calls performed.",
+  "referenceBase": "owner-skill-root for SKILL.md/contractEntrypoints/referenceSources paths; contract field resolves from this JSON directory; upstream repository entrypoints stay repository-relative"
+}

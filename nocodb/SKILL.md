@@ -9,6 +9,8 @@ description: NocoDB 数据管理平台操作。通过 REST API 对 NocoDB 表执
 
 ## Description
 
+首次接入/变更扫描与日常认证入口见 [SaaS 接入](references/saas-access.md)；已有平台业务契约与授权门禁仍在本 Skill 维护。
+
 NocoDB 是内部数据管理平台，存储 SLA 指标配置、业务域/应用域等配置数据。
 
 | 区域 | 地址 |
@@ -94,7 +96,7 @@ curl -s "https://nocodb.addx.live/api/v1/db/meta/projects/{project_id}/tables" \
 
 通过上传脚本将本地 CSV/Excel 文件写入 NocoDB 表，支持新建表和写入已有表。
 
-- 上传脚本位置：`skills/nocodb/scripts/upload_to_nocodb.py`
+- 上传脚本位置：`skills/data/nocodb/scripts/upload_to_nocodb.py`
 - 目标项目固定为 `AmazonApi`
 - 需要 `NOCODB_TOKEN` 环境变量或 `--token` 参数
 
@@ -283,3 +285,9 @@ curl -s "https://nocodb.addx.live/api/v1/db/data/v1/AmazonApi/monthly_sales?limi
 - [`references/data-sync-jobs.md`](references/data-sync-jobs.md) — 数仓同步任务 (`data_sync.jobs`) 完整字段定义、选择器菜单、curl 示例、job_args 模板、只读映射查询（双向）、安全红线
 - 源码：`/project/dbt/utils/_nocodb/client.py`（NocoDBClient）
 - 源码：`/project/dbt/utils/_nocodb/admin.py`（NocoDBAdminClient）
+
+### 真实登录与两端只读验收
+
+优先已授权平台 API Token；没有 Token 时先完成真实 LDAP 登录并检测目标 `/api/v1/auth/user/me` 身份。若当前部署支持登录签发的 `xc-auth` 会话，可仅在进程内存中传递给本机与远端原生 HTTP 消费器，不自动创建新的管理 Token，也不能把 `xc-auth` 和 `xc-token` 当成同一种凭据。分别核验目标身份、部署版本和相同只读结果，对照网页；退出登录、清除进程内存并关闭任务页面，关闭页面本身不等于退出。
+
+项目元数据列表不一定遵守 `limit` 参数：检查实际返回数量与分页契约，不把参数存在当成服务端限制已生效。业务数据查询必须采用当前版本实际支持的分页并限制数量。只读验收不查询凭据表或导出秘密。

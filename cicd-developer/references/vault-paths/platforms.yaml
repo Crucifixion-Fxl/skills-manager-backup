@@ -39,6 +39,19 @@ platforms:
       Platform administrators issue, read and rotate credentials through vault-policies.
       Application project membership grants no personnel access; ESO uses independent machine policies.
 
+  linode:
+    covers: Linode / Akamai Object Storage S3-compatible access keys
+    typical_keys: [access_key_id, secret_access_key]
+    written_by: Platform Admin
+    notes: |
+      Platform-issued, bucket-scoped credentials use
+      secret/{env}/linode/application/{app}/{key}; issue separate keys per app and environment.
+      This namespace is for object-storage keys, not an account-wide Linode API token.
+      Field names follow the consuming client contract; endpoint/bucket/region are non-secret config.
+      Registration validates path syntax only: vault-policies must authorize platform operators,
+      and a separately approved machine policy must authorize each ESO consumer. Application
+      project membership alone grants no personnel access. Never store real credentials in Git.
+
   auth:
     covers: Casdoor / OIDC 平台给 app 下发的 client secret
     typical_keys: [client_id, client_secret, issuer_url]

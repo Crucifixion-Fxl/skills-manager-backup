@@ -7,6 +7,7 @@
     {"sig": "glm-1302", "text": "Request rejected (429) · [1302][请求过于频繁，请稍后再试][<request id>]"},
     {"sig": "claude-usage-limit", "text": "You've hit your weekly limit · resets 12am (UTC)"},
     {"sig": "claude-auth", "text": "I couldn't process the last request: authentication failed. Please re-authenticate the CLI (e.g. run claude /login"},
-    {"sig": "codex-usage-limit", "text": "You've hit your usage limit. Try again at 4:15 PM."}
+    {"sig": "codex-usage-limit", "text": "You’ve hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at Oct 1st, 2026 12:13 AM."},
+    {"sig": "codex-usage-limit", "text": "{\"message\": \"<changed wording>\", \"codex_error_info\": \"usage_limit_exceeded\"}"}
   ]
 }

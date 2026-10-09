@@ -1,0 +1,11 @@
+import {ArgumentError,CommandExecutionError,EmptyResultError} from '@jackwener/opencli/errors';
+const fail=()=>{throw new CommandExecutionError('Console detail contract changed');};
+export function detailId(args){const id=Number(args.id);if(!Number.isSafeInteger(id)||id<1)throw new ArgumentError('id must be an existing positive integer resource ID');return id;}
+function integer(v){if(v===null||v===undefined)return null;if(!Number.isSafeInteger(v)||v<0)fail();return v;}
+function text(v){if(v===null||v===undefined)return null;if(typeof v!=='string')fail();return v;}
+function list(v,nullable=false){if(nullable&&(v===null||v===undefined))return [];if(!Array.isArray(v)||v.length>1000)fail();return v;}
+function object(v){if(!v||typeof v!=='object'||Array.isArray(v))fail();return v;}
+function record(v,id){if(v===null||v===undefined||(typeof v==='object'&&!Array.isArray(v)&&(v.id===null||v.id===undefined)))throw new EmptyResultError('addx-console detail','No visible resource for the selected ID');object(v);if(v.id!==id)fail();return v;}
+function ids(v){return list(v,true).map(x=>{if(!Number.isSafeInteger(x)||x<0)fail();return x;}).sort((a,b)=>a-b);}
+export function categoryDetail(value,id){const v=record(value,id);const links=list(v.modelCategoryComponentDOList).map(x=>{object(x);if(!Number.isSafeInteger(x.componentGroupId)||x.componentGroupId<1)fail();return x.componentGroupId;}).sort((a,b)=>a-b);return{id:v.id,name:text(v.categoryName),code:text(v.categoryCode),version:integer(v.versionTime),releasedVersion:integer(v.releaseVersionTime),releaseStatus:integer(v.releaseStatus),componentGroupIds:JSON.stringify(links),componentGroupCount:links.length,updatedAt:text(v.lastModifyTime)};}
+export function groupDetail(value,id){const v=record(value,id);const parameters=list(v.paramDOList,true);let subCount=0;const codes=parameters.map(p=>{object(p);const code=text(p.paramCode);for(const sub of list(p.subParamResponseList,true)){object(sub);text(sub.paramCode);subCount++;}return code;});return{id:v.id,name:text(v.componentGroupName),code:text(v.componentGroupCode),categories:text(v.categoryStr),businessType:integer(v.businessType),relatedBusiness:integer(v.relatedBusiness),workstationIds:JSON.stringify(ids(v.relatedWorkstation)),parameterCodes:JSON.stringify(codes),parameterCount:parameters.length,subParameterCount:subCount};}

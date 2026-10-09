@@ -27,6 +27,21 @@ non-promotion。
 证明生产候选分支完整包含 staging 已验证的功能改动，包括后续缺陷修复、评审修复、
 测试、可观测性、migration 和部署配置。环境差异必须显式声明并逐文件验证。
 
+长期环境分支（例如反复执行 `develop → staging → main`）不适用“同一功能分支最早
+staging MR”为 canonical base 的推导。此时使用 `--branch-promotion`：候选 MR
+HEAD、当前 staging 分支 HEAD 必须与**最后一次已合并且已验收**的 staging MR 的
+`merge_commit_sha` 完全相同。工具从 GitLab API 绑定三个 SHA 和当前生产目标 SHA，
+再以同一生产目标为基线逐路径比较完整的 staging→production 候选差异，并要求
+目标分支与候选提交的 Git 合并树精确等于已验收 staging 树。不抓取可能已过期的
+历史 MR ref，也不假设生产目标是 staging commit 的祖先。此模式还要求绑定该 merge
+SHA 的 staging 合并后成功流水线，以及合并后写入 MR、包含
+以 `<!-- staging-acceptance:PASS:v1:<MR IID>:<merge SHA>:<pipeline ID> -->`
+为首行、第二行以 `验收通过：` 开头并含流水线 URL 的验收记录。该 note 的作者必须是
+GitLab 记录的 staging MR 合并人；引用或否决说明不能冒充验收。
+Auditor 重新读取两项证据；维护窗口和生产 live 验收仍需单独核实。
+候选独有的生产配置修改不能用 contract 在此模式下放行；须先走受控的 staging 验证
+或另行取得符合紧急修复合同的授权。external gate 的 contract 仍按下文实时审计。
+
 本检查只证明代码和声明的一致性，不证明运行时行为正确。语义安全仍需使用
 `face-review-repair` 和功能对应的测试方案验证。
 
@@ -35,16 +50,25 @@ non-promotion。
 | 输入 | 含义 |
 |:--|:--|
 | `project_path` | GitLab 项目路径 |
-| `canonical_verification_mr` | 主功能分支最后一个绑定 staging 验证结果的已合并 MR IID |
+| `canonical_verification_mr` | 功能分支模式：主功能分支最后一个绑定 staging 验证结果的已合并 MR；长期环境分支模式：最后一个已验收的 staging 合并 MR |
 | `candidate_mr` | 当前生产候选 MR IID |
 | `staging_branch` | staging 目标分支，默认 `staging` |
+| `staging_pipeline_id`、`staging_acceptance_note_id` | 长期环境分支模式必填：合并后成功流水线与验收 note ID |
 | `contract` | 环境差异或外部门禁存在时使用的 `release-contracts/<feature>.yaml` |
 
-调用方不再手填 ref 或 SHA。脚本直接读取 GitLab API：从 verification MR 的 source
-branch 历史中找到最早的已合并 staging MR，以其 `diff_refs.base_sha` 作为 canonical
-base；使用 verification MR HEAD 作为 canonical head；使用 candidate MR HEAD 和生产
-目标分支 API 当前 SHA 作为 candidate head/base。随后 fetch GitLab MR ref 与目标分支并
-逐一绑定。两个 base 还必须分别是对应 head 的祖先。
+调用方不再手填 ref 或 SHA。默认功能分支模式下，脚本直接读取 GitLab API：从
+verification MR 的 source branch 历史中找到最早的已合并 staging MR，以其
+`diff_refs.base_sha` 作为 canonical base；使用 verification MR HEAD 作为 canonical
+head；使用 candidate MR HEAD 和生产目标分支 API 当前 SHA 作为 candidate head/base。
+随后 fetch GitLab MR ref 与目标分支并逐一绑定。两个 base 还必须分别是对应 head 的祖先。
+
+长期环境分支模式下，使用同一命令并追加 `--branch-promotion`。脚本读取已合并
+verification MR 的 `merge_commit_sha`，要求它与当前 staging ref 和 candidate MR
+HEAD **完全相等**，并从远端抓取、回验这些 ref；不会使用早期 MR ref。报告中的
+`canonical_base` 与 `candidate_base` 均为当前生产目标 SHA，两个 head 均为已验收
+staging merge SHA。由于生产目标与 staging 可分叉，此模式不要求生产目标为 head 的
+祖先；执行 `git merge-tree --write-tree` 并要求合并树等于已验收树。目标独有的
+文件或修改会阻断，而不会被误记为已匹配的删除。
 
 ## 主功能分支规则
 
@@ -75,13 +99,23 @@ uv run <gitlab-mr-skill>/scripts/release_parity_check.py \
   --json > /tmp/release-parity-report.json
 ```
 
+长期环境分支在相同命令中追加 `--branch-promotion --staging-pipeline-id <id>
+--staging-acceptance-note-id <id>`。选择模式前必须检查实际
+发布拓扑；不要因默认模式失败就改用 branch-promotion 绕过缺失的功能提交。
+
 脚本执行以下检查：
 
-- canonical origin/verification MR 必须已合入 staging、source branch 相同，且
-  verification MR 必须出现在该 canonical branch 的 staging MR 历史中。
+- 默认功能分支模式：canonical origin/verification MR 必须已合入 staging、
+  source branch 相同，且 verification MR 必须出现在该 canonical branch 的
+  staging MR 历史中。
+- 长期环境分支模式：verification MR 必须已合入 staging；当前 staging SHA、
+  candidate MR SHA 和 verification merge SHA 必须完全相同；合并后流水线必须绑定
+  该 SHA/ref 且成功，验收 note 必须晚于 merge 并绑定 SHA 和流水线 URL。
 - candidate MR 必须打开并目标为 `main` / `master` / `release/*`。
 - GitLab MR ref 和生产目标远端 ref 必须精确等于 API 返回的 SHA。
-- base 必须是对应 head 的祖先。
+- 默认功能分支模式的两个 base 必须是对应 head 的祖先；长期环境分支模式允许
+  main/staging 分叉，并记录同一个当前 main SHA 作为两个比较基线；合并结果树必须
+  精确等于 staging 树，否则阻断。
 - 使用 `--no-renames` 获取精确变更路径，删除加新增不能冒充重命名。
 - 比较每个路径修改前后的 Git 对象类型、mode 和 object ID。
 - 空白、YAML/Python 缩进、文件权限和二进制内容变化都会被识别。
@@ -94,7 +128,7 @@ uv run <gitlab-mr-skill>/scripts/release_parity_check.py \
 这种比较是有意保守的：同一路径存在无法分类的基线或内容差异时应阻断，而不是猜测其
 是否“等价”。
 
-随后人工检查提交拓扑和冲突解决语义：
+随后人工检查提交拓扑和冲突解决语义。默认功能分支模式执行：
 
 ```bash
 git log --oneline --decorate <canonical-base>..<canonical-head>
@@ -107,6 +141,11 @@ git range-diff \
 
 `range-diff` 是评审证据，不是唯一门禁。squash、rebase 和冲突解决可能改变 commit
 形态，因此仍须通过精确文件变更检查。
+
+长期环境分支模式检查 candidate HEAD 与 verification merge SHA、当前 staging
+SHA 的一致性，查看 `git log --graph`、`git merge-base` 和 GitLab 的冲突状态；
+`range-diff` 不用于把多次环境晋级误当作单个功能分支。主干有独立变更时，重点审查
+合并结果与生产运行对象。若主干有独立变更，即使无冲突也要先处理并重新完成 staging 验收。
 
 ## 发布契约
 

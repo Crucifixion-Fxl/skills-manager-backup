@@ -42,6 +42,7 @@ SYNC_UNIT = re.compile(r"gitlab-buzz-sync-([A-Za-z0-9][A-Za-z0-9_-]*)\.service")
 FEISHU_UNIT = re.compile(r"buzz-feishu-([A-Za-z0-9][A-Za-z0-9_-]*)\.service")
 TODO_UNIT = re.compile(r"gitlab-todo-sync-([A-Za-z0-9][A-Za-z0-9_-]*)\.service")
 JOIN_UNIT = re.compile(r"(buzz-agent-join)\.service")
+RECOVERY_UNIT = re.compile(r"(buzz-agent-recovery)\.service")
 FORBIDDEN_ENV_KEYS = frozenset(
     {
         "AMAP_MAPS_API_KEY",
@@ -134,6 +135,7 @@ REQUIRED_AGENT_ENV_KEYS = frozenset(
         "BUZZ_ACP_AGENT_COMMAND",
         "BUZZ_ACP_BINARY",
         "BUZZ_ACP_BINARY_SHA256",
+        "BUZZ_ACP_RECOVERY_REVISION",
         "BUZZ_ACP_SYSTEM_PROMPT_FILE",
         "BUZZ_RESPONSIBLE_CONFIG",
     }
@@ -381,6 +383,7 @@ class Auditor:
         self.agents_dir = home / ".config/buzz/agents"
         self.units_dir = home / ".config/systemd/user"
         self.release_root = home / ".local/share/buzz-agent-setup/releases"
+        self.git_mirror = home / ".local/share/buzz-agent-setup/git-mirror/skills.git"
         self.checks: list[dict[str, str]] = []
         self.harnesses: set[tuple[str, str]] = set()
         self.cli_paths: set[Path] = set()
@@ -405,6 +408,7 @@ class Auditor:
             "feishu_release": ["LA-06", "LA-08"],
             "todo_release": ["LA-06", "LA-09"],
             "join_release": ["LA-06", "LA-10"],
+            "recovery_release": ["LA-06", "LA-10"],
             "buzz_cli": ["LA-11"],
             "media_proxy": ["LA-06", "LA-11"],
             "plugin_revision": ["LA-06", "LA-12"],
@@ -609,7 +613,6 @@ class Auditor:
                 or token_env.startswith("BUZZ_")
                 or token_env in RESPONSIBLE_CHILD_ENV_KEYS
                 or not isinstance(projects, list)
-                or not projects
                 or len(projects) != len(set(projects))
                 or not all(type(item) is int and item > 0 for item in projects)
             ):
@@ -722,6 +725,56 @@ class Auditor:
             and not bool(stat.S_IMODE(metadata.st_mode) & 0o077)
             and trusted_directory_chain(resolved.parent, os.geteuid())
         )
+
+    def is_expected_or_trusted_descendant(self, candidate_sha: object) -> bool:
+        """Accept the pinned target itself, or a commit a trusted local git
+        mirror can prove descends from it (ADR-0024). Ancestry can only ever
+        be proven with the mirror; a missing, untrusted, non-canonical-remote,
+        or too-stale-to-contain-the-commit mirror makes this return False,
+        same as an unrelated commit would -- the caller still records the
+        same fail-closed ``revision_mismatch`` result. This never touches the
+        network: the mirror is refreshed out-of-band by
+        ``refresh_trusted_git_mirror.py``, never fetched here."""
+        if not isinstance(candidate_sha, str) or SHA40.fullmatch(candidate_sha) is None:
+            return False
+        if candidate_sha == self.expected_sha:
+            return True
+        if not self.trusted_private_directory(self.git_mirror):
+            return False
+        child_env = {
+            "HOME": str(self.home),
+            "PATH": "/usr/bin:/bin",
+            "GIT_CONFIG_NOSYSTEM": "1",
+            "GIT_CONFIG_GLOBAL": "/dev/null",
+        }
+        git_dir = str(self.git_mirror)
+        try:
+            done, remote = run_bounded_text(
+                ["/usr/bin/git", "--git-dir", git_dir, "config", "--get", "remote.origin.url"],
+                env=child_env,
+                timeout=10,
+            )
+            if done.returncode != 0 or remote.strip() != CANONICAL_SKILLS_REMOTE:
+                return False
+            for sha in (self.expected_sha, candidate_sha):
+                done, _ = run_bounded_text(
+                    ["/usr/bin/git", "--git-dir", git_dir, "cat-file", "-e", sha + "^{commit}"],
+                    env=child_env,
+                    timeout=10,
+                )
+                if done.returncode != 0:
+                    return False
+            done, _ = run_bounded_text(
+                [
+                    "/usr/bin/git", "--git-dir", git_dir, "merge-base", "--is-ancestor",
+                    self.expected_sha, candidate_sha,
+                ],
+                env=child_env,
+                timeout=10,
+            )
+            return done.returncode == 0
+        except (OSError, subprocess.TimeoutExpired):
+            return False
 
     def unit_search_directories(self) -> list[Path]:
         if self._unit_search_cache is not None:
@@ -1296,7 +1349,7 @@ class Auditor:
                 return role
         return None
 
-    def audit_prompt(self, agent: str, path: Path) -> None:
+    def audit_prompt(self, agent: str, path: Path, *, env_channels: str | None = None) -> None:
         subject = f"agent:{agent}"
         text = self.read_text(
             path,
@@ -1339,8 +1392,34 @@ class Auditor:
             self.fail("agent_prompt", subject, "helper_revision_mismatch")
         if missing:
             self.fail("agent_prompt", subject, "required_markers_missing", f"count={len(set(missing))}")
-        if not missing and not forbidden and refs == {self.expected_sha}:
+        admission_ready = True
+        if role in JOIN_MANAGED_PROMPT_ROLES:
+            admission_ready = self.audit_admission_channel_table(subject, text, env_channels)
+        if not missing and not forbidden and refs == {self.expected_sha} and admission_ready:
             self.pass_("agent_prompt", subject)
+
+    def audit_admission_channel_table(self, subject: str, text: str, env_channels: str | None) -> bool:
+        """Read-only check of the owner-maintained table the admission service appends to."""
+        begin, end = "<!-- buzz-agent-channels:v1 -->", "<!-- /buzz-agent-channels:v1 -->"
+        if text.count(begin) != 1 or text.count(end) != 1 or text.index(begin) >= text.index(end):
+            self.fail("agent_prompt", subject, "admission_channel_table_invalid")
+            return False
+        block = text[text.index(begin) + len(begin):text.index(end)]
+        channels = []
+        for line in block.splitlines():
+            cells = [cell.strip() for cell in line.strip().split("|")]
+            if len(cells) == 5 and not cells[0] and not cells[-1]:
+                channel = cells[2]
+                if channel.startswith("`") and channel.endswith("`"):
+                    channel = channel[1:-1]
+                if UUID.fullmatch(channel):
+                    channels.append(channel)
+        expected = {part.strip() for part in env_channels.split(",") if part.strip()} if env_channels is not None else None
+        if (not channels or len(channels) != len(set(channels))
+                or (expected is not None and set(channels) != expected)):
+            self.fail("agent_prompt", subject, "admission_channel_table_mismatch")
+            return False
+        return True
 
     def audit_responsible_config(
         self, agent: str, path: Path
@@ -1940,6 +2019,11 @@ class Auditor:
                 self.resolved_trusted_executable(binary_raw) if binary_raw else None
             )
             digest = environment.get("BUZZ_ACP_BINARY_SHA256", "")
+            recovery_dir = home / ".local/state/buzz-recovery" / agent / "runtime"
+            if (environment.get("BUZZ_ACP_RECOVERY_REVISION") != self.expected_sha
+                    or environment.get("BUZZ_ACP_RECOVERY_DIR", str(recovery_dir)) != str(recovery_dir)):
+                raise ValueError("recovery launch revision or directory mismatch")
+            environment["BUZZ_ACP_RECOVERY_DIR"] = str(recovery_dir)
             if binary is None or binary_raw != binary or HEX64.fullmatch(digest) is None:
                 raise ValueError("buzz-acp binary pin is invalid")
             mode, contents = read_immutable_file(
@@ -2034,7 +2118,10 @@ class Auditor:
         if prompt is None:
             self.fail("agent_prompt", subject, "prompt_path_invalid")
         else:
-            self.audit_prompt(agent, prompt)
+            self.audit_prompt(
+                agent, prompt,
+                env_channels=self.assignment_value(env.get("BUZZ_ACP_CHANNELS")) or "",
+            )
         responsible = self.resolve_path(env.get("BUZZ_RESPONSIBLE_CONFIG"))
         if responsible is None:
             self.fail("responsible_config", subject, "config_path_invalid")
@@ -2390,6 +2477,54 @@ class Auditor:
             self.fail("join_release", subject, "agent_binding_mismatch")
             return
         self.pass_("join_release", f"{subject}:agent-coverage", "all_applicable_agents_managed")
+        self.audit_feishu_invites(value, rows, subject)
+
+    def audit_feishu_invites(self, value: dict[str, Any], rows: list[dict[str, Any]], subject: str) -> None:
+        """ADR-0023: every managed agent tells an unbound Feishu group why it cannot work there. That needs its own lark-cli
+        profile in the join config, the switch left on, and a capability the runner has verified (list chats, send, read
+        back). Anything missing is a failure with a fix, never "not applicable"."""
+        fix = "see agent-channel-join.md 被拉进未绑定的飞书群"
+        if value.get("feishu_unbound_prompt", True) is not True:
+            self.fail("join_release", f"{subject}:feishu-invites", "feishu_invite_prompt_disabled",
+                      f"set feishu_unbound_prompt to true; {fix}")
+            return
+        state_dir = value.get("state_dir")
+        capabilities: dict[str, Any] = {}
+        state_path = Path(state_dir) / "feishu-invite-state.json" if isinstance(state_dir, str) else None
+        if state_path is not None and state_path.exists():
+            state = self.read_json(state_path, "join_release", f"{subject}:feishu-invite-state", require_private=True)
+            agents = state.get("agents") if isinstance(state, dict) else None
+            capabilities = agents if isinstance(agents, dict) else {}
+        good = True
+        for row in rows:
+            name = row["name"]
+            block = row.get("feishu")
+            if not isinstance(block, dict):
+                self.fail("join_release", f"{subject}:feishu-invites:{name}", "feishu_invite_profile_missing",
+                          f"agent={name}: add agents[].feishu {{app_id, lark_config_dir, lark_data_dir}} (its own "
+                          f"lark-cli profile) and lark_cli; {fix}")
+                good = False
+                continue
+            directories = [block.get("lark_config_dir"), block.get("lark_data_dir")]
+            if not all(isinstance(d, str) and Path(d).is_absolute() and self.trusted_private_directory(Path(d))
+                       for d in directories) or not isinstance(value.get("lark_cli"), str):
+                self.fail("join_release", f"{subject}:feishu-invites:{name}", "feishu_invite_profile_invalid",
+                          f"agent={name}: the lark-cli profile directories must be this user's 0700 directories; {fix}")
+                good = False
+                continue
+            record = capabilities.get(name)
+            capability = record.get("capability") if isinstance(record, dict) else None
+            if capability is None:
+                self.fail("join_release", f"{subject}:feishu-invites:{name}", "feishu_invite_capability_unverified",
+                          f"agent={name}: run buzz-agent-join once and read its feishu report; {fix}")
+                good = False
+            elif capability != "ok":
+                shown = capability if isinstance(capability, str) and re.fullmatch(r"[a-z_:,]{1,60}", capability) else "invalid"
+                self.fail("join_release", f"{subject}:feishu-invites:{name}", "feishu_invite_capability_gap",
+                          f"agent={name}: {shown}; grant the missing scope (feishu_scope_apply_url.py) or fix the profile; {fix}")
+                good = False
+        if good:
+            self.pass_("join_release", f"{subject}:feishu-invites", "unbound_group_prompts_ready")
 
     def audit_join_timer_runtime(self) -> None:
         """A file on disk is not default-on; the real user's timer must also be enabled and active."""
@@ -2416,6 +2551,62 @@ class Auditor:
                 self.fail("join_release", "buzz-agent-join", code)
             else:
                 self.pass_("join_release", f"buzz-agent-join:{verb}")
+
+    def audit_recovery(self, agents: list[tuple[Path, str]]) -> None:
+        """Generic recovery is required for ALL canonical Agents, not just join-managed roles."""
+        category, subject = "recovery_release", "buzz-agent-recovery"
+        service = self.units_dir / "buzz-agent-recovery.service"
+        if not self.regular_file(service, category, subject, "required_service_not_deployed"):
+            return
+        if not self.reject_unit_dropins(service, category, subject):
+            return
+        self.audit_service_baseline(service, category, subject, "5min", network_after=True)
+        self.audit_timer_pair(service, category, subject, interval="15s", require_persistent=True)
+        text = self.read_text(service, category, subject, require_trusted=True)
+        if text is None or self.unit_environment(text, "PATH") != "/usr/bin:/bin":
+            self.fail(category, subject, "service_environment_contract_mismatch")
+        release = self.release_root / self.expected_sha
+        config = self.home / ".config/buzz/recovery/config.json"
+        try:
+            argv = shlex.split(self.unit_exec(service, category, subject) or "")
+        except ValueError:
+            argv = []
+        if argv != ["/usr/bin/python3", "-I", str(release / "scripts/recovery_controller.py"), "--config", str(config)]:
+            self.fail(category, subject, "entrypoint_contract_mismatch")
+        self.validate_release(release, category, subject, "recovery_controller.py")
+        value = self.read_json(config, category, subject, require_private=True)
+        rows = value.get("agents") if isinstance(value, dict) else None
+        names = [row.get("name") for row in rows if isinstance(row, dict)] if isinstance(rows, list) else []
+        expected = sorted(name for _unit, name in agents)
+        if (not isinstance(rows, list) or len(names) != len(rows)
+                or any(not isinstance(name, str) for name in names)
+                or sorted(names) != expected):
+            self.fail(category, subject, "agent_coverage_mismatch")
+        else:
+            for row in rows:
+                name = row["name"]
+                env = self.parse_env(self.agents_dir / f"{name}.env", f"agent:{name}") or {}
+                if (row.get("env_file") != str(self.agents_dir / f"{name}.env")
+                        or row.get("unit") != f"buzz-local-{name}.service"
+                        or row.get("journal_dir") != str(self.home / ".local/state/buzz-recovery" / name / "runtime")
+                        or row.get("revision") != self.expected_sha
+                        or row.get("binary_sha256") != env.get("BUZZ_ACP_BINARY_SHA256")):
+                    self.fail(category, subject, "agent_runtime_binding_mismatch")
+                else:
+                    self.pass_(category, f"{subject}:agent:{name}", "recovery_binding_verified")
+        if self._verify_user_manager:
+            child_env = {"HOME": str(self.home), "PATH": "/usr/bin:/bin"}
+            if self.runtime_dir is not None:
+                child_env["XDG_RUNTIME_DIR"] = str(self.runtime_dir)
+            for verb, expected_value in (("is-enabled", "enabled"), ("is-active", "active")):
+                try:
+                    done, output = run_bounded_text(["/usr/bin/systemctl", "--user", verb, "buzz-agent-recovery.timer"],
+                                                    env=child_env, timeout=30)
+                    if done.returncode != 0 or output.strip() != expected_value:
+                        raise ValueError("recovery timer unavailable")
+                    self.pass_(category, f"{subject}:{verb}")
+                except (OSError, ValueError, subprocess.TimeoutExpired):
+                    self.fail(category, subject, "recovery_timer_not_enabled_or_active")
 
     def audit_claude_plugin(self, raw: str) -> None:
         try:
@@ -2461,7 +2652,7 @@ class Auditor:
         record = records[0]
         install_raw = record.get("installPath")
         install = Path(install_raw) if isinstance(install_raw, str) and Path(install_raw).is_absolute() else None
-        skill = install / "skills/buzz-agent-setup/SKILL.md" if install else None
+        skill = install / "skills/agent-harness/buzz-agent-setup/SKILL.md" if install else None
         try:
             install_good = install is not None and install.resolve(strict=True) == install
         except OSError:
@@ -2506,7 +2697,7 @@ class Auditor:
             or any(value is not True for value in effective_overrides)
         ):
             self.fail("plugin_revision", subject, "plugin_not_enabled")
-        elif record.get("gitCommitSha") != self.expected_sha:
+        elif not self.is_expected_or_trusted_descendant(record.get("gitCommitSha")):
             self.fail("plugin_revision", subject, "revision_mismatch")
         elif (
             not install_good
@@ -2517,7 +2708,7 @@ class Auditor:
             or skill.is_symlink()
         ):
             self.fail("plugin_revision", subject, "install_or_skill_invalid")
-        elif not self.validate_installed_skill_tree(install / "skills/buzz-agent-setup"):
+        elif not self.validate_installed_skill_tree(install / "skills/agent-harness/buzz-agent-setup"):
             self.fail("plugin_revision", subject, "installed_skill_tree_mismatch")
         else:
             self.pass_("plugin_revision", subject)
@@ -2625,16 +2816,17 @@ class Auditor:
             subject,
             require_trusted=True,
         )
+        revision_ok = metadata is not None and self.is_expected_or_trusted_descendant(metadata.get("revision"))
         if (
             metadata is None
             or metadata.get("source_type") != "git"
             or metadata.get("source") != marketplace_source
             or metadata.get("ref_name") not in (None, "main")
             or metadata.get("sparse_paths") != []
-            or metadata.get("revision") != self.expected_sha
+            or not revision_ok
         ):
             self.fail("plugin_revision", subject, "revision_mismatch")
-        elif not self.validate_installed_skill_tree(install / "skills/buzz-agent-setup"):
+        elif not self.validate_installed_skill_tree(install / "skills/agent-harness/buzz-agent-setup"):
             self.fail("plugin_revision", subject, "installed_skill_tree_mismatch")
         else:
             self.pass_("plugin_revision", subject)
@@ -2666,12 +2858,12 @@ class Auditor:
             return
         repo = matches[0]
         install = Path(str(repo.get("path", "")))
-        skill = install / "skills/buzz-agent-setup/SKILL.md"
+        skill = install / "skills/agent-harness/buzz-agent-setup/SKILL.md"
         try:
             install_good = install.is_absolute() and install.resolve(strict=True) == install
         except OSError:
             install_good = False
-        if repo["kind"].get("commit") != self.expected_sha:
+        if not self.is_expected_or_trusted_descendant(repo["kind"].get("commit")):
             self.fail("plugin_revision", subject, "revision_mismatch")
         elif (
             not install_good
@@ -2680,7 +2872,7 @@ class Auditor:
             or skill.is_symlink()
         ):
             self.fail("plugin_revision", subject, "install_or_skill_invalid")
-        elif not self.validate_installed_skill_tree(install / "skills/buzz-agent-setup"):
+        elif not self.validate_installed_skill_tree(install / "skills/agent-harness/buzz-agent-setup"):
             self.fail("plugin_revision", subject, "installed_skill_tree_mismatch")
         else:
             self.pass_("plugin_revision", subject)
@@ -2805,7 +2997,7 @@ class Auditor:
         )
 
     def discover_lookup_only_units(self, primary_names: set[str]) -> list[str]:
-        patterns = (AGENT_UNIT, SYNC_UNIT, FEISHU_UNIT, TODO_UNIT, JOIN_UNIT)
+        patterns = (AGENT_UNIT, SYNC_UNIT, FEISHU_UNIT, TODO_UNIT, JOIN_UNIT, RECOVERY_UNIT)
         matches: set[str] = set()
         transient = (
             self.runtime_dir / "systemd/transient"
@@ -2875,10 +3067,12 @@ class Auditor:
                         "buzz-feishu-*.service",
                         "gitlab-todo-sync-*.service",
                         "buzz-agent-join.service",
+                        "buzz-agent-recovery.service",
                         "gitlab-buzz-sync-*.timer",
                         "buzz-feishu-*.timer",
                         "gitlab-todo-sync-*.timer",
                         "buzz-agent-join.timer",
+                        "buzz-agent-recovery.timer",
                         "buzz-local-*.timer",
                     ],
                     env=child_env,
@@ -2902,11 +3096,13 @@ class Auditor:
                         "buzz-feishu-*.service",
                         "gitlab-todo-sync-*.service",
                         "buzz-agent-join.service",
+                        "buzz-agent-recovery.service",
                         "buzz-local-*.timer",
                         "gitlab-buzz-sync-*.timer",
                         "buzz-feishu-*.timer",
                         "gitlab-todo-sync-*.timer",
                         "buzz-agent-join.timer",
+                        "buzz-agent-recovery.timer",
                     ],
                     env=child_env,
                     timeout=30,
@@ -2983,7 +3179,7 @@ class Auditor:
             self.unknown("inventory", "transient_systemd", "transient_inventory_unreadable")
             return []
         candidates.sort()
-        patterns = (AGENT_UNIT, SYNC_UNIT, FEISHU_UNIT, TODO_UNIT, JOIN_UNIT)
+        patterns = (AGENT_UNIT, SYNC_UNIT, FEISHU_UNIT, TODO_UNIT, JOIN_UNIT, RECOVERY_UNIT)
         matches = []
         for path in candidates:
             service_name = (
@@ -3046,6 +3242,7 @@ class Auditor:
         feishu: list[tuple[Path, str]] = []
         todo: list[tuple[Path, str]] = []
         joins: list[tuple[Path, str]] = []
+        recoveries: list[tuple[Path, str]] = []
         for unit in units:
             for pattern, target in (
                 (AGENT_UNIT, agents),
@@ -3053,6 +3250,7 @@ class Auditor:
                 (FEISHU_UNIT, feishu),
                 (TODO_UNIT, todo),
                 (JOIN_UNIT, joins),
+                (RECOVERY_UNIT, recoveries),
             ):
                 match = pattern.fullmatch(unit.name)
                 if match:
@@ -3068,7 +3266,7 @@ class Auditor:
                     "inventory", f"timer:{timer.name}", "unexpected_agent_timer"
                 )
                 continue
-            if any(pattern.fullmatch(service_name) for pattern in (SYNC_UNIT, FEISHU_UNIT, TODO_UNIT, JOIN_UNIT)):
+            if any(pattern.fullmatch(service_name) for pattern in (SYNC_UNIT, FEISHU_UNIT, TODO_UNIT, JOIN_UNIT, RECOVERY_UNIT)):
                 persistent_timer_names.append(timer.name)
                 if service_name not in service_names:
                     self.unknown("inventory", f"timer:{timer.name}", "orphan_timer_without_service")
@@ -3083,6 +3281,7 @@ class Auditor:
             self.audit_agent(unit, agent)
         if agents:
             self.audit_agent_launcher()
+            self.audit_recovery(agents)
         for unit, name in sync:
             self.audit_sync(unit, name)
         if sync:
@@ -3163,6 +3362,7 @@ class Auditor:
                 "feishu_services": len(feishu),
                 "todo_services": len(todo),
                 "join_services": len(joins),
+                "recovery_services": len(recoveries),
                 "harnesses": len(self.harnesses),
                 "buzz_cli_binaries": len(self.cli_paths),
                 "transient_services": len(transient),
@@ -3175,6 +3375,7 @@ class Auditor:
                 "feishu_services": sorted(unit.name for unit, _name in feishu),
                 "todo_services": sorted(unit.name for unit, _name in todo),
                 "join_services": sorted(unit.name for unit, _name in joins),
+                "recovery_services": sorted(unit.name for unit, _name in recoveries),
                 "persistent_timers": sorted(persistent_timer_names),
                 "harnesses": sorted(
                     self.public_harness_identity(kind, value)

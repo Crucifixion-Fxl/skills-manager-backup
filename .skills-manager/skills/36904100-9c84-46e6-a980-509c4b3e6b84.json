@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "36904100-9c84-46e6-a980-509c4b3e6b84",
+  "path": "stripe",
+  "path_key": "stripe",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/experimentation/stripe",
+    "branch": null
+  }
+}

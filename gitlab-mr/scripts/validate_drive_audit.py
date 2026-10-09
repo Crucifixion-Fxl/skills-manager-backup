@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # /// script
 # requires-python = ">=3.11"
+# dependencies = ["pyyaml>=6.0"]
 # ///
 """机械校验 gitlab-mr Auditor 的结构化完成证据。"""
 
@@ -15,12 +16,13 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).parents[1] / "lib"))
 
+from production_overlay_audit import validate_non_promotion_overlay_audit
+from release_branch_audit import validate_branch_acceptance
 from release_drive_validation import cleanup_job_binding_matches
 
 
 class AuditError(ValueError):
     """Auditor 证据不完整或与当前 state 不一致。"""
-
 
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(
@@ -31,7 +33,6 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--json", action="store_true", dest="as_json")
     return result
 
-
 def load_object(path: Path, label: str) -> dict[str, Any]:
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
@@ -40,7 +41,6 @@ def load_object(path: Path, label: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise AuditError(f"{label} must be a JSON object")
     return value
-
 
 def require_text(value: Any, label: str) -> str:
     if not isinstance(value, str) or not value.strip():
@@ -131,6 +131,10 @@ def validate_release_evidence(
             raise AuditError("production promotion requires code_parity_status=pass")
         if release.get("parity_report_sha256") != promotion.get("parity_report_sha256"):
             raise AuditError("Auditor parity report does not match Driver state")
+        if promotion.get("parity_mode") == "branch-promotion":
+            validate_branch_acceptance(
+                promotion, release, validate_observation, parse_raw_json, AuditError
+            )
         expected_gates = {
             gate["name"]: gate
             for gate in promotion.get("external_gates", [])
@@ -158,18 +162,17 @@ def validate_release_evidence(
                 expected_contains=gate.get("expected_contains", []),
             )
     elif mode == "production-non-promotion":
-        evidence_url = promotion.get("staging_flow_evidence")
-        validate_observation(
-            release.get("workflow_evidence"),
-            expected_name="staging-flow-not-applicable",
-            expected_url=evidence_url,
+        validate_non_promotion_overlay_audit(
+            state, release, promotion, validate_observation, require_text, AuditError
         )
     elif mode == "staging-writer-cleanup":
         cleanup = state.get("cleanup")
         if not isinstance(cleanup, dict) or cleanup.get("enabled") is not True:
             raise AuditError("staging writer cleanup is missing attested state")
         if not cleanup_job_binding_matches(cleanup):
-            raise AuditError("cleanup accepted jobs do not bind the staging contract gate")
+            raise AuditError(
+                "cleanup accepted jobs do not bind the staging contract gate"
+            )
         contract = cleanup.get("contract")
         if not isinstance(contract, dict) or release.get(
             "cleanup_contract_sha256"
@@ -178,9 +181,7 @@ def validate_release_evidence(
         evidence = release.get("cleanup_evidence")
         if not isinstance(evidence, list):
             raise AuditError("release.cleanup_evidence must be a list")
-        actual = {
-            item.get("name"): item for item in evidence if isinstance(item, dict)
-        }
+        actual = {item.get("name"): item for item in evidence if isinstance(item, dict)}
         expected = {
             "accepted-staging-pipeline": {
                 "url": cleanup.get("accepted_pipeline_api_url"),
@@ -199,9 +200,7 @@ def validate_release_evidence(
             },
         }
         if len(actual) != len(evidence) or set(actual) != set(expected):
-            raise AuditError(
-                "cleanup evidence does not match required observations"
-            )
+            raise AuditError("cleanup evidence does not match required observations")
         for name, requirement in expected.items():
             observation = actual[name]
             if observation.get("observed_value") != requirement["observed"]:

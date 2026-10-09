@@ -38,7 +38,7 @@ Code Review 与 Pipeline 是并行且独立的两条链路：
 ## 执行流程
 
 ```
-Step 0: 变更范围获取 → 拿到 diff，按文件类型分类
+Step 0: Issue 关联门禁 + 变更范围获取 → 验证 canonical Issue，再拿到 diff 并按文件类型分类
 Step 1: 文档规范检查 → 按 /architect 格式规则逐项检查（激活角色并行审查，优先独立 sub-agent）
 Step 2: 内容质量审查 → 读懂内容，按 /architect 质量标准评判（激活角色并行审查，优先独立 sub-agent）
 Step 3: 端到端一致性 → 追溯 US ↔ 设计 ↔ 代码 ↔ 测试 ↔ 可观测性 ↔ catalog（含 catalog-info / API 契约 / TechDocs / ADR / 跨仓引用；激活角色并行审查，优先独立 sub-agent）
@@ -52,12 +52,23 @@ Step 5: 总结与评分 → 汇总各步结果，红线判定（confirmed/uncert
 
 ### Step 0: 变更范围获取
 
+#### Step 0.0：Canonical Issue 关联门禁（确定性红线）
+
+绑定与跨仓 Work Item 语义统一遵循 [`gitlab-issue-sop` 生命周期契约](../../collaboration/gitlab-issue-sop/references/lifecycle-binding.md)。在读取和评价 diff 前：
+
+1. CI 场景读取可信 adapter 生成的 `meta.root_issue_binding`、`meta.work_item_binding` 与 `meta.issue_binding_evidence`；本地 commit/未提交变更要求调用方提供完整 Issue URL，再实时读取 GitLab。
+2. 确认 binding contract version、项目/IID 唯一、Issue 为 `opened`、至少一位 assignee、Work Item 属于当前仓，并且当前 MR↔Work Item、Root↔Work Item 关系均已由 GitLab 服务端验证。
+3. MR 描述中的 `Work Item:` / `Root Issue:` 仅是候选；分支名、commit message、裸 `#IID`、`Closes` 文本或客户端 JSON 不能单独放行。
+4. 缺失、不可读、关闭、无 assignee、项目不匹配、关系未验证或 snapshot 字段不完整时，停止审查并返回 `ISSUE_LINK_REQUIRED` 或 `ISSUE_BINDING_UNVERIFIED`。不得输出通过/有条件通过、评分或伪造后续结果。
+
+该门禁与 aggregate Pipeline 状态独立。Issue 存在不代表代码正确；门禁通过后仍完整执行 Step 0–5。
+
 #### Step 0 数据获取策略
 
 **优先级 1 — 预处理数据**（CI 场景）：
 检查环境变量 `$REVIEW_DATA_DIR` 是否存在且目录下有 `meta.json`。
 - 存在：使用 Read 工具按以下顺序读取，**跳过 API 调用**：
-  1. `$REVIEW_DATA_DIR/meta.json` — 先读取 schema、scope/content 完整性和 manifest 分片状态
+  1. `$REVIEW_DATA_DIR/meta.json` — 先验证 Issue bindings，再读取 schema、scope/content 完整性和 manifest 分片状态
   2. `$REVIEW_DATA_DIR/file-list.md` — 小 MR 为完整文件索引；大 MR 为一级目录计数和 `file-lists/*.md` 分片入口
   3. `meta.manifest.partitioned=true` 时，根据目录计数读取所有与本次激活审查维度相关的 `$REVIEW_DATA_DIR/file-lists/*.md` 分片；每片最多 200 条，禁止只读根索引后假设分片内容不存在
   4. 根据索引/分片信息，按下方分类规则确定每个文件的审查维度和优先级
@@ -90,7 +101,7 @@ Step 5: 总结与评分 → 汇总各步结果，红线判定（confirmed/uncert
 
 **固件基线的取证范围**：基线检查包含未修改的安全实现，但取证方式受执行环境约束，保留 review-data-contract 的证据要求：
 - **已授权本地审查**：Step 0 的单次 diff 获取和异常跳过规则不禁止按固定目标 SHA/profile 只读补齐必查项所需的未修改源码、依赖、BSP、产线与发布配置。
-- **受限 CI 审查**：优先遵守 [`references/ci-integration.md`](references/ci-integration.md)，仅使用 review-data 和其中允许的受控 helper。diff helper 只能物化清单内 diff，路径 helper 只能证明路径存在性，均不能取得未修改文件全文。不得另用 Git/API/网络、业务目录 Read/Glob 或自编脚本补齐；CI 预处理数据缺失也不能转入本地取数方式。
+- **受限 CI 审查**：优先遵守 [`references/ci-integration.md`](references/ci-integration.md)，仅使用 review-data 和其中允许的受控 helper。diff helper 只物化清单内 diff；路径 helper 只证明存在性。若详细行为核验确需读取未改动的直接依赖源码，可对已由 diff 确认的具体路径调用受限的 `read-source-file.sh`，再用 Read 读取其固定 head 产物；这不是搜索仓库、读取配置或证明本 MR 修改了该文件的权限。不得另用 Git/API/网络、业务目录 Read/Glob 或自编脚本补齐；CI 预处理数据缺失也不能转入本地取数方式。
 - **材料不足**：逐项保留待核验及缺少的证据，产品基线写未完成核验；继续报告已有证据支持的问题，不将完整变更清单、路径存在或取数失败解释为控制已实现、缺失或通过。本规则不启动 codebase-vulnerability-analysis 的 full_audit，不扩大其他专项范围。
 
 获取 diff 后，先应用 review-data-contract，再按文件类型分类，并结合已确认的固件产品身份激活专项——**本表是「变更/产品类型 → 走哪些 Step + 激活哪些角色/专项」的唯一 SSOT**；角色身份与关注点定义见 [`references/review-roles.md`](references/review-roles.md)：
@@ -113,6 +124,14 @@ Step 5: 总结与评分 → 汇总各步结果，红线判定（confirmed/uncert
 | 固件产品的代码、依赖、构建、版本或发布配置提交 | 根据用户任务、产品配置和构建入口识别固件产品；本次可只改业务逻辑，安全文件无需出现在 diff | 必含设备/固件安全专项：检查目标版本产品基线 B01–B12/F01–F04，报告既有缺口；diff 用于增量归因，不限定此基线检查范围 |
 
 > **跳过规则**：无对应文件/产品类型则该角色/专项不激活；纯说明文档变更跳过实现类角色（安全/性能/质量/生产事故/app UI）。已确认的固件产品代码/构建等提交不因 diff 无安全关键词而跳过基线。**执行方式：优先独立 sub-agent**——能可靠 spawn 则各激活角色委派独立 sub-agent 并行（首选，视角隔离去偏）；引擎不支持时降级单 agent 一遍覆盖这些视角（如实记录、不编造，见「多角色评审流程」节）。
+
+#### Step 0.3：大文件与制品存储审查
+
+本次提交历史引入二进制、制品、运行数据/缓存（即使最终 diff 已删除），或 `.gitattributes`、制品依赖引用变化时，读取
+[统一存储规则与检查方法](../../delivery/gitlab-mr/reference/large-file-storage.md)：源资产走 LFS，编译制品走 `addx:addx-nexus-usage`；按项目阈值和例外检查实际 blob、有效指针及新增历史对象。
+此项包含测试资产，不因实现类角色未激活而跳过；已授权本地审查只读取相关 Git 对象，不全仓扫描旧历史、不写 memory 或上传制品。
+受限 CI/远程材料未提供实际大小、pointer 或历史对象证据时遵循原取数限制，标记待核验和证据缺口；不能凭扩展名、binary diff 或 `filter=lfs` 断言违规或通过，不能擅自扩大 C1 命令层阻断范围。
+`gitlab-mr` / `code-submit` 负责在 push 前完成对象核验；本次违规给出路径、大小、分类与修复建议，存量问题只登记。
 
 #### Step 0.4：行为覆盖判定
 
@@ -148,6 +167,10 @@ Step 5: 总结与评分 → 汇总各步结果，红线判定（confirmed/uncert
 4. **无法判定**：配置缺失/无法读取/格式异常，或项目身份无法解析时，不得猜测命中；C1 发现降为 ⚠️，并在结果中注明“C1 中央策略未解析，未作为红线”。配置仓自身由 schema + CI contract 阻止无效配置进入 main。
 5. **证据输出**：C1 子表必须写明 canonical project path（若无法解析则写 `unknown`）、`policy=block|warning` 以及匹配依据。不得只凭发现中文就直接打 🔴。
 
+#### Step 0.7：PRD → observability → 埋点
+
+MR 用 `Closes #N` 或 `Relates to #N` 关联 `type::feature`，或 diff 交付了应当埋点的用户可见产品行为时，读取 [`references/prd-observability-tracking-review.md`](references/prd-observability-tracking-review.md)，从该 issue 的 PRD 核对 observability，再核对埋点实现。`type::bug`、没有新用户可见能力的技术优化、以及纯 skill / 文档 / CI 改动，按该文件写一行跳过。
+
 ---
 
 ### Step 1: 文档规范检查
@@ -158,7 +181,7 @@ Step 5: 总结与评分 → 汇总各步结果，红线判定（confirmed/uncert
 
 | 规则 | 来源 |
 |:-----|:-----|
-| 单文件 ≤ 600 行，超过必须拆分（`docs/plans/` 下的方案/计划文档豁免，允许长篇幅） | /architect 核心原则 4 |
+| Markdown 单文件 ≤ 600 行，超过必须拆分（`docs/plans/` 下的方案/计划文档豁免，允许长篇幅）；**HTML 文档不设行数限制**（/architect：HTML 不为压行数牺牲清晰度，靠大纲、导航、分区和稳定锚点保证可读），不要因为行数给 HTML 报 🔴 | /architect 核心原则 4 |
 | 术语与 `domain-model.md` 一致 | /architect 核心原则 5 |
 | US 不含技术实现细节（不写类名、API 路径、DB 字段） | /architect Step 1 |
 | ADR 包含完整推理链（Context → Options → Trade-off → Decision → Consequences） | /architect Step 2 |
@@ -177,7 +200,7 @@ Step 5: 总结与评分 → 汇总各步结果，红线判定（confirmed/uncert
 读懂变更内容后，按 `/architect` 定义的标准评判质量。Review 不定义标准，只执行评判。
 
 **生产代码变更的硬性要求**：只要 diff 涉及功能代码，Step 2 必须先做实现风险审查，不能只查文档一致性、契约漂移或测试覆盖。
-公司安全合规规则以 [`../security-compliance-review/SKILL.md`](../security-compliance-review/SKILL.md) + [`../security-compliance-review/references/REFERENCE.md`](../security-compliance-review/references/REFERENCE.md) 为 SSOT；跨真实信任边界的代码漏洞机理与攻击类以 [`../codebase-vulnerability-analysis/SKILL.md`](../codebase-vulnerability-analysis/SKILL.md) 为 SSOT。
+公司安全合规规则以 [`../security-compliance-review/SKILL.md`](../../security/security-compliance-review/SKILL.md) + [`../security-compliance-review/references/REFERENCE.md`](../../security/security-compliance-review/references/REFERENCE.md) 为 SSOT；跨真实信任边界的代码漏洞机理与攻击类以 [`../codebase-vulnerability-analysis/SKILL.md`](../../security/codebase-vulnerability-analysis/SKILL.md) 为 SSOT。
 本 skill 负责日常 MR 的增量范围、第一道门禁、专项触发和最终结论。至少覆盖：
 
 **Finding 证据门槛（含 P2）**：必须证明实现事实，以及该事实构成问题所需的契约/业务不变量。
@@ -234,7 +257,7 @@ Step 5: 总结与评分 → 汇总各步结果，红线判定（confirmed/uncert
 
 ##### 设备/固件安全专项升级触发条件（调 `firmware-security-compliance`）
 
-> 嵌入式设备的密码算法选型、密钥管理、通信链路、OTA 与安全启动、本地存储、**设备本地接口暴露面与鉴权**、IoT 合规（EN 18031 / ETSI EN 303 645 / NIST / Matter）以 [`../firmware-security-compliance/SKILL.md`](../firmware-security-compliance/SKILL.md) + 其 `references/` 为 **SSOT**。code-review **不自行枚举**这些规则，命中触发时按该 skill 的安全域（S1–S10）与红线（RL-01–RL-15）审查，发现标注对应 ID（如 `[fw RL-05]`、`[fw S10]`）。
+> 嵌入式设备的密码算法选型、密钥管理、通信链路、OTA 与安全启动、本地存储、**设备本地接口暴露面与鉴权**、IoT 合规（EN 18031 / ETSI EN 303 645 / NIST / Matter）以 [`../../hardware/firmware-security-compliance/SKILL.md`](../../hardware/firmware-security-compliance/SKILL.md) + 其 `references/` 为 **SSOT**。code-review **不自行枚举**这些规则，命中触发时按该 skill 的安全域（S1–S10）与红线（RL-01–RL-15）审查，发现标注对应 ID（如 `[fw RL-05]`、`[fw S10]`）。
 
 **前置依赖**：运行环境里若没有 `firmware-security-compliance` skill，继续常规安全审查，在第 1 段注明缺失，并将产品安全基线标为未完成；不能给出产品基线通过结论，也不能进入阻断整轮审查的平台追问。
 
@@ -272,10 +295,10 @@ Step 5: 总结与评分 → 汇总各步结果，红线判定（confirmed/uncert
 
 ##### ADR 规范一致性（diff 涉及 `docs/architecture/**/adrs/*.md` 时必查）
 
-> 标准来源：[`../service-catalog-onboarding/SKILL.md`](../service-catalog-onboarding/SKILL.md) §4.1「ADR 完整规范」 + [`../architect/references/adr-format.md`](../architect/references/adr-format.md)。每条规则单独标注 🔴（阻断）/ ⚠️（警告但不阻断）：
+> 标准来源：[`../../collaboration/service-catalog-onboarding/SKILL.md`](../../development/service-catalog-onboarding/SKILL.md) §4.1「ADR 完整规范」 + [`../architect/references/adr-format.md`](../../development/architect/references/adr-format.md)。每条规则单独标注 🔴（阻断）/ ⚠️（警告但不阻断）：
 
 1. 🔴 **文件命名**：必须 `NNNN-<kebab-slug>.md`（如 `0003-engagement-routing-vs-routing-service.md`），不允许 `adr-3-foo.md` / `ADR_003_Foo.md` / 仅 slug 无序号；
-2. 🔴 **YAML frontmatter 必填字段**：`status` / `date` / `deciders` / `supersedes` / `superseded-by` —— 缺一不可（即便是空 `[]` 也要写出来）；`status ∈ {Proposed, Accepted, Rejected, Deprecated, Superseded, Pending}`（六个值与 [`../architect/references/adr-format.md`](../architect/references/adr-format.md) 第 40 行 SSOT 对齐；`Pending` 表示信息不足、Decision Outcome 节列出待回答问题；`Rejected` 表示评审后否决，保留作决策史）；
+2. 🔴 **YAML frontmatter 必填字段**：`status` / `date` / `deciders` / `supersedes` / `superseded-by` —— 缺一不可（即便是空 `[]` 也要写出来）；`status ∈ {Proposed, Accepted, Rejected, Deprecated, Superseded, Pending}`（六个值与 [`../architect/references/adr-format.md`](../../development/architect/references/adr-format.md) 第 40 行 SSOT 对齐；`Pending` 表示信息不足、Decision Outcome 节列出待回答问题；`Rejected` 表示评审后否决，保留作决策史）；
 3. ⚠️ **5 个 H2 sections（顺序建议）**：`## Context and Problem Statement` / `## Considered Options` / `## Trade-off Analysis` / `## Decision Outcome` / `## Consequences`。新写 ADR 推荐齐全 + 顺序一致；**已存在的 ADR**（如 promoted-from-tech-design、或历史 ADR 重整理）只要求 5 段都存在即可，顺序不必严格 / 中间允许 H3 子节嵌套。**Trade-off Analysis 缺失** = ⚠️ 提示（不阻断 MR），允许在 PR 评论里指出可补，但不强制必须当前 MR 修；
 4. 🔴 **禁止 aggregator 文件**：任何新增 `adrs.md` / `architecture-decisions.md` 这类单文件多 ADR 的形态 = 🔴。Backstage `@backstage/plugin-adr` 一文件渲染一条 ADR，aggregator 会让门户 ADR 页空白或错乱。**单 ADR 一文件**；
 5. 🔴 **Supersede 不删旧**：超越旧 ADR 时**不要 `git rm` 旧文件**；新 ADR frontmatter `supersedes: [<old-filename-no-ext>]`，旧 ADR frontmatter 改 `status: Superseded` + `superseded-by: [<new-filename-no-ext>]`。删除旧 ADR = 🔴（丢失决策历史）；
@@ -366,6 +389,7 @@ Step 5: 总结与评分 → 汇总各步结果，红线判定（confirmed/uncert
   **反例 A**（必须卡住）：MR 把 `event_play_clicked` bump 到 v3 并合并代码，但埋点平台 `event_play_clicked` 仍只到 v2 published / v3 仍是 draft。
   **反例 B**（必须卡住，常见漏审）：MR 没改 yaml，只在业务代码新增 `track("event_share_clicked", ...)` 并把 `TRACKING_VERSION` 升到 1-0-4 — 因为没动 yaml 就跳过校验是错的，要按"代码 diff 来源"提取并校验。
   **正例**（放行）：MR 变更的所有点位 + 版本均在埋点平台返回 `status=published`。
+- **PRD 功能是否被埋点实现**（`[PRD-OBS-TRACK]`）：上一条用 `tracker-publish-check.js` 检查 diff 里已改点位是否 `releaseStatus=3`。本条从 MR 关联 issue 的 PRD 出发，核对 observability 是否覆盖这次要交付的功能，再核对代码调用点。步骤、跳过条件和审查日见 [`references/prd-observability-tracking-review.md`](references/prd-observability-tracking-review.md)。
 - Prometheus 指标是否有对应的后端代码（至少标注实现计划）
 - **Observability 本地契约**（新增条）：每个 `observability.md` 中定义的 alert/dashboard PromQL 必须有对应的 `e2e/observability-local/verify.sh` 断言。未覆盖 = 🔴 不通过。参考 `prom-grafana-dev` skill。
 
@@ -485,7 +509,7 @@ Step 4 的最小上下文硬约束保持 fail-closed，不能假装已经证明�
 
 ##### A 类 API 契约必须跟实现一致 —— hard rule (trust the code)
 
-> 标准来源：[`../service-catalog-onboarding/SKILL.md`](../service-catalog-onboarding/SKILL.md) §5「A 类 API 契约必须跟实现一致」。**diff 同时涉及路由代码 + `api/*.openapi.yaml` / `*.proto` / `*.api` 时必查**；diff 只涉及路由代码（没碰契约）也要查 —— 漏改契约才是最常见的漂移。
+> 标准来源：[`../../collaboration/service-catalog-onboarding/SKILL.md`](../../development/service-catalog-onboarding/SKILL.md) §5「A 类 API 契约必须跟实现一致」。**diff 同时涉及路由代码 + `api/*.openapi.yaml` / `*.proto` / `*.api` 时必查**；diff 只涉及路由代码（没碰契约）也要查 —— 漏改契约才是最常见的漂移。
 
 1. **路由 drift（METHOD + PATH 集合对账）**：改了 `routes.go` / FastAPI app / `.api` 文件 → 必须同步改契约文件。Reviewer 必须**实际列出**代码侧路由集合（如 `grep -E 'GET|POST|PUT|DELETE|PATCH' internal/handler/routes.go`）和契约侧 `paths:` 集合，**取差集**：
    - 代码有 / 契约无 → 🔴（undocumented endpoint）
@@ -583,7 +607,7 @@ Step 4 的最小上下文硬约束保持 fail-closed，不能假装已经证明�
 
 #### 部署配置（k8s / ArgoCD Application / Crossplane）— A4x 部署合规专项（调 `cicd-developer`）
 
-> A4x 的 K8s/ArgoCD/Crossplane 部署规约（镜像路径三方一致、Image Updater 自助契约、ExternalSecret/Vault 路径、`kind: Rollout`、Crossplane providerConfig·identifier·external-name、仓库边界、Kyverno baseline 等）以 [`../cicd-developer/SKILL.md`](../cicd-developer/SKILL.md) +  [`../cicd-developer/references/data/hard-rules.yaml`](../cicd-developer/references/data/hard-rules.yaml) 为 **SSOT**。code-review **不自行枚举**这些规则，命中触发时交给 `cicd-developer` 的 **Review/Scan 模式** 扫描。
+> A4x 的 K8s/ArgoCD/Crossplane 部署规约（镜像路径三方一致、Image Updater 自助契约、ExternalSecret/Vault 路径、`kind: Rollout`、Crossplane providerConfig·identifier·external-name、仓库边界、Kyverno baseline 等）以 [`../../delivery/cicd-developer/SKILL.md`](../../delivery/cicd-developer/SKILL.md) +  [`../../delivery/cicd-developer/references/data/hard-rules.yaml`](../../delivery/cicd-developer/references/data/hard-rules.yaml) 为 **SSOT**。code-review **不自行枚举**这些规则，命中触发时交给 `cicd-developer` 的 **Review/Scan 模式** 扫描。
 
 **前置依赖**：本专项依赖 cicd-developer 的 **Review/Scan 模式**。若运行环境里的 cicd-developer 尚无该模式（仍只有 Build/Troubleshoot 两模式、`/cicd-developer` 无法进入 Review），**跳过本专项**（按常规维度审查即可），**绝不能**让调用 fall through 进 cicd-developer 的部署/访谈流程。
 
@@ -670,6 +694,17 @@ Observability (observability.md + 埋点/指标代码)
 | 代码 ↔ catalog-info.yaml | 代码实现与目录配置无漂移 | 见下方「代码 ↔ catalog-info.yaml 漂移检查」 |
 | 代码 → 测试 | 已实现功能有测试覆盖 | handler 至少 L2；L3 按 `l3-release-gate.md` 先定受影响范围与证据复用，再区分 pre-merge-runnable / staging-dependent / release context；核心流程有边界覆盖 |
 | 代码 → 可观测 | 已实现功能可观测 | 核心流程有埋点设计；错误路径有日志 |
+| Issue PRD → observability → 埋点 | `[PRD-OBS-TRACK]` | 本 MR 要交付的 PRD 功能在 observability 里有决策问题或必要事件，且代码有 `file:line` 调用点。级别按 [`prd-observability-tracking-review.md`](references/prd-observability-tracking-review.md) 的审查日 |
+
+同一 MR 交付用户可见功能时，再核这条链。它不替换上面的 US 追溯，步骤以该参考为准：
+
+```
+Issue 上读到的 PRD
+  ↓ 决策问题和必要事件是否覆盖本次交付的功能，并引用同一份 PRD？
+Observability 设计（issue comment 回链的方案）
+  ↓ 每个必要事件是否有 SDK 调用点 file:line？
+埋点实现
+```
 
 #### 文档 ↔ 代码双向一致性门禁
 
@@ -705,7 +740,7 @@ Observability (observability.md + 埋点/指标代码)
 #### Step 3.X — catalog ↔ code 一致性（diff 涉及 `catalog-info.yaml` / `api/*` / `docs/` / `mkdocs.yml` / 跨服务调用 / 新依赖 时必查）
 
 > 配合 Step 3 主表的「代码 ↔ `catalog-info.yaml` 漂移检查」一起用。Step 3 主表查的是 `providesApis`/`dependsOn`/`spec.type` 那条横线，本节是把它做细 —— catalog-info.yaml ↔ code、TechDocs Approach B 深链、跨仓引用 TODO 三个维度的对账清单。
-> 标准来源：[`../service-catalog-onboarding/SKILL.md`](../service-catalog-onboarding/SKILL.md) §3.5（docs/ 镜像 catalog）+ §4（TechDocs Approach A/B） + §5（API 契约一致）。
+> 标准来源：[`../../collaboration/service-catalog-onboarding/SKILL.md`](../../development/service-catalog-onboarding/SKILL.md) §3.5（docs/ 镜像 catalog）+ §4（TechDocs Approach A/B） + §5（API 契约一致）。
 
 ##### A. catalog-info.yaml ↔ code 同步
 
@@ -752,6 +787,8 @@ Observability (observability.md + 埋点/指标代码)
 | **研判型红线** | 鉴权/越权/租户隔离绕过、SQL/命令/路径/SSRF/XSS/反序列化注入、并发竞态/事务/幂等、性能可用性、回归、批量导出风险、migration/兼容性风险、L3 适用范围与有效证据缺口（按专项复核规则） | 需结合代码事实**研判**，存在误报空间 | **是，进本轮证伪** |
 
 finding 复核输入 = Step 1-3 汇总去重后的**研判型红线 + P1 + P2**。确定性红线直接进 Step 5 红线判定，不经 finding 复核；这不豁免下方 4f 的行为覆盖核验。
+
+`[PRD-OBS-TRACK]` 在 2026-11-05 之前不是上表中的确定性红线，不进本轮证伪。自 2026-11-05 起，同一缺口是确定性红线：命中即阻断，不进本轮证伪，也不享受 pre-existing 豁免。宽限期内的 ⚠️ 只进建议改进。日期以 [`prd-observability-tracking-review.md`](references/prd-observability-tracking-review.md) 的审查日为准。
 
 **L3 专项复核**：按 `l3-release-gate.md` 评估影响范围、提交材料和执行限制说明。错误适用性/缺失判断经事实证伪后可剔除。平台未取证或有具体解释的本地未执行不构成红线或审查未完成；相关已知失败、具体缺陷和无验证也无解释的必需缺口按事实处理。未扩大的历史欠债不阻断。
 
@@ -880,6 +917,7 @@ severity 改判为 P1/P2，再按下表的 P1/P2 列处理；不得因 Step 1-3 
 - API/event/proto/schema/config 变更破坏旧客户端、旧 worker、旧消费者或旧缓存数据兼容
 - L3 验证风险（见 `references/l3-release-gate.md`）：仅对确认必需的受影响链路，相关测试明确失败，或既无验证也无执行限制说明且具体影响链成立时阻断。MR 描述/附件可作为证据；具体本地执行限制记 `L3_EXECUTION_EXPLAINED`，可完成评审。平台取证缺口、release 身份、无关端报告、SHA 变化或未扩大风险的旧债均不构成红线；部署后验收单列 pending。
 - 已实现功能无可观测性（无埋点、无看板、无 A/B）— 视同故障，没有度量就不算交付
+- `[PRD-OBS-TRACK]`（见 `references/prd-observability-tracking-review.md`）：关联 issue 的 PRD 功能没有被 observability 覆盖，或其中的必要事件没有代码调用点 `file:line`。审查日 2026-10-04 至 2026-11-04（含）只记 ⚠️，写入建议改进，不得因此改「是否应通过」，也不写入红线问题。自 2026-11-05 起同一缺口是确定性红线。本条不替代上一条「已实现功能无可观测性」的发布状态检查，也不把 tracking-lifecycle M2 的 AI `covered` 当作通过。
 - US 混入技术实现细节（类名、API 路径、数据库字段）
 - 代码/配置中出现明文 Secrets
 - i18n 资源文件占位符不一致（M1 / M1.b）— 运行时崩溃或显示异常；M1.b：en 基准切换编号 ↔ 无编号占位符语法但未同步重写目标语种译文（旧调序变乱序 bug）
@@ -911,7 +949,7 @@ severity 改判为 P1/P2，再按下表的 P1/P2 列处理；不得因 Step 1-3 
 
 #### 建议改进项（不阻断）
 
-- 文档超 600 行未拆分（`docs/plans/` 下豁免）
+- Markdown 文档超 600 行未拆分（`docs/plans/` 下豁免；HTML 不限行数）
 - domain-model.md 未同步新术语
 - ADR 格式不完整（缺 Options 或 Trade-off）
 - 测试覆盖可加强的边界场景
@@ -925,6 +963,7 @@ severity 改判为 P1/P2，再按下表的 P1/P2 列处理；不得因 Step 1-3 
 - **重审收敛**：同一 MR 二次及以后 review，**只报新增的红线 / P1**，已提过的 P2·nit 不重复刷（避免一个小修被反复挑 style）。
 - **优先级**：红线 > P1 > nit；先保证红线/P1 完整，nit 是补充不是主体。
 - **固件基线例外**：逐项状态与尚未闭环的基线缺口不受五条上限、重审只报新增问题的过滤；每次按目标版本更新，可引用仍有效的既有证据/问题号，但不得省略未满足或待核验项。
+- **`[PRD-OBS-TRACK]`**：2026-10-04 至 2026-11-04（含）的这条建议，以及 2026-11-05 起的确定性红线，都不受五条上限和重审过滤。矩阵留在 `### 3`。
 
 ---
 
@@ -1115,7 +1154,7 @@ MR 评论必须严格遵循以下模板输出（**标题必须用 `### N.` 三�
 <!-- 审查的最终结论，按规则逐项列出 -->
 | 规则 | 状态 | 说明 |
 |:-----|:-----|:-----|
-| ≤ 600 行（docs/plans/ 豁免） | ✅/🔴 | 文件名:行数 |
+| Markdown ≤ 600 行（docs/plans/ 豁免；HTML 不限） | ✅/🔴 | 文件名:行数 |
 | domain-model 同步 | ✅/🔴 | 具体缺失项 |
 | US 无技术细节 | ✅/🔴 | 具体文件和行号 |
 | ADR 推理链完整 | ✅/🔴 | 缺失段落 |
@@ -1139,6 +1178,7 @@ MR 评论必须严格遵循以下模板输出（**标题必须用 `### N.` 三�
 - **L3 gate context**: `non-release` / `release` / `unknown`；**L3 gate status**: `passed` / `L3_GATE_DEFERRED_TO_RELEASE` / `L3_REPORT_VERIFIED` / `L3_EXECUTION_EXPLAINED` / `RELEASE_L3_EVIDENCE_MISSING`；附 dependency 与 evidence
 - **L3 affected scope** / **L3 selection reason** / **L3 evidence reuse**: 按 `l3-release-gate.md` 列受影响行为与端、最小充分验证依据及旧报告复用证明；无行为变化一行说明，不要求全端材料
 - **可观测性**：埋点覆盖、漏斗完整性、指标可量化、告警阈值
+- **PRD → observability → 埋点**（`[PRD-OBS-TRACK]`）：矩阵 `| PRD 功能 | observability 决策问题/事件 | 代码实现 file:line | 结论 |`，规则见 `references/prd-observability-tracking-review.md`。审查日 2026-10-04 至 2026-11-04（含）的缺口写入第 5 段建议改进，不得改「是否应通过」；自 2026-11-05 起写入红线问题。跳过只写一行 `[PRD-OBS-TRACK] 跳过：<原因>`。
 - **功能代码 / 部署配置**：安全边界、输入/注入面、敏感数据、数据一致性、并发、性能容量、资源释放、工程规范、类型安全、模块边界、错误处理、事务边界、降级方案、线上事故风险、与架构文档一致性；`k8s/` 新增文件附 cicd-developer Review findings（带文件路径 + 规则号）
 - **代码质量与新增逻辑必要性**（功能代码）：按 `code-structure-design-review.md` 仅在此处汇总一次。无 finding 最多三行；机械改动一行；有 finding 给出比较证据、反例与归因；pending 单列且不计分。
 - **app UI 无障碍 + 可测试性**（diff 涉及 app UI 源文件时）：T 轴（硬卡）+ A 轴（试跑）两张子表，按 `references/app-ui-a11y-testability-review.md` 输出格式；T、A 均无问题时仅一行「N 个 UI 文件，T 轴通过 ✅、A 轴无 ⚠️」
@@ -1156,6 +1196,8 @@ MR 评论必须严格遵循以下模板输出（**标题必须用 `### N.` 三�
 | 变更 | US | 架构设计 | 功能代码 | 测试 | 可观测 | 状态 |
 |:-----|:---|:--------|:--------|:-----|:------|:-----|
 | 具体变更项 | US-XX-NN | doc §N.N | file.go | test.go | obs.md | ✅/⚠️/🔴 |
+
+`[PRD-OBS-TRACK]` 的可观测列与 `### 3` 使用同一条审查日规则：2026-11-04（含）之前写 ⚠️，2026-11-05 起写 🔴。跳过时在说明里写跳过原因。
 
 **行为覆盖与漏报复核**：只摘要核验深度、实际执行方式、补审/未核验项及必要证据。
 详细模式附检查器结果，不在正文重复完整覆盖表/JSON；简要模式不要求 JSON；无行为变化一行依据。

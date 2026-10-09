@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "7e71e6ee-d093-4b93-82f2-5dfb10e98f26",
+  "path": "bazel-remote-cache",
+  "path_key": "bazel-remote-cache",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/delivery/bazel-remote-cache",
+    "branch": null
+  }
+}

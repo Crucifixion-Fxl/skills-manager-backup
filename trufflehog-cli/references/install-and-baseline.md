@@ -26,7 +26,7 @@
 优先使用本 Skill 内置脚本，保证版本与校验规则一致：
 
 - POSIX:
-  `./skills/trufflehog-cli/scripts/install-trufflehog.sh`
+  `./skills/security/trufflehog-cli/scripts/install-trufflehog.sh`
 - PowerShell:
   `.\skills\trufflehog-cli\scripts\install-trufflehog.ps1`
 

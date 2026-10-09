@@ -1,6 +1,6 @@
 # 普通 Desk 提示词片段：GitLab → Buzz 同步说明
 
-按 [ADR-0008](../../../docs/05-adr/0008-run-gitlab-sync-from-owner-systemd-timer.md)，GitLab → Buzz 同步由 owner 的 `systemd --user` timer（`gitlab-buzz-sync-<channel>.timer`，每 300 秒一次）直接运行 `gitlab_buzz_sync_timer.py`，同步路径里没有 LLM。Desk 是普通 Buzz Agent：普通 buzz-acp、普通 claude-agent-acp／codex-acp runtime，和其它角色 Agent 一样配置，不需要 heartbeat、受限 runtime 或专用 exec 规则。
+按 [ADR-0008](../../../../docs/agent-harness/adr/0008-run-gitlab-sync-from-owner-systemd-timer.md)，GitLab → Buzz 同步由 owner 的 `systemd --user` timer（`gitlab-buzz-sync-<channel>.timer`，每 300 秒一次）直接运行 `gitlab_buzz_sync_timer.py`，同步路径里没有 LLM。Desk 是普通 Buzz Agent：普通 buzz-acp、普通 claude-agent-acp／codex-acp runtime，和其它角色 Agent 一样配置，不需要 heartbeat、受限 runtime 或专用 exec 规则。
 
 把下面代码块追加到 Desk 的 owner prompt，改完重启 Desk（不重启会静默跑旧 prompt）。它只让 Desk 能解释同步是怎么来的，**不运行**任何同步脚本。
 

@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "tool": "grafana",
+  "provider": "delegated",
+  "owner": "grafana",
+  "authContract": "SKILL.md",
+  "verification": "source-verified",
+  "runtimeVerification": "pending",
+  "authDiscovery": "references/auth-discovery.json"
+}

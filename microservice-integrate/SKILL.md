@@ -1,6 +1,6 @@
 ---
 name: microservice-integrate
-description: 后端微服务"架构咨询 + 平台接入"双能力。当开发遇到 (1) 架构问题——"我需要 X 能力调哪个服务"、"这服务属于哪一层"、"新建仓应该放哪个 GitLab group"、"跨服务调用走 SDK 还是 REST"、"feature flag/支付/通知/测试用户应该怎么用"——基于本仓 public/dev-standards/architecture/backend-service-architecture.html 给权威答案；或 (2) 已确定要接入某个内部微服务（权益中心 / 个性化引擎 等），根据接入规格 + 当前项目技术栈生成接入代码。触发词："架构"、"分层"、"找哪个服务"、"调谁"、"放哪个 group"、"GitLab group"、"调用规则"、"接入"、"对接"、"integrate"。
+description: 后端微服务"架构咨询 + 平台接入"双能力。当开发遇到 (1) 架构问题——"我需要 X 能力调哪个服务"、"这服务属于哪一层"、"新建仓应该放哪个 GitLab group"、"跨服务调用走 SDK 还是 REST"、"feature flag/支付/通知/测试用户应该怎么用"——基于本仓 docs/development/standards/reference-pages/architecture/backend-service-architecture.html 给权威答案；或 (2) 已确定要接入某个内部微服务（权益中心 / 个性化引擎 等），根据接入规格 + 当前项目技术栈生成接入代码。触发词："架构"、"分层"、"找哪个服务"、"调谁"、"放哪个 group"、"GitLab group"、"调用规则"、"接入"、"对接"、"integrate"。
 ---
 
 # Microservice Integrate — 架构咨询 + 接入引导
@@ -18,12 +18,12 @@ description: 后端微服务"架构咨询 + 平台接入"双能力。当开发�
 
 | 文档 | 用途 |
 |---|---|
-| [`backend-service-architecture.html`（本仓 `public/dev-standards/architecture/`）](../../public/dev-standards/architecture/backend-service-architecture.html) | **服务清单 / 5 层架构 / 调用规则 / GitLab group 命名约定 / 仓库索引** —— 全局架构 SSOT（2026-08-11 从 `engineering/architecture` 仓迁回本仓,HTML 正本;人读版在 [Pages](https://pages.addx.ai/engineering/skills/dev-standards/architecture/backend-service-architecture.html)）|
-| [`docs/architecture/backend-service-tdd-adoption.md`](../../docs/architecture/backend-service-tdd-adoption.md) | TDD 接入 / routing-key / **测试用户与 qatools 协同** |
-| [`docs/architecture/domain-model.md`](../../docs/architecture/domain-model.md) | 业务术语 SSOT |
-| [`docs/architecture/tdd-infra/`](../../docs/architecture/tdd-infra/) | TDD 通用方法论（方案 A/B / partition key / Mixed Workload）|
+| [`backend-service-architecture.html`（本仓 `docs/development/standards/reference-pages/architecture/`）](../../../docs/development/standards/reference-pages/architecture/backend-service-architecture.html) | **服务清单 / 5 层架构 / 调用规则 / GitLab group 命名约定 / 仓库索引** —— 全局架构 SSOT（2026-08-11 从 `engineering/architecture` 仓迁回本仓,HTML 正本;人读版在 [Pages](https://pages.addx.ai/engineering/skills/dev-standards/architecture/backend-service-architecture.html)）|
+| [`docs/development/architecture/backend-service-tdd-adoption.md`](../../../docs/development/architecture/backend-service-tdd-adoption.md) | TDD 接入 / routing-key / **测试用户与 qatools 协同** |
+| [`docs/quality/architecture/domain-model.md`](../../../docs/quality/architecture/domain-model.md) | 业务术语 SSOT |
+| [`docs/architecture/tdd-infra/`](../../../docs/architecture/tdd-infra) | TDD 通用方法论（方案 A/B / partition key / Mixed Workload）|
 
-**铁律**：架构问题不要靠记忆答。**先读上面文档**（全部在本仓,直接 Read——`backend-service-architecture.html` 在 `public/dev-standards/architecture/`,`domain-model.md` / `backend-service-tdd-adoption.md` / `tdd-infra/` 在 `docs/architecture/`），答案要引具体章节（§N.x）和具体服务名。文档未覆盖的场景，明确告知"文档未覆盖"，不编造。
+**铁律**：架构问题不要靠记忆答。**先读上面文档**（全部在本仓,直接 Read——`backend-service-architecture.html` 在 `docs/development/standards/reference-pages/architecture/`,`domain-model.md` / `backend-service-tdd-adoption.md` / `tdd-infra/` 在 `docs/architecture/`），答案要引具体章节（§N.x）和具体服务名。文档未覆盖的场景，明确告知"文档未覆盖"，不编造。
 
 ---
 
@@ -31,7 +31,7 @@ description: 后端微服务"架构咨询 + 平台接入"双能力。当开发�
 
 ### A.1 "我需要 X 能力，应该调哪个服务？"
 
-按能力反查（详细职责见 [架构 §3-§6](../../public/dev-standards/architecture/backend-service-architecture.html)）：
+按能力反查（详细职责见 [架构 §3-§6](../../../docs/development/standards/reference-pages/architecture/backend-service-architecture.html)）：
 
 | 我要做的事 | 找哪个服务 | 在哪一层 |
 |---|---|---|
@@ -63,7 +63,7 @@ description: 后端微服务"架构咨询 + 平台接入"双能力。当开发�
 
 ### A.2 "这个服务属于哪一层？"
 
-5 层结构 → [架构 §1 + §2](../../public/dev-standards/architecture/backend-service-architecture.html)：
+5 层结构 → [架构 §1 + §2](../../../docs/development/standards/reference-pages/architecture/backend-service-architecture.html)：
 
 | 层 | 含义 | 自研? | 行业绑定? | 当前成员 |
 |---|---|---|---|---|
@@ -80,7 +80,7 @@ description: 后端微服务"架构咨询 + 平台接入"双能力。当开发�
 
 ### A.3 "新建一个服务，应该放在哪个 GitLab group？"
 
-目标命名约定（[架构 §1.x GitLab group 命名约定](../../public/dev-standards/architecture/backend-service-architecture.html)）：
+目标命名约定（[架构 §1.x GitLab group 命名约定](../../../docs/development/standards/reference-pages/architecture/backend-service-architecture.html)）：
 
 | 架构层 | 目标 GitLab group |
 |---|---|
@@ -94,7 +94,7 @@ description: 后端微服务"架构咨询 + 平台接入"双能力。当开发�
 
 ### A.4 "我跨服务调用，应该走 SDK 还是 REST？"
 
-[架构 §1 调用规则](../../public/dev-standards/architecture/backend-service-architecture.html)：
+[架构 §1 调用规则](../../../docs/development/standards/reference-pages/architecture/backend-service-architecture.html)：
 
 | 调用方向 | 协议 | 备注 |
 |---|---|---|
@@ -106,15 +106,15 @@ description: 后端微服务"架构咨询 + 平台接入"双能力。当开发�
 
 ### A.5 "Feature Flag / AB 实验应该怎么用？"
 
-**走 Personalization Engine 的 `evalFeature()`**，不直连 GrowthBook。理由 + 落地 → [架构 §5.5 PE](../../public/dev-standards/architecture/backend-service-architecture.html)。
+**走 Personalization Engine 的 `evalFeature()`**，不直连 GrowthBook。理由 + 落地 → [架构 §5.5 PE](../../../docs/development/standards/reference-pages/architecture/backend-service-architecture.html)。
 
 ### A.6 "支付（Stripe / Apple Pay / Airwallex）应该怎么用？"
 
-**走增值订阅 SUB 的 `createOrder` / `checkEntitlement`**，业务方不直连任何支付通道。理由 + 落地 → [架构 §5.7 SUB](../../public/dev-standards/architecture/backend-service-architecture.html)。
+**走增值订阅 SUB 的 `createOrder` / `checkEntitlement`**，业务方不直连任何支付通道。理由 + 落地 → [架构 §5.7 SUB](../../../docs/development/standards/reference-pages/architecture/backend-service-architecture.html)。
 
 ### A.7 "通知（Push / 邮件 / 短信）应该怎么用？"
 
-**走 Novu**（立项中）。业务方调 Novu workflow API，不直连 FCM/APNs/SendGrid。理由 + 落地 → [架构 §6.5 Novu](../../public/dev-standards/architecture/backend-service-architecture.html)。
+**走 Novu**（立项中）。业务方调 Novu workflow API，不直连 FCM/APNs/SendGrid。理由 + 落地 → [架构 §6.5 Novu](../../../docs/development/standards/reference-pages/architecture/backend-service-architecture.html)。
 
 ### A.8 "测试用户怎么造？测试设备怎么 lease？"
 
@@ -127,11 +127,11 @@ description: 后端微服务"架构咨询 + 平台接入"双能力。当开发�
 | 用户数据 reset | qatools `/api/test-users/{id}/reset?scope=...`；**业务测试代码禁止跑 DELETE** |
 | 测试用户 cleanup | **不写 per-test cleanup**——靠 prefix 命名 + 中心化 GC job |
 
-完整策略 + 风险防御 → [TDD adoption §3 测试用户与 partition key 策略](../../docs/architecture/backend-service-tdd-adoption.md)。
+完整策略 + 风险防御 → [TDD adoption §3 测试用户与 partition key 策略](../../../docs/development/architecture/backend-service-tdd-adoption.md)。
 
 ### A.9 "我做的服务以后怎么接 sandbox 测试 (routing-key)？"
 
-每个服务的 routing-key 接入清单 → [TDD adoption §2.2 接入清单（每个服务的具体改造点）](../../docs/architecture/backend-service-tdd-adoption.md)。
+每个服务的 routing-key 接入清单 → [TDD adoption §2.2 接入清单（每个服务的具体改造点）](../../../docs/development/architecture/backend-service-tdd-adoption.md)。
 
 按服务复杂度 3 档：🟢 零改动（OTel 自动）/ 🟡 中（Kafka producer + cron 注入）/ 🔴 大（webhook 反查 + 多通道叠加）。
 
@@ -142,8 +142,8 @@ description: 后端微服务"架构咨询 + 平台接入"双能力。当开发�
 1. **先 grep / Read 架构文档**找答案，不要凭记忆
 2. **答案必须引具体章节 + 服务名**（如"按 §1 调用规则，业务平台之间必须走 SDK"）
 3. **覆盖不全直说**："架构文档未覆盖此场景，建议先去 wiki 找 owner / 在飞书架构群问"，不编造
-4. 如果用户问的是 **routing-key / 测试用户 / qatools**，立刻引到 [TDD adoption 文档](../../docs/architecture/backend-service-tdd-adoption.md)
-5. 如果用户问 **TDD 通用方法（方案 A/B、Mixed Workload、partition key）**，引到 [tdd-infra/service-integration-tdd.md](../../docs/architecture/tdd-infra/service-integration-tdd.md)
+4. 如果用户问的是 **routing-key / 测试用户 / qatools**，立刻引到 [TDD adoption 文档](../../../docs/development/architecture/backend-service-tdd-adoption.md)
+5. 如果用户问 **TDD 通用方法（方案 A/B、Mixed Workload、partition key）**，引到 [tdd-infra/service-integration-tdd.md](../../../docs/development/architecture/tdd-infra/service-integration-tdd.md)
 
 ---
 
@@ -176,12 +176,12 @@ description: 后端微服务"架构咨询 + 平台接入"双能力。当开发�
 
 ### Step 2：读取平台接入规格
 
-读取 `~/.claude/skills/microservice-integrate/references/<platform>.md`。文件不存在 → 告知用户规格未录入，提示可贡献 `references/<platform>.md`。
+读取 `~/.claude/skills/development/microservice-integrate/references/<platform>.md`。文件不存在 → 告知用户规格未录入，提示可贡献 `references/<platform>.md`。
 
 ### Step 3：分析现有接入状态
 
 ```bash
-bash ~/.claude/skills/microservice-integrate/references/verify.sh <platform> <project_root>
+bash ~/.claude/skills/development/microservice-integrate/references/verify.sh <platform> <project_root>
 ```
 
 - 全部 PASS → 已完整接入
@@ -214,7 +214,7 @@ bash ~/.claude/skills/microservice-integrate/references/verify.sh <platform> <pr
 ### Step 6：运行验证脚本（强制，不可跳过）
 
 ```bash
-bash ~/.claude/skills/microservice-integrate/references/verify.sh <platform> <project_root>
+bash ~/.claude/skills/development/microservice-integrate/references/verify.sh <platform> <project_root>
 ```
 
 脚本自动从 `.md` 的 checklist 表格提取 `auto` 验证规则执行 grep 校验。
@@ -253,7 +253,7 @@ bash ~/.claude/skills/microservice-integrate/references/verify.sh <platform> <pr
 
 **用户**："我做新功能要 AB 测试，怎么接？"
 
-✅ 我：先查 [`backend-service-architecture.html` §5.5 PE（本仓 `public/dev-standards/architecture/`）](../../public/dev-standards/architecture/backend-service-architecture.html)。**答**：走 Personalization Engine 的 `evalFeature()` 接口，不直连 GrowthBook。SDK 在 [`services/personalization-engine`](https://gitlab.addx.ai/services/personalization-engine)，gRPC（集群内）/ HTTP（跨集群）协议。理由：换 GrowthBook 时业务无感、统一打点。要接入吗？我可以走 B 模式生成代码（`/microservice-integrate personalization`）。
+✅ 我：先查 [`backend-service-architecture.html` §5.5 PE（本仓 `docs/development/standards/reference-pages/architecture/`）](../../../docs/development/standards/reference-pages/architecture/backend-service-architecture.html)。**答**：走 Personalization Engine 的 `evalFeature()` 接口，不直连 GrowthBook。SDK 在 [`services/personalization-engine`](https://gitlab.addx.ai/services/personalization-engine)，gRPC（集群内）/ HTTP（跨集群）协议。理由：换 GrowthBook 时业务无感、统一打点。要接入吗？我可以走 B 模式生成代码（`/microservice-integrate personalization`）。
 
 ### Good — A 模式（GitLab group 咨询）
 

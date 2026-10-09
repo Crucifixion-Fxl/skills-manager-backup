@@ -31,8 +31,9 @@ CICD 栈采用 **`cicd/base/*` Helm wrapper + 集群 overlay + ArgoCD App of App
 一个仓库可提供多个独立渲染入口，每个 Application 只绑定一个 Project；一个 Project
 可有多个成员。按资源权限职责分组，不按目录名或每个 kind 机械拆分；平台 claim 可按
 已批准合同留 runtime。资源须只有一个 Application 管理，存量拆分先审批 prune/finalizer
-保护、tracking 接管和反向交接。owner 专属 Project 尚属目标态，不能自动新增名称、
-放宽平台 IAM/ProviderConfig 权限或取消审核。原生 AppProject 限制 repo/destination/kind，
+保护、tracking 接管和反向交接。业务 runtime/raw 数据面分别使用共享 `app-runtime` /
+`app-data-plane`；不按业务 owner 新建 Project，不把混合 Application 整体迁入数据面，
+也不放宽平台 IAM/ProviderConfig 权限或取消审核。原生 AppProject 限制 repo/destination/kind，
 精确 path/revision 由 argocd-apps CI 合同补充。详见
 [部署权限事实表](../cicd-developer/references/data/permission-boundaries.yaml)。
 
@@ -167,8 +168,8 @@ Application CRD、controller minor version 或 SSA/CSA 切换时，必须先读
 | 变体 | 适用集群 | 主要差异 |
 |------|---------|---------|
 | `cicd/base/default/` | US/EU/SG EKS、GKE 常规组件 | 上游官方 Helm chart repo 或 vendor chart |
-| `cicd/base/cn/` | CN EKS (`cn-tech-service`, `cn-prod`, `cn-dev`, `cn-staging`) | CN Harbor / AWS China 适配 |
-| `cicd/base/tencent/` | TKE (`tencent-cn-main`) | 腾讯云 CLB / TKE 适配 |
+| `cicd/base/cn/` | 历史 AWS CN EKS 兼容模板（集群已弃用） | 不用于新的 CN 部署 |
+| `cicd/base/tencent/` | 当前三个 CN TKE 集群 | 腾讯云 CLB / TKE 适配；实际 source 可能引用 default/vendor，按 Application 查证 |
 | `cicd/base/gcp/` | GKE 专用差异组件 | GKE/Casdoor/Crossplane 差异，缺什么以目录为准 |
 
 ## 组件总览
@@ -281,15 +282,15 @@ git -C ~/Project/A4x/argocd-apps ls-tree -d --name-only origin/main \
 | EKS_OIDC_ISSUER | EKS OIDC URL | `https://oidc.eks.us-east-1.amazonaws.com/id/...` |
 | VAULT_INTERNAL_ADDR | Vault 内部地址 | `https://vault-us-internal-new.addx.live` |
 | HARBOR_REGISTRY | Harbor 地址 | 优先使用本集群 Harbor；从 `clusters/<cluster>/cicd/*/values-override*.yaml` 或 base-images `.gitlab-ci.yml` 查 |
-| CICD_BASE | base 变体 | `cicd/base/default`、`cicd/base/cn`、`cicd/base/tencent`、`cicd/base/gcp` |
+| CICD_BASE | base 变体 | `cicd/base/default`、`cicd/base/tencent`、`cicd/base/gcp`（以及 Application 实际引用的 vendor） |
 
 ### TKE 额外变量
 
 | 变量 | 说明 | 示例 |
 |------|------|------|
-| TLS_SECRET_NAME | 腾讯云 SSL 证书 Secret | `addx-live-2023-wgyxwfot` |
+| TLS_SECRET_NAME | 目标账号的证书 Secret（若该 controller 配置使用 Secret） | 从该集群 bootstrap/Ingress values 查证；不跨账号复制 |
 | INTERNAL_SUBNET | 内网 CLB 子网 | `subnet-gix3oqcx` |
-| STORAGE_CLASS | 存储类 | `cbs-topo` |
+| STORAGE_CLASS | 目标集群已提供的存储类 | 当前新 staging 使用 `cbs`，tech-service 使用 `cbs-topo`；以该组件 values / live StorageClass 核验 |
 
 ### 区域差异
 
@@ -297,15 +298,16 @@ git -C ~/Project/A4x/argocd-apps ls-tree -d --name-only origin/main \
 |------|-------------|----------------|---------------|--------|
 | US/SG EKS | aws | vault-us-new.addx.live | vault-us-internal-new.addx.live | 本集群 Harbor，如 `harbor-00249-us-tech.addx.live` / `harbor-12571-sg-devops.addx.live` |
 | EU EKS | aws | vault-eu.addx.live | vault-eu-internal.addx.live | 本集群 Harbor，如 `harbor-01084-eu-tech.addx.live` |
-| CN EKS | aws-cn | vault-cn.addx.live | vault-cn-internal.addx.live | 本集群 Harbor + 旧 `registry-harbor-cn.addx.live` 兼容 |
-| TKE | N/A | vault-cn.addx.live | vault-cn-internal.addx.live | `harbor-cn.addx.live` |
 | GKE | GCP | vault-us-new.addx.live | 外部/专用网络路径 | `harbor-a4xt-us-tech.addx.live` / `harbor-a4xp-us-prod.addx.live` |
+| CN prod TKE / 100014919455 | N/A | vault-cn.addx.live | vault-cn-internal.addx.live | `harbor-cn.addx.live` |
+| CN staging TKE / 100052802231 | N/A | 以本集群配置为准 | `http://vault-active.vault.svc:8200` | `harbor-02231-cn-staging.addx.live`（内网） |
+| CN tech-service TKE / 100052802231 | N/A | vault-cn.addx.live（Ops） | ESO Git 声明使用外部地址 | `harbor-02231-cn-tech-service.addx.live`（内网目标，待切换） |
 
-> **注意:** CN EKS ARN 前缀为 `arn:aws-cn:`
+CN 最新环境全部在腾讯云，账号、目录、ArgoCD 入口及证据见 [CN 腾讯云环境事实与核验入口](../../infrastructure/k8s-ops/references/cn-tencent-inventory.md)。AWS CN 已弃用，不能复制旧 AWS CN 目录或按 `arn:aws-cn:` 配置新目标。
 
-> **⚠️ Builder / Ops 域分离（关键，先看这条再 onboard）：** 上表的 Vault 地址是 **Ops 域** vault（`vault-{us-new,eu,cn}.addx.live`），**只用于承载 C 端或运维负载的集群**：prod / tech-service / data-ops / sg-devops。**dev / staging / sandbox 等 Builder 域集群必须改用 Builder Vault**——外部域名 `vault-{cn,us,eu}.builder.addx.live`（三个都在；cn-staging / us-staging / eu-staging 的 ESO 实际就用各自**外部**域名）。**内部跨集群域名只有 CN 一个** `vault-cn-internal.builder.addx.live`——仅 **cn-dev** 用（它在 801 账号，经 VPC peering 访问 cn-tech/589 上的 CN Builder Vault）。**不存在** `vault-us-internal.builder` / `vault-eu-internal.builder`（US/EU 的 Builder Vault 就跑在各自 staging 集群内，用外部域名即可，或集群内 service `vault-builder-active.vault-builder.svc:8200`）。
->
-> **切勿把 Builder 域集群 onboard 到 Ops vault。** §3.2 创建的 `external-secrets-policy` 是 `secret/data/*` **全量读**；一旦在 Ops vault 上为某 Builder 集群建了 `external-secrets` role，该集群的 ESO（`external-secrets/external-secrets` SA）即可认证进 Ops vault 读取**全部 C 端生产密钥**，Builder/Ops 隔离被旁路。2026-06 cn-dev 即因此误配（jwt-eks-dev/external-secrets 建在了 `vault-cn.addx.live`）被实测可全量读 C 端密钥，已下线。Builder 域集群的 ESO 只连 Builder Vault（ClusterSecretStore 名 `vault-builder-backend`）。
+CN tech-service 的目标域名均为 `pending-cutover`，执行前按上述清单核验 live 入口，不能把技能更新当作 DNS/Ingress/认证已部署。Builder 目标入口为 `https://vault-cn.builder.addx.live`，新 TKE 的部署与认证待核验；它不替换当前 Ops `vault-backend` 的 `vault-cn.addx.live`。
+
+> **Builder / Ops 域分离：** dev / staging / sandbox 的凭据必须与生产域隔离。US/EU staging 继续按其 Builder Vault 配置核验；CN 新 staging 当前使用本集群 `vault-active.vault.svc:8200`，Store 名为 `vault-backend`，不可套旧 CN EKS 的 `vault-builder-backend` 或旧 VPC peering 规则。Store 名称不证明权限域，核对 server、auth、role/policy 后才能操作。禁止在生产 Vault 为 Builder 集群授予 `secret/data/*` 的全量读。
 
 ## 执行流程
 
@@ -314,10 +316,10 @@ git -C ~/Project/A4x/argocd-apps ls-tree -d --name-only origin/main \
 1. 确认 kubectl context 可用：
    ```bash
    kubectl config get-contexts | grep <KUBE_CONTEXT>
-   # 如不存在：
+   # 仅 AWS EKS 如不存在时（TKE 按 tencent-cloud-cli 核验账号/集群后获取 kubeconfig）：
    aws eks update-kubeconfig --name <cluster-name> --region <REGION> --profile <AWS_PROFILE>
    ```
-2. 参考现有最近的同类型集群目录（US/EU/CN EKS 或 TKE）的配置作为模板
+2. 参考现有最近的同类型集群目录（US/EU/SG EKS 或当前账号 TKE）的配置作为模板
 
 ### Step 2: 创建集群目录结构
 
@@ -339,19 +341,23 @@ helm install external-secrets . -n external-secrets --create-namespace \
   -f values-override.yaml --kube-context <KUBE_CONTEXT>
 ```
 
-#### 3.2 配置 Vault JWT Auth（Vault 侧）
+#### 3.2 配置 Vault Auth（Vault 侧）
 
-> **⚠️ 先按域选对 Vault：** Builder 域集群（dev/staging/sandbox）的 `VAULT_ADDR` 必须是 **Builder Vault**（`vault-{cn,us,eu}.builder.addx.live`），**不是** Ops vault。下方 `external-secrets-policy` 授予 `secret/data/*` 全量读——在 Ops vault 上为 Builder 集群建此 role = 把 C 端生产密钥暴露给沙箱集群（见上方「区域差异」域分离说明）。
+先读本集群 ClusterSecretStore，选择真实 Vault 域和 auth 类型。以下是 JWT 参数化示例，所有槽位必须来自精确目标，不可沿用 EKS 默认 audience / issuer。CN prod / staging 使用 Kubernetes Auth，不执行此 JWT 示例。US/EU staging 使用其 Builder Vault，新 CN staging 使用本集群独立 Vault；禁止给 Builder 集群创建生产 Vault 全量读 role。
+
+当前 CN tech-service 的 `cluster-secret-store.yaml` 声明：JWT path=`jwt-tke-cn-tech-service-2231`、role=`external-secrets`、SA namespace/name=`external-secrets/external-secrets`、audiences=`[vault]`。因此该目标的 `bound_audiences` 必须包含 `vault`，不能使用 `https://kubernetes.default.svc`。先用目标集群的 OIDC discovery 及已存在的 Vault auth mount 核对真实 issuer/公钥验证方式和 Vault 可达性；不能把 EKS issuer 复制到 TKE。若已有 mount/role，先读取并核对，不能无条件重新 enable 或覆盖。
+
+上述是 Ops Vault 合同；域名去掉 `2231` 不改 JWT mount、role、SA、audience 或 Vault KV 路径。Vault JWT issuer 来自目标 Kubernetes SA，不能使用新的 Casdoor/Vault URL；Builder 目标入口的认证须独立核验，不能复制本段 Ops 合同。
 
 ```bash
 export VAULT_ADDR=<VAULT_EXTERNAL_ADDR>
 vault login -method=userpass username=qlv
 
-# 启用独立 JWT Auth path（每集群独立，见下方 JWT Auth Path 表）
+# 仅新目标尚未配置时启用；参数先由 CSS/目标 issuer/现有 auth contract 核验
 vault auth enable -path=<JWT_AUTH_PATH> jwt
 vault write auth/<JWT_AUTH_PATH>/config \
-  oidc_discovery_url="<EKS_OIDC_ISSUER>" \
-  default_role="external-secrets"
+  oidc_discovery_url="<VERIFIED_TARGET_OIDC_ISSUER>" \
+  default_role="<CSS_JWT_ROLE>"
 
 # 创建 Policy（如该 Vault 上还没有 external-secrets-policy 则先创建）
 vault policy write external-secrets-policy - <<EOF
@@ -364,11 +370,11 @@ path "secret/metadata/*" {
 EOF
 
 # 创建 Role
-vault write auth/<JWT_AUTH_PATH>/role/external-secrets \
+vault write auth/<JWT_AUTH_PATH>/role/<CSS_JWT_ROLE> \
   role_type="jwt" \
-  bound_audiences="https://kubernetes.default.svc" \
+  bound_audiences="<CSS_PROJECTED_TOKEN_AUDIENCES>" \
   user_claim="sub" \
-  bound_subject="system:serviceaccount:external-secrets:external-secrets" \
+  bound_subject="system:serviceaccount:<CSS_SA_NAMESPACE>:<CSS_SA_NAME>" \
   policies="external-secrets-policy" \
   ttl="1h"
 ```
@@ -536,9 +542,13 @@ kubectl --context <KUBE_CONTEXT> -n argo-cd get app crossplane crossplane-post-i
 kubectl --context <KUBE_CONTEXT> get providers.pkg.crossplane.io
 ```
 
-`argocd-apps origin/main` 当前已有 17 份 `crossplane-post-install.yaml`，包括 EKS、GKE、TKE 的现有集群目录；是否需要具体 provider 资源以目标目录内容为准，不再用“仅 AWS 才创建 Application”推断。
+从 `argocd-apps origin/main` 的当前目标集群目录检查 `crossplane-post-install.yaml` 及其 source；历史目录不计作当前 fleet。是否需要具体 provider 资源以实际 source 内容为准，不再用“仅 AWS 才创建 Application”推断。
 
-**CN EKS 注意：** providers 镜像使用 `registry-harbor-cn.addx.live/charts/provider-aws-*:v2.0.0`（已同步到 CN Harbor）。
+**当前 CN TKE：** operator/provider 镜像及 pull secret 按本集群 Harbor values / post-install 声明核验；新 staging 默认使用内网 `harbor-02231-cn-staging.addx.live`。新 tech-service 的内网目标是 `harbor-02231-cn-tech-service.addx.live`，外部/SG 同步目标是 `harbor-02231-cn-tech-service-pub.addx.live`，均为 `pending-cutover`，核实切换后才能使用，不能照抄旧 AWS CN provider 镜像。
+staging 的受限公网入口为 `harbor-02231-cn-staging-pub.addx.live`，用于获准的外部访问；
+采用内网镜像前核验精确域名的 pull-secret auth key，以及 token realm 的 VPC 内解析。
+两入口与兼容项规则见 [Harbor 实例与访问说明](../harbor/SKILL.md)。
+tech-service 目标是同一 Harbor 的双入口；其 `externalURL`、token realm 和 DNS 路径仍待实测，不能套用 staging 已验收的 split DNS。旧 Git 声明仅用于迁移核对，不作为自动 fallback。
 
 **AWS IAM 前置条件（每个 AWS 账号一次性创建）：**
 
@@ -586,9 +596,9 @@ done
 
 > 端口说明：PostgreSQL(5432) + MySQL(3306) + Redis(6379) + DocumentDB(27017) + MSK(9092/9094/9096)
 
-## JWT Auth Path 表
+## Vault Auth Path 表
 
-每个集群必须使用独立的 JWT Auth path（同一 Vault 实例上每个 path 只能绑定一个 OIDC issuer）：
+每个集群的 auth 类型与 path 以 ClusterSecretStore 为准；JWT 同一 Vault path 只能绑定一个 issuer，Kubernetes Auth 不能直接套 JWT 配置：
 
 | Vault | 集群 | JWT Auth Path |
 |-------|------|---------------|
@@ -598,15 +608,14 @@ done
 | EU Vault | aws-010840394398-eu-tech-service | `jwt-eks-tech-service` |
 | EU Vault | aws-740315635167-eu-prod | `jwt-eks-prod` |
 | EU Vault | aws-769494896000-eu-data | `jwt-prod-data` |
-| CN Vault | aws-589899215075-cn-tech-service | `jwt-eks-tech-service` |
-| CN Vault | aws-741924744516-cn-prod | `jwt-eks-data-ops` |
-| **CN Builder Vault** | aws-801447536674-cn-dev | `jwt-eks-dev` |
 | CN Vault | aws-125710977284-sg-devops | `jwt-eks-sg-devops` |
 | US Vault (external) | gcp-a4xcloud-tech-service-us | `jwt-gke-us-tech-service` |
 | US Vault (external) | gcp-a4xcloud-p-us-us-prod | `jwt-gke-us-prod` |
 | CN Vault | tencent-100014919455-cn-main | `kubernetes` (K8s Auth) |
+| 本集群 Vault | tencent-100052802231-cn-staging | `kubernetes` (K8s Auth)，Store `vault-backend` |
+| CN Ops Vault | tencent-100052802231-cn-tech-service | `jwt-tke-cn-tech-service-2231` (JWT，域名变更不改 mount) |
 
-> 表中 **「Vault」列即 Ops 域 vault**（`vault-{us-new,eu,cn}.addx.live`）。**「CN Builder Vault」= `vault-cn.builder.addx.live`**（`jwt-eks-dev` mount 建在这台，不是 Ops vault）。其余 Builder 域集群（`*-cn-staging` / `*-us-staging` / `*-eu-staging`）同理，JWT path 建在各自 **Builder Vault**（`vault-{cn,us,eu}.builder.addx.live`）上，path 按 `jwt-eks-<cluster>` 命名（如 cn-staging=`jwt-eks-cn-staging`）。**绝不在 Ops vault 上为 Builder 域集群建 `external-secrets` role。**
+> CN 行来自对应 `cicd/external-secrets-config/cluster-secret-store.yaml`。US/EU Builder 集群仍使用各自 Builder Vault；不要从环境名推算 auth path，也不能将旧 AWS CN 的 `jwt-eks-*` 自动迁到 TKE。
 
 ## 关键注意事项
 
@@ -625,18 +634,16 @@ done
 
 9. **CoreDNS**: rewrite 规则**禁止**使用 `answer auto`，EKS CoreDNS v1.11.x 不支持
 10. **Harbor**: 每个集群有独立 Harbor（见集群表），Runner 自动挂载凭证并注入 `HARBOR_REGISTRY` 环境变量
-11. **Crossplane CN 镜像**: provider 镜像已同步到 CN Harbor，CN EKS 集群使用本集群 Harbor 域名
-13. **CN ARN**: 所有 ARN 使用 `arn:aws-cn:` 前缀
 
 ### TKE 特有
 
 14. **Crossplane**: 使用 `cicd/base/tencent/crossplane` 和腾讯云 provider/post-install；不要套 AWS provider/IAM 前置条件
 15. **Ingress 控制器**: 使用腾讯云 CLB annotation (`kubernetes.io/ingress.class: qcloud`)，不设 `ingressClassName`
-16. **CLB 固定 IP**: 必须通过 `kubernetes.io/ingress.qcloud-loadbalance-id` 固定 CLB ID，防止同步时 IP 变更
+16. **CLB 归属**: 从目标 controller/Ingress values 核对固定 CLB，实际可能用 `kubernetes.io/ingress.qcloud-loadbalance-id` 或 `kubernetes.io/ingress.existLbId`；必须属于目标账号/区域。新账号不能复用旧账号 CLB ID；变更 immutable 注解不等于授权删除/重建 Ingress
 17. **CoreDNS (TKE)**: CLB 返回 IP，CoreDNS 使用 `hosts` 插件而非 `rewrite name`
-18. **存储类**: 使用 `cbs-topo`（腾讯云 CBS）
-19. **Vault Auth (TKE)**: Vault 运行在同集群，使用 Kubernetes Auth 替代 JWT Auth
-20. **Kyverno**: TKE K8s 1.28 使用 `cicd/base/tencent/` 中的 Kyverno 适配配置
+18. **存储类**: 按精确目标核验；当前新 staging 配置使用 `cbs`，tech-service 使用 `cbs-topo`，不把任一值作为所有 TKE 的默认
+19. **Vault Auth (TKE)**: 按上表区分；prod / staging 为 Kubernetes Auth，tech-service 为独立 JWT path，不假定所有 TKE 的 Vault 都运行在同集群
+20. **Kyverno / TLS**: 版本、base 和 TLS 配置按当前 Application/values 核对；新 tech-service 在 CLB 终结 TLS，不能强制所有 TKE Ingress 写 `spec.tls` 或复制旧证书 Secret
 
 ### GKE 特有
 

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "aea53668-e6eb-47bd-9f4e-33f03e0933ad",
+  "path": "graylog",
+  "path_key": "graylog",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/observability/graylog",
+    "branch": null
+  }
+}

@@ -8,7 +8,7 @@ JSON receipt 的每条 `checks[]` 都带 `gap_ids`，顶层 `gaps` 固定包含 
 |---|---|---|---|
 | LA-01 | agent inventory／持久 unit／canonical launcher 不完整 | `inventory`、`agent_unit`、`shared_launcher` | 删除 agent unit 或改成 wrapper／瞬时 unit |
 | LA-02 | agent env 权限、键集合或启动 preflight 不一致 | `agent_env` | env 非 0600、缺 relay／binary pin、危险继承键或不可信 PATH |
-| LA-03 | prompt 通用条款、角色条款或 helper pin 漂移 | `agent_prompt` | 删除任一精确条款、未知角色或旧 release helper |
+| LA-03 | prompt 通用条款、角色条款、入群频道表或 helper pin 漂移 | `agent_prompt` | 删除精确条款、未知角色、旧 helper；业务 Agent 频道表缺失/重复/倒置、表内 UUID 与 env 不一致 |
 | LA-04 | 责任人配置未收敛到 v2／`people_file` | `responsible_config` | v1、缺 people_file、权限错误或路径不可读 |
 | LA-05 | Claude sandbox／Read deny 基线变松 | `sandbox` | 缺 release/people allowRead、宽路径、`allowAllUnixSockets` 或缺 `permissions.deny` |
 | LA-06 | 所有运行面没有收敛到同一个完整 release SHA | 各 `*_release`、prompt、plugin 的 revision check | 任一 pin 留在旧 SHA |

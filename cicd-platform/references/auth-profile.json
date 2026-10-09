@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "tool": "cicd",
+  "provider": "bearer-env",
+  "owner": "cicd-platform",
+  "authContract": "SKILL.md",
+  "verification": "source-verified",
+  "runtimeVerification": "pending",
+  "authDiscovery": "references/auth-discovery.json",
+  "sourceDiscovery": "references/source-discovery.json",
+  "origin": "https://cicd.addx.live",
+  "tokenEnv": "CICD_TOKEN",
+  "identity": {
+    "method": "GET",
+    "path": "/api/user/info",
+    "subjectPath": "result.userId"
+  },
+  "response": {
+    "successPath": "code",
+    "successValue": 0
+  },
+  "operations": {
+    "me": {
+      "effect": "read",
+      "method": "GET",
+      "path": "/api/user/info"
+    }
+  },
+  "sourceCommits": {
+    "DEV/cicd-server": "9eda25f1e5af8861cd2d8f1293d8dc899d45b8b1",
+    "DEV/cicd-fe": "6cd7d7776db78c9f3fefee2de8213e69530da8e5"
+  },
+  "sourceEvidence": [
+    "handler/handler.go",
+    "handler/user.go",
+    "response/user.go",
+    "src/api/sys/user.ts",
+    "src/utils/http/axios/index.ts"
+  ],
+  "fixtureVerification": "../../web-access/runtime/tests/owner-profiles.test.js",
+  "runtimeScope": "Current identity only; browser nested cache requires a dedicated verified adapter; business workflow stays in owner Skill."
+}

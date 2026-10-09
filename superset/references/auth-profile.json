@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "tool": "superset",
+  "provider": "superset-service",
+  "owner": "superset",
+  "authContract": "references/login2-session.md",
+  "verification": "source-verified",
+  "runtimeVerification": "pending",
+  "origin": "https://superset-us.addx.live",
+  "identity": {
+    "path": "/api/v1/me/",
+    "subjectPath": "result.id"
+  },
+  "operations": {
+    "me": {
+      "effect": "read",
+      "path": "/api/v1/me/"
+    },
+    "dashboards": {
+      "effect": "read",
+      "path": "/api/v1/dashboard/?q=(page:0,page_size:20)"
+    }
+  },
+  "fixtureVerification": "../../web-access/runtime/tests/providers.test.js",
+  "servicePasswordPolicy": "SUPERSET_ACCOUNT_TYPE=service; no personal SSO password login",
+  "authDiscovery": "references/auth-discovery.json"
+}

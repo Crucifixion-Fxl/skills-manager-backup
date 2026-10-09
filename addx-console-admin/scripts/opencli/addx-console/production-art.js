@@ -1,0 +1,4 @@
+import {cli,Strategy} from '@jackwener/opencli/registry';
+import {identity,request} from './native.mjs';
+import {artId,chooseArt,projectArt} from './production-art-detail-records.mjs';
+cli({site:'addx-console',name:'production-art',access:'read',description:'Existing production art metadata by exact actual ID, list-backed view; excludes raw ext and barcode configuration, no independent detail API',strategy:Strategy.LOCAL,browser:false,args:[{name:'id',type:'int',required:true,help:'An ID observed in an authorized fresh art list, never guessed'}],columns:['id','code','name','abilityCount','abilityNames','unresolvedAbilityCount','needPassCheck','uiNeedPassCheck','inProduceCodeType'],func:async args=>{const id=artId(args.id);await identity();const art=chooseArt(await request('/produce/art/query-produce-art-list','POST',{}),id);const abilities=await request('/produce/art/all-produce-art-ability','POST',{});return[projectArt(art,abilities)];}});

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "fba52587-0273-452d-bad6-ef1e43a3d791",
+  "path": "cs-workspace",
+  "path_key": "cs-workspace",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/customer-care/cs-workspace",
+    "branch": null
+  }
+}

@@ -7,6 +7,8 @@ description: 为明确依赖效能应用或内部业务平台 OAuth 的 Skill �
 
 ## Description
 
+首次接入/变更扫描与日常认证入口见 [SaaS 接入](references/saas-access.md)；已有平台业务契约与授权门禁仍在本 Skill 维护。
+
 本 Skill 只管理内部业务平台使用的 `@a4x/feishu-auth-cli` token。它不是普通飞书
 消息、文档、Wiki、Base、任务、日历或通讯录的认证入口，也不是 Codex Lark MCP 的
 回退方案。普通 OAuth 恢复按 `feishu-channel-rules` 完成门禁后读取 CLI 内置 `lark-shared`。

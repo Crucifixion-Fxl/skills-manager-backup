@@ -6,18 +6,26 @@ staging 集群时，按现有 staging 集群事实复制对应 region 的资源�
 
 ## 新部署 staging / tech-service 应用的中间件凭据申请规则
 
-shared-middleware 已上线 **6 个集群**：staging-us/eu/cn（us/eu/cn-eks-staging）+
-**tech-us/eu/cn**（002/010/589 tech-service）。在**这 6 个集群**上，新部署应用的数据需求
+当前策略覆盖 US/EU EKS staging + tech-service，以及 CN TKE staging + tech-service
+（账号 `100052802231`）。AWS US/EU 的已上线实现不能证明新 TKE 的能力。
+
+**当前 CN 能力门禁**：先读 `../cn-tencent-migration.md`，逐目标核验 served
+Database/KafkaScramCredential API、对应 Composition/ProviderConfig、共享实例及 Vault
+writer/reader、per-app 凭据交付。所核验的新 CN Git 目录尚不足以证明这些能力，
+未知则 STOP + Ops Todo；不得复制历史 AWS CN MSK broker/ARN，也不得把 ESO JWT mount
+当作应用 writer 已就绪。
+
+在上述 staging/tech-service 目标上，新部署应用的数据需求
 **只能消费 shared-middleware**，**不允许为单 app 自建数据类中间件**
 （RDS / Aurora / ElastiCache Redis / DocumentDB / MSK / Kafka / ClickHouse），
 **也不允许用 StatefulSet+PVC 自托管数据库引擎**绕过（hard-rule #30，软约定需在
 cd-requirements.md 写明理由）。dev/staging/tech-service 默认复用平台共享实例，由共享实例按资源类型为
 每个 app 签发**独立的 per-app database/user 或连接凭据**。
 
-> **prod（prod-us/eu/cn）没有 shared-middleware**：prod 数据库继续用 app-owned 托管
+> **prod（prod-us/eu/cn）没有默认 shared-middleware 合同**：AWS prod 数据库继续用 app-owned 托管
 > RDS / Aurora / ElastiCache（cost-tiering 表 prod tier，multiAZ + 加密 + 删除保护），
-> 走 `workflows/add-rds.md` / `add-aurora.md` / `add-redis.md`；prod **同样不应**用 StatefulSet
-> 自托管数据库。本节的"只能用 shared-middleware"只约束 staging + tech-service 这 6 个集群。
+> 走 `workflows/add-rds.md` / `add-aurora.md` / `add-redis.md`；腾讯云 prod-cn 使用腾讯原生资源流程或 Ops Todo，不能套用 AWS recipe。prod **同样不应**用 StatefulSet
+> 自托管数据库。本节的"只能用 shared-middleware"约束当前 staging + tech-service；CN 能力缺失不允许绕过。
 
 > **凭据约定（2026-06-01 起，取代旧"共享 root 契约"模型）**：不再有单一共享 root 契约。
 > 每个 app 拿自己的 per-app 凭据，落 `platform-resource-credential` 的 per-app 路径
@@ -46,7 +54,7 @@ Composition，立即 STOP，并产 Ops Todo 让平台补**可复用的自助 Com
 
 ## 资源组合
 
-典型 shared-middleware（staging + tech-service 6 集群）包含：
+典型 shared-middleware（AWS US/EU staging + tech-service；旧 AWS CN 仅为历史实现）包含：
 
 - RDS MySQL
 - RDS PostgreSQL
@@ -57,12 +65,13 @@ Composition，立即 STOP，并产 Ops Todo 让平台补**可复用的自助 Com
 - ClickHouse 对应的 office / VPC SG ingress rule
 
 > **S3 不属于 shared-middleware**（2026-06-05 移除）：共享 S3 桶 `{env}-shared-middleware-data`
-> 从未被消费、已删除。对象存储一律按业务语义走 **app-owned S3**（`workflows/add-s3-bucket.md`
-> + IRSA），不归入 shared-middleware。
+> 从未被消费、已删除。对象存储按业务语义走 **app-owned**，不归入 shared-middleware：
+> AWS 使用 [S3 workflow](../../workflows/add-s3-bucket.md) + IRSA；腾讯云使用 [COS workflow](../../workflows/add-tencent-cos.md) 的
+> 原生 COS 合同。必须核验精确目标的权限、网络与凭据交付，能力不明则 STOP + Ops Todo，不能把 S3/IRSA 模板套入 TKE。
 
 ## 同 AWS account 多 region 的 IAM 命名
 
-US/EU staging 当前同属一个 AWS account。CN staging 是 AWS China account，但 IAM Role
+US/EU staging 当前同属一个 AWS account。历史 AWS CN staging 已退役；IAM Role
 仍是 account-global 资源。Role 不能只按 app 名命名，否则同账号多 region 或后续
 同账号扩展会争用同一个 Role。
 
@@ -72,11 +81,11 @@ US/EU staging 当前同属一个 AWS account。CN staging 是 AWS China account�
 |---|---|
 | staging-us | `crossplane-app-shared-middleware-us-staging` |
 | staging-eu | `crossplane-app-shared-middleware-eu-staging` |
-| staging-cn | `crossplane-app-shared-middleware-cn-staging` |
+| retired AWS staging-cn（仅历史） | `crossplane-app-shared-middleware-cn-staging` |
 
 对应 `ClusterProviderConfig` 仍可在各自集群内叫 `shared-middleware`，因为它是集群内
-Kubernetes 资源，不是 AWS account-global 资源。CN staging 使用 `arn:aws-cn` partition，
-不要复用普通 AWS partition 的 ARN 模板。
+Kubernetes 资源，不是 AWS account-global 资源。历史 AWS CN 使用 `arn:aws-cn` partition，
+不要复用普通 AWS partition 的 ARN 模板；当前腾讯云 CN 不使用上述 AWS IAM/ProviderConfig。
 
 ## 共享 SG rule 不重复声明
 
@@ -132,16 +141,13 @@ metadata:
 
 ## 凭据申请流程（kind: Database）
 
-> **`kind:Database` 只在 6 个 shared-middleware 集群可消费**（`{us,eu,cn}-eks-staging` +
-> `{us,eu,cn}-eks-tech-service`；判别按 **cluster 名**，不是 `$target.env`——tech-service 的
-> env-keyword `env=prod`，与真 prod 集群同 env）。`spec.env` 只决定 **vault 路径段 + store**，不决定
-> 集群是否有 shared-middleware：tech-service 应用写 `env: prod`（路由到 tech-service 的共享实例 +
-> ops vault），staging 应用写 `env: staging`。**真 prod 集群（`*-eks-prod`/`*-prod-data`）没有 shared
-> 实例、也没部署 Composition** → 那里的数据库走 app-owned 托管 RDS/Aurora，不要在真 prod 写 kind:Database。
+> **共享中间件消费策略覆盖 6 个当前集群；不代表能力均已上线**（`{us,eu}-eks-staging` +
+> `{us,eu}-eks-tech-service + cn-tke-staging + cn-tke-tech-service`；判别按 **cluster 名**，不是 `$target.env`——tech-service 的
+> env-keyword `env=prod`，与真 prod 集群同 env）。CN TKE 必须先通过本文能力门禁，不能因属于策略目标就宣称可消费。`spec.env` 决定 **Vault 路径段**；store 与 writer/reader 由精确目标的 Composition + ClusterSecretStore 合同决定，不按 env 推断。tech-service 应用写 `env: prod`，staging 应用写 `env: staging`。真 prod 没有默认 shared-middleware 合同：AWS prod 走 app-owned 托管 RDS/Aurora，腾讯云 prod 转原生能力或 Ops Todo。
 
-### ✅ 共享 MySQL + Redis + PostgreSQL —— 已上线（全 6 集群）
+### ✅ 共享 MySQL + Redis + PostgreSQL —— AWS US/EU 已上线；旧 AWS CN 记录不代表当前 TKE
 
-`engine=mysql` / `engine=redis` / `engine=postgres` 的共享中间件自助**已 live + 验证**：us/eu/cn-staging + tech-us/eu/cn（mysql/redis 2026-06-03；**postgres 2026-06-04**，6 实例已建+激活+端到端验证）。
+`engine=mysql` / `engine=redis` / `engine=postgres` 的共享中间件自助**已 live + 验证**：AWS US/EU staging + tech-service；mysql/redis 2026-06-03、postgres 2026-06-04 的历史六集群验证含已退役 AWS CN，不适用于新 TKE。
 开发者在**自己 app 的 namespace** 写一个统一 `kind: Database`（engine 区分），Composition
 （function-go-templating + provider-sql/provider-kubernetes）自助供给并把连接信息推到 vault per-app
 路径，app 自己写 ExternalSecret 消费。`Database` claim 和 ExternalSecret 都必须提交到应用仓
@@ -253,7 +259,7 @@ skill 新增的全局原子身份分配器。这是部署前保护，不能宣�
   **`secret/{env}/rds/application/{spec.app}/postgres-<purpose-as-kebab>`**。不填 purpose 的
   primary identity 和 `.../postgres` 路径完全不变。删除 purpose claim 时 Schema 外部对象
   随 master-owned Database 的删除级联回收；不要因 Schema CR 使用 Orphan 而保留整个数据库。
-- store 由 env 决定:dev/staging→`vault-builder-backend`,pre/prod→`vault-backend`。
+- 现有 AWS producer Composition 按 env 选择 store：dev/staging→`vault-builder-backend`、pre/prod→`vault-backend`。这不是跨云规则；新 CN staging 的 consumer `vault_css=vault-backend`，指向集群内 Vault。新 TKE 必须先核验 producer/consumer 是否交付到同一实例和路径；未对齐则 STOP，不套用 AWS producer 投影来宣称契约通过。
 - **app 侧自己写 `ExternalSecret`**（`secretStoreRef.name` = 集群 `vault_css`,`remoteRef.key` = 上面的
   per-app 路径,相对路径不带 `secret/` 前缀）注入工作负载。**app namespace 不会有静态 K8s secret,只由
   ExternalSecret 创建。** db/user/路径段 = `spec.app`。回收:删 `kind:Database` → 组合资源(provider-sql
@@ -262,11 +268,11 @@ skill 新增的全局原子身份分配器。这是部署前保护，不能宣�
 
 #### PostgreSQL purpose 的目标能力 gate
 
-primary PostgreSQL 已有六集群契约，不代表 purpose Schema 能力在所有目标均已部署。
+primary PostgreSQL 的历史六个 AWS 集群契约不覆盖当前 CN TKE，也不代表 purpose Schema 能力在所有目标均已部署。
 平台源 `DEV/k8s` 的 `cicd/base/default/shared-db-compositions/composition-database.yaml`
 在 `a7835aee3d58ca108961bbf9220ce92e79ff3bda` 增加了 purpose Schema；
-当前源快照 `1882119f9bd620b70342ac82b3e7126276e402b7` 中，US/EU staging 使用
-provider-sql v0.11.0，CN staging 与三套 tech-service 仍声明 v0.9.0。
+历史源快照 `1882119f9bd620b70342ac82b3e7126276e402b7` 中，US/EU staging 使用
+provider-sql v0.11.0，当时的 AWS CN staging 与三套 AWS tech-service 声明 v0.9.0；不据此推断当前 TKE。
 这是 Git desired state 对照，不能代替目标 live 验证。
 
 生成新的 purpose claim 前，逐 target 只读确认：
@@ -396,7 +402,7 @@ Git 候选可以在同一应用 overlay 中生成 claim 和对应 ExternalSecret
 current version，让 PushSecret 首次创建新 current version 并取得 ownership。完整步骤见
 `troubleshooting/shared-database-pushsecret-unmanaged-vault-path.md`。
 
-### ✅ 共享 MSK(Kafka) SCRAM 凭据 —— 已上线（全 6 集群）
+### ✅ 共享 MSK(Kafka) SCRAM 凭据 —— AWS US/EU 已上线；旧 AWS CN 记录不代表当前 TKE
 
 共享 MSK 本身已部署到 6 个 shared-middleware 集群，并已切到
 `SASL_SSL + SCRAM-SHA-512`。应用在自己的 namespace 写
@@ -462,7 +468,7 @@ PushSecret status 或应用 ExternalSecret 映射里缺 `bootstrap_brokers_sasl_
 
 > ⚠️ **仍 STOP + Ops Todo（共享实例已部署、消费 Composition 尚未落地）**：
 > **ClickHouse / DocumentDB(MongoDB)** —— 这 2 类的**共享实例本身已于 2026-06-04
-> 部署到全 6 集群**（staging + tech-service 各有 shared ClickHouse StatefulSet /
+> 历史部署到含已退役 AWS CN 的六集群；当前 TKE 必须重新核验**（staging + tech-service 各有 shared ClickHouse StatefulSet /
 > shared DocumentDB，全 Synced/Healthy/私有），但 `kind:Database` **自助消费 Composition 还没写**，
 > 所以仍 STOP，Ops Todo 内容是"补可复用 kind:Database 消费层 + 自动 per-app 凭据交付"，
 > **不是**"再建共享实例"，也不是在平台仓为当前 app 手写底层资源。

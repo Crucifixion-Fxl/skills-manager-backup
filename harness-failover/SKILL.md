@@ -9,7 +9,7 @@ description: 检测本机 Buzz agent 当前使用的 harness（grok / claude / c
 
 本机（systemd --user）上的 Buzz agent 共用几个 harness 账号。额度用完时，buzz-acp **不会退出**：turn 反复失败、重试 10 次（约 50 分钟）后**整条消息被丢弃**。本 skill 让这件事变成「检测 → 决策 → 一起切换 → 找回并重试」。
 
-可运行脚本在 [scripts/](scripts/)，入口 `scripts/harness-failover`。测试：`uv run --extra dev pytest skills/harness-failover/tests -q`。
+可运行脚本在 [scripts/](scripts)，入口 `scripts/harness-failover`。测试：`uv run --extra dev pytest skills/agent-harness/harness-failover/tests -q`。
 
 ## Rules
 
@@ -37,7 +37,7 @@ description: 检测本机 Buzz agent 当前使用的 harness（grok / claude / c
 ## 流程
 
 ```bash
-H=skills/harness-failover/scripts/harness-failover   # 安装后见 references/install.md
+H=skills/agent-harness/harness-failover/scripts/harness-failover   # 安装后见 references/install.md
 $H profiles                       # 列出 profile，标出当前
 $H detect [--probe] [--json]      # 不改任何 agent：每个 profile 的健康度 + 建议 + 配置漂移（会更新本机学习记录，失败不影响判断）
 $H switch --to auto               # dry-run：会切到哪
@@ -84,7 +84,7 @@ $H notify [--status|--setup|--test]  # 飞书通知：查看状态 / 从 lark-cl
 |:--|:--|:--|
 | grok | `~/.grok/logs/unified.jsonl` 的 `billing: fetched credits config` + `inference_failed 402` | 周期内 credits ≥ 100% 且按需/预充余额为 0 → 耗尽，恢复时刻 = `billingPeriodEnd` |
 | claude / glm | `<home>/projects/*/*.jsonl` 近 48h 的 `api_error` 与 `isApiErrorMessage` | **最新事件**是额度错误且恢复时刻在未来 → 耗尽；最新是成功回复 → 可用；无恢复时刻的错误只在 30 分钟内算数 |
-| codex | `codex login status`（两个输出流 + 返回码）+ 探测 | 未登录 → `unavailable`；已登录但无历史 → `unknown`（需 `--probe` 验证才会被选中） |
+| codex | `codex login status`（两个输出流 + 返回码）+ `<CODEX_HOME>/sessions/YYYY/MM/DD/rollout-*.jsonl` 近 48h 的 `task_complete`，**只看本 profile 模型**（前面的 `turn_context.model`） | 未登录 → `unavailable`；**最新事件**是 `usage_limit_exceeded` 且恢复时刻（`try again at …`，主机本地时区）在未来 → 耗尽；最新是成功 turn → 可用；无该模型记录 → `unknown`（需 `--probe` 验证才会被选中） |
 
 错误签名是**数据**：[assets/signatures.json](assets/signatures.json)，样本在 `tests/fixtures/samples.json`，两者必须成对出现（测试强制）。当前已知签名与证据见 [references/detection.md](references/detection.md)。
 
@@ -97,7 +97,7 @@ $H notify [--status|--setup|--test]  # 飞书通知：查看状态 / 从 lark-cl
 - **「已加载新配置」证明的是环境，不是存活**：切完 8 秒后的 `active` + `/proc` 环境一致；随后才崩溃循环的 agent 要靠 systemd/监控发现。
 - **profiles 文件与 wrapper 由同一 uid 控制**：只要求文件属于你且不被所有人可写；能写它的进程本来就能读 owner 密钥，这里不构成提权，但请当作可信配置对待。
 - **restart 之后的备份会累积**：每次切换每个 env 留一份完整副本（0600），只保留最近 5 份。
-- codex 路径：`codex-buzz` 必须先**人工登录**（`CODEX_HOME=~/.codex-buzz codex login`）；登录后请先 `detect --probe` 确认能出 token，再依赖它做备选。codex 的额度错误文案未采样，签名 `codex-usage-limit` 为 `verified:false`。
+- codex 路径：`codex-buzz` 必须先**人工登录**（`CODEX_HOME=~/.codex-buzz codex login`）；登录后请先 `detect --probe` 确认能出 token，再依赖它做备选。codex 的额度按**模型**分开算（premium 模型用完不影响 `gpt-5.6-sol`），所以只统计本 profile 模型的 turn；每个 rollout 只读末尾 4 MB，末尾之前开始、没有 `turn_context` 的超长 turn 不计入。
 - **`notify.json` / `state.json` 由同一 uid 控制**，没有属主/权限校验（不同于 profiles 文件）：能写它们的进程能改收件人、关掉通知或指向别的可执行文件；同 uid 本来就能改 unit 和工具本身，这里不构成提权，请当作可信配置。SIGKILL/断电无法通知（没有进程可发）。
 - **通知依赖 lark-cli 与 bot 权限**：bot 需要 `im:message:send_as_bot`，且与你已有单聊关系；CLI 返回成功不等于你已读。飞书本身不可用时，这条通道无法告警（只有 systemd 日志）。
 - 探测消耗一次极小的真实请求；grok 不探测（billing 历史是权威来源）。
@@ -117,7 +117,7 @@ systemctl --user restart buzz-local-jchen-ubuntu-192-168-20-24   # 只切一个 
 ### ✅ Good — 看各 harness 自己的历史，耗尽才切，全部一起切，切完证明并找回
 
 ```bash
-H=skills/harness-failover/scripts/harness-failover
+H=skills/agent-harness/harness-failover/scripts/harness-failover
 $H detect --probe
 #   grok         EXHAUSTED  until 2026-09-25T01:03:18Z — credits 100% 且无按需/预充余额（402 usage balance exhausted）
 #   claude-buzz  OK         — 最近一次事件是成功回复

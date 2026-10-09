@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "tool": "datahub-schema-search",
+  "owner": "datahub-schema-search",
+  "provider": "delegated",
+  "origin": "https://datahub-schema-search.addx.live",
+  "authContract": "saas-access.md",
+  "verification": "source-verified",
+  "runtimeVerification": "pending",
+  "deploymentVersion": "unknown"
+}

@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "tool": "dittofeed",
+  "owner": "dittofeed",
+  "provider": "delegated",
+  "origin": "https://ditto.addx.live",
+  "authContract": "saas-access.md",
+  "verification": "source-verified",
+  "runtimeVerification": "pending",
+  "deploymentVersion": "unknown"
+}

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "9abc468f-8b59-45eb-a962-fde6f5724274",
+  "path": "matter-spec",
+  "path_key": "matter-spec",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/hardware/matter-spec",
+    "branch": null
+  }
+}

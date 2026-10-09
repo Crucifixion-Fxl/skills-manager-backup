@@ -12,7 +12,7 @@
 
 跑:
   cd ~/A4x/AI/skills
-  uv run pytest skills/crowdin/tests/ -v
+  uv run pytest skills/development/crowdin/tests/ -v
 """
 from __future__ import annotations
 

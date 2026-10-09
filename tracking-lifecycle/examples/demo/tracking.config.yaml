@@ -1,0 +1,11 @@
+schemaVersion: 1
+hooks:
+  usage:
+    argv: [node, adapter.js, usage]
+    outputs: [.tracking/usage.json]
+  local:
+    argv: [node, adapter.js, local]
+    outputs: [.tracking/local-capture.json]
+  artifact:
+    argv: [node, adapter.js, artifact]
+    outputs: [.tracking/artifact.bin]

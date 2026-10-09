@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 import subprocess
 import tempfile
@@ -11,7 +12,9 @@ SCRIPT = Path(__file__).with_name("build-branch-pages.sh")
 SKILL = SCRIPT.parent.parent / "SKILL.md"
 REFERENCE = SCRIPT.parent.parent / "references" / "branch-pages-publisher.md"
 ISSUE_SOP = SCRIPT.parents[2] / "gitlab-issue-sop" / "SKILL.md"
-CI_CONFIG = SCRIPT.parents[3] / ".gitlab-ci.yml"
+REPO_ROOT = SCRIPT.parents[4]
+sys.path.insert(0, str(REPO_ROOT / "scripts"))
+from gitlab_ci_config import merged_text  # noqa: E402
 
 
 def run(*args: str, cwd: Path, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -146,7 +149,7 @@ class BranchPagesBuilderTest(unittest.TestCase):
         self._build("feature&x")
 
         index = (self.publisher / "public/index.html").read_text()
-        self.assertIn('href="feature-x/docs/"', index)
+        self.assertIn('href="feature-x/docs"', index)
         self.assertIn("feature&amp;x", index)
         self.assertNotIn(">feature&x<", index)
 
@@ -166,7 +169,7 @@ class BranchPagesReferenceContractTest(unittest.TestCase):
         cls.skill = SKILL.read_text(encoding="utf-8")
         cls.reference = REFERENCE.read_text(encoding="utf-8")
         cls.issue_sop = ISSUE_SOP.read_text(encoding="utf-8")
-        cls.ci_config = CI_CONFIG.read_text(encoding="utf-8")
+        cls.ci_config = merged_text(REPO_ROOT)
 
     def test_issue_html_links_publish_and_preserve_relative_path(self) -> None:
         for document in (self.skill, self.reference, self.issue_sop):
@@ -178,7 +181,7 @@ class BranchPagesReferenceContractTest(unittest.TestCase):
 
     def test_ci_runs_contract_for_issue_sop_changes(self) -> None:
         self.assertEqual(
-            self.ci_config.count('- "skills/gitlab-issue-sop/SKILL.md"'), 2
+            self.ci_config.count('- "skills/collaboration/gitlab-issue-sop/SKILL.md"'), 2
         )
 
     def test_push_and_mr_map_to_current_and_target_branch(self) -> None:

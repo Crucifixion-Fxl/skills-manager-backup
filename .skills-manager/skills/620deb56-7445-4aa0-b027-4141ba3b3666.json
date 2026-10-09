@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "620deb56-7445-4aa0-b027-4141ba3b3666",
+  "path": "apollo-permission",
+  "path_key": "apollo-permission",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/security/apollo-permission",
+    "branch": null
+  }
+}

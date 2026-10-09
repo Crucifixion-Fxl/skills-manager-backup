@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "tool": "rerun-hub",
+  "owner": "rerun-hub",
+  "repo": "https://gitlab.addx.ai/infra/ai-data-platform",
+  "researchCommit": "e58c4d9cdc6740781e63440f24d153edc71d369e",
+  "routeEntries": [
+    "hub/src/hub_catalog/hub_api.py",
+    "hub/src/hub_catalog/access_api.py",
+    "hub/src/hub_catalog/authz.py"
+  ],
+  "verification": "local-source-reviewed",
+  "deploymentConsistency": "pending",
+  "needsResearch": [
+    "deployment SHA/version and auth configuration",
+    "subject and resource permissions"
+  ],
+  "officialReferences": [
+    "https://rerun.io/docs/howto/query-and-transform"
+  ],
+  "apiDiscovery": {
+    "method": "Source HTTP and gRPC handlers plus published API contract",
+    "entries": [
+      "hub/src/hub_catalog/http_app.py",
+      "hub/src/hub_catalog/hub_api.py",
+      "hub/src/hub_catalog/access_api.py",
+      "hub/src/hub_catalog/wire.py"
+    ],
+    "contract": "https://pages.addx.ai/infra/ai-data-platform/site/docs/api.html",
+    "crossChecks": [
+      "RerunCloudService official protocol",
+      "project/dataset authorization",
+      "query/export/readback capabilities"
+    ],
+    "coverage": "existing contract; deployed source consistency pending"
+  },
+  "referenceBase": "owner-skill-root for SKILL.md/contractEntrypoints/referenceSources paths; contract field resolves from this JSON directory; upstream repository entrypoints stay repository-relative"
+}

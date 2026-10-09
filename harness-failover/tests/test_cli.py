@@ -172,6 +172,107 @@ def test_probe_result_can_promote_an_unknown_profile(tmp_path):
     assert rep["health"]["claude-buzz"]["status"] == "ok" and rep["decision"]["to"] == "claude-buzz"
 
 
+# ───────── codex history (bug 2026-09-26: codex_health never read any history, so codex was never left) ─────────
+SOL, ASTRA = "gpt-5.6-sol", "gpt-6-astra"
+CODEX_LIMIT = ("You\u2019ve hit your usage limit. Visit https://example.test/usage to purchase more credits "
+               "or try again at Sep 20th, 2026 3:05 PM.")
+
+
+def rollout_lines(model, ts, ok):
+    tc = {"timestamp": ts, "type": "turn_context", "payload": {"turn_id": "t", "cwd": "/work/agent", "model": model}}
+    done = {"type": "task_complete", "turn_id": "t", "last_agent_message": "done" if ok else None,
+            "started_at": 0, "completed_at": 0}
+    if not ok:
+        done["error"] = {"message": CODEX_LIMIT, "codex_error_info": "usage_limit_exceeded"}
+    return [tc, {"timestamp": ts, "type": "event_msg", "payload": done}]
+
+
+def codex_rollout(home, name, turns, mtime=None):
+    """turns: [(model, ts, ok)] → <home>/.codex-buzz/sessions/2026/09/19/rollout-<name>.jsonl"""
+    path = f"{home}/.codex-buzz/sessions/2026/09/19/rollout-{name}.jsonl"
+    meta = {"timestamp": turns[0][1], "type": "session_meta", "payload": {"cwd": "/work/agent"}}
+    write(path, "\n".join(json.dumps(o) for o in [meta] + [l for t in turns for l in rollout_lines(*t)]) + "\n")
+    if mtime is not None:
+        os.utime(path, (mtime.timestamp(), mtime.timestamp()))
+    return path
+
+
+def on_codex(home):
+    """Put alpha/beta on the codex-buzz profile (the fleet profile, model gpt-5.6-sol)."""
+    codex = {p.id: p for p in P.load_profiles(home)}["codex-buzz"].env_updates()
+    for name in ("alpha", "beta"):
+        write(f"{home}/.config/buzz/agents/{name}.env",
+              f"AGENT_PUBKEY_HEX={AGENT_PK}\n" + "".join(f"{k}={v}\n" for k, v in codex.items() if v is not None)
+              + f"BUZZ_ACP_AGENT_OWNER={OWNER_PK}\n", 0o600)
+
+
+def codex_ops(home):
+    ops = FakeOps(home)
+    ops.codex = True
+    return ops
+
+
+def test_detect_reads_codex_rollouts_and_leaves_an_exhausted_codex(tmp_path, host_tz):
+    host_tz("UTC")
+    home = make_home(tmp_path, grok_pct=10.0)
+    on_codex(home)
+    codex_rollout(home, "a", [(SOL, "2026-09-19T04:00:00.000Z", True), (SOL, "2026-09-19T04:40:00.000Z", False)])
+    rep = json.loads(run(["detect", "--json"], home, ops=codex_ops(home))[1])
+    assert rep["current"] == "codex-buzz"
+    h = rep["health"]["codex-buzz"]
+    assert h["status"] == "exhausted" and h["until"].startswith("2026-09-20T15:05")
+    assert rep["decision"]["action"] == "switch" and rep["decision"]["to"] == "grok"
+
+
+def test_codex_success_in_a_newer_rollout_wins(tmp_path, host_tz):
+    host_tz("UTC")
+    home = make_home(tmp_path, grok_pct=10.0)
+    on_codex(home)
+    codex_rollout(home, "a", [(SOL, "2026-09-19T04:40:00.000Z", False)], mtime=NOW - dt.timedelta(minutes=20))
+    codex_rollout(home, "b", [(SOL, "2026-09-19T04:55:00.000Z", True)], mtime=NOW - dt.timedelta(minutes=5))
+    rep = json.loads(run(["detect", "--json"], home, ops=codex_ops(home))[1])
+    assert rep["health"]["codex-buzz"]["status"] == "ok" and rep["decision"]["action"] == "none"
+
+
+def test_codex_reads_on_past_a_newer_file_whose_last_turn_is_older(tmp_path, host_tz):
+    """mtime orders files by their last write, not by their last turn: a file written at 04:58 (e.g. a token_count
+    line) can end with a 04:30 turn while an older-mtime file holds the newer 04:45 turn. Stopping after the first
+    file with events would pick the wrong latest event."""
+    host_tz("UTC")
+    home = make_home(tmp_path, grok_pct=10.0)
+    on_codex(home)
+    codex_rollout(home, "x", [(SOL, "2026-09-19T04:30:00.000Z", False)], mtime=NOW - dt.timedelta(minutes=2))
+    codex_rollout(home, "y", [(SOL, "2026-09-19T04:45:00.000Z", True)], mtime=NOW - dt.timedelta(minutes=10))
+    rep = json.loads(run(["detect", "--json"], home, ops=codex_ops(home))[1])
+    assert rep["health"]["codex-buzz"]["status"] == "ok"
+
+
+def test_a_pinned_agent_exhausted_on_another_codex_model_does_not_flip_the_fleet_profile(tmp_path, host_tz):
+    host_tz("UTC")
+    home = make_home(tmp_path, grok_pct=10.0)
+    on_codex(home)
+    codex_rollout(home, "fleet", [(SOL, "2026-09-19T04:30:00.000Z", True)], mtime=NOW - dt.timedelta(minutes=30))
+    codex_rollout(home, "pinned", [(ASTRA, "2026-09-19T04:58:00.000Z", False)], mtime=NOW - dt.timedelta(minutes=2))
+    rep = json.loads(run(["detect", "--json"], home, ops=codex_ops(home))[1])
+    assert rep["health"]["codex-buzz"]["status"] == "ok" and rep["decision"]["action"] == "none"
+
+
+def test_codex_rollouts_older_than_the_history_window_are_not_read(tmp_path, host_tz):
+    host_tz("UTC")
+    home = make_home(tmp_path, grok_pct=10.0)
+    on_codex(home)
+    codex_rollout(home, "old", [(SOL, "2026-09-19T04:40:00.000Z", False)], mtime=NOW - dt.timedelta(hours=49))
+    rep = json.loads(run(["detect", "--json"], home, ops=codex_ops(home))[1])
+    assert rep["health"]["codex-buzz"]["status"] == "unknown"
+
+
+def test_codex_without_rollouts_is_unknown_and_logged_out_is_unavailable(tmp_path):
+    home = make_home(tmp_path, grok_pct=10.0)
+    assert json.loads(run(["detect", "--json"], home, ops=codex_ops(home))[1])["health"]["codex-buzz"]["status"] == "unknown"
+    codex_rollout(home, "a", [(SOL, "2026-09-19T04:40:00.000Z", False)])
+    assert json.loads(run(["detect", "--json"], home)[1])["health"]["codex-buzz"]["status"] == "unavailable"
+
+
 # ───────── switch ─────────
 def test_switch_dry_run_changes_nothing(tmp_path):
     home = make_home(tmp_path)

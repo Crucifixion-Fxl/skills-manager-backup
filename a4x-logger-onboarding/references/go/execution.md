@@ -284,7 +284,7 @@ A 更干净(测试红 / 不红的原因清晰),B 灵活(对小项目成本低)�
 ## 3. 字段契约
   3.1 Canonical 字段(LoggerMiddleware 注入):request_id / device_msg_src(✅ 已注入);user_id(⚠️ 待 auth 接入后补)
   3.2 IDTYPE 反射标签:仅 demo `ExampleGetUserRequest` 已示范
-  3.3 PII mask(logger.yaml):预置规则,业务出新 PII 模式时按 [fields-and-idtype.md](../../../skills/a4x-logger-onboarding/references/fields-and-idtype.md) 扩
+  3.3 PII mask(logger.yaml):预置规则,业务出新 PII 模式时按 [fields-and-idtype.md](../../../skills/observability/a4x-logger-onboarding/references/fields-and-idtype.md) 扩
 
 ## 4. 待办(后续业务铺开时补)
   4.1 接入 auth 后:LoggerMiddleware 里 user_id 注入解开 TODO

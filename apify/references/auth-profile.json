@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "tool": "apify",
+  "owner": "apify",
+  "provider": "delegated",
+  "origin": "https://console.apify.com",
+  "authContract": "saas-access.md",
+  "verification": "source-verified",
+  "runtimeVerification": "pending",
+  "deploymentVersion": "unknown"
+}

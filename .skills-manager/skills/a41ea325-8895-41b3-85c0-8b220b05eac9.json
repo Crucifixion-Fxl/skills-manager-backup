@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "a41ea325-8895-41b3-85c0-8b220b05eac9",
+  "path": "zendesk-admin-config",
+  "path_key": "zendesk-admin-config",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/customer-care/zendesk-admin-config",
+    "branch": null
+  }
+}

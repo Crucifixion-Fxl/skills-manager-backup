@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "tool": "worktime",
+  "owner": "worktime",
+  "repo": "https://gitlab.addx.ai/empowered-efficiency/worktime-h5",
+  "researchCommit": "46f828c00758a303ee75f6e31b66bcbfee0c5866",
+  "routeEntries": [
+    "app.py",
+    "feishu_auth.py",
+    "utils/cli_token.py"
+  ],
+  "verification": "source-verified",
+  "deploymentConsistency": "pending",
+  "needsResearch": [
+    "deployment SHA/version and effective auth configuration",
+    "cookie-free identity fixture including snapshot and user_id lifecycle binding",
+    "current subject/resource permissions"
+  ],
+  "apiDiscovery": {
+    "method": "Source-reviewed Flask/Feishu Bitable service entrypoints and existing complete business contract",
+    "contract": "../../worktime-filing/references/worktime-h5-api.md",
+    "crossChecks": [
+      "personal/admin resource scope",
+      "batch preview expiry and confirm generation",
+      "ISO-week record readback and delete window"
+    ],
+    "coverage": "Source auth routes located; deployed revision/configuration and runtime correspondence pending"
+  },
+  "sourceFacts": [
+    "app.py:3085 OAuth state is random UUID in Flask session, checked and cleared before code exchange; logout clears session only.",
+    "app.py:3163 /api/user/info returns 401 without session identity and code:0/data:user_info otherwise.",
+    "app.py:7095 verifies Bearer wktok_ and injects identity without persisting session; existing browser identity takes precedence.",
+    "utils/cli_token.py:15-19,52-95 defines hash storage, expiry and identity snapshot; app.py lifecycle handlers list/create/revoke native CLI tokens.",
+    "app.py:7056 /auth/cli-redirect validates loopback port/state and redirects token to 127.0.0.1 callback."
+  ],
+  "gates": [
+    "Research source is not deployment proof; do not read private settings or activate a guessed provider.",
+    "Keep owner-native login/token capture private and cookie-free identity validation separate from permission/write approval.",
+    "No business, login or token lifecycle calls in this source-only discovery."
+  ],
+  "referenceBase": "owner-skill-root for SKILL.md/contractEntrypoints/referenceSources paths; contract field resolves from this JSON directory; upstream repository entrypoints stay repository-relative"
+}

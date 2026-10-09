@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "tool": "feishu",
+  "owner": "feishu-auth",
+  "instances": [],
+  "nativeRoute": "@a4x/feishu-auth-cli business OAuth (not @larksuite/cli)",
+  "loginFlow": {
+    "reuseFirst": true,
+    "steps": "复用该 CLI status；业务 owner 明确依赖且已授权时调用其 login/refresh。使用 SKILL 指定内部 npm registry 与版本；不为普通飞书资源或消息改用此身份。",
+    "authorization": "Login, token creation/rotation/revocation and business writes require the current task scope; this discovery performs none."
+  },
+  "tokenMechanism": "效能业务 OAuth access/refresh token；stdout 仅捕获到进程变量，禁止终端/日志输出。",
+  "subjectPermission": "CLI status 只证明本地认证状态；目标业务平台 identity 与 permission 必须由业务 owner 契约验证。",
+  "expiryRevoke": "用 CLI refresh 恢复失效会话；logout/revoke 的版本支持需读 CLI --help 和发布源码后确定，不能虚构命令。",
+  "officialRefs": [],
+  "sources": [
+    {
+      "kind": "owner-contract",
+      "path": "../SKILL.md",
+      "status": "contract-recorded"
+    },
+    {
+      "kind": "repository",
+      "repository": "https://gitlab.addx.ai/WEB/micro_app_platform",
+      "researchCommit": "f0b8bc1798ba9e235eae88c946c2b10e3be5da42",
+      "entries": [
+        "docs/architecture/micro-app-platform-tooling/feishu-auth-cli/index.html",
+        "packages"
+      ],
+      "status": "source-verified"
+    }
+  ],
+  "versionPolicy": {
+    "researchCommit": "f0b8bc1798ba9e235eae88c946c2b10e3be5da42",
+    "deployedCommit": null,
+    "deploymentMatch": "unknown",
+    "refreshTriggers": [
+      "authentication contract change",
+      "deployed version change",
+      "reproducible auth failure"
+    ],
+    "rule": "Candidate source and published contracts do not establish deployed compatibility. Verify the target instance version and read-only supported capabilities before enabling an adapter."
+  },
+  "verification": {
+    "source": "source-verified",
+    "fixture": "not-run-in-this-discovery",
+    "runtime": "not-attempted",
+    "scope": "Read-only documentation/repository discovery; no login, token issuance, credential inspection or business API execution."
+  }
+}

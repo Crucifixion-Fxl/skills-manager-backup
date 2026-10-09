@@ -64,11 +64,12 @@ python3 scripts/pagerduty_api.py oncall-poll --since {last_poll_at} --json
 
 1. 调用 `state_manager.create_cg(incidents, service, environment)` → 获得 CG-{id}
 2. 调用 `state_manager.mark_processed(incident_ids)`
-3. 发 Phase 1 飞书通知（模板: `feishu-cards/phase1-new-alert.md`）：
+3. 在首个安全检查点按 lifecycle contract 创建/复用 Incident Issue，验证 open + assignee，并把 Root/Incident binding 持久化到 CG；若建单受阻，保留 `ISSUE_BINDING_UNVERIFIED`，不阻止紧急可逆缓解，但阻止 durable remediation、RCA final 和关闭声明。
+4. 发 Phase 1 飞书通知（模板: `feishu-cards/phase1-new-alert.md`）：
    - 使用 `scripts/feishu_notify.py send-elements` 发送
    - 颜色按 PagerDuty urgency: high=red, low=yellow
-4. 派发 Investigation subagent（按顶部"Subagent 派发协议"执行 wrapper prompt，禁止 Read 全文透传）。
-5. 更新 CG status 为 "investigating"
+5. 派发 Investigation subagent（按顶部"Subagent 派发协议"执行 wrapper prompt，禁止 Read 全文透传）。
+6. 更新 CG status 为 "investigating"
 
 ### Step 5: 处理关联告警
 
@@ -144,6 +145,8 @@ for (cg_id, idx) in approaching:
 ### Step 8: 检查执行完成 → 触发 Pattern Extraction
 
 遍历 approvals/ 中 status == "executed_success" 的 solution：
+
+在触发 Pattern Extraction 前，先把 execution revision、approval、环境、动作、结果、runtime readback、rollback 状态和未验证边界幂等写回 Incident Issue/Execution Task 并回读。`executed_success` 只表示动作完成，不表示事故关闭。
 
 ```
 if not already_extracted:

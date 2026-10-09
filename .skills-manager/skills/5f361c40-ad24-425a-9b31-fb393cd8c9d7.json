@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "5f361c40-ad24-425a-9b31-fb393cd8c9d7",
+  "path": "channel-issue-progress",
+  "path_key": "channel-issue-progress",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/collaboration/channel-issue-progress",
+    "branch": null
+  }
+}

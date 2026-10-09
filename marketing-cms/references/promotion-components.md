@@ -65,7 +65,7 @@ Promotion 是轻量级的触达点素材，用于 popup 弹窗、banner 横幅�
 `image` 字段启用了多语言，每个 locale 可以关联不同的图片。App 根据用户设备语言请求对应 locale 的图片。
 
 - **通用图片（无文案）**：将同一张图片写入所有 locale
-- **含文案图片**：`en` 必须提供；`de`/`fr`/`it`/`es`/`pt` 大概率有本地化版本；其余 locale 用 `en` 兜底
+- **含文案图片**：`en` 必须提供；缺少译图时默认停止受影响 locale 的写入并报告缺口。只有既有用户授权明确覆盖指定 locale 使用英语 fallback 时才能继续，并明示“英语回退，非已翻译素材”；授权已覆盖时不重复确认。历史上服务端/App 可能回退 `en` 的描述，不代表 Agent 可以静默发布英语代替翻译，也不证明当前运行态支持该回退。
 
 API 不指定 locale 时默认写入 `en`。用 `locale=all` 查看各 locale 的值：
 ```bash
@@ -77,8 +77,10 @@ GET /api/promotions/{id}?locale=all&depth=0
 
 图片需先上传到 media 集合获取 ID，再填入 imageCard 的 `image` 字段。
 
+先按主 [SKILL.md](../SKILL.md) 的环境选择及 `feishu-auth` 契约定义 `cms_curl`；它通过 stdin 传入进程内 `TOKEN`，不把凭据放进 curl argv。上传前确认本次写入已获授权。
+
 ```bash
-curl -X POST /api/media \
+cms_curl /api/media -X POST \
   -F "file=@image.jpg" \
   -F '_payload={"alt":"description"}'
 ```
@@ -88,6 +90,6 @@ curl -X POST /api/media \
 ## 已知约束
 
 - **key 唯一性**：CMS 创建时校验 key 是否重复，重复则报错并返回已有记录的 ID
-- **image 是 i18n 字段**：通用图片需写入所有 locale；含文案图片按语言版本写入，未提供的 locale 用 `en` 兜底
+- **image 是 i18n 字段**：通用图片与含文案图片均遵循上方[同一 locale 写入规则](#image-字段是-i18n-的)，不另设默认英语兜底。
 - **dismissible 的行为**：用户点击关闭按钮后，App 调用 noThanks 接口，该 experimentKey 下的内容永久不再展示给该用户
 - **skipNoThanks 允许重复展示**：设为 `true` 时，关闭按钮不调 noThanks 接口，下次仍可展示。适用于试用期提醒等需要反复触达的场景

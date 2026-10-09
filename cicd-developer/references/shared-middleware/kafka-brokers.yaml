@@ -1,4 +1,5 @@
-# Shared MSK SASL/SCRAM bootstrap brokers for the 6 shared-middleware clusters.
+# Shared MSK SASL/SCRAM brokers: current AWS US/EU targets + retired AWS CN history.
+# Current CN is Tencent; NEVER use historical AWS CN brokers for new staging-cn / tech-cn.
 # Source of truth: live Crossplane Cluster `.status.atProvider.bootstrapBrokersSaslScram`.
 # Verified: 2026-07-08.
 #
@@ -54,9 +55,12 @@ clusters:
       - b-2.stagingeusharedmsk.n5qeba.c8.kafka.eu-central-1.amazonaws.com:9096
       - b-3.stagingeusharedmsk.n5qeba.c8.kafka.eu-central-1.amazonaws.com:9096
 
-  staging-cn:
+  # 历史记录：该 MSK 已于 2026-10 删除（Crossplane 声明经 DEV/k8s!2850 移除），broker 地址不可用。
+  # 新 CN staging 未提供共享 MSK；Kafka 需求按 shared-middleware 策略走 Ops Todo。
+  retired-aws-staging-cn:
+    deployment_status: retired
     fleet_name: CN Staging
-    env_keyword: staging-cn
+    historical_env_keyword: staging-cn
     context: cn-eks-staging
     cloud: aws-cn
     account_id: "801447536674"
@@ -97,9 +101,10 @@ clusters:
       - b-1.techeusharedmsk.nets5t.c2.kafka.eu-central-1.amazonaws.com:9096
       - b-2.techeusharedmsk.nets5t.c2.kafka.eu-central-1.amazonaws.com:9096
 
-  tech-cn:
+  retired-aws-tech-cn:
+    deployment_status: retired
     fleet_name: CN Tech Service
-    env_keyword: tech-cn
+    historical_env_keyword: tech-cn
     context: cn-eks-tech-589-admin
     cloud: aws-cn
     account_id: "589899215075"

@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "tool": "sentry",
+  "provider": "delegated",
+  "owner": "sentry",
+  "authContract": "SKILL.md",
+  "verification": "source-verified",
+  "runtimeVerification": "pending",
+  "authDiscovery": "references/auth-discovery.json"
+}

@@ -9,6 +9,8 @@ description: 通过 az CLI 管理 Azure 资源。当用户提到 Azure、Azure A
 
 ## Description
 
+首次接入/变更扫描与日常认证入口见 [SaaS 接入](references/saas-access.md)；已有平台业务契约与授权门禁仍在本 Skill 维护。
+
 本 Skill 提供 Azure CLI 的标准化操作流程，覆盖资源查询、状态检查和变更操作。Azure API 用法通过 WebSearch 查询官方文档，本 Skill 只记录公司特有的账户信息、命名约定和操作红线。
 
 ## 账户体系

@@ -3,6 +3,8 @@ name: ops-guardrails
 description: 运维 AI 在执行有风险的基础设施动作前的预检 checklist。当 AI 准备做这些事时强制触发：申请公网 DNS 解析、改 Ingress/SG/NodePool、push 到 master、跨仓库 glab、kubectl apply 到非 GitOps 路径、写 ExternalSecret/Rollout/AnalysisTemplate/TKE Ingress、把新 Application 部署到已有 namespace、给用户断言根因或写设计方案。
 ---
 
+**写入 memory 时**：遵循 [极简写入规约](../../agent-harness/dev-infra/references/memory-writing.md)：只增量写长期约束与入口，默认≤5条/≤10行/约≤200字，语义去重；保留既有授权边界和安全门禁，详情留文档。此规约不新增写入授权。
+
 # ops-guardrails
 
 ## Description
@@ -27,7 +29,7 @@ A4x 运维 AI 的"动作前必检"清单。**不是教学文档**，是 AI 在�
 | 新 Application / Helm release 部署到一个 namespace、`prune: true` 接管已有资源 | §5 Namespace 与替换 |
 | 写 ExternalSecret、决定 Vault 路径写到哪、多个 ES 指向同一个 Secret | §6 ESO 与 Vault 路径 |
 | 写 Rollout / AnalysisTemplate、改 PromQL rate 窗口、canary 加权策略 | §7 Rollouts 与 Analysis |
-| 在 cn-k8s (TKE) 集群写或改 Ingress | §8 TKE Ingress |
+| 在任一 CN TKE 集群写或改 Ingress | §8 TKE Ingress |
 | 准备给用户讲根因 / 写设计方案 / 说"违反约束"或"Skill 教错了" | §9 推断与决策纪律 |
 
 只读动作（`get`/`describe`/`list`/读 YAML/查 Argo CD UI/查 git log）**不触发**本 skill。
@@ -97,16 +99,16 @@ A4x 运维 AI 的"动作前必检"清单。**不是教学文档**，是 AI 在�
 
 把任何 Pod 迁到**私有子网池**（`nat-egress` / `cicd-system` / `crossplane-providers` 等走 NAT 的池，或改 DRC/values `nodeSelector` 让它落私有节点）**之前**，核对它的跨 VPC 依赖在池的**每一张**私有子网 RT 里都有 peering 路由：
 
-1. **列依赖**：该负载要连哪些跨 VPC 的内部端点？常见——Vault（`vault-{us,eu,cn}-internal[.builder].addx.live`）、内部 Harbor（`registry-harbor-*`，**OCI base chart 依赖也算**，repo-server 拉它要够得着）、跨账号 RDS、其它 `*-internal.addx.live` / `internal-*.elb` ALB。
-2. **解析落点**：`getent hosts <host>` 看私有 IP 落哪个 /16（=哪个 VPC/账号）。10.211=us-data、10.222=eu-tech、10.228=cn-tech（**CN builder Vault 在 cn-tech 不在本集群**）、10.236=cn-prod、10.237=cn-dev……
-3. **逐张比对**：枚举池的全部私有子网 → 各自 RT（**同集群多张子网可能是不同 RT，cn-dev 3 张只 1 张有路由→间歇性故障，落哪个子网决定通不通**）→ 确认每张都有 `<依赖CIDR>/16 → pcx-<peering>`。用**公有子网 RT 做对照**（公有常有全套 peering，私有缺哪条一目了然）。
-4. **缺则补**：`aws ec2 create-route --route-table-id <rt> --destination-cidr-block <dep>/16 --vpc-peering-connection-id <pcx>`；回程侧确认有宽 /16 回程路由（通常已有）。
+1. **列依赖**：该负载要连哪些跨 VPC 的内部端点？常见——Vault（按目标 ClusterSecretStore 的真实 server；US/EU 可能使用 `vault-{us,eu}-internal[.builder].addx.live`，新 CN staging 为集群内独立 Vault，不能拼旧 CN Builder 域名）、内部 Harbor（`registry-harbor-*`，**OCI base chart 依赖也算**，repo-server 拉它要够得着）、跨账号 RDS、其它 `*-internal.addx.live` / `internal-*.elb` ALB。
+2. **解析落点**：解析实际 endpoint，再用目标云账号的 VPC、子网、路由表验证归属，不能凭 IP 前缀判定账号。旧 AWS CN 的 10.228/10.236/10.237 网段只属于历史排障线索；当前 CN 为腾讯云，staging 的 ESO 指向本集群 Vault，详见 [CN 腾讯云环境事实与核验入口](../k8s-ops/references/cn-tencent-inventory.md)。
+3. **逐张比对**：枚举池的全部私有子网及各自路由表，确认依赖 CIDR 与去程/回程路由。历史 cn-dev 的“3 张表仅 1 张有 peering”说明应逐张检查，不代表当前 CN 的路由拓扑。AWS 查 VPC peering/TGW；腾讯云按当前 VPC、对等连接/CCN/NAT 路径核查。
+4. **缺则补**：通过对应云的 GitOps 资源准备精确 CIDR 和路由目标变更，核对回程后按授权执行；不要在腾讯云目标上运行 `aws ec2 create-route`，也不要默认放宽到整个 /16。
 5. **验证**：消费者起来后实测——CSS 看 `.status.conditions[?(@.type=="Ready")].status==True`（**不是 `kubectl get clustersecretstore` 的 capabilities 列 `ReadWrite`，那个永远在**），或 debug pod 裸 TCP。
 
 **陷阱**：
 - SG drop 和黑洞路由**症状完全相同**（静默超时 / `unable to create client` / `context deadline exceeded`）——**先查 RT peering，别先怪 SG**（Vault/Harbor 内部 ALB 前端 SG 入站常本就 `0.0.0.0/0`）。
 - ArgoCD app `Synced·Degraded` 但 `health.message` 空、`status.resources` 子资源全 `health=-` → 查带自定义健康检查的 CRD：`ClusterSecretStore`/`ExternalSecret` 的 `Ready` 条件会 roll up 成 app Degraded 但**不在 resources 内联显示**，直接 `kubectl get clustersecretstore <n> -o jsonpath` 看 conditions。
-- builder 域集群（cn-dev / cn-staging / us/eu-staging）的 CSS 名是 `vault-builder-backend`（指向 builder Vault），别只扫 prod 的 `vault-backend`。
+- US/EU staging 的 Builder Store 仍需核查；CN 新 staging 的 CSS 当前叫 `vault-backend`，指向本集群 Vault。扫描实际 server/auth/Ready，不能仅凭 Store 名推断 Builder/Ops 权限域。
 
 ---
 
@@ -317,19 +319,13 @@ canary:
 
 来源：memory `tke-qcloud-ingress-tls-required`。
 
-cn-k8s（TKE）集群的 qcloud Ingress：
+当前 CN 的 prod、staging、tech-service 都是 TKE，但 controller / 证书契约不同，不能把旧 cn-main 模板复制到新账号：
 
-1. **必须有 `spec.tls`**——`l7-lb-controller` 强制要 HTTPS 监听器证书
-2. **复用预置通配符 secret**：`addx-live-2023-wgyxwfot`（staging-cn / prod-cn 命名空间已预置 `*.addx.live`）
-   ```yaml
-   spec:
-     tls:
-       - hosts: [<ingress-host>]
-         secretName: addx-live-2023-wgyxwfot
-   ```
-3. 缺 tls → `E4040 CertError` → CLB Listener / Rule / BackendGroup 都不创建 → readiness gate 永卡 False → Rollout `ProgressDeadlineExceeded`
-4. **Pin CLB ID**：annotation `kubernetes.io/ingress.qcloud-loadbalance-id` 固定 LB，防止 sync 时 IP 变化
-5. 其它 TKE namespace 没预置 secret → 走 ingress-tls 自服务申请或 crossplane-infra 声明
+1. 从目标 `argocd-apps` Application 的全部 sources、values 和 patches 确定实际 qcloud controller 配置。
+2. 使用目标账号的 CLB 和 SSL 证书；新账号 `100052802231` 的证书/CLB ID 不能沿用 prod 账号 `100014919455` 的值。
+3. 旧 cn-main 的部分 Ingress 通过 `spec.tls.secretName` 指定证书；缺少其要求的 TLS 可导致 `E4040 CertError`。新 tech-service ArgoCD 已在 CLB 终结 TLS，使用 `ingress.cloud.tencent.com/certificate` 且 `tls: false`，不是一律必须写 `spec.tls`。
+4. 固定 CLB 注解可能是 `kubernetes.io/ingress.qcloud-loadbalance-id` 或 `kubernetes.io/ingress.existLbId`，以当前配置为准；`existLbId` 可能不可原地修改，切换需单独核对有界重建方案及授权。
+5. staging 证书引用以 `clusters/tencent-100052802231-cn-staging/cicd/bootstrap/ingress-certificate-references.yaml` 为准，不默认使用旧 `addx-live-2023-wgyxwfot`。实时验收 HTTPS、证书域名、CLB 安全组、后端和 readiness。
 
 ---
 
@@ -396,7 +392,7 @@ AI：
 问题：违反 §1A——内部代码搜索工具是典型的内部工具，加 DNS 前必须先核查三件套，裸奔就拒绝并要求改造，而不是先加再说。
 
 ```
-用户：在 cn-tech-service 部署一个新服务，要从节点出去访问 cn-prod RDS
+用户：在 us-tech-service 部署一个新服务，要从节点出去访问 us-prod RDS
 
 AI：
 1. 直接新建 sourcebot-egress NodePool

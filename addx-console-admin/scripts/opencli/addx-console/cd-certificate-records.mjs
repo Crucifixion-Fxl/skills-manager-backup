@@ -1,0 +1,5 @@
+import {ArgumentError,CommandExecutionError,EmptyResultError} from '@jackwener/opencli/errors';
+function bad(){throw new CommandExecutionError('Console CD certificate metadata contract changed');}
+function text(x){if(x===null||x===undefined)return null;if(typeof x!=='string'||x.length>8192)bad();return x;}
+export function cdArgs(a){const limit=Number(a.limit);if(!Number.isSafeInteger(limit)||limit<1||limit>20)throw new ArgumentError('limit must be 1 to 20');return{limit,body:{vid:'',pid:'',type:null,modelNoLike:''}};}
+export function cdRows(d,a){if(!Array.isArray(d)||d.length>10000)bad();if(!d.length)throw new EmptyResultError('addx-console cd-certificates','No CD certificate metadata returned');const rows=d.map(r=>{if(!r||!Number.isSafeInteger(r.id)||r.id<1)bad();const ms=r.modelNoList;if(ms!==null&&ms!==undefined&&(!Array.isArray(ms)||ms.length>10000))bad();return{id:r.id,name:text(r.cdCertificationName),vid:text(r.vid),pid:text(r.pid),createdAt:text(r.createTime),updatedAt:text(r.updateTime),boundModelCount:ms===null||ms===undefined?null:ms.length,total:d.length};});return rows.slice(0,a.limit);}

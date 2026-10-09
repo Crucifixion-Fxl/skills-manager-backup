@@ -14,25 +14,29 @@ skill 合并进 main，本机**不会**自动跟上。一次完整升级必须�
 
 **适用的新功能默认启用**：合并并纳入 release 的后台能力，只要适用于本机现有 agent，升级就必须同时生成或迁移配置、安装并 enable 对应 service/timer、手动跑一轮，再读回 unit 和业务状态。不能把新能力留成“文档里有、代码里有、运行时没有”的可选项，也不能静默跳过；无法安全生成配置时，本次升级应明确失败，写出具体缺项与补救方法。平台类 agent 或 executor 等明确不适用的角色仍按各自 fail-closed 策略处理。
 
+升级默认同时安装或升级 Agent 自动恢复（第 7 节「自动恢复」）：重启打断的任务由已安装的 `buzz-agent-recovery.timer` 在原 Thread 自动续接，不再由人手发 `@Agent continue`。[restart-continue-tdd.md](restart-continue-tdd.md) 是它的发送契约与 L4 验收。
+
 | # | 钉的地方 | 钉的是什么 | 完整升级要做什么 |
 |---|---|---|---|
 | 1 | GitLab → Buzz 同步：Desk env 的 `BUZZ_DESK_RUNNER_MANIFEST` 与 `gitlab-buzz-sync-<channel>.service` | manifest 的 `release_dir`，以及 canonical launcher 后的 `gitlab_buzz_sync_timer.py` 路径 | 两处都切到同一个 release；unit 固定走 `~/.config/buzz/sync/gitlab-buzz-sync-launch.sh /usr/bin/python3 <release>/scripts/gitlab_buzz_sync_timer.py`，不能改成自制 launcher |
 | 2 | 飞书镜像 `buzz-feishu-<channel>.service`、个人 todo `gitlab-todo-sync-<name>.service`、`buzz-agent-join.service` | `ExecStart` 里的脚本路径 | 三类 unit 都切到新 release；timer 与 service 必须成对发现，todo/sync launcher 必须与文档模板一致 |
-| 3 | 每个 agent 的 prompt | `<release>/scripts/buzz_send_with_responsible_mentions.py` | helper 路径切到新 release；同时检查通用 prompt 条款和角色条款 |
+| 3 | 每个 agent 的 prompt | `<release>/scripts/buzz_send_with_responsible_mentions.py` | helper 路径切到新 release；检查通用/角色条款；适用入群审批的业务 Agent 必须有唯一有序频道表，表内 UUID 与 env 已批准清单完全一致 |
 | 4 | 每个 agent 的沙箱 settings 与 `BUZZ_RESPONSIBLE_CONFIG` | `allowRead` 里的 release 目录、责任人配置、配置的 `people_file` | 三条路径都放行；责任人配置保持 v2、0600、非 symlink |
 | 5 | 每个实际在用的 harness 插件副本 | agent 真正加载的 Skill revision | 审计器不执行任何 harness／wrapper：Claude 按 launcher 显式校验的 `CLAUDE_CONFIG_DIR` 静态合并 user、project、remote 与 managed settings，任一高优先级来源禁用插件即 fail；Grok 读 registry；Codex 静态读取完整 canonical `CODEX_HOME/config.toml` 的 enabled plugin／Git marketplace，再要求 `plugins/cache/addx/addx/` 只有一个安装目录，回读其 `.codex-marketplace-install.json` 和完整 Skill tree；多份／异常 cache、非 canonical remote/main 或另一个 PATH 命中一律 fail closed；更新后重启使用它的 agent |
 | 6 | 每个 agent 的 ACP 图片代理 | `BUZZ_ACP_AGENT_COMMAND` 指向的代理文件摘要，以及 `BUZZ_ACP_MEDIA_ADAPTER_COMMAND`／`BUZZ_ACP_MEDIA_BUZZ_CLI` | 代理内容必须与目标 release 的 `buzz_acp_media_proxy.py` 完全一致，目录名是其 64 位 SHA-256，真实 adapter 与固定 Buzz CLI 都回读为可信 executable |
 
+**当某个 harness 的插件市场无法固定到历史 commit 时**（例如 `claude-glm plugin update addx@addx` 只会同步到当前 `origin/main`，手动 `git checkout <sha>` 会被下一次 update 静默覆盖）：`plugin_revision`（LA-12）除了精确相等，也接受一个**可信本地 git 镜像能证明是目标 SHA 的后代**的 commit（ADR-0024，`Auditor.is_expected_or_trusted_descendant`）。这个镜像只由 `scripts/refresh_trusted_git_mirror.py` 离线刷新（owner 手动跑，像发布 release 一样，审计器本身永远不联网、不自动刷新），装在 `~/.local/share/buzz-agent-setup/git-mirror/skills.git`，root/owner-only、remote 必须逐字等于 canonical 仓库地址；镜像缺失、权限不对、remote 不对或还没抓到那个 commit，一律按原来的 `revision_mismatch` 失败，不会因为「说不清」就放行。这不放宽普通场景的判定：能精确匹配的 harness 完全不需要这个镜像。
+
 所有 agent 共用的 `~/.config/buzz/agents/run-agent.py` 必须逐字安装自 `<release>/references/scripts/run-agent.py`（0500）；每个 `buzz-local-<agent>.service` 由固定 `/usr/bin/python3 -I` 直接执行它并传入唯一的 agent 名，不再保留 shell wrapper。unit 还必须用 canonical `UnsetEnvironment=` 在解释器／loader 之前删除 LD／Python／shell 注入变量；`-I` 再隔离 Python user site。launcher 用同一 fd 读取 0600 env、按 literal 解析并从空环境构造子进程。机器相关的 PATH 放进该 agent 的 `BUZZ_AGENT_SAFE_PATH`，且每个目录必须 canonical、可信 owner、组和其他人不可写；最终 `buzz-acp` 则必须另以 `BUZZ_ACP_BINARY` 和 `BUZZ_ACP_BINARY_SHA256` 固定，不能从 PATH 回退。
 
-`<release>` 根下直接是 `scripts/` 与 `references/`：runner、todo 和 helper 都按 `<release>/scripts/<name>.py` 找脚本，并会继续读取 `<release>/references/scripts/`，所以解包时去掉前两层目录。历史 `releases/feishu-group-sync-<短 sha>/skills/buzz-agent-setup/…` 是旧布局；两种别放进同一个目录，新升级统一用 40 位 SHA 布局。
+`<release>` 根下直接是 `scripts/` 与 `references/`：runner、todo 和 helper 都按 `<release>/scripts/<name>.py` 找脚本，并会继续读取 `<release>/references/scripts/`，所以解包时去掉前两层目录。历史 `releases/feishu-group-sync-<短 sha>/skills/agent-harness/buzz-agent-setup/…` 是旧布局；两种别放进同一个目录，新升级统一用 40 位 SHA 布局。
 
 ## 2. 改了什么，该动哪几处
 
 先看变更，用于决定迁移与 live canary；不用于豁免 full convergence：
 
 ```bash
-git diff <旧 40 位> <新 40 位> -- skills/buzz-agent-setup/scripts skills/buzz-agent-setup/references/scripts
+git diff <旧 40 位> <新 40 位> -- skills/agent-harness/buzz-agent-setup/scripts skills/agent-harness/buzz-agent-setup/references/scripts
 ```
 
 | diff 里出现 | 额外关注（所有 pin 仍统一切新 SHA） |
@@ -110,7 +114,7 @@ for part in target.parts[1:]:
        /usr/bin/env -i HOME=/nonexistent PATH=/usr/bin:/bin LANG=C.UTF-8 \
        GIT_NO_REPLACE_OBJECTS=1 GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_ATTR_NOSYSTEM=1 \
        /usr/bin/git --no-replace-objects -C "$SOURCE/repo" cat-file blob \
-       "$SHA:skills/buzz-agent-setup/scripts/build_release_manifest.py" >"$BOOTSTRAP" )
+       "$SHA:skills/agent-harness/buzz-agent-setup/scripts/build_release_manifest.py" >"$BOOTSTRAP" )
    test -s "$BOOTSTRAP"
    test "$(/usr/bin/wc -c <"$BOOTSTRAP")" -le 1048576
    chmod 0500 "$BOOTSTRAP"
@@ -188,6 +192,42 @@ for part in target.parts[1:]:
 
    comparator 会先校验 receipt 的完整 schema、`checks`↔`summary`↔`gaps` 交叉计数、inventory↔identity 数量、可信父目录链和稳定读取，再比较升级前后持久 topology；缺 `checks`、空 inventory 或手工伪造 summary/gaps 都会失败。只有 receipt 中 `ok=true`、`fail=0, unknown=0`，且 LA-01…LA-12 每类都有确定状态，再叠加上一步 live 结果，才叫本机升级完成。审计器会拒绝未清理上述变量的父环境；`-I` 不能清掉 dynamic loader 变量。审计 PASS 只证明静态/P1 对齐，不冒充服务 active、真实消息效果或 GitLab/Buzz L4。
 
+### 业务 Agent 缺少入群频道表时
+
+旧版审计可能通过，但没有频道表的 Agent 在下一次入群审批时无法自动补全 prompt。这不是“不适用”，也不能以 service active 替代就绪证明。新版只读审计以 `agent_prompt` 分类明确失败：
+
+- `admission_channel_table_invalid`：标记缺失、重复或先后倒置。先备份 prompt，按 [prompt 约定](agent-channel-join.md#prompt-约定) 保留恰好一对有序标记。
+- `admission_channel_table_mismatch`：表内没有有效 UUID 行、行重复，或表内 UUID 集合与 `BUZZ_ACP_CHANNELS` 不一致。只从 owner 当前已批准的 env 清单整理表格，不从群名、Canvas、消息或 prompt 其它位置猜频道；既不能漏掉第二个频道，也不能加入尚未批准的频道。ID 列使用完整 UUID，可用成对反引号包裹。
+
+迁移前保存旧 prompt、env 与责任人配置的备份；只修改需要修复的 prompt，保持 0600。逐份审阅原有固定主群的回复规则、角色说明和出口授权：将回复目标引用改为已批准频道表中的**本次触发 Channel 的原 Thread**，保留原职责、仓库/凭据范围、可信发起人限制和禁止跨频道披露的规则。不能追加一个与旧规则冲突的表就算修完，也不能把 `respond_to` 改成 anyone 来绕过限制。个人助手尤其不能因此向新群披露个人待办或私信。
+
+修改后先重新跑只读审计；只要表格与批准清单仍不一致，就继续修复而非删除检查。审计通过后按第 3 节逐 Agent 空闲重启并读取订阅/回复证据。回滚时恢复对应备份并重启；若回到缺表旧配置，应如实报告未就绪，不能声称完整升级通过。该门禁只验证结构；真实审批、同话题回应和数据出口边界仍需 L4。
+
+### 飞书群同步升级到绑定认领、换机器同步同一个绑定（ADR-0022）
+
+`buzz_feishu_group_sync.py` 升级后缺省开启绑定认领（`binding_claim`）：首轮就在镜像的 kind:30177 里写认领。升级前确认每个镜像身份的 kind 0 由跑同步的那把 `people_api.signer_env_file` key 背书（否则报告 `claim_owner_mismatch`、不写认领）。**没升级的机器不发认领、也发现不了冲突**，所以同一个频道或同一个群若在两台机器上都有绑定，要两边都升级后才会收敛到一套；升级后手动一轮读报告里的 `claim_conflict`。
+
+换机器（旧机器停掉、新机器接手同一个 `频道 + 群`）有两种交接，二选一，写进交接记录：
+
+1. **拷 state 目录**（推荐）：先停旧机器的 timer、等正在跑的一轮结束，把整个 state 目录（`state.json` 0600、目录 0700）原样拷到新机器，再在新机器上跑 `round --take-over`。账本连续，不会重复。拷贝走本人可控的通道，结束后删掉中转副本。
+2. **不拷 state**：新机器从空 state 开始，首轮只回看重叠窗口（Buzz 900 秒、飞书 120 秒），窗口里旧机器已经转过的消息可能被重发一次；接受这一次重复才这样做。
+
+两种做法都可以不加 `--take-over`，等旧认领 30 分钟过期后自动接管；加了就立即接管，旧机器若还在跑，下一轮看到被接管就停下并撤掉自己那条。
+
+### 入群申请升级到「未绑定飞书群提示」（ADR-0023）
+
+新版 `buzz_agent_join_requests.py` 让每个纳管 agent 在被拉进没有绑定 Buzz 频道的飞书群时说明一次原因（[agent-channel-join.md](agent-channel-join.md)「被拉进未绑定的飞书群」）。它以 ADR-0022 的绑定认领为准，所以**先把所有机器的群同步升级到认领版**（上一节，`binding_claim` 缺省开），确认每套绑定都写出了认领，再给入群申请配置加 `feishu` 块；否则没升级的机器同步的群会被说成「未绑定」。
+
+只读审计对入群申请配置里的每个 agent 检查这一项，失败码与整改：
+
+- `feishu_invite_profile_missing`：agent 没有 `feishu` 块。从它的群同步配置 `agents` 里抄 `{app_id, lark_config_dir, lark_data_dir}`（它自己的 lark-cli profile），顶层加 `lark_cli`；还没有飞书应用的 agent 按 [feishu-group-sync.md](feishu-group-sync.md)「agent 的飞书身份」建一个。
+- `feishu_invite_profile_invalid`：profile 目录不是本人的 0700 目录，或没有 `lark_cli`。修权限，不要复制 profile。
+- `feishu_invite_capability_unverified`：runner 还没核实过这个 agent（状态文件里没有它）。手动跑一轮 `buzz-agent-join.service`，看输出里的 `feishu.capability`。
+- `feishu_invite_capability_gap`：runner 记下的能力不是 `ok`，detail 写明原因。`scope_missing:list|send|read` 用 `python3 references/scripts/feishu_scope_apply_url.py <app_id>` 生成链接给 owner 开通对应 scope（`im:chat:readonly`、`im:message:send_as_bot`、`im:message:readonly`）；`profile_mismatch` 说明 profile 登录的不是配置的应用；`list_refused` 是列群被飞书拒绝。开通后下一轮（缺口状态每轮重查）恢复 `ok`。
+- `feishu_invite_prompt_disabled`：配置里写了 `feishu_unbound_prompt: false`。回退窗口结束后改回 `true`。
+
+这些都是失败，不是「不适用」。升级后第一轮只把 bot 已经在的群记为基线、不发消息；真实入群效果另做 L4（在测试群里把 agent 拉进一个未绑定的群，看它说的话与回读结果）。
+
 ## 4. 破坏性变更窗口：责任人 helper 配置 v1 ↔ v2
 
 !962 起 helper 只认 v2（`version` 是整数 `2`；`channels` 由对象改成 UUID 数组；新增 `people_file`）；旧 helper 只认 v1，v2 helper 又不认 `canvas_alias`，两边互不认。一个 agent 的 prompt helper 路径、`BUZZ_RESPONSIBLE_CONFIG` 和沙箱 `allowRead` 必须一起换、随即重启，中间错配会让责任人通知失败关闭。
@@ -205,6 +245,8 @@ Workflow 正文里的 `canvas_alias` locator 改成 `person`，要在**被它唤
 
 ## 5. 验证
 
+本机配置、服务与审计缺口要在发起升级的同一 session 修完并回读；不得把未完成的本机任务转成项目 Issue 作为交付。`gitlab.projects=[]` 的无仓 Desk 只用 owner 管理的 `people_file` 解析 `person` locator，不要求 GitLab token；GitLab locator 仍须在项目 allowlist 内且有该 Agent 自己的有效 token。
+
 - **静态总门禁**：只能使用第 2 步同一个 clean-parent 子 shell 和 `/usr/bin/python3 -I <release>/scripts/audit_local_alignment.py --expected-sha <40 位 SHA>`；release 内容清单、持久／瞬时发现集合、systemd lookup shadow／drop-in／manager 实际加载值、完整 unit 模板、共享 launcher、env/prompt 权限与角色映射、责任人 v2 与 `people_file`、固定 Buzz CLI 哈希、ACP 图片代理摘要、沙箱 `allowRead`、sync manifest、飞书/todo/join unit、Claude/Codex/Grok 实际插件 revision 任一不一致都非零。只有 `fail=0, unknown=0` 才通过；JSON 可保存为不含 secret、带 LA-01…LA-12 聚合结果的 receipt。
 - agent 服务 active：`systemctl --user is-active buzz-local-<name>.service`；进程启动时间晚于 prompt、配置、沙箱和 plugin revision 的变更时间。
 - 沙箱真实会话补探针：`wc -c < <people_file>` 非零；用 `importlib` 加载 `<release>/scripts/buzz_send_with_responsible_mentions.py` 并让 `load_config` 读 `BUZZ_RESPONSIBLE_CONFIG`。静态审计不能替代真实沙箱可读性。
@@ -218,3 +260,57 @@ Workflow 正文里的 `canvas_alias` locator 改成 `person`，要在**被它唤
 - 同步／飞书／todo／join：先停 timer。回到不能理解新版 outbox 的旧 release 前，必须先用新版逐项恢复并排空 `pending`（包括旧／未知 kind）；存在 `pending` 或未知 kind 时禁止回退，不能把状态直接交给旧版或删除 state。排空后再恢复备份或旧 release 路径，`daemon-reload`，手动 start 一轮，再 enable。
 - agent：原来的 prompt、责任人配置、沙箱**三样一起还原**，并同时还原 env（包括旧 `BUZZ_ACP_BINARY*` pin）、unit、`run-agent.py` 与 `local-alignment-roles.json` 后重启；sync/todo 也恢复各自的共享 launcher。备份时记为 absent 的共享文件要移除，不能遗留新版本。Canvas 别名表还在，才回得去（helper v1 仍依赖它）。若明确回到 stock text-only，必须按 runtime-setup 写 `BUZZ_ACP_MEDIA_MODE=stock_text_only`，不能只删代理键。
 - **首次迁入本规范时的旧版本回滚是 legacy/degraded 回滚**：恢复全部备份、重新安装各 harness 真实旧 revision、`daemon-reload` 并回读 effective enabled 状态，再重启 agent 和逐个手动验证业务。因为旧 release 没有内容清单、canonical launcher 等新契约，当前 P1 审计预期仍会报告 drift，不能把它写成 full convergence PASS；稳定后要 forward-fix 回新版本。只有新旧两个 release 都已支持本规范时，回到**旧目标 SHA**、同步恢复其 binary/plugin pin 后，才可用第 2 步相同的 clean-parent 子 shell执行 `/usr/bin/python3 -I <旧 release>/scripts/audit_local_alignment.py` 并要求 `fail=0, unknown=0`。cursor、outbox、binding 和 state 目录始终不删除。
+
+## 7. 自动恢复（Agent 重启后在原 Thread 续接）
+
+Agent 因计划重启、被强杀后由 systemd 拉起或断电开机而中断时，`buzz-agent-recovery.timer` 每 15 秒触发一次 oneshot `buzz-agent-recovery.service`，运行 `<release>/scripts/recovery_controller.py`：读取各 Agent 的 native journal，复核原请求授权后，在**原 Channel 的原 Thread** 里发带真实 `p` tag 的 `@Agent continue`。它和其它适用的新功能一样默认启用，覆盖本机全部 Agent，不能只装一两个 canary；契约见 buzz-deploy `docs/design/agent-recovery/contract.md` §7、§8。
+
+### 同一次升级必须一起换的三样
+
+| 部分 | 要求 |
+|---|---|
+| 每个 Agent 的 env | 写 `BUZZ_ACP_RECOVERY_REVISION=<目标 40 位 SHA>`。canonical `run-agent.py` 把它列为必填键，缺失或不是 40 位 hex 就**拒绝启动**该 Agent。`BUZZ_ACP_RECOVERY_DIR` 在**运行时**（`run-agent.py`）可省略：省略时启动器按 `~/.local/state/buzz-recovery/<name>/runtime` 自动补上；写了就必须逐字等于这个路径。但**安装/审计**（`install_agent_recovery.py`）要求 env 文件里已经写着这个键、且值精确等于该路径，省略或不符会被判 `agent_identity_unverified` 拒绝安装该 Agent——升级迁移 env 时必须显式写上，不能依赖运行时的省略行为 |
+| 原生 `buzz-acp` | `BUZZ_ACP_BINARY`／`BUZZ_ACP_BINARY_SHA256` 固定支持恢复的构建。安装器用同一 fd 执行 `buzz-acp recovery-schema`，输出必须与 `install_agent_recovery.py` 里唯一一份 `CAPABILITIES`（含 journal 版本）逐项相等，否则报 `binary_recovery_capability_unverified` |
+| 控制器配置与单元 | `~/.config/buzz/recovery/config.json`（0600）、`buzz-agent-recovery.service`、`buzz-agent-recovery.timer`，只由安装器生成，不手写 |
+
+三样必须在**同一次升级**里迁完：只换 env 不换二进制，能力核对失败；只换二进制不写 env，Agent 起不来；还有 Agent 没迁完就装控制器，安装器会列出缺项并拒绝，不会把没迁的 Agent 当成不适用。env 按第 3 节逐个 Agent 空闲时重启，新进程才会用新 revision 写 journal；首次安装前旧进程没有 journal，先让它们空闲再切换，从未持久化的工作不承诺恢复。
+
+### 安装器 `install_agent_recovery.py`
+
+在第 2 步同一个 clean-parent 子 shell 里执行，四个模式必须且只能选一个，其余参数相同；输出一行 JSON，不含 env 值或私钥：
+
+```bash
+/usr/bin/python3 -I <release>/scripts/install_agent_recovery.py --check \
+  --revision <目标 40 位 SHA> --owner-env-file <owner 0600 env> --relay-pubkey <relay pubkey>
+```
+
+| 模式 | 做什么 |
+|---|---|
+| `--check` | 只读：安装记录状态、完整清单与审计、要生成的单元、用户服务管理器当前状态（只 `show`）、每个 Agent 的真实进程与 journal（不发预热信号）。通过只说明可以 apply，`installed` 恒为 false |
+| `--dry-run` | 只读：打印计划覆盖的 Agent |
+| `--apply` | 安装或升级：锁内记录安装日志与备份 → 停旧 timer/service → 发布三份文件 → `daemon-reload` → 先持久记下“新服务可能已运行”再手动跑一轮 → 核对全部 Agent 就绪 → enable 并启动 timer → 后置审计。首次安装只放行已批准的那一对新增单元（即 `compare_local_alignment_receipts.py --allow-recovery-install` 的语义），其它任何拓扑增减都失败 |
+| `--repair` | 处理中断的安装（见下文回滚），不会新建安装 |
+
+只有 `--apply`／`--repair` 在输出 `installed=true` 时才算装好：它们已读回**本次** systemd 运行写下的持久 tick 回执（本次启动、本 boot、本份配置，且成功）、timer 同时 enabled 与 active、全部 Agent 的真实进程与 journal、后置审计 PASS。命令退出码 0 不算证据。
+
+| 退出码 | `outcome` | 含义与下一步 |
+|---|---|---|
+| `0` | `ok` | 请求的操作完成；看 `installed`、`repair` 字段 |
+| `2` | — | 参数错误（未选模式或选了多个） |
+| `3` | `refused` | 预检拒绝，没改任何文件或服务；按 `remediation` 修好后重新 `--check` |
+| `4` | `rolled_back` | 安装失败，已按持久备份恢复原文件和 timer 状态；修好原因后 `--check` 再 `--apply` |
+| `5` | `needs_repair` | 安装未完成，或新服务可能已处理任务；不要删安装记录、不要直接重装，先 `--check` 再 `--repair` |
+
+### 验证
+
+- `--apply` 的输出：`installed=true`、`tick.invocation_id`、`timer` 为 enabled＋active、`after_audit.ok`。
+- 静态总门禁：第 5 节的 `audit_local_alignment.py` 必须 `fail=0, unknown=0`；它逐项核对恢复 service/timer 模板、配置对全部 Agent 的覆盖与绑定（env、unit、journal 路径、revision、二进制摘要），真实本机上再读 timer 的 enabled/active。升级前后两份 receipt 用 `compare_local_alignment_receipts.py` 比较，首次安装加 `--allow-recovery-install`，之后的升级不加。
+- 之后任意时刻读最近一次 tick 回执（只读，不建库、不修复）：`/usr/bin/python3 -I -c 'import json, sys; sys.path.insert(0, "<release>/scripts"); import recovery_tick; print(json.dumps(recovery_tick.read_tick(sys.argv[1])))' ~/.local/state/buzz-recovery/controller`，要求 `phase=completed`、`ok=true`、`origin=systemd`，`started_ns` 随 timer 前进。
+- timer 持续运行不等于断电后自启：还要单独确认 `loginctl enable-linger <user>` 等开机前提。真实续接效果按 [restart-continue-tdd.md](restart-continue-tdd.md) 的 L4 验收。
+
+### 回滚与修复
+
+- 安装日志在 `~/.local/state/buzz-recovery/install/<操作 id>/`：`journal.json` 记录每一步和三份文件的原内容，`before-audit.json` 是安装前的拓扑基线。整个目录**不删**、不手改；有未完成记录时，`--apply` 一律 `needs_repair`。
+- `--repair` 只接管唯一一条未完成记录：新服务启动前中断的，核对三份文件都是原内容或新内容、服务没在运行、没有新配置的运行回执后，**逐字**恢复原文件并把 timer 恢复到安装前状态；新服务启动之后（记录为 `runtime_started` 或 `forward_fix_required`）只能**向前修复**：不回退文件、不动任务队列，重新证明 tick、就绪、timer 与后置审计后才提交。记录缺失、多条未完成、文件被人改过、服务正在运行、缺拓扑基线或计划与已发布文件不符时，`--repair` 以固定原因拒绝，什么都不改，按 `remediation` 人工核对。
+- 退回旧 release：先 `systemctl --user disable --now buzz-agent-recovery.timer`，再按第 6 节把所有 pin 一起退回。旧 native／旧控制器不理解新 journal schema 时，存在 `pending` 或未知状态就不能把它交给旧版，也不能删 `~/.local/state/buzz-recovery/`；保留证据、向前修复。回到没有恢复能力的旧 release，后置审计照实报恢复缺项，不能写成 full convergence。
+- 紧急停用只停调度：`systemctl --user disable --now buzz-agent-recovery.timer`。它不删除任务责任、不改业务成员关系；之后审计会报 `recovery_timer_not_enabled_or_active`，要如实记录，修好后用 `--apply` 重新启用。

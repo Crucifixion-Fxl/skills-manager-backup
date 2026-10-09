@@ -575,12 +575,46 @@
           "check": "Return the structured result card with exact current Research/form/draft IDs and API-returned URLs; do not invent source campaign identity as the current Draft."
         }
       ]
+    },
+    {
+      "id": 20,
+      "slug": "published-shared-form-update-confirmation",
+      "mode": "two_turn_confirmed_effect",
+      "prompt": "把这个已经公开收集答卷的问卷改一题；它可能被同项目多个 Research 共用。先告诉我会改哪份问卷、影响哪些研究、历史答卷风险，等我确认后再改。",
+      "setup": "Fresh Agent with one Project key. Exact definition GET returns a public form, nonzero or unknown response_count, two same-Project affected_research records, provider_revision and affected_scope_digest. A competing edit may change either revision or affected scope before update. No direct Typeform access is allowed.",
+      "expected_output": "Before any write, identify exact Project/form and every affected Idea/Research, show the intended full diff and Typeform PUT/PATCH risk, then wait for this target-specific confirmation. After confirmation use the exact fresh guards, stop and reconfirm on drift, and verify the same form by readback and preview.",
+      "assertions": [
+        {
+          "name": "form-update-01",
+          "check": "GET the exact bound native definition with idea_id; use returned affected_research and never infer scope from a shared Typeform account."
+        },
+        {
+          "name": "form-update-02",
+          "check": "Disclose all affected Idea/Research IDs, public/collecting state, response count or unknown, concrete changes, and whole-form PUT deletion risk or official-path PATCH limit before asking confirmation."
+        },
+        {
+          "name": "form-update-03",
+          "check": "No update before explicit confirmation of this exact form, affected scope and diff; past creation/publication consent does not count."
+        },
+        {
+          "name": "form-update-04",
+          "check": "Use GET provider_revision and affected_scope_digest as expected fields; on revision or scope conflict, re-read and reconfirm instead of silent retry."
+        },
+        {
+          "name": "form-update-05",
+          "check": "After the write, compare the exact provider definition and public state with the approved diff and use only an API-returned no-submission preview URL."
+        },
+        {
+          "name": "output-20",
+          "check": "Return the structured result card with exact Project/form and all affected Idea/Research IDs, verified state, risks and API-returned links; mark unknown response count as unknown."
+        }
+      ]
     }
   ],
   "contract": {
     "version": 1,
     "id_start": 1,
-    "case_count": 19,
+    "case_count": 20,
     "canonical_inputs": true,
     "require_assertions": true,
     "hide_tool_tokens": true,

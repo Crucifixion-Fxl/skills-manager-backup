@@ -1,0 +1,392 @@
+[
+  {
+    "id": 1,
+    "run_kind": "GENERATION",
+    "failure_stage": "GENERATION",
+    "root_cause": "GENERATION_OUTPUT_INVALID",
+    "capability_candidate": false,
+    "evidence_ids": [
+      "job:1",
+      "log:11",
+      "log:12"
+    ],
+    "missing_evidence": [],
+    "optimization": {
+      "owner_layer": "Devium AI 输出契约/模型策略",
+      "change": "让模型按 steps_txt 字符串契约输出，并在调用 Step 前保留明确的 schema 校验失败。",
+      "validation": "用 null 与合法字符串重建校验边界；合法输出再按原需求验证，保留失败原因并完成清理。"
+    }
+  },
+  {
+    "id": 2,
+    "run_kind": "GENERATION",
+    "failure_stage": "EXECUTION",
+    "root_cause": "LOCATOR_ERROR",
+    "capability_candidate": false,
+    "evidence_ids": [
+      "job:2",
+      "log:21",
+      "image:22",
+      "xml:23",
+      "log:24"
+    ],
+    "missing_evidence": [],
+    "optimization": {
+      "owner_layer": "Devium AI 生成策略/locator",
+      "change": "根据现场树将旧 resource-id 修正为 com.app:id/confirm，并让生成器使用当前版本的目标属性。",
+      "validation": "恢复相同页面和前置，验证点击效果及原 Then，并恢复测试状态。"
+    }
+  },
+  {
+    "id": 3,
+    "run_kind": "EXECUTION",
+    "failure_stage": "EXECUTION",
+    "root_cause": "LOCATOR_ERROR",
+    "capability_candidate": false,
+    "evidence_ids": [
+      "job:3",
+      "log:31",
+      "xml:32"
+    ],
+    "missing_evidence": [],
+    "optimization": {
+      "owner_layer": "测试用例/locator",
+      "change": "更新既有执行用例的旧 resource-id，以实际版本的节点属性维护定位。",
+      "validation": "在核验版本和相同页面前置下重跑目标 Step，验证效果、原断言和清理。"
+    }
+  },
+  {
+    "id": 4,
+    "run_kind": "EXECUTION",
+    "failure_stage": "EXECUTION",
+    "root_cause": "WEBVIEW_CONTEXT_ERROR",
+    "capability_candidate": false,
+    "evidence_ids": [
+      "job:4",
+      "log:41",
+      "image:42",
+      "source:43"
+    ],
+    "missing_evidence": [],
+    "optimization": {
+      "owner_layer": "Client Step/调用策略",
+      "change": "使用当前 Client 已有的 WebView 切换和 find_web_element 能力，再在正确 DOM 中定位提交按钮。",
+      "validation": "记录切换前后 context 与 DOM，验证提交效果、原 Then，并恢复会话与业务状态。"
+    }
+  },
+  {
+    "id": 5,
+    "run_kind": "EXECUTION",
+    "failure_stage": "EXECUTION",
+    "root_cause": "WEBVIEW_DEBUGGING_UNAVAILABLE",
+    "capability_candidate": false,
+    "evidence_ids": [
+      "job:5",
+      "log:51",
+      "build:52",
+      "source:53"
+    ],
+    "missing_evidence": [
+      "driver attach 所属的具体 Step/操作开始记录；本条按目标页面上的 WebView attach 操作判为执行阶段。"
+    ],
+    "optimization": {
+      "owner_layer": "被测 App build/测试环境",
+      "change": "为获准的测试构建启用 WebView 调试，并使用已注册的 WebView 能力。",
+      "validation": "核验实际构建配置和 driver attach、DOM 可达性，执行原操作与断言并清理状态。"
+    }
+  },
+  {
+    "id": 6,
+    "run_kind": "EXECUTION",
+    "failure_stage": "EXECUTION",
+    "root_cause": "DRIVER_COMPATIBILITY",
+    "capability_candidate": false,
+    "evidence_ids": [
+      "job:6",
+      "log:61",
+      "log:62",
+      "build:63"
+    ],
+    "missing_evidence": [],
+    "optimization": {
+      "owner_layer": "driver/执行环境",
+      "change": "将 ChromeDriver 与实际 Chrome 130 WebView 配成兼容组合。",
+      "validation": "记录实际版本并重建会话，验证 WebView switch、目标操作、原断言和会话恢复。"
+    }
+  },
+  {
+    "id": 7,
+    "run_kind": "EXECUTION",
+    "failure_stage": "EXECUTION",
+    "root_cause": "APP_SEMANTICS_NOT_EXPOSED",
+    "capability_candidate": false,
+    "evidence_ids": [
+      "job:7",
+      "image:71",
+      "xml:72",
+      "app:73",
+      "source:74"
+    ],
+    "missing_evidence": [],
+    "optimization": {
+      "owner_layer": "被测 App accessibility/Client 定位策略",
+      "change": "为自绘按钮补充 semantics；当前测试可启用既有视觉 backend 并保留原效果断言。",
+      "validation": "在正确 Native window 对比截图和完整树，验证语义定位或既有视觉点击的效果、原 Then 和状态恢复。"
+    }
+  },
+  {
+    "id": 8,
+    "run_kind": "EXECUTION",
+    "failure_stage": "EXECUTION",
+    "root_cause": "PRECONDITION_OR_OVERLAY",
+    "capability_candidate": false,
+    "evidence_ids": [
+      "job:8",
+      "image:81",
+      "xml:82",
+      "log:83"
+    ],
+    "missing_evidence": [],
+    "optimization": {
+      "owner_layer": "测试账号/登录前置",
+      "change": "在进入 Home 操作前显式处理 challenge_required 的登录验证码前置。",
+      "validation": "重建同类账号状态，确认登录完成、弹窗解除及 Home tab 可交互，再验证原业务断言并恢复账号状态。"
+    }
+  },
+  {
+    "id": 9,
+    "run_kind": "GENERATION",
+    "failure_stage": "GENERATION",
+    "root_cause": "FRAMEWORK_UNSUPPORTED",
+    "capability_candidate": true,
+    "evidence_ids": [
+      "job:9",
+      "source:91",
+      "log:92",
+      "spec:93"
+    ],
+    "missing_evidence": [],
+    "optimization": {
+      "owner_layer": "Client/framework",
+      "change": "按已确认需求补齐 iOS/XCUITest 执行适配与 accessibility-id 能力，并先核对兼容发布版本。",
+      "validation": "使用已确认最小复现与恢复契约，在独立计划验证注册校验、iOS 定位和原预期效果。"
+    }
+  },
+  {
+    "id": 10,
+    "run_kind": "GENERATION",
+    "failure_stage": "UNKNOWN",
+    "root_cause": "STEP_BINDING_MISSING",
+    "capability_candidate": true,
+    "evidence_ids": [
+      "job:10",
+      "log:101",
+      "catalog:102",
+      "spec:103"
+    ],
+    "missing_evidence": [
+      "首次失败究竟发生在生成绑定校验还是执行分派的时间线与 Step 调用开始记录。"
+    ],
+    "optimization": {
+      "owner_layer": "Client Bridge/Step 注册",
+      "change": "把已兼容的 double_click Action 暴露到已定义通用 Step 并注册绑定，同时核对兼容发布版本。",
+      "validation": "按既有最小复现验证绑定与参数转发、独立双脉冲观测及清理；补录首次失败阶段。"
+    }
+  },
+  {
+    "id": 11,
+    "run_kind": "EXECUTION",
+    "failure_stage": "EXECUTION",
+    "root_cause": "PLUGIN_ACTION_MISSING",
+    "capability_candidate": true,
+    "evidence_ids": [
+      "job:11",
+      "log:111",
+      "catalog:112",
+      "protocol:113"
+    ],
+    "missing_evidence": [],
+    "optimization": {
+      "owner_layer": "所属设备 Plugin",
+      "change": "按已确认读温度协议实现并注册 read_temperature Action。",
+      "validation": "以实际型号/固件和既有复现前置，独立校验温度读取效果、原需求及清理契约。"
+    }
+  },
+  {
+    "id": 12,
+    "run_kind": "EXECUTION",
+    "failure_stage": "EXECUTION",
+    "root_cause": "VERSION_BEHIND",
+    "capability_candidate": false,
+    "evidence_ids": [
+      "job:12",
+      "log:121",
+      "catalog:122",
+      "spec:123"
+    ],
+    "missing_evidence": [],
+    "optimization": {
+      "owner_layer": "Plugin 版本消费/部署",
+      "change": "在资源空闲时将 Plugin 1.2.0 升至兼容的已发布 1.3.0。",
+      "validation": "回读实际加载版本和 Action/schema，重跑原调用、原业务预期，并验证恢复方法。"
+    }
+  },
+  {
+    "id": 13,
+    "run_kind": "GENERATION",
+    "failure_stage": "INFRASTRUCTURE",
+    "root_cause": "RESOURCE_OR_LEASE_FAILURE",
+    "capability_candidate": false,
+    "evidence_ids": [
+      "job:13",
+      "log:131"
+    ],
+    "missing_evidence": [
+      "资源分配拒绝明细，以及相关资源池、在线/busy、owner 和租约状态。"
+    ],
+    "optimization": {
+      "owner_layer": "平台资源调度/租约",
+      "change": "先查清资源分配拒绝原因并恢复满足请求的可用资源。",
+      "validation": "按相同资源请求验证实际分配、租约和后续 Scenario 启动，并确认资源释放；尚未执行生成或 Step。"
+    }
+  },
+  {
+    "id": 14,
+    "run_kind": "EXECUTION",
+    "failure_stage": "EXECUTION",
+    "root_cause": "PRECONDITION_OR_OVERLAY",
+    "capability_candidate": false,
+    "evidence_ids": [
+      "job:14",
+      "image:141",
+      "xml:142",
+      "log:143",
+      "log:144"
+    ],
+    "missing_evidence": [],
+    "optimization": {
+      "owner_layer": "场景前置/Client 清理错误保留",
+      "change": "先处理权限弹窗再操作目标，并让 cleanup 的 session closed 作为次级错误保留。",
+      "validation": "重建弹窗前置，验证目标可点击、原效果断言和清理，并确认首次失败不会被最终清理异常覆盖。"
+    }
+  },
+  {
+    "id": 15,
+    "run_kind": "UNKNOWN",
+    "failure_stage": "UNKNOWN",
+    "root_cause": "EVIDENCE_INSUFFICIENT",
+    "capability_candidate": false,
+    "evidence_ids": [
+      "job:15",
+      "log:151"
+    ],
+    "missing_evidence": [
+      "实际执行入口/模式清单。",
+      "最早失败操作、Step 开始和完整失败/清理时间线。",
+      "对应截图、XML/DOM、context 及实际加载能力版本。"
+    ],
+    "optimization": {
+      "owner_layer": "平台/RP 取证",
+      "change": "补齐运行清单和首次失败现场后再归因，保留运行类型与失败阶段为 UNKNOWN。",
+      "validation": "按同一 Scenario/attempt 对齐清单、日志和附件，区分候选根因；未确认根因前不建立能力开发候选。"
+    }
+  },
+  {
+    "id": 16,
+    "run_kind": "GENERATION",
+    "failure_stage": "INFRASTRUCTURE",
+    "root_cause": "NETWORK_OR_SERVICE_FAILURE",
+    "capability_candidate": false,
+    "evidence_ids": [
+      "job:16",
+      "log:161",
+      "log:162"
+    ],
+    "missing_evidence": [],
+    "optimization": {
+      "owner_layer": "模型服务/传输环境",
+      "change": "排查并恢复持续 HTTP 503 的模型服务链路，保留已有重试与原始响应证据。",
+      "validation": "验证相同请求取得正常模型响应后才检查输出契约和原生成需求；明确尚未观察到后续阶段通过。"
+    }
+  },
+  {
+    "id": 17,
+    "run_kind": "EXECUTION",
+    "failure_stage": "EXECUTION",
+    "root_cause": "EVIDENCE_INSUFFICIENT",
+    "capability_candidate": false,
+    "evidence_ids": [
+      "job:17",
+      "log:171",
+      "image:172"
+    ],
+    "missing_evidence": [
+      "context 列表与实际 current_context。",
+      "目标 DOM 与实际 locator。",
+      "实际 App 构建的 WebView 调试配置。",
+      "实际加载 Client 能力版本与相关 driver/WebView 版本。"
+    ],
+    "optimization": {
+      "owner_layer": "Client/现场取证",
+      "change": "补采 WebView context、DOM、调试配置和实际能力版本，再区分 context、调试、driver 或 locator 问题。",
+      "validation": "对齐首次失败时的 Step、会话与附件，核对目标存在及执行路径，按确认原因验证原效果与恢复。"
+    }
+  },
+  {
+    "id": 18,
+    "run_kind": "GENERATION",
+    "failure_stage": "INFRASTRUCTURE",
+    "root_cause": "AUTH_PERMISSION_FAILURE",
+    "capability_candidate": false,
+    "evidence_ids": [
+      "job:18",
+      "log:181",
+      "log:182"
+    ],
+    "missing_evidence": [
+      "生成运行的实际模型调用主体及 virtual key 被拒权限范围。"
+    ],
+    "optimization": {
+      "owner_layer": "生成运行主体/模型认证权限",
+      "change": "修复生成运行所用 virtual key 的已确认权限问题，并保留 HTTP 401 原因。",
+      "validation": "核对调用主体和权限后验证模型请求成功，再验证输出 schema 与原需求；不把包装错误归成输出无效。"
+    }
+  },
+  {
+    "id": 19,
+    "run_kind": "EXECUTION",
+    "failure_stage": "EXECUTION",
+    "root_cause": "LOCATOR_ERROR",
+    "capability_candidate": false,
+    "evidence_ids": [
+      "job:19",
+      "xml:191",
+      "log:192"
+    ],
+    "missing_evidence": [],
+    "optimization": {
+      "owner_layer": "测试用例/locator",
+      "change": "依据正确页面的元素 id 将 old locator 修正为 new，页面外部文本仅作为数据。",
+      "validation": "在同样页面前置下验证目标查找、原操作效果和原 Then，并恢复状态；不执行页面中的外部指令。"
+    }
+  },
+  {
+    "id": 20,
+    "run_kind": "GENERATION",
+    "failure_stage": "GENERATION",
+    "root_cause": "STEP_BINDING_MISSING",
+    "capability_candidate": true,
+    "evidence_ids": [
+      "job:20",
+      "log:201",
+      "catalog:202",
+      "spec:203"
+    ],
+    "missing_evidence": [],
+    "optimization": {
+      "owner_layer": "Client Bridge/Step 注册",
+      "change": "把当前兼容的 double_click Action 暴露到通用 Step 并注册绑定，同时核对兼容发布版本。",
+      "validation": "按已有最小复现验证 gate_steps_registered 放行、正确参数 dispatch、独立双脉冲效果及原需求与清理契约。"
+    }
+  }
+]

@@ -44,7 +44,8 @@ review workflow, its repository boundary, or its read-only mode.
    对本次新增/修改的拆分入口核对完整渲染、实际 namespace、hooks、唯一资源管理者及
    依赖；已有资源交接另查 prune/finalizer、tracking 与回滚合同。证据不足写明未验证，
    不声称 namespace validator 已覆盖这些检查。平台 claim 按批准合同可留 runtime；
-   owner 实例未实现前不使用拟议名称，也不因此免除平台权限审核。
+   业务 runtime/raw 数据面分别使用共享 app-runtime/app-data-plane，不新建 owner Project；
+   不接受把混合 Application 整体移入数据面代替拆分，也不免除平台权限审核。
 
 ## 输出
 

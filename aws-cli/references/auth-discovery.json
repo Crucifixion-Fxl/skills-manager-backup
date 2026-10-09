@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "tool": "aws",
+  "owner": "aws-cli",
+  "instance": {
+    "selection": "Use target/environment mapping in owner SKILL; never enumerate unrelated profiles or silently fall back.",
+    "contract": "SKILL.md",
+    "currentVersion": "unknown; historical values are not runtime evidence",
+    "addressEvidence": "Owner SKILL.md environment tables are the address SSOT; credential variables and exceptions in auth.nativeCredentialPath are selected-instance constraints."
+  },
+  "auth": {
+    "nativeCredentialPath": "Official aws CLI selected existing profile; ~/.aws config/credentials consumed by CLI only, no secret/profile content enumeration.",
+    "missingCredentialWorkflow": "Only selected target profile: renew existing IAM Identity Center session with aws sso login --profile when SSO configured; otherwise administrator injects approved STS/access credentials via official setup, no default/legacy CN fallback.",
+    "subjectAndResourcePermissionVerification": "aws sts get-caller-identity --profile <target>, Account equals requested account, then service-specific authorized read. STS identity success does not establish resource permission.",
+    "issuanceConsumptionRevocation": "SSO cache/STS temporary credential expiry; aws sso logout affects cached sessions and must be scoped/authorized. Long-lived IAM key deactivation/delete by owning admin, not local config deletion.",
+    "credentialHandling": "Private injection only; never print/store secrets in repository, command arguments, chat or receipts. Discovery itself performs no login/token creation."
+  },
+  "nativeRoute": {
+    "business": "Owner SKILL + version-matched official CLI/API documentation",
+    "loginRecovery": "web-access for human web interaction; official CLI only where explicitly documented",
+    "refresh": "platform-onboarding only for concrete auth/version/interface drift",
+    "runtimeProvider": "delegated",
+    "adapterStatus": "delegated contract only; no new runnable provider or full API mirror implemented"
+  },
+  "referenceSources": [
+    {
+      "kind": "owner-contract",
+      "path": "SKILL.md"
+    },
+    {
+      "kind": "owner-contract",
+      "path": "references/setup.md"
+    },
+    {
+      "kind": "primary-official",
+      "url": "https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-sso.html",
+      "checkedOn": "2026-10-07",
+      "use": "authentication discovery; match actual deployed version before business calls",
+      "status": "retrieved",
+      "limitation": "Official documentation does not prove instance compatibility."
+    }
+  ],
+  "versionPolicy": {
+    "probe": "aws --version; hosted services use per-service API models, selected region/partition; no shared server semver. AWS CN historical only; current CN Tencent.",
+    "compatibility": "Unknown deployment version requires non-mutating capability evidence before business usage; do not promote latest upstream docs to deployed compatibility."
+  },
+  "verification": {
+    "source": "source-verified",
+    "fixture": "not-run: reference-only changes",
+    "runtime": "pending",
+    "sourceCandidate": "8d736bd81ab8500e51cf6be3d71d1ffa70937cae",
+    "scope": "Owner repository contract and primary documentation research only. No credential inspection, login, token issuance/revocation or online business calls.",
+    "pendingReasons": [
+      "Target deployment version, selected subject and exact resource permissions have not been runtime verified.",
+      "Token/login workflow needs independently authorized selected-instance validation; no runnable unified provider is claimed."
+    ]
+  }
+}

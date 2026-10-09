@@ -78,7 +78,10 @@ MAX_ROUND_ENTRIES = 512
 MAX_ROUND_BYTES = 64 * 1024 * 1024
 SHA256_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 SKILL_ROOT = Path(__file__).resolve().parents[1]
-REPOSITORY_ROOT = SKILL_ROOT.parents[1]
+REPOSITORY_ROOT = next(
+    root for root in (SKILL_ROOT.parents[1], SKILL_ROOT.parents[2])
+    if (root / "skills").is_dir() and SKILL_ROOT.is_relative_to(root / "skills")
+)
 _STATE_ROOT_VALUE = os.environ.get("ADDX_WORK_METHOD_STATE_DIR")
 STATE_ROOT = (
     Path(_STATE_ROOT_VALUE)
@@ -90,7 +93,7 @@ if not STATE_ROOT.is_absolute():
 QUALITY_GATE_ROOT = STATE_ROOT / "quality-gates"
 STATE_MARKER = ".addx-work-method-artifacts"
 STATE_MARKER_CONTENT = "addx.work_method_artifacts.v1\n"
-SKILL_CATALOG = REPOSITORY_ROOT / "skill-analytics" / "catalog" / "addx-skills.json"
+SKILL_CATALOG = REPOSITORY_ROOT / "runtime/coding-session" / "catalog" / "addx-skills.json"
 FILTER_SOURCES = (
     SKILL_ROOT / "filters" / "claude-session-evidence.jq",
     SKILL_ROOT / "filters" / "codex-session-evidence.jq",

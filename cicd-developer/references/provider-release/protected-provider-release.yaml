@@ -138,13 +138,13 @@ write_sets:
   engineering_skills:
     repository: engineering/skills
     allowed_paths:
-      - .claude/skills/cicd-developer/references/data/routes-build.yaml
-      - .claude/skills/cicd-developer/references/data/stop-conditions.yaml
-      - .claude/skills/cicd-developer/references/provider-release/
-      - .claude/skills/cicd-developer/recipes/ci/
-      - .claude/skills/cicd-developer/validators/
-      - .claude/skills/cicd-developer/workflows/
-      - .claude/skills/cicd-developer/tests/
+      - .claude/skills/delivery/cicd-developer/references/data/routes-build.yaml
+      - .claude/skills/delivery/cicd-developer/references/data/stop-conditions.yaml
+      - .claude/skills/delivery/cicd-developer/references/provider-release/
+      - .claude/skills/delivery/cicd-developer/recipes/ci/
+      - .claude/skills/delivery/cicd-developer/validators/
+      - .claude/skills/delivery/cicd-developer/workflows/
+      - .claude/skills/delivery/cicd-developer/tests/
   runner_gitops:
     repositories:
       - repository: DEV/k8s

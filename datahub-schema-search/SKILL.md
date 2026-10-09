@@ -11,9 +11,15 @@ description: >
 
 ## Description
 
+平台接入唯一正本为[saas-access.md](references/saas-access.md)，认证/source事实见[auth-profile.json](references/auth-profile.json)、[auth-discovery.json](references/auth-discovery.json)、[source-discovery.json](references/source-discovery.json)。日常访问调用`web-access`；首次或认证/部署变化调用`platform-onboarding`。认证未知不视作匿名，也不套用底层DataHub token；以下业务接口原文保留，POST sync执行须明确授权并回读。
+
 通过 datahub-schema-search 服务的 REST API，帮助用户以自然语言搜索和浏览 DataHub 中的表结构元数据。支持语义搜索、精确查表、浏览数据库和表列表。
 
 服务地址：`https://datahub-schema-search.addx.live`
+
+浏览器单次 ERR_BLOCKED_BY_CLIENT 只说明该次浏览器通道失败，不能据此认定服务不可达。可分别用本机与远端无凭据访问健康、文档与 OpenAPI 发现入口，保存状态及选定元数据，不调用同步或猜认证。公开文档没有 securitySchemes 或 Authorize 按钮不证明业务接口匿名；文档 info.version 不证明当前部署构建版本。认证中间件、网关主体和业务权限未核验时，明确保留身份与业务读取未覆盖，底层 DataHub 会话不代替本服务证据。
+
+定位私有服务时从部署 Application 的 repoURL 与 sourcePath 追到真正代码，而非选择名称相近的导出仓库；配置 image tag 不等于在线 workload 版本。分别追踪请求、懒初始化与启动生命周期：懒建进程内客户端不代表 bootstrap，而启动进程可能创建后端资源并自动同步，禁止为只读验证直接运行服务。应用 GET 只调 list 的证据与部署 SDK、网关身份和完整依赖链证明分开。数据库目录查询可能遍历全部后端 passages，少量输出不代表少量服务器读取；未收到 HTTP 状态的有界请求记录为读取未通过，保留消费者终态并避免反复重试或把公开健康成功当业务成功。
 
 Swagger API 文档：https://datahub-schema-search.addx.live/docs
 

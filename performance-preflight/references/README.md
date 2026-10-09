@@ -16,7 +16,7 @@ Read these in order based on what you need:
 | 这个服务的 Prometheus job label 叫什么 / "What's the job label for service X?" | [job-labels.md](job-labels.md) — naming conventions, including the `prod-us-X` vs `us-prod-X` trap |
 | 现在 US prod 大概有多少在线设备 / 多少 QPS / "What's the current order of magnitude for X?" | [magnitudes.md](magnitudes.md) — point-in-time anchors + cross-service ratios |
 | 我要在脚本里跑 PromQL，怎么写最少代码 / "How do I run a PromQL query in the fewest lines?" | [query-helpers.py](query-helpers.py) — copy-paste-runnable Python |
-| iot-service-cloud / kiss / state-machine 有哪些 counter 可以用 / "What metrics does service X expose?" | [recipes/](recipes/) — per-project counter tables + standard recipes |
+| iot-service-cloud / kiss / state-machine 有哪些 counter 可以用 / "What metrics does service X expose?" | [recipes/](recipes) — per-project counter tables + standard recipes |
 | 上面的项目都没列，怎么找 / "Service X is not listed anywhere — how do I find its metrics?" | [recipes/fallback.md](recipes/fallback.md) — discovery algorithm |
 | 业务量级（DAU / 设备分布）从哪查 / "Where does business-level data live?" | [data-warehouse.md](data-warehouse.md) — Superset + DataHub |
 | 我能用 troubleshooting skill 拿到统计量吗 / "Can troubleshooting skill give me stats?" | [troubleshooting-bridge.md](troubleshooting-bridge.md) |

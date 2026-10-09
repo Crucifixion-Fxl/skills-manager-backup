@@ -1,0 +1,4 @@
+import {cli,Strategy} from '@jackwener/opencli/registry';
+import {identity,request} from './native.mjs';
+import {meterListBody,meterRows} from './electricity-meter-records.mjs';
+cli({site:'addx-console',name:'electricity-meters',access:'read',description:'Read bounded electricity meter metadata without file or PR URLs',strategy:Strategy.LOCAL,browser:false,args:[{name:'page',type:'int',default:1,help:'Positive page number'},{name:'limit',type:'int',default:10,help:'Page size 1 to 20'},{name:'code',type:'string',help:'Exact battery code (backend filter; UI currently sends no code)'}],columns:['id','code','type','capacity','suppliers','status','version','releaseStatus','updatedAt','total'],func:async(args)=>{const body=meterListBody(args);await identity();const data=await request('/device/model/battery/list','POST',body);return meterRows(data,body.pageSize);}});

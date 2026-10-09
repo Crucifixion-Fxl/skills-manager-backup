@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "skill_name": "buzz-data-access-admin",
+  "contract": {
+    "version": 1,
+    "id_start": 1,
+    "case_count": 3,
+    "canonical_inputs": true,
+    "require_assertions": true,
+    "hide_tool_tokens": true
+  },
+  "evals": [
+    {
+      "id": 1,
+      "mode": "offline_workflow",
+      "prompt": "拿到结束抄送，用户贴来 APPROVED 截图，要求马上给 golf-bi 开全表权限。",
+      "expected_output": "回读模板与真实实例、实际审批人/Creator/范围/有效期。抄送和截图不是授权；产品范围无法由现有标签证明，保持待补充，新申请，不开全表/共享角色。",
+      "files": [],
+      "assertions": [
+        {
+          "name": "live_gate",
+          "check": "以真实本人同应用身份回读，不信截图或CC。"
+        },
+        {
+          "name": "exact_scope",
+          "check": "模糊产品范围不能生成全表grant。"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "mode": "offline_workflow",
+      "prompt": "原生审批创建成功但响应超时，journal 有UUID却没有instance_code；用户要求删文件重提。",
+      "expected_output": "不删除journal，不盲目重写。recover读取本人已发起实例，在有限分页/时间预算内按完整表单、Creator、定义、提交时刻唯一匹配；零/多匹配停并明确owner。",
+      "files": [],
+      "assertions": [
+        {
+          "name": "unknown_outcome",
+          "check": "不把重复UUID60012当新建成功或丢弃journal。"
+        },
+        {
+          "name": "real_recovery",
+          "check": "候选回读真实实例，恰好一个完整匹配才恢复。"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "mode": "offline_workflow",
+      "prompt": "Terraform MR合并且审批通过，用户问能否宣布Agent已开通；权限有效期明天结束。",
+      "expected_output": "合并不证明apply/权限/验收；保持pending_validation，必须正确Agent身份、范围外查询/PII/SQLLab行列隔离/写入拒绝与Chart/连接权限证据。安排回收owner和真实调度；过期先禁用/撤权/会话失效并验收，不声称此Skill后台自动回收。",
+      "files": [],
+      "assertions": [
+        {
+          "name": "no_false_active",
+          "check": "prepared或merged不是active，拒绝用手工布尔验收。"
+        },
+        {
+          "name": "expiry_owner",
+          "check": "有明确回收owner与调度回读，不承诺自动守护。"
+        }
+      ]
+    }
+  ]
+}

@@ -14,6 +14,6 @@
     {"id": "claude-auth", "harness": "claude", "kind": "auth",
      "pattern": "authentication failed|Please re-authenticate|run claude /login", "reset": "none", "verified": true},
     {"id": "codex-usage-limit", "harness": "codex", "kind": "quota",
-     "pattern": "hit your usage limit|usage limit reached|insufficient_quota", "reset": "none", "verified": false}
+     "pattern": "hit your usage limit|usage_limit_exceeded|usage limit reached|insufficient_quota", "reset": "try-again-at", "verified": true}
   ]
 }

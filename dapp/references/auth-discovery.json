@@ -1,0 +1,96 @@
+{
+  "schemaVersion": 1,
+  "tool": "dapp",
+  "owner": "dapp",
+  "instances": [
+    "https://dapp-api.addx.live",
+    "https://dapp.addx.live"
+  ],
+  "nativeRoute": "dapp native Feishu web login / injected DAPP_TOKEN; Superset independently authenticated",
+  "loginFlow": {
+    "reuseFirst": true,
+    "steps": "Reuse only already authorized host-injected credentials for the matching instance. Legacy normal Feishu web authorization exchanges code and stores identity in a process Session map; its browser anonymous cookie is only a map index, not backend JWT. Separate newer MicroAuth normal OAuth remains separate. Never mint by username to fill a bridge/identity gap.",
+    "authorization": "Login, token creation/rotation/revocation and business writes require the current task scope; this discovery performs none."
+  },
+  "tokenMechanism": "Legacy backend Bearer JWT and legacy web process Session are independent source contracts. Existing host-injected DAPP_TOKEN/native Token/API remains supported subject to trusted server caller gate and deployment match; no normal web-session bridge proved. NocoDB xc-token remains independent read-only fallback.",
+  "subjectPermission": "Legacy trusted minimal server currentcaller endpoint remains unproven; /api/current is absent from audited legacy routers. Browser UI identity or locally decoded JWT is not a native server-bound subject gate. Independently verify Superset identity and target resource permission.",
+  "expiryRevoke": "需补 session/generate handler、调用权限、撤销/expiry 与部署 SHA；无证据不提供可直接 mint 的命令。",
+  "officialRefs": [],
+  "sources": [
+    {
+      "kind": "repository",
+      "repository": "https://gitlab.addx.ai/DATA/dbt",
+      "researchCommit": "dac6a84ff193e60e1471eda900394956fb8bf38b",
+      "entries": [
+        "a4x_bi/login/auth.py",
+        "a4x_bi/login/session.py",
+        "a4x_backend/app.py",
+        "a4x_backend/api/__init__.py",
+        "a4x_backend/core/middleware/auth.py",
+        "a4x_backend/api/auth.py",
+        "a4x_backend/api/sla_metric.py",
+        "a4x_backend/services/nocodb.py",
+        "utils/_nocodb/client.py"
+      ],
+      "status": "legacy-contract-candidate-source-verified"
+    },
+    {
+      "kind": "owner-contract",
+      "path": "../../sla-metric/references/dapp-api.md",
+      "status": "contract-recorded"
+    },
+    {
+      "kind": "repository",
+      "repository": "https://gitlab.addx.ai/DATA/dapp",
+      "researchCommit": "9342ab29cf2e65e24d3366ae14cefcf97133eb82",
+      "entries": [
+        "dapp/a4x/dapp/app.py",
+        "dapp/a4x/dapp/api/base.py",
+        "dapp-frontend/src/services/a4x-dapp/auth.ts"
+      ],
+      "status": "candidate-source-verified"
+    }
+  ],
+  "versionPolicy": {
+    "researchCommit": "9342ab29cf2e65e24d3366ae14cefcf97133eb82",
+    "deployedCommit": null,
+    "deploymentMatch": "unknown",
+    "refreshTriggers": [
+      "authentication contract change",
+      "deployed version change",
+      "reproducible auth failure"
+    ],
+    "rule": "Candidate source and published contracts do not establish deployed compatibility. Verify the target instance version and read-only supported capabilities before enabling an adapter.",
+    "instanceCandidates": [
+      {
+        "repository": "https://gitlab.addx.ai/DATA/dbt",
+        "researchCommit": "dac6a84ff193e60e1471eda900394956fb8bf38b",
+        "deployedCommit": null,
+        "deploymentMatch": "unknown"
+      },
+      {
+        "repository": "https://gitlab.addx.ai/DATA/dapp",
+        "researchCommit": "9342ab29cf2e65e24d3366ae14cefcf97133eb82",
+        "deployedCommit": null,
+        "deploymentMatch": "unknown"
+      }
+    ]
+  },
+  "verification": {
+    "source": "candidate-source-verified",
+    "fixture": "not-run-in-this-discovery",
+    "runtime": "not-attempted",
+    "scope": "Read-only documentation/repository discovery; no login, token issuance, credential inspection or business API execution."
+  },
+  "sourceMismatch": "DATA/dbt legacy auth candidate and DATA/dapp MicroAuth candidate must be matched by instance and deployment. Do not apply Micro-app OAuth to legacy API or treat either candidate as deployed proof.",
+  "referenceBase": "owner-skill-root for SKILL.md/contractEntrypoints/referenceSources paths; contract field resolves from this JSON directory; upstream repository entrypoints stay repository-relative",
+  "sourceBoundaries": {
+    "legacyNormalWebAuth": "Feishu code -> app/user access token -> Feishu userinfo/contact -> process Session map",
+    "browserCookie": "Anonymous session index only; not an official REST credential by assumption",
+    "legacyBackendAuth": "Signed JWT Bearer verification -> request.state.username; username-only mint routes are excluded from acceptance",
+    "legacySelfIdentity": "No /api/current or currentcaller handler in audited legacy auth/router source",
+    "slaReadClosure": "SLA list -> NocoDB count/page GET candidate; full UI mount/aux closure incomplete, authorization workflow side effects require separate audit",
+    "privateHandling": "No credential/session bodies, maps or auth errors in output; private stdin/process/SSH injection only after compatible contract and caller gate",
+    "cleanup": "Record exact application Session logout and task-owned temporary/profile cleanup; do not infer backend Token revocation from browser logout"
+  }
+}

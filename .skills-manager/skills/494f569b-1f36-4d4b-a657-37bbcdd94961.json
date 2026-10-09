@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "494f569b-1f36-4d4b-a657-37bbcdd94961",
+  "path": "sla-alert-analysis",
+  "path_key": "sla-alert-analysis",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/observability/sla-alert-analysis",
+    "branch": null
+  }
+}

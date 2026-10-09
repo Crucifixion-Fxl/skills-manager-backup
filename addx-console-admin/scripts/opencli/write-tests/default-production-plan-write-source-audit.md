@@ -1,0 +1,15 @@
+# Default production-plan write source audit (offline only)
+
+This is a source/fixture readiness audit, not a registered OpenCLI write command or real SaaS acceptance. No browser, credentials, production requests, business writes, release or deployment were used.
+
+The pinned backend save contract defaults `publish=true`. Save runs in its own dynamic-datasource transaction and locks a fixed first plan row. Publication follows after that transaction commits: failure may leave a saved draft. The row lock does not compare a caller snapshot, provide CAS, or prove external deployment and permissions.
+
+The exact detail method selects plan and all saved model/factory association rows without initialization in that inspected method. The factory candidate view is unsuitable as full saved state. Association updates are deltas with explicit tombstones, not replacements: omission preserves rows. Foreign association IDs are not independently checked in the mutation branches. An edit without an existing target and an update count of zero can still reach relation writes. Create/edit must stay separate.
+
+Publish recalculates every plan/model override for each affected factory, disables unmatched active execution records, and upserts runtime art entries plus factory first/last-art release configuration. It can affect other plans and clear null release fields. There is no proven single transaction across save, all factories, release rows and source status. A same-class async call bears a transactional annotation whose effective interception is unproven. No whole-plan delete contract is exposed in the inspected controller/mapper; relation deletion must not be presented as plan deletion.
+
+The independent pure helper accepts only offline fixture intents. It checks target and association ownership, duplicate deltas, explicit deletion membership, model nonemptiness, and basic saved JSON shape; omissions retain associations. It returns counts and a snapshot digest only. The digest does not establish authorization or server CAS. It never emits saved raw configuration or an executable payload. Unknown fields, submit, candidate-only snapshots and malformed configuration are rejected. Create/publish/delete remain explicitly unavailable for execution.
+
+Uncovered: complete nested process and first/last-art schema, current published art catalogue/manual-generate ordering, category/manufacturer compatibility and factory/model occupancy, deployment identity/write grants, field-level immutable rules, full affected factory execution state, atomic rollback/readback/retry handling, and database constraints. Nine offline tests pass. This does not make whole-site write interfaces ready.
+
+Generic skill-method suggestion: trace default publish flags and transaction boundaries; distinguish saved association deltas from candidate views and full replacements; verify ownership of every mutation row; treat fixed writer locks as different from caller CAS; compute publication blast radius using all affected runtime resources; if any authority/full-state proof is missing, keep the result an offline intent audit with no payload or submit path.

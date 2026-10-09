@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "e1148364-92d9-4a8a-85ee-e2f9586afc52",
+  "path": "feishu-remote-login",
+  "path_key": "feishu-remote-login",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/agent-harness/feishu-remote-login",
+    "branch": null
+  }
+}

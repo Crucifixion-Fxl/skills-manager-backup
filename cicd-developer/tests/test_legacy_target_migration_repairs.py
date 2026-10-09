@@ -17,8 +17,11 @@ import pytest
 import yaml
 
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+REPO_ROOT = next(p for p in Path(__file__).resolve().parents if (p / ".codex-plugin" / "plugin.json").is_file())
 SKILL_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT / "scripts") not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT / "scripts"))
+from gitlab_ci_config import merged_text  # noqa: E402
 VALIDATOR_ROOT = SKILL_ROOT / "validators"
 
 
@@ -2043,7 +2046,7 @@ def test_four_historical_add_target_route_keywords_remain_asserted() -> None:
 
 
 def test_cicd_ci_has_deterministic_critical_legacy_validator_coverage_gate() -> None:
-    ci = (REPO_ROOT / ".gitlab-ci.yml").read_text(encoding="utf-8")
+    ci = merged_text(REPO_ROOT)
     for validator in (
         "_legacy_target_common.py",
         "check_legacy_target_application.py",

@@ -61,7 +61,7 @@ spec:
 
 **症状**：catalog 实体页显示的 API 跟实际线上行为不一致；客户端按 catalog 生成 SDK 调用 → 404 / 422。engagement audit 一次发现 9 BREAKING + 5 MINOR 漂移。
 
-**正确**：CI 跑 `app.openapi()` 生成 → drift check（详见 [api-contract-drift.md](./api-contract-drift.md)）：
+**正确**：CI 跑 `app.openapi()` 生成 → drift check（详见 [api-contract-drift.md](api-contract-drift.md)）：
 
 ```yaml
 # .gitlab-ci.yml
@@ -74,7 +74,7 @@ api:gen-openapi:
 
 手写**只是 last resort 4 种例外**（stdlib / `.api` 不兼容 / 占位仓 / 静态 BCR/APISIX），且文件头必须标 `WARNING: 此文件即 SSOT`。
 
-> 涉及：SKILL.md §6 / [api-contract-drift.md](./api-contract-drift.md)
+> 涉及：SKILL.md §6 / [api-contract-drift.md](api-contract-drift.md)
 
 ---
 
@@ -111,7 +111,7 @@ spec:
 
 catalog 是 SSOT，无需预先去 markdown 清单注册（旧规则已废止）。
 
-> 涉及：SKILL.md §6.1（能力命名 / 引用校验 canonical）+ [api-refs-check.md](./api-refs-check.md)
+> 涉及：SKILL.md §6.1（能力命名 / 引用校验 canonical）+ [api-refs-check.md](api-refs-check.md)
 
 ---
 
@@ -147,7 +147,7 @@ spec:
   type: service
 ```
 
-> 涉及：SKILL.md §7 / [website-links.md](./website-links.md)
+> 涉及：SKILL.md §7 / [website-links.md](website-links.md)
 
 ---
 

@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "tool": "figma",
+  "owner": "figma",
+  "instances": [],
+  "nativeRoute": "Figma authorized host MCP/session + Crowdin native token independently",
+  "loginFlow": {
+    "reuseFirst": true,
+    "steps": "复用宿主已授权 Figma MCP 会话、正确 file/node；缺失走实际宿主 Figma OAuth/连接授权。Crowdin glossary 读取使用安全注入 CROWDIN_TOKEN，缺失用户在 Crowdin API Personal Access Tokens 申请只读所需 scope。",
+    "authorization": "Login, token creation/rotation/revocation and business writes require the current task scope; this discovery performs none."
+  },
+  "tokenMechanism": "Figma MCP/OAuth token 不等于 REST PAT；Crowdin Bearer 单独配置。禁止按照旧 SKILL 将 token 内联在命令行。",
+  "subjectPermission": "Figma target file/node 读取和编辑权限；Crowdin target glossary terms 读取权限；两系统 identity/scope 分别核验。",
+  "expiryRevoke": "Figma Connected apps/PAT 页面按实际选择撤销；Crowdin API Token 页面 revoke/expiry；宿主 MCP 会话状态需宿主探针，不能虚构 CLI。",
+  "officialRefs": [
+    "https://developers.figma.com/docs/rest-api/authentication/",
+    "https://support.crowdin.com/personal-access-tokens/"
+  ],
+  "sources": [
+    {
+      "kind": "owner-contract",
+      "path": "../../figma-i18n/SKILL.md",
+      "status": "contract-recorded"
+    }
+  ],
+  "versionPolicy": {
+    "researchCommit": null,
+    "deployedCommit": null,
+    "deploymentMatch": "unknown",
+    "refreshTriggers": [
+      "authentication contract change",
+      "deployed version change",
+      "reproducible auth failure"
+    ],
+    "rule": "Candidate source and published contracts do not establish deployed compatibility. Verify the target instance version and read-only supported capabilities before enabling an adapter."
+  },
+  "verification": {
+    "source": "owner-contract-only",
+    "fixture": "not-run-in-this-discovery",
+    "runtime": "not-attempted",
+    "scope": "Read-only documentation/repository discovery; no login, token issuance, credential inspection or business API execution."
+  },
+  "referenceBase": "owner-skill-root for SKILL.md/contractEntrypoints/referenceSources paths; contract field resolves from this JSON directory; upstream repository entrypoints stay repository-relative"
+}

@@ -100,6 +100,9 @@ Read back and retain the exact `form_id`, API-provided `form_edit_url`, `form_ur
 `definition_fingerprint`. Compare definition semantics, not just HTTP success. Give the user
 `form_edit_url` so they can edit the questionnaire. Do not present `form_url` as that editor.
 `form_url` stays the respondent display URL used later for invitations.
+For a newly created form there is no no-submission preview URL before publication.
+Attaching an existing form does not change its public state; read the exact
+Research status and use only an API-returned preview URL if it is already public.
 
 If Platform returns `typeform_choices_empty`, `typeform_choice_invalid`, or `typeform_payload_rejected`, the form was
 not created. Fix the body using the returned field path and retry the same Research; do not mint a replacement form.
@@ -107,11 +110,66 @@ not created. Fix the body using the returned field path and retry the same Resea
 If form creation times out after the provider may have accepted it, read journey status and replay only the same key
 and body (or the same attach `source_research_id` / `form_url`). Never create a replacement form.
 
-Creating or attaching a form does not publish it. The display URL stays private until
-`personal_research_journey_form_publish` returns `form_public=true`. Before that call, confirm the user
+Creating a form does not publish it. Attaching an existing form does not publish it anew,
+but a source form that was already public remains public after attachment. Check the exact
+Research status before describing its visibility. For an unpublished form, the display URL
+stays private until `personal_research_journey_form_publish` returns `form_public=true`. Before that call, confirm the user
 wants respondents to open the questionnaire. Do not say the API cannot publish, do not call Typeform,
 and do not invent an admin URL. Publish is idempotent when the form is already public. It does not send
 a campaign. After publish, the user may stop here.
+Report the API-returned `form_preview_url` separately as a published-form test link that does not
+record a response. It uses Typeform's `?__dangerous-disable-submissions` query parameter; the
+parameter can be removed, so it is not access control or a way to preview an unpublished form.
+Never build that URL in the Agent, and never substitute it for `form_url` in invitations. If the
+publish response does not include it, read the exact journey status and report it only if the
+binding-matched API response supplies it; otherwise mark it unavailable.
+
+After publication, modifications may use only named Audience
+`personal_research_journey_form_definition`, `personal_research_journey_form_replace`, and
+`personal_research_journey_form_patch` operations actually exposed by the deployed host.
+Never call Typeform directly or fabricate a partial-update call. Before any update, read the
+exact Project, Idea, Research and journey binding; call definition GET with the exact bound
+`form_id` and required `idea_id` query. It returns the provider `body`, PUT-ready `put_body`,
+`provider_revision`, `affected_scope_digest`, `affected_research`, public state, and nullable
+`response_count`. Present a target-and-change preview to the Human:
+
+- exact Project and `form_id`, plus *every* same-Project Idea/Research binding affected
+  by that `form_id` (`affected_research` returns exact IDs; resolve names through authorized
+  Project reads when available and mark any unreadable name unknown);
+- current public state (not proof of active collection) and existing response count, or explicitly `unknown` if unreadable;
+- whether the same `form_id` is bound in a different Project; that is not an authorized update
+  target and must stop before the write;
+- the fields/settings to change, delete and preserve, including original field `id`/`ref` and choice meanings;
+- whether this is a complete native `PUT` replacement or an official-path `PATCH`, and the risks.
+
+For a public form, say plainly that live respondents can see changed questions immediately or at the
+provider's publication point, and historical response interpretation can break. Typeform's native
+`PUT /forms/{form_id}` overwrites the whole form. Omitted fields, especially original field `id` values,
+delete those fields and their results; use a full current-definition round trip, not a hand-authored
+small body that omits the rest. Native `PATCH` is limited to the exact paths in Typeform's published
+[REST reference](https://www.typeform.com/developers/create/reference/update-form-patch/)
+(settings, title, theme, workspace); it does not patch an individual question. Do not
+translate a requested question edit into an undocumented PATCH. Preserve Audience-required hidden
+fields and binding identity. If the user needs an unsupported change, stop and explain the limit.
+
+Obtain explicit confirmation for *this exact bound form, all affected Research, and the shown diff* after that preview, even
+if the same user previously approved creating or publishing it. A changed source revision/fingerprint,
+binding, affected-scope digest or provider state invalidates confirmation: re-read and show
+the new affected list, diff and risk before asking again. Submit only the server-issued
+`affected_scope_digest` as `expected_affected_scope_digest`, and its `provider_revision` as
+`expected_provider_revision`; never compute or guess either locally. The update request
+also requires exact `idea_id` and `acknowledge_published_risk=true` after Human confirmation.
+For PUT, start from the returned `put_body` and preserve every unchanged native field;
+send the full intended `body`. For PATCH, send the native `operations` array only on official paths.
+Never silently retry a stale update with a new revision. After an accepted update, read the
+same `form_id` and journey status again, compare the actual definition to the approved diff, and
+inspect `form_preview_url` from that journey status when public. The native definition/PUT/PATCH
+response does not include the preview link. A successful HTTP write alone does not
+prove the intended live questions. If readback is uncertain, report uncertainty and stop further
+effects. The Audience publish operation that makes a private form public is not a substitute for a
+provider editor `Publish edits` action. If the deployed Audience host does not expose named update
+operations, stay read-only and offer `form_edit_url`; Human editor changes require `Publish edits`,
+followed by the same exact readback and preview check.
 
 ## 4. Select and materialize
 
@@ -209,10 +267,12 @@ Follow response pagination snapshot tokens exactly; restart after snapshot confl
 Question text in CSV answer headers comes from the exact verified Typeform definition; values remain native answer
 encodings. Do not join unmatched rows to a guessed profile.
 
-When a stored report exists, `project_get_current_report` returns it plus
-`newer_responses`. That flag compares latest versus published aggregate
-`response_count` only. Do not treat fingerprint or watermark movement as new
-responses, and do not publish because the flag is true.
+When a stored Research report exists, `project_get_current_report` returns it
+plus `newer_responses`. That flag compares latest versus published aggregate
+`response_count` only. For an Idea report, compare the stored publication's
+`source_revision_id` with the current Idea summary's `source_revision_id`;
+describe a mismatch only as a changed report data version. Keep the stored
+report and its download, and do not publish solely because either signal changed.
 
 ## Completion reply
 
@@ -220,3 +280,4 @@ Report the actual stopping point and only known facts: human Research/form name,
 criteria and partition, preview/materialized counts, Brevo aggregate counts, Draft state, match counts and returned
 human URLs. Mention limitations that change interpretation. Keep tokens, emails, uid, per-user URL, raw provider
 payload, internal SQL and routine protocol IDs out of the reply.
+Distinguish the API-returned edit link, published no-submission preview link, and respondent link.

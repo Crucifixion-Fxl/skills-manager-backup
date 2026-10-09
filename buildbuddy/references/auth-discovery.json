@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "tool": "buildbuddy",
+  "owner": "buildbuddy",
+  "status": "source-reviewed-runtime-pending",
+  "contract": "../../../delivery/buildbuddy-deploy/references/facts.md",
+  "notes": "UI办公网，CI gRPC internal WAF header gate，dev gRPC办公网只读WAF；header值由owner/CI注入，禁止读Secret。facts记录v2.252.0仅声明，部署版本未知。",
+  "credentialHandling": "No login, secret reads, token issuance, or SaaS business calls performed.",
+  "referenceBase": "owner-skill-root for SKILL.md/contractEntrypoints/referenceSources paths; contract field resolves from this JSON directory; upstream repository entrypoints stay repository-relative"
+}

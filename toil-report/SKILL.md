@@ -74,7 +74,7 @@ echo "MODE: $TARGET_DATE"
 ## Step 2 — 执行提取脚本
 
 ```bash
-SKILL_DIR="$HOME/.claude/skills/toil-report"
+SKILL_DIR="$HOME/.claude/skills/infrastructure/toil-report"
 
 if [ "$TARGET_DATE" = "weekly" ]; then
     python3 "$SKILL_DIR/scripts/extract.py" --weekly --json > /tmp/toil_raw.json
@@ -99,7 +99,7 @@ print(f'任务数: {d[\"task_count\"]}，日期: {d[\"date_range\"]}')
 ### 3.1 计算 Agent 数量 + 切 batches + 写入 batch 输入文件
 
 ```bash
-SKILL_DIR="$HOME/.claude/skills/toil-report"
+SKILL_DIR="$HOME/.claude/skills/infrastructure/toil-report"
 
 python3 - <<'PY'
 import json, math, os
@@ -160,7 +160,7 @@ PY
 ---
 你是 Toil 分类专家。
 
-**任务**：读取 `/tmp/toil_batch_{i}_in.txt` 中的全部任务，按 `~/.claude/skills/toil-report/references/taxonomy.md` 定义的 18 类分类体系和归纳规则，对每个任务输出一行 JSON。
+**任务**：读取 `/tmp/toil_batch_{i}_in.txt` 中的全部任务，按 `~/.claude/skills/infrastructure/toil-report/references/taxonomy.md` 定义的 18 类分类体系和归纳规则，对每个任务输出一行 JSON。
 
 **输出**：用 Bash heredoc 写入 `/tmp/toil_batch_{i}_out.txt`（**每行一个 JSON，无代码块标记，无其他文字**）：
 
@@ -173,7 +173,7 @@ EOF
 ```
 
 **硬性要求**：
-1. 先 Read `~/.claude/skills/toil-report/references/taxonomy.md` 获取分类体系和归纳规则，不要凭记忆分类
+1. 先 Read `~/.claude/skills/infrastructure/toil-report/references/taxonomy.md` 获取分类体系和归纳规则，不要凭记忆分类
 2. 再 Read `/tmp/toil_batch_{i}_in.txt` 获取任务列表
 3. **禁止使用 Write 工具**写输出文件（subagent 会被 "File has not been read yet" 拦截），只用 Bash heredoc
 4. 输出任务数必须等于输入任务数，id 字段原样保留，不得合并或跳过
@@ -346,7 +346,7 @@ PY
 ## Step 5 — 渲染 HTML
 
 ```bash
-SKILL_DIR="$HOME/.claude/skills/toil-report"
+SKILL_DIR="$HOME/.claude/skills/infrastructure/toil-report"
 
 if [ "$TARGET_DATE" = "weekly" ]; then
     LAST_DATE=$(python3 -c "import json; d=json.load(open('/tmp/toil_raw.json')); print(d['date_range'].split(' ~ ')[1])")

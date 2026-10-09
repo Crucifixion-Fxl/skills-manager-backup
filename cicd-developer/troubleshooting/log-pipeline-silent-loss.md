@@ -34,7 +34,7 @@ kubectl --context <context> -n <namespace> logs <pod> --tail=20
 声明当作 live 已生效。检查 input 的采集路径/Exclude_Path、filter 和 output：
 
 - **direct**：output 是 OpenSearch/ES，按 `Index` 或 `Logstash_Prefix` 查索引/alias。
-  AWS US/EU/CN staging 的当前 Git 配置走此分支，**无 Kafka / Vector hop**。
+  AWS US/EU staging 与当前腾讯云 CN staging 的 Git 配置走此分支，**无 Kafka / Vector hop**。
 - **kafka-consumer**：output 是 Kafka，读取 broker/topic 和实际消费者/下游 mapping。
 - 无法证明 topology：报告 `NOT_VERIFIED` 和缺少的权限/证据，不能猜测下游断链。
 
@@ -82,9 +82,9 @@ Rollout 为 CRD，显式 pod-template patch 是标准方式；StatefulSet / Depl
 2. 检查 output 连接、TLS/鉴权失败、重试、buffer、bulk 错误及写入/容量限制。
    不读取或打印 Secret 值；使用获准的只读状态和错误信息。
 3. 按 output 的 index/alias 查询：US staging 为 `addx-us-staging-*`，EU staging
-   为 `addx-eu-staging` alias，AWS CN staging 为 `addx-cn-staging-*`。
+   为 `addx-eu-staging` alias，腾讯云 CN staging 为 `addx-cn-staging-*`。
    这些是共享索引，需要匹配目标 pod/app/time；不能拼 `<app>` 到 index 名。
-4. 检查 frontend 实际后端与用户查询权限。CN 的 AWS/TKE 清单出现同名入口时，
+4. 检查 frontend 实际后端与用户查询权限。CN 的历史 AWS/旧 TKE 清单与当前目标出现同名入口时，
    不能仅凭 URL 判断查询的是哪个集群。
 5. 没有 Kafka、Vector、consumer group 或 per-app index 不是此分支的 blocker。
 

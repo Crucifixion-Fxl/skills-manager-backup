@@ -228,8 +228,12 @@ argocd_app_projects:
     固定 revision、完整 values/参数和全部 sources 渲染后，按 cluster/group/kind/
     实际 namespace/name 证明无重复 owner、无遗漏；父 overlay 不得继续引用新 infra
     Application 已接管的对象。operator 派生对象按 controller ownership/tracking 归因。
-    owner 可以拥有多个 Application；app-data-plane-<owner>[-<component>] 仍是目标态，
-    未获平台注册、现行 lint 不接受的名称不可使用，不凭前缀自动放行或取消平台审查。
+    owner 可以拥有多个 Application；runtime 使用共享 app-runtime，获批 raw RDS、
+    ElastiCache、S3 等使用共享 app-data-plane，不按业务 owner/component 新建 Project。
+    owner 专属 Project 方向已撤回，不是后续推广目标；Model Serving 的专属 Project
+    已由 argocd-apps !2221 上线，是待另行纠正的存量例外，本次文档不代表已回迁。
+    混合 Application 不因含 raw 资源而整体改投 app-data-plane；先拆独立 render。
+    执行边界与跨 Application 依赖见 ../application-resource-split.md；不取消平台审查。
     渲染仅生成权限需求，批准合同才是授权依据。准备按候选成员交付，允许零 live 成员；
     启用核对 render/hooks/隐式 Namespace/live cleanup 所需权限，额外保留项说明理由；
     退役冻结成员和精确合同，到清理完成且回滚窗口关闭后才单独撤权。单行 project 回滚

@@ -8,6 +8,7 @@ per message, `p` tags read back. GitLab text itself stays neutralized.
 
 import hashlib
 import importlib.util
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -25,7 +26,9 @@ def load_module():
 
 SYNC = load_module()
 
-DESK = "d" * 64
+# Synthetic fixture identity; never a configured publisher credential.
+DESK_SECRET = (1).to_bytes(32, "big")
+DESK = SYNC.nk.pubkey_xonly(DESK_SECRET).hex()
 CHANNEL = "00000000-0000-4000-8000-0000000000c1"
 BOT_ID = 7
 BOT = "buzz-sync-bot"
@@ -170,13 +173,18 @@ class FakeBuzz:
         self.roles = {pubkey: "member" for pubkey in PEOPLE.values()}
 
     def send(self, content, reply_to=None, mentions=()):
-        event_id = hashlib.sha256(f"{len(self.events)}:{content}".encode()).hexdigest()
         tags = [["h", CHANNEL]]
         if reply_to:
             tags.append(["e", reply_to, "", "reply"])
         tags.extend(["p", pubkey] for pubkey in mentions)
+        created_at = 1000 + len(self.events)
+        canonical = json.dumps([0, DESK, created_at, 9, tags, content],
+                               ensure_ascii=False, separators=(",", ":")).encode()
+        digest = hashlib.sha256(canonical).digest()
+        event_id = digest.hex()
         self.events.append({"id": event_id, "pubkey": DESK, "kind": 9,
-                            "created_at": 1000 + len(self.events), "tags": tags, "content": content})
+                            "created_at": created_at, "tags": tags, "content": content,
+                            "sig": SYNC.nk.schnorr_sign(digest, DESK_SECRET, bytes(32)).hex()})
         self.writes.append((reply_to, content, tuple(mentions)))
         return event_id
 
@@ -442,6 +450,9 @@ class TopLevelAttentionTest(SyncCase):
         self.run_sync()
         self.assertGreaterEqual(len(self.buzz.writes), 3)
         self.assertTrue(all(mentions == () for _, _, mentions in self.buzz.writes))
+        for event in self.buzz.events:
+            SYNC.verify_nostr_event_signature(event, label="broadcast fixture")
+            self.assertFalse(any(tag[0] == "p" for tag in event["tags"]))
 
     def test_no_people_means_no_extra_gitlab_or_channel_reads(self):
         """L1-GIS-222 没配 people 时不为 @ 多读触发人或频道成员。"""

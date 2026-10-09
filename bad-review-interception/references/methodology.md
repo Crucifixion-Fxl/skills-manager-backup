@@ -177,7 +177,7 @@ LIMIT 50
 |---|---|---|
 | DataHub Schema Search | 列表/查详情/语义搜索 | `https://datahub-schema-search.addx.live` |
 | Superset | 跑 SQL 出数 | `https://superset-us.addx.live`（需要 SUPERSET_USERNAME/PASSWORD env） |
-| tracker-manager | 埋点平台 SSOT（event_id ↔ event_name ↔ 描述） | `https://us-tracker-management.theunismart.com` |
+| tracking-lifecycle | 埋点平台 SSOT（event_id ↔ event_name ↔ 描述） | `https://us-analytics-management.theunismart.com` |
 | skill `addx-engineering:datahub-schema-search` | 封装了上面的 API 调用 | 本仓库 Claude 环境内可直接调用 |
 | skill `addx-engineering:superset` | 封装 Superset JWT 登录 + SQL 执行 | 同上 |
 
@@ -191,4 +191,4 @@ LIMIT 50
 - [ ] 按 App 归类，剔除纯服务端埋点（`iot_service/iot_local/kiss_safertc/safertc_*/oauth2_*`）如果目标是用户可感知场景
 - [ ] 按事件名归一化，识别跨 App 通用事件作为高优先级拦截候选
 - [ ] Superset 跑频次，确定 Top-N
-- [ ] 反查 tracker-manager 拿 `event_id` 补全清单
+- [ ] 反查 tracking-lifecycle 拿 `event_id` 补全清单

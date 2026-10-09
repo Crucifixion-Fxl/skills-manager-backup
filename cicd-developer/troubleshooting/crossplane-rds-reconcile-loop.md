@@ -116,7 +116,8 @@ Crossplane 需要 Describe（Resource: "*"）+ Manage（Resource: app-scoped ARN
 修法：
 1. 找一个本集群跑得通的 RDS manifest：
    ```
-   ls <app仓>/k8s/overlays/<env>/rds-instance.yaml          # 新契约位置
+   ls <app仓>/<已核验的infra-source-path>/rds-instance.yaml # 从唯一管理 Application 解析
+   ls <app仓>/k8s/overlays/<env>/rds-instance.yaml           # 仅可能的历史存量路径
    ls crossplane-infra/<cluster_dir>/*-rds.yaml             # 存量 legacy
    ```
 2. 比 `dbSubnetGroupName` 和 `vpcSecurityGroupIds`，跟你的失败 manifest 对照

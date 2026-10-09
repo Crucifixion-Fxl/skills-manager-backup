@@ -32,6 +32,9 @@ def promotion_state(
         candidate_source_ref = f"refs/release-parity/mr-{candidate.get('iid', '')}"
     return {
         "enabled": args.mr_mode == "production-promotion",
+        "parity_mode": provenance.get("mode", "feature-branch"),
+        "staging_acceptance": provenance.get("staging_acceptance", {}),
+        "merge_result": provenance.get("merge_result", {}),
         "staging_flow_exists": staging_flow_exists,
         "staging_branch": args.staging_branch,
         "staging_flow_evidence": flow_evidence,

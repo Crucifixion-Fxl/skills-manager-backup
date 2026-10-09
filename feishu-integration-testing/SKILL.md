@@ -3,11 +3,13 @@ name: feishu-integration-testing
 description: 飞书 (Lark) IM 集成的分层测试方法论 — 覆盖飞书 WebSocket 长连接与 Webhook 双通道入口、Card 2.0 回包、消息回路、签名校验的 L1→L2→L3→L3-Feishu→L4 端到端测试策略。当用户需要为接入了飞书 IM 的服务设计测试、验证飞书消息回路、构造飞书事件 payload 打 webhook、用 mock 替代 lark-oapi 客户端、在 staging 跑真实飞书 UAT、或落地 "每个 User Story 必须有飞书 E2E" 这类强约束时必须使用此 skill。即便用户只说"加个飞书测试"、"飞书集成测了吗"、"smoke 跑不过"、"L3-Feishu 失败"、"webhook 签名怎么测"，也要触发。
 ---
 
+**写入 memory 时**：遵循 [极简写入规约](../../agent-harness/dev-infra/references/memory-writing.md)：只增量写长期约束与入口，默认≤5条/≤10行/约≤200字，语义去重；保留既有授权边界和安全门禁，详情留文档。此规约不新增写入授权。
+
 # 飞书 (Lark) IM 集成分层测试方法论
 
 ## 适用范围
 
-适用于**任何把飞书 IM 作为消息入口或回包通道的服务**：聊天机器人、AI Agent、群审批、值班通知、CS 工单接入等。本 skill 是 [`testing-strategy`](../testing-strategy/SKILL.md) 在「飞书 IM 通道」场景下的具体落地。
+适用于**任何把飞书 IM 作为消息入口或回包通道的服务**：聊天机器人、AI Agent、群审批、值班通知、CS 工单接入等。本 skill 是 [`testing-strategy`](../../quality/testing-strategy/SKILL.md) 在「飞书 IM 通道」场景下的具体落地。
 
 继承自父规约：测试左移、测试下沉、Bug 右侧追溯、防假绿测试、用例金字塔（L1:L2:L3:L4 ≈ 70:20:9:1）。
 
@@ -366,7 +368,7 @@ def feishu_mock_recorder(monkeypatch):
 
 ## 九、参考与延伸
 
-- 通用测试方法论：[`testing-strategy`](../testing-strategy/SKILL.md)
+- 通用测试方法论：[`testing-strategy`](../../quality/testing-strategy/SKILL.md)
 - 飞书 OpenAPI 探索（找官方文档）：[`lark-openapi-explorer`](../lark-openapi-explorer/SKILL.md)
 - 飞书 IM SDK 用法：[`lark-im`](../lark-im/SKILL.md)
 - L1 unit pattern + 防假绿：见父 skill `testing-strategy` 的 Step 7.6

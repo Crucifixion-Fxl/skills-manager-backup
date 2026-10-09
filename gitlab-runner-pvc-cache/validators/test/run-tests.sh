@@ -3,7 +3,7 @@ set -euo pipefail
 
 script_dir="$(cd "$(dirname "$0")" && pwd)"
 validator="$(cd "${script_dir}/.." && pwd)/validate.sh"
-repo_root="$(cd "${script_dir}/../../../.." && pwd)"
+repo_root="$(cd "${script_dir}/../../../../.." && pwd)"
 
 pass_count=0
 fail_count=0

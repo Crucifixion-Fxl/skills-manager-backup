@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "tool": "prometheus",
+  "owner": "prometheus",
+  "instance": {
+    "selection": "Use target/environment mapping in owner SKILL; never enumerate unrelated profiles or silently fall back.",
+    "contract": "SKILL.md",
+    "currentVersion": "unknown; historical values are not runtime evidence",
+    "addressEvidence": "Owner SKILL.md environment tables are the address SSOT; credential variables and exceptions in auth.nativeCredentialPath are selected-instance constraints."
+  },
+  "auth": {
+    "nativeCredentialPath": "PROMETHEUS_URL for selected target; US DATA http://prometheus-us-data.addx.live is recorded no-auth; optional PROMETHEUS_USER/PASSWORD only configured targets.",
+    "missingCredentialWorkflow": "No login/token issuance for recorded US DATA endpoint. Other reverse proxies/VM deployments require target-specific owner auth, never copy no-auth to CN.",
+    "subjectAndResourcePermissionVerification": "GET /api/v1/status/buildinfo and allowed query metadata within chosen tenant/network; anonymous endpoint has no subject identity. VMCluster path /select/0/prometheus is tenant-specific.",
+    "issuanceConsumptionRevocation": "No core API tokens or per-user RBAC established. Proxy Basic/mTLS credentials managed/revoked by proxy owner; don't manufacture platform OAuth.",
+    "credentialHandling": "Private injection only; never print/store secrets in repository, command arguments, chat or receipts. Discovery itself performs no login/token creation."
+  },
+  "nativeRoute": {
+    "business": "Owner SKILL + version-matched official CLI/API documentation",
+    "loginRecovery": "web-access for human web interaction; official CLI only where explicitly documented",
+    "refresh": "platform-onboarding only for concrete auth/version/interface drift",
+    "runtimeProvider": "delegated",
+    "adapterStatus": "delegated contract only; no new runnable provider or full API mirror implemented"
+  },
+  "referenceSources": [
+    {
+      "kind": "owner-contract",
+      "path": "SKILL.md"
+    },
+    {
+      "kind": "primary-official",
+      "url": "https://prometheus.io/docs/prometheus/latest/querying/api/",
+      "checkedOn": "2026-10-07",
+      "use": "authentication discovery; match actual deployed version before business calls",
+      "status": "retrieved",
+      "limitation": "Official documentation does not prove instance compatibility."
+    }
+  ],
+  "versionPolicy": {
+    "probe": "/api/v1/status/buildinfo; US DATA historical 2.45.0. CN VictoriaMetrics and VMAlert are different products and must use matching docs.",
+    "compatibility": "Unknown deployment version requires non-mutating capability evidence before business usage; do not promote latest upstream docs to deployed compatibility."
+  },
+  "verification": {
+    "source": "source-verified",
+    "fixture": "not-run: reference-only changes",
+    "runtime": "pending",
+    "sourceCandidate": "8d736bd81ab8500e51cf6be3d71d1ffa70937cae",
+    "scope": "Owner repository contract and primary documentation research only. No credential inspection, login, token issuance/revocation or online business calls.",
+    "pendingReasons": [
+      "Target deployment version, selected subject and exact resource permissions have not been runtime verified.",
+      "Token/login workflow needs independently authorized selected-instance validation; no runnable unified provider is claimed."
+    ]
+  }
+}

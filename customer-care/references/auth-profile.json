@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "tool": "customer-care",
+  "owner": "customer-care",
+  "provider": "delegated",
+  "authContract": "saas-access.md",
+  "verification": "source-verified",
+  "runtimeVerification": "pending",
+  "deploymentVersion": "unknown",
+  "origin": "https://customer-care-admin-staging.addx.live"
+}

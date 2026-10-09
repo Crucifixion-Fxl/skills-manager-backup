@@ -36,6 +36,7 @@ INVENTORY_KEYS = {
     "feishu_services",
     "todo_services",
     "join_services",
+    "recovery_services",
     "harnesses",
     "buzz_cli_binaries",
     "transient_services",
@@ -43,7 +44,7 @@ INVENTORY_KEYS = {
 }
 STABLE_IDENTITIES = (
     "agents", "agent_services", "sync_services", "feishu_services",
-    "todo_services", "join_services", "persistent_timers", "harnesses",
+    "todo_services", "join_services", "recovery_services", "persistent_timers", "harnesses",
 )
 INVENTORY_ID_KEYS = {
     *STABLE_IDENTITIES,
@@ -58,6 +59,7 @@ COUNTED_IDENTITIES = {
     "feishu_services": "feishu_services",
     "todo_services": "todo_services",
     "join_services": "join_services",
+    "recovery_services": "recovery_services",
     "harnesses": "harnesses",
     "transient_services": "transient_units",
     "lookup_only_units": "lookup_only_units",
@@ -185,7 +187,7 @@ def validate_shape(receipt: dict[str, Any], expected_sha: str) -> None:
         raise ValueError("agent service inventory disagrees with agents")
     if len(identities["persistent_timers"]) != sum(
         inventory[key]
-        for key in ("sync_services", "feishu_services", "todo_services", "join_services")
+        for key in ("sync_services", "feishu_services", "todo_services", "join_services", "recovery_services")
     ):
         raise ValueError("timer inventory disagrees with persistent services")
     expected_cli_ids = ["buzz-cli"] if inventory["buzz_cli_binaries"] else []
@@ -251,7 +253,10 @@ def validate_shape(receipt: dict[str, Any], expected_sha: str) -> None:
             raise ValueError("gap status does not match its counts")
 
 
-def compare(before: dict[str, Any], after: dict[str, Any], expected_sha: str) -> None:
+def compare(before: dict[str, Any], after: dict[str, Any], expected_sha: str,
+            *, allow_recovery_install: bool = False) -> None:
+    if type(allow_recovery_install) is not bool:
+        raise ValueError("recovery installation permission must be explicit")
     validate_shape(before, expected_sha)
     validate_shape(after, expected_sha)
     if (
@@ -261,8 +266,15 @@ def compare(before: dict[str, Any], after: dict[str, Any], expected_sha: str) ->
         or any(value.get("status") in {"fail", "unknown"} for value in after["gaps"].values())
     ):
         raise ValueError("post-upgrade receipt is not a PASS")
+    expected_ids = before["inventory_ids"]
+    if allow_recovery_install and expected_ids["recovery_services"] == []:
+        timer = "buzz-agent-recovery.timer"
+        if timer in expected_ids["persistent_timers"]:
+            raise ValueError("orphan recovery timer is not a new installation")
+        expected_ids = {**expected_ids, "recovery_services": ["buzz-agent-recovery.service"],
+                        "persistent_timers": sorted([*expected_ids["persistent_timers"], timer])}
     for key in STABLE_IDENTITIES:
-        if before["inventory_ids"].get(key) != after["inventory_ids"].get(key):
+        if expected_ids.get(key) != after["inventory_ids"].get(key):
             raise ValueError(f"persistent topology changed: {key}")
     if (
         after["inventory"].get("transient_services") != 0
@@ -278,13 +290,16 @@ def main() -> int:
     parser.add_argument("--before", type=Path, required=True)
     parser.add_argument("--after", type=Path, required=True)
     parser.add_argument("--expected-sha", required=True)
+    parser.add_argument("--allow-recovery-install", action="store_true",
+                        help="allow only the first canonical recovery service/timer pair; all other identities stay fixed")
     args = parser.parse_args()
     if not sys.flags.isolated:
         return 2
     if SHA40.fullmatch(args.expected_sha) is None:
         return 2
     try:
-        compare(load_receipt(args.before), load_receipt(args.after), args.expected_sha)
+        compare(load_receipt(args.before), load_receipt(args.after), args.expected_sha,
+                allow_recovery_install=args.allow_recovery_install)
     except ValueError:
         return 2
     print(json.dumps({"ok": True, "expected_sha": args.expected_sha}, sort_keys=True))

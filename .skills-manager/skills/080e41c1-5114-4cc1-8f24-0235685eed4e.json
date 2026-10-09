@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "080e41c1-5114-4cc1-8f24-0235685eed4e",
+  "path": "performance-preflight",
+  "path_key": "performance-preflight",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/quality/performance-preflight",
+    "branch": null
+  }
+}

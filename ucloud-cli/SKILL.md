@@ -7,6 +7,8 @@ description: 通过 UCloud CLI 管理 UCloud 云资源。当用户提到 UCloud�
 
 ## Description
 
+首次接入/变更扫描与日常认证入口见 [SaaS 接入](references/saas-access.md)；已有平台业务契约与授权门禁仍在本 Skill 维护。
+
 通过 UCloud 官方 CLI（ucloud）协助运维和开发人员管理 UCloud 云资源。当前主要用途为 AI 训练（GPU 云主机）。
 
 ## 账户信息

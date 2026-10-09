@@ -11,13 +11,15 @@ Argo CD GitOps 持续部署平台，管理 Kubernetes 应用的声明式部署�
 
 ## Description
 
+首次接入/变更扫描与日常认证入口见 [SaaS 接入](references/saas-access.md)；已有平台业务契约与授权门禁仍在本 Skill 维护。
+
 适用场景：查看应用部署状态、触发同步、回滚部署、排查部署问题。
 
 ## Rules
 
 ### 多集群连接信息
 
-当前受管 Kubernetes fleet 有 16 个集群；每个集群都有独立 ArgoCD 实例。权威集群清单以 `~/Project/A4x/k8s` 的 `clusters/` 目录和 `~/Project/A4x/argocd-apps` 根目录为准。
+每个受管集群都有独立 ArgoCD 实例。以下为当前目标清单；执行前交叉核对 `argocd-apps` 当前引用、`k8s/clusters/` 配置和 live root Application，目录残留不代表仍在运行。CN 已迁至腾讯云：prod 为 `100014919455`，staging / tech-service 为 `100052802231`，见 [CN 腾讯云环境事实与核验入口](../../infrastructure/k8s-ops/references/cn-tencent-inventory.md)。
 
 | 集群 | argocd-apps 目录 | ArgoCD 地址 | kubectl context |
 |------|------------------|-------------|-----------------|
@@ -32,11 +34,16 @@ Argo CD GitOps 持续部署平台，管理 Kubernetes 应用的声明式部署�
 | eu-tech-service | `aws-010840394398-eu-tech-service/` | `https://argocd-eu-tech-service.addx.live` | `arn:aws:eks:eu-central-1:010840394398:cluster/eu-eks-tech-service` |
 | eu-data | `aws-769494896000-eu-data/` | `https://argocd-eu-data.addx.live` | `arn:aws:eks:eu-central-1:769494896000:cluster/eu-prod-data` |
 | eu-staging | `aws-390709477306-eu-staging/` | `https://argocd-eu-staging.addx.live` | `arn:aws:eks:eu-central-1:390709477306:cluster/eu-eks-staging` |
-| cn-prod | `aws-741924744516-cn-prod/` | `https://argocd-cn.addx.live` | `arn:aws-cn:eks:cn-north-1:741924744516:cluster/cn-eks` |
-| cn-tech-service | `aws-589899215075-cn-tech-service/` | `https://argocd-cn-tech-service.addx.live` | `arn:aws-cn:eks:cn-north-1:589899215075:cluster/cn-eks-tech-service` |
-| cn-dev | `aws-801447536674-cn-dev/` | `https://argocd-cn-dev.addx.live` | `arn:aws-cn:eks:cn-north-1:801447536674:cluster/cn-eks-dev` |
-| cn-staging | `aws-801447536674-cn-staging/` | `https://argocd-cn-staging.addx.live` | `arn:aws-cn:eks:cn-north-1:801447536674:cluster/cn-eks-staging` |
-| cn-main (TKE) | `tencent-100014919455-cn-main/` | `https://argocd-cn-k8s.addx.live` | `tke-cn-k8s` |
+| cn-main（prod，TKE） | `tencent-100014919455-cn-main/` | `https://argocd-cn-k8s.addx.live` | `tke-cn-k8s` |
+| cn-staging (TKE) | `tencent-100052802231-cn-staging/` | `https://argocd-cn-staging.addx.live` | 本机核验后设 `CN_STAGING_CONTEXT` |
+| cn-tech-service (TKE) | `tencent-100052802231-cn-tech-service/` | `https://argocd-cn-tech-service-tke.addx.live`（目标，待切换） | 本机核验后设 `CN_TECH_CONTEXT` |
+
+CN tech-service 的新 ArgoCD 地址与 Casdoor `https://casdoor-cn-tech-service-tke.addx.live`
+均为 `pending-cutover`。登录/API 调用前，按 [目标与旧 Git 声明映射](../../infrastructure/k8s-ops/references/cn-tencent-inventory.md#cn-tech-service-目标域名待切换)
+核验 live 目标集群、Ingress/DNS/TLS、ArgoCD URL、Casdoor OIDC issuer 与回调；未完成就暂停，
+不自动尝试旧地址或 AWS CN。此处 Casdoor issuer 不替代 Vault 的 Kubernetes JWT issuer。
+
+CN 的 context 名称是本地别名；核验账号、集群 ID 和 API server 后使用。不得把旧 `cn-eks-*`、AWS ARN 或同名旧 context 作为回退。
 
 **认证方式：**
 - Web UI：Casdoor SSO（飞书账号登录），点击 "LOG IN VIA CASDOOR"
@@ -61,8 +68,9 @@ Application（含全部 sources）只绑定一个 AppProject。按权限职责�
 批准的平台 claim 可留 runtime；不能在同一 Application 内按 kind 自动分流。
 每个资源只有一个 Application 管理，父 overlay 不得重复渲染已交给 infra 的对象。
 存量拆分须独立评审 prune/finalizer、tracking 与反向交接；只改 Project 不完成资源拆分。
-只能使用目标集群已批准的精确合同，owner 专属名称仍是待实现目标；平台 IAM/ProviderConfig
-边界和审批不因命名改变。完整规则见
+runtime 使用共享 `app-runtime`，获批 raw RDS/ElastiCache/S3 等使用共享 `app-data-plane`；
+不按业务 owner 新建 Project，也不把混合 Application 整体迁入数据面。平台 IAM/ProviderConfig
+边界和审批保持不变。完整规则见
 [部署权限事实表](../cicd-developer/references/data/permission-boundaries.yaml)。
 
 **应用上线流程：**
@@ -73,10 +81,10 @@ Application（含全部 sources）只绑定一个 AppProject。按权限职责�
 
 **基础设施 YAML 位置（k8s 仓库）：**
 - 集群级 CICD 配置：`clusters/<cluster-dir>/cicd/`
-- ArgoCD values：`clusters/<cluster-dir>/cicd/argocd/values-override.yaml`
+- ArgoCD values：以对应 `argocd-apps/<cluster-dir>/argocd.yaml` 的 `valueFiles` 为准；新 CN staging / tech-service 使用 `values-self-managed.yaml`，不要固定假定 `values-override.yaml`
 - Self-manage Applications：`clusters/<cluster-dir>/cicd/self-manage/`
 - Git 凭据 / ESO / Kyverno 等：先查同集群 `cicd/` 下现有文件，不要使用旧 `eks/` 或 `tke/` 路径
-- Vault KV 路径：`secret/cicd/argocd/git-credentials`（三个 Vault 实例均有）
+- Vault KV 路径：从本集群 Git 凭据 ExternalSecret 的 `remoteRef` 和 SecretStore 查证；不要假定所有 Vault 实例拥有相同路径
 
 ### 状态矩阵
 
@@ -140,6 +148,7 @@ custom health，可用 live resource 与 live `argocd-cm` 执行
 
 ### 操作红线
 
+- 任何具体部署、sync、rollback 或生产状态修复必须先按 [`gitlab-issue-sop` 生命周期契约](../../collaboration/gitlab-issue-sop/references/lifecycle-binding.md) 验证 Root Issue 与环境级 Deployment Task；纯只读查询可先返回事实，但不得给出可用于关闭 Issue 的完成结论。
 - **按变更类型选择回滚**：业务纯镜像回退复用已验证的旧制品，走下方精确 pin 与执行交接，不以 revert 后重新构建作为必经步骤；配置变更通过源仓库 revert / fix MR 收敛，数据与不可逆副作用另行评估。
 - **生产执行必须有具体授权**：先展示目标集群、Application、镜像与 digest、操作范围和影响。已有用户明确审阅并批准的精确方案仍匹配当前证据时，直接按该授权执行，不重复确认；授权不覆盖的目标、动作或后续 release 不得顺带执行。
 - Application 原生 `rollback` 要求 auto-sync 已关闭；App of Apps 的 root 可能恢复 child 的自动同步配置，必须核对实际管理关系。直接 Rollout `undo` 修改期望模板，可能被 Argo CD selfHeal 覆盖；`abort` 仅适用于尚未完成且有可用 stable 版本的发布，不能当作已完成发布的历史回退。
@@ -220,6 +229,10 @@ CLI/API 返回成功也不是最终证据；必须以 Application operation stat
 Hook runtime 证据闭环。如果认证失败或 token 过期，应明确报告没有发生 operation，
 不得静默改用另一条生产写路径。
 
+具体执行完成后，把 exact revision/image digest、environment、approval、operation/history、
+workload runtime、业务探针、观察窗口与未验证边界幂等写回 Deployment Task 并回读。
+部署回执只推进生命周期；除非 final closure contract 的全部条件满足，不关闭 Root Issue。
+
 ## Examples
 
 ### Bad
@@ -261,3 +274,9 @@ Hook runtime 证据闭环。如果认证失败或 token 过期，应明确报告
 4. 获得生产手工 sync 批准后触发同步
 5. 以新 history、Hook Pod UID、exit 0、日志和实际节点完成验证
 ```
+
+### SSO 会话的原生只读验收
+
+已有官方 CLI 登录优先；CLI 或已注入凭据缺失时，沿用实际目标平台的正常 SSO。可以从本次登录回调的 Response Set-Cookie 私下接收平台签发的会话，在进程内通过加密通道交给两端原生 API 消费；不读取旧浏览器缓存，不创建本地账号 API Key 来代替 SSO。先读取 `/api/v1/session/userinfo`，以目标平台返回的 username、issuer 和 loggedIn 核验身份；用户名可能是完整邮箱，不能直接把个人短别名当作平台 subject。
+
+应用读取用明确的 `fields` 限制响应，不取完整 spec、Secret 或资源清单。字段过滤以当前实例实际响应为准；缺失的 health 字段不能解释为 Healthy，也不能只凭请求 200 宣称与网页一致。分别对照两端应用数、同步状态、健康状态及正常化结果。纯只读验收不调用 refresh、sync、部署或资源修改。验收后按平台正常登出并关闭本任务标签；关闭标签不等于服务端撤销会话。

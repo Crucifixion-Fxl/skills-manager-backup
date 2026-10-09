@@ -8,9 +8,9 @@
 
 **P0 修复**
 
-- US 文档 `docs/04-user-stories/share-device-skill.md` 重写：去除所有实现细节
+- US 文档 `docs/quality/requirements/share-device-skill.md` 重写：去除所有实现细节
   （API 路径 / CLI 参数 / tenant / preset / MS 场景 ID），只留用户视角验收标准
-- 实现细节迁到 `docs/03-detailed-design/share-device-skill.md`
+- 实现细节迁到 `docs/quality/design/share-device-skill.md`
 - 新增 9 个 contract-level mock E2E `scripts/tests/test_share_device_e2e_mock.py`：
   覆盖 share 9 步链路 / share --decline / unshare sharer-self / unshare --by-admin
   双路径 / list 双视角 / _post 仅看 result / 错误传播 / recentapprovals 拒绝兜底
@@ -29,7 +29,7 @@
 
 **P2 文档**
 
-- 新增 `docs/05-adr/share-device-preset-strategy.md`：承载"preset 双处复制
+- 新增 `docs/quality/adrs/share-device-preset-strategy.md`：承载"preset 双处复制
   vs 抽公共 module"的取舍 + 后续触发条件
 - SKILL.md 增加"密码最小化保留 + 轮换建议"段：限定专用测试账号 / 季度轮换 /
   离职清理流程

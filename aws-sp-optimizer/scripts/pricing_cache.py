@@ -32,7 +32,7 @@ from scripts._common import (
 
 logger = logging.getLogger(__name__)
 
-# Skill-shipped pricing cache — ships with the skill at skills/aws-sp-optimizer/data/.
+# Skill-shipped pricing cache — ships with the skill at skills/infrastructure/aws-sp-optimizer/data/.
 # Updated by the maintainer via a `--refresh-cache` run + git commit.
 SHIPPED_DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 SHIPPED_RATIOS_PATH = SHIPPED_DATA_DIR / "ratios.json.gz"
@@ -132,7 +132,7 @@ def version_metadata_to_json(meta: VersionMetadata) -> dict:
 def load_and_validate_ratios(primary_region: str) -> Ratios:
     """Read ratios.json.gz and return a Ratios instance.
 
-    Reads from the skill-shipped gzip cache at skills/aws-sp-optimizer/data/ratios.json.gz.
+    Reads from the skill-shipped gzip cache at skills/infrastructure/aws-sp-optimizer/data/ratios.json.gz.
     Maintainers update it via a --refresh-cache run + git commit.
 
     Raises CacheError on missing file, JSON parse failure, or schema mismatch.

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "db191fc9-95f7-4441-b878-dd70b324d309",
+  "path": "retro-prep",
+  "path_key": "retro-prep",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/collaboration/retro-prep",
+    "branch": null
+  }
+}

@@ -5,6 +5,16 @@ description: 给 app-owned private S3 bucket 加 CloudFront CDN（OAC + bucket p
 
 # Workflow：add-cloudfront
 
+## Application 与渲染入口前置
+
+raw 数据面分支先执行 [资源职责拆分合同](../references/application-resource-split.md)：
+登记 `$target.infra_source_path` 和 `$target.runtime_source_path`，分别绑定共享
+`app-data-plane` / `app-runtime`。infra 的 kustomization 不得被 runtime root 引用；
+每次生成后独立构建两份 render，核对唯一资源管理者。缺少准确合同先交付 Ops Todo，
+不能把混合 Application 整体迁入数据面或新建 owner Project。已批准的高层 claim 分支保持原合同。
+以下原有 app overlay 路径仅用于 runtime 消费文件，raw 与生产链使用明确的 infra 路径；
+跨 Application 的依赖以实际生产/消费 Ready 证据验收，不靠资源 sync-wave 推断。
+
 ## 目的
 
 给已经存在或同轮创建的 app-owned private S3 bucket 增加 CloudFront CDN。当前支持 **S3 private origin + Origin Access Control (OAC)**；不支持 ALB/custom origin、多 origin routing、Lambda@Edge、CloudFront Functions、KeyGroup signed URL 自助生成。
@@ -18,7 +28,8 @@ description: 给 app-owned private S3 bucket 加 CloudFront CDN（OAC + bucket p
 
 ## 进入条件
 
-- S3 bucket 已由 app overlay 管理，或同一轮先跑 `add-s3-bucket.md`
+- S3 bucket 已由已登记的独立 infra 入口管理，或同一轮先跑 `add-s3-bucket.md`；
+  若仍由历史混合入口管理，先独立评审 ownership 交接，不在本流程直接移动文件。
 - bucket 与 CloudFront 同 AWS commercial partition；`aws-cn` / 非 AWS 目标 STOP，走独立 CDN 方案评估
 - crossplane-infra 可同时提交 per-app ProviderConfig / CloudFront RolePolicy
 - 用户已说明是否需要 custom domain；如果需要，必须提供 hostname 和 us-east-1 ACM cert ARN，DNS 仍是 Ops Todo
@@ -96,9 +107,9 @@ description: 给 app-owned private S3 bucket 加 CloudFront CDN（OAC + bucket p
       - `{{viewer_certificate_block}}` 填 `cloudfrontDefaultCertificate: true`
       - `{{aliases_block}}=` 空字符串
   - 写到应用仓库：
-    - `k8s/overlays/{$target.env_keyword}/cloudfront-oac.yaml`
-    - `k8s/overlays/{$target.env_keyword}/cloudfront-distribution.yaml`
-  - 加入 overlay `kustomization.yaml`
+    - `{$target.infra_source_path}/cloudfront-oac.yaml`
+    - `{$target.infra_source_path}/cloudfront-distribution.yaml`
+  - 只加入 `{$target.infra_source_path}/kustomization.yaml`，runtime root 不引用此入口。
 
 [validate]
   - Distribution **必须**用 `originAccessControlIdRef.name: {$cdn_name}-oac`
@@ -110,11 +121,11 @@ description: 给 app-owned private S3 bucket 加 CloudFront CDN（OAC + bucket p
     `s3OriginConfig: {}`。不要写 legacy `originAccessIdentity: ""`，否则 Crossplane
     会规范化 live spec，造成 ArgoCD 长期 OutOfSync。
   - `providerConfigRef.name: {$app}` / `kind: ClusterProviderConfig`
-  - `bash "$skill_root/validators/validate.sh" k8s/overlays/{$target.env_keyword}` 通过
+  - `bash "$skill_root/validators/validate.sh" "{$target.infra_source_path}"` 通过
 
 [output]
-  - `k8s/overlays/{$target.env_keyword}/cloudfront-oac.yaml`
-  - `k8s/overlays/{$target.env_keyword}/cloudfront-distribution.yaml`
+  - `{$target.infra_source_path}/cloudfront-oac.yaml`
+  - `{$target.infra_source_path}/cloudfront-distribution.yaml`
 
 ## Step 4. 写 bootstrap BucketPolicy
 
@@ -122,12 +133,16 @@ description: 给 app-owned private S3 bucket 加 CloudFront CDN（OAC + bucket p
   - Step 3 完成
 
 [action]
-  - 用 `recipes/crossplane/cloudfront-bucket-policy-bootstrap.yaml.tmpl` 写到 bucket owner overlay：
+  - 用 `recipes/crossplane/cloudfront-bucket-policy-bootstrap.yaml.tmpl` 写到 bucket owner 的 `{$target.infra_source_path}`：
     - `{{app}}=$app`
     - `{{bucket_name}}=$bucket_name`
     - `{{region}}=$target.aws_region`
     - `{{partition}}=$target.partition`
     - `{{account_id}}=$target.account_id`
+  - 新 policy 文件只登记到 `{$target.infra_source_path}/kustomization.yaml` 的 resources；
+    若已登记则不重复添加。本自动流程只支持 bucket、BucketPolicy 与 CDN 同属这个
+    已登记 infra Application；若 bucket owner 是另一个 Application，STOP 并交付独立
+    多 owner 合同/资源登记/逐入口 render 的适配评审，不沿用下面“两份 render”的验收。
   - 如果已有 bucket policy，要合并成单个 BucketPolicy；S3 一个 bucket 只有一个 policy，不要生成两个互相覆盖的 BucketPolicy。
 
 [validate]
@@ -135,10 +150,10 @@ description: 给 app-owned private S3 bucket 加 CloudFront CDN（OAC + bucket p
   - Action 只有 `s3:GetObject`
   - PublicAccessBlock 不改
   - policy 用 `AWS:SourceAccount` 仅作为 bootstrap；cd-requirements.md 必须记录 Phase 2 hardening
-  - `bash "$skill_root/validators/validate.sh" k8s/overlays/{$target.env_keyword}` 通过
+  - `bash "$skill_root/validators/validate.sh" "{$target.infra_source_path}"` 通过
 
 [output]
-  - `k8s/overlays/{$target.env_keyword}/s3-bucket-policy.yaml` 或 `s3-{$purpose}-bucket-policy.yaml`
+  - `{$target.infra_source_path}/s3-bucket-policy.yaml` 或 `s3-{$purpose}-bucket-policy.yaml`
 
 ## Step 5. 注入 CDN_BASE_URL
 
@@ -148,14 +163,20 @@ description: 给 app-owned private S3 bucket 加 CloudFront CDN（OAC + bucket p
 [action]
   - 如果有 custom domain：`CDN_BASE_URL=https://{$custom_domain}`
   - 如果无 custom domain：先不写业务配置；等 Distribution Ready 后用 `status.atProvider.domainName` 或 `*.cloudfront.net` 作为 E2E URL
-  - ConfigMap 路径复用 `recipes/k8s/configmap.yaml.tmpl` 或现有 overlay config 文件
+  - ConfigMap 使用 `recipes/k8s/configmap.yaml.tmpl` 写入 `{$target.runtime_source_path}`，
+    新文件只加入 `{$target.runtime_source_path}/kustomization.yaml` 的 resources；已有配置则
+    修改该 runtime 入口实际引用的文件/生成器，并保留现有 workload 消费方式，不写入 infra。
 
 [validate]
-  - custom domain 场景：config 里有 `CDN_BASE_URL`
-  - 无 custom domain 场景：cd-requirements.md 明确这是 E2E / technical smoke，不是产品 URL
+  - 执行 [两份 render 的执行与验收](../references/application-resource-split.md#两份-render-的执行与验收)，
+    独立构建并验证 runtime/infra，逐资源核对唯一管理者和无遗漏。
+  - custom domain 场景：最终 runtime render 的配置中有准确 `CDN_BASE_URL`，且实际应用容器
+    引用该配置；infra render 含 OAC、Distribution 与唯一 BucketPolicy，不含业务 runtime 配置
+  - 无 custom domain 场景：runtime render 与原合同一致，不为 E2E URL 创建占位业务配置；
+    cd-requirements.md 明确这是 E2E / technical smoke，不是产品 URL
 
 [output]
-  - `k8s/overlays/{$target.env_keyword}/configmap.yaml` 或现有 config 文件
+  - `{$target.runtime_source_path}/configmap.yaml` 或现有 config 文件
 
 ## Step 6. ArgoCD ignoreDifferences 检查
 
@@ -163,7 +184,7 @@ description: 给 app-owned private S3 bucket 加 CloudFront CDN（OAC + bucket p
   - Step 5 完成
 
 [action]
-  - 检查对应 ArgoCD Application 是否包含 CloudFront bootstrap 期 ignoreDifferences：
+  - 检查管理 `{$target.infra_source_path}` 的准确 infra ArgoCD Application 是否包含 CloudFront bootstrap 期 ignoreDifferences：
     - group `cloudfront.aws.m.upbound.io`, kind `Distribution`
     - Phase 1 可临时忽略：
       - `/metadata/annotations/crossplane.io~1external-name`
@@ -219,14 +240,16 @@ description: 给 app-owned private S3 bucket 加 CloudFront CDN（OAC + bucket p
   - Step 7 拿到 `$distribution_id`
 
 [action]
-  - 回填 `cloudfront-distribution.yaml`：
+  - 回填 `{$target.infra_source_path}/cloudfront-distribution.yaml`：
     - `metadata.annotations.crossplane.io/external-name: $distribution_id`
-  - 用 `recipes/crossplane/cloudfront-bucket-policy-final.yaml.tmpl` 替换 bootstrap policy：
+  - 用 `recipes/crossplane/cloudfront-bucket-policy-final.yaml.tmpl` 替换同一已登记 infra 入口的 bootstrap policy：
     - `{{distribution_id}}=$distribution_id`
   - 再次 push / sync
 
 [validate]
-  - `bash "$skill_root/validators/validate.sh" k8s/overlays/{$target.env_keyword}` 通过
+  - `bash "$skill_root/validators/validate.sh" "{$target.infra_source_path}"` 通过
+  - hardening 后重新执行两份 render 的执行与验收，runtime 配置/消费引用保持不变；
+    infra 仍只有原 OAC、Distribution 和唯一 BucketPolicy，不能新增第二个管理者。
   - bucket policy 中有 `AWS:SourceArn: arn:aws:cloudfront::{$account_id}:distribution/{$distribution_id}`
   - ArgoCD diff 不再因为 external-name 空值反复创建 / adopt
   - curl CloudFront domain 仍返回 200 / 304

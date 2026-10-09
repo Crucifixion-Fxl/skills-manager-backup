@@ -45,15 +45,15 @@ metadata:
     backstage.io/techdocs-entity-path: /architecture/engagement-backend/engagement-service/
 ```
 
-Domain 实体（SKILL.md §1）也可加 `techdocs-entity` 指业务仓 host（深链 `path: /` = `docs/index.md` = Domain 总览）。**不能**同时写 `techdocs-ref` 和 `techdocs-entity`（一实体只能一个来源）。
+Domain 实体（SKILL.md §1）也可加 `techdocs-entity` 指业务仓 host（深链 `path: /` = `docs/catalogue.md` = Domain 总览）。**不能**同时写 `techdocs-ref` 和 `techdocs-entity`（一实体只能一个来源）。
 
-## mkdocs.yml + mermaid_hook.py + docs/index.md（必需 3 件套）
+## mkdocs.yml + mermaid_hook.py + docs/catalogue.md（必需 3 件套）
 
 完整模板：[`scripts/mkdocs.yml.template`](../scripts/mkdocs.yml.template)（~25 行，不写显式 nav）+ [`scripts/mermaid_hook.py`](../scripts/mermaid_hook.py)（让 Mermaid 渲染）。
 
 **为什么不写显式 nav**：URL 是从**文件路径**生成的（`docs/architecture/<system>/<component>/index.md` → `/architecture/<system>/<component>/`），跟 nav 配置无关；`techdocs-entity-path` 引用的就是这个 URL。显式 nav 只在确实要改顺序/中文标签时塞少数几条。
 
-**`docs/index.md` 必须有**（或 `docs/README.md`）—— 配了 `techdocs-ref: dir:.` 但没 `index.md` 时门户「Docs」标签直接 404（`engineering/architecture` 踩过：有 `docs/architecture/` 子目录但没根 `docs/index.md`）。
+**`docs/catalogue.md` 必须有**（或 `docs/catalogue.md`）—— 配了 `techdocs-ref: dir:.` 但没 `index.md` 时门户「Docs」标签直接 404（`engineering/architecture` 踩过：有 `docs/architecture/` 子目录但没根 `docs/catalogue.md`）。
 
 **Mermaid 图必须配 `mermaid_hook.py`**：RHDH 自带的 `mkdocs-techdocs-core` 覆盖了 `markdown_extensions`，```mermaid``` 围栏会被当普通高亮代码块输出，门户的 TechDocs Mermaid addon 不认。hook 把围栏换成 `<pre class="mermaid"><code>…HTML 转义后的图源…</code></pre>` —— 节点换行用 `<br/>` **不用 `\n`**。
 

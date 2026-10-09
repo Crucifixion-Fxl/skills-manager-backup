@@ -10,11 +10,11 @@ notes: |
   当前自助模板只覆盖单节点 StatefulSet。
   多节点需要配 Keeper，先找运维评估，不在本模板范围。
   serviceType **永远** ClusterIP——ClickHouse native 协议无 auth 层，不可对外暴露 Ingress。
-  自 2026-06-01 起，新部署应用 **staging / tech-service**（6 集群 us/eu/cn-staging + tech-us/eu/cn）
+  自 2026-06-01 起，新部署应用 **staging / tech-service**（当前 us/eu/cn staging + tech-service；CN 腾讯云能力须独立验证）
   不再按本表创建 app-owned ClickHouse/PVC，也不允许用 StatefulSet+PVC 自托管绕过（hard-rule #29 + #30）；
   应通过 kind:Database Composition 在 shared ClickHouse 实例上拿到自己的 database+user，凭证落在
   secret/{env}/clickhouse/application/{app}/<key>（platform-resource-credential，region-less），
-  app 用 ExternalSecret 读取。**shared ClickHouse 实例本身已于 2026-06-04 部署到全 6 集群**
+  app 用 ExternalSecret 读取。**shared ClickHouse 实例本身已于 2026-06-04 历史部署到含已退役 AWS CN 的六集群；当前 TKE 须重新核验**
   （每集群一个 shared ClickHouse StatefulSet，Synced/Healthy/私有），但 **kind:Database 消费 Composition
   尚未落地** → 未落地前 STOP，把"补可复用消费层 + 自动 per-app 凭据交付"路由到 Ops Todo
   （不是再建实例，也不是在平台仓为当前 app 手搓凭证）。

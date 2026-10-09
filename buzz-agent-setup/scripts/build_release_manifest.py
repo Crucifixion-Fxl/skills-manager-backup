@@ -161,13 +161,13 @@ def archive_records(
     tree = git_output(
         source_repo,
         child_env,
-        ["ls-tree", "-rz", "--full-tree", commit, "--", "skills/buzz-agent-setup"],
+        ["ls-tree", "-rz", "--full-tree", commit, "--", "skills/agent-harness/buzz-agent-setup"],
         MAX_TREE_BYTES,
         60,
     )
     records: dict[str, dict[str, object]] = {}
     extracted_bytes = 0
-    prefix = "skills/buzz-agent-setup/"
+    prefix = "skills/agent-harness/buzz-agent-setup/"
     for raw_entry in tree.split(b"\0"):
         if not raw_entry:
             continue

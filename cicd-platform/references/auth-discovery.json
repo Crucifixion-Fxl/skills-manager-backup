@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "tool": "cicd",
+  "owner": "cicd-platform",
+  "instances": [
+    "https://cicd.addx.live"
+  ],
+  "nativeRoute": "CICD GitLab OAuth → system JWT → browser task session",
+  "loginFlow": {
+    "reuseFirst": true,
+    "steps": "复用宿主安全注入 CICD_TOKEN，先执行 source-verified Bearer /api/user/info；缺失则通过 web-access 复用页面 session 或点击 GitLab 登录由用户完成 SSO/MFA。网页 TOKEN__ nested cache 需要专用 adapter，不提取 raw key。",
+    "authorization": "Login, token creation/rotation/revocation and business writes require the current task scope; this discovery performs none."
+  },
+  "tokenMechanism": "前端 TOKEN__ 位于带前缀 COMMON__LOCAL__KEY__ 缓存结构；不能当成 localStorage 单一 token key。源码含 query token callback，页面 URL 不能原样记录。",
+  "subjectPermission": "候选 GET /api/user/info，code=0，result.userId（uint stable ID）；result.username/roles 提供身份与角色上下文。前端 /user/info + API prefix /api + Bearer；部署 SHA 未匹配，仍待 runtime-only probe。上线单/项目/部署权限分别核验。",
+  "expiryRevoke": "候选 OAuth 生成系统 JWT 默认 12h；GET /logout handler 只返回 success，没有撤销 JWT。前端清除 TOKEN__/USER__INFO__ 仅清本地会话；服务端撤销/refresh 策略仍待核验。",
+  "officialRefs": [],
+  "sources": [
+    {
+      "kind": "owner-contract",
+      "path": "../SKILL.md",
+      "status": "contract-recorded"
+    },
+    {
+      "kind": "repository",
+      "repository": "https://gitlab.addx.ai/DEV/cicd-server",
+      "researchCommit": "9eda25f1e5af8861cd2d8f1293d8dc899d45b8b1",
+      "entries": [
+        "router/router.go",
+        "handler/oauth.go",
+        "handler/user.go",
+        "response/user.go",
+        "router/middleware/jwt.go"
+      ],
+      "status": "source-verified"
+    }
+  ],
+  "versionPolicy": {
+    "researchCommit": "9eda25f1e5af8861cd2d8f1293d8dc899d45b8b1",
+    "deployedCommit": null,
+    "deploymentMatch": "unknown",
+    "refreshTriggers": [
+      "authentication contract change",
+      "deployed version change",
+      "reproducible auth failure"
+    ],
+    "rule": "Candidate source and published contracts do not establish deployed compatibility. Verify the target instance version and read-only supported capabilities before enabling an adapter."
+  },
+  "verification": {
+    "source": "source-verified",
+    "fixture": "Root integration will run owner-profiles.test.js; not run by this discovery.",
+    "runtime": "not-attempted",
+    "scope": "Read-only documentation/repository discovery; no login, token issuance, credential inspection or business API execution."
+  },
+  "candidateIdentity": {
+    "method": "GET",
+    "path": "/api/user/info",
+    "tokenScheme": "Bearer",
+    "successPath": "code",
+    "successValue": 0,
+    "subjectPath": "result.userId",
+    "runtimeEnabled": true
+  }
+}

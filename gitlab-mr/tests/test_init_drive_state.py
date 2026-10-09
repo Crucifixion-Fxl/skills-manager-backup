@@ -1,18 +1,76 @@
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
 import os
 import subprocess
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import quote, urlencode
 
+import pytest
+
 SCRIPT = Path(__file__).parents[1] / "scripts" / "init_drive_state.py"
+AUDIT_SCRIPT = Path(__file__).parents[1] / "scripts" / "validate_drive_audit.py"
 PROJECT_PATH = "engineering/skills"
 ORIGIN_MR_IID = 101
 VERIFICATION_MR_IID = 102
 CANDIDATE_MR_IID = 103
 CLEANUP_PIPELINE_ID = 9001
+OVERLAY = "backend/k8s/overlays/prod-us/kustomization.yaml"
+NETWORK_POLICY = "backend/k8s/overlays/prod-us/network-policy-apisix.yaml"
+DEPLOYMENT_PLAN = "docs/deployment/prod-deployment-plan.md"
+APP_PATH = "aws-302571458622-us-prod/sample-prod-us.yaml"
+APP_URL = f"https://gitlab.addx.ai/DEV/argocd-apps/-/blob/main/{APP_PATH}"
+STAGING_APP_PATH = "aws-390709477306-us-staging/sample-staging-us.yaml"
+STAGING_APP_URL = (
+    f"https://gitlab.addx.ai/DEV/argocd-apps/-/blob/main/{STAGING_APP_PATH}"
+)
+BASE_PROD_KUSTOMIZATION = """apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+patches: []
+"""
+PLACEMENT_PROD_KUSTOMIZATION = """apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+patches:
+  - target:
+      group: argoproj.io
+      version: v1alpha1
+      kind: Rollout
+      name: sample
+    patch: |-
+      - op: add
+        path: /spec/template/spec/nodeSelector/karpenter.sh~1nodepool
+        value: shared-amd64-ondemand
+"""
+BASE_NETWORK_POLICY = """apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sample
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+  ingress: []
+"""
+UPDATED_NETWORK_POLICY = """apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sample
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+"""
 
 
 def git(repo: Path, *args: str) -> str:
@@ -139,9 +197,13 @@ def setup_promotion_repo(
         }
     )
     responses = {
+        f"{mr_path}/{ORIGIN_MR_IID}": origin_mr,
         f"{mr_path}/{VERIFICATION_MR_IID}": verification_mr,
         f"{mr_path}/{CANDIDATE_MR_IID}": candidate_mr,
-        f"{mr_path}?{query}": [origin_mr, verification_mr],
+        f"{mr_path}?{query}": [
+            {key: value for key, value in origin_mr.items() if key != "diff_refs"},
+            {key: value for key, value in verification_mr.items() if key != "diff_refs"},
+        ],
         f"projects/{project}/repository/branches/main": {
             "name": "main",
             "commit": {"id": base_sha},
@@ -320,6 +382,201 @@ print(json.dumps(responses[sys.argv[2]]))
     env["FAKE_GLAB_RESPONSES"] = str(responses_path)
     env["PATH"] = f"{fake_bin}{os.pathsep}{env['PATH']}"
     return repo, env, candidate_sha, accepted_sha
+
+
+def setup_production_overlay_repo(
+    tmp_path: Path,
+    *,
+    business_code: bool = False,
+    staging_drift: bool = False,
+    staging_missing_overlay: bool = False,
+    image_mutation: bool = False,
+    image_patch: bool = False,
+    network_policy_only: bool = False,
+    deployment_doc: bool = False,
+    wrong_mr_sha: bool = False,
+    wrong_application: bool = False,
+    unprotected_application: bool = False,
+    staging_uses_prod_overlay: bool = False,
+    staging_overlay_suffix: str = "",
+) -> tuple[Path, dict[str, str], str]:
+    origin = tmp_path / "overlay-origin.git"
+    git(tmp_path, "init", "--bare", str(origin))
+    repo = create_repo(tmp_path, "overlay-repo")
+    git(repo, "remote", "add", "origin", str(origin))
+    overlay = repo / OVERLAY
+    overlay.parent.mkdir(parents=True)
+    overlay.write_text(BASE_PROD_KUSTOMIZATION, encoding="utf-8")
+    policy = repo / NETWORK_POLICY
+    if network_policy_only:
+        policy.write_text(BASE_NETWORK_POLICY, encoding="utf-8")
+    deployment_plan = repo / DEPLOYMENT_PLAN
+    if deployment_doc:
+        deployment_plan.parent.mkdir(parents=True)
+        deployment_plan.write_text("# Production deployment\n", encoding="utf-8")
+    git(repo, "add", ".")
+    git(repo, "commit", "-m", "add production overlay")
+    base_sha = git(repo, "rev-parse", "HEAD")
+
+    git(repo, "switch", "-c", "staging")
+    if staging_missing_overlay:
+        git(repo, "rm", NETWORK_POLICY if network_policy_only else OVERLAY)
+        git(repo, "commit", "-m", "production overlay absent on staging")
+    elif staging_drift:
+        overlay.write_text("kind: Kustomization\nresources: [../../other-base]\n", encoding="utf-8")
+        git(repo, "add", OVERLAY)
+        git(repo, "commit", "-m", "change production overlay on staging")
+    staging_sha = git(repo, "rev-parse", "HEAD")
+
+    git(repo, "switch", "main")
+    git(repo, "switch", "-c", "feat/sample")
+    if network_policy_only:
+        policy.write_text(UPDATED_NETWORK_POLICY, encoding="utf-8")
+    else:
+        placement = PLACEMENT_PROD_KUSTOMIZATION
+        if image_patch:
+            placement = placement.replace(
+                "/spec/template/spec/nodeSelector/karpenter.sh~1nodepool",
+                "/spec/template/spec/containers/0/image",
+            )
+        overlay.write_text(
+            placement
+            + ("images: [{name: sample, newTag: bypass}]\n" if image_mutation else ""),
+            encoding="utf-8",
+        )
+    if deployment_doc:
+        deployment_plan.write_text("# Production deployment\n\nNetworkPolicy updated.\n", encoding="utf-8")
+    plan = repo / "docs/requirements/170/plan.md"
+    plan.parent.mkdir(parents=True)
+    plan.write_text("# Production placement\n", encoding="utf-8")
+    if business_code:
+        (repo / "service.py").write_text("print('business')\n", encoding="utf-8")
+    git(repo, "add", ".")
+    git(repo, "commit", "-m", "scope production overlay")
+    candidate_sha = git(repo, "rev-parse", "HEAD")
+    git(
+        repo,
+        "push",
+        "origin",
+        f"{base_sha}:refs/heads/main",
+        f"{staging_sha}:refs/heads/staging",
+        f"{candidate_sha}:refs/merge-requests/42/head",
+    )
+
+    project = quote(PROJECT_PATH, safe="")
+    gitops = quote("DEV/argocd-apps", safe="")
+    app_sha = "a" * 40
+    app_yaml = f"""apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: sample-prod-us
+  labels:
+    env: prod-us
+spec:
+  source:
+    repoURL: https://gitlab.addx.ai/{'other/project' if wrong_application else PROJECT_PATH}.git
+    targetRevision: main
+    path: backend/k8s/overlays/prod-us
+"""
+    staging_app_yaml = f"""apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: sample-staging-us
+  labels:
+    env: staging-us
+spec:
+  source:
+    repoURL: https://gitlab.addx.ai/{PROJECT_PATH}.git
+    targetRevision: staging
+    path: backend/k8s/overlays/{'prod-us' if staging_uses_prod_overlay else 'staging-us' + staging_overlay_suffix}
+"""
+    responses = {
+        f"projects/{project}/merge_requests/42": {
+            "iid": 42,
+            "state": "opened",
+            "source_branch": "feat/sample",
+            "target_branch": "main",
+            "sha": "f" * 40 if wrong_mr_sha else candidate_sha,
+            "description": (
+                "Work Item: https://gitlab.addx.ai/engineering/skills/-/issues/170"
+            ),
+        },
+        f"projects/{project}/repository/branches/main": {
+            "name": "main",
+            "protected": True,
+            "commit": {"id": base_sha},
+        },
+        f"projects/{project}/repository/branches/staging": {
+            "name": "staging",
+            "protected": True,
+            "commit": {"id": staging_sha},
+        },
+        f"projects/{gitops}/repository/branches/main": {
+            "name": "main",
+            "protected": not unprotected_application,
+            "commit": {"id": app_sha},
+        },
+        f"projects/{gitops}/repository/files/{quote(APP_PATH, safe='')}?ref={app_sha}": {
+            "file_path": APP_PATH,
+            "encoding": "base64",
+            "content": base64.b64encode(app_yaml.encode()).decode(),
+            "content_sha256": hashlib.sha256(app_yaml.encode()).hexdigest(),
+        },
+        f"projects/{gitops}/repository/files/{quote(STAGING_APP_PATH, safe='')}?ref={app_sha}": {
+            "file_path": STAGING_APP_PATH,
+            "encoding": "base64",
+            "content": base64.b64encode(staging_app_yaml.encode()).decode(),
+            "content_sha256": hashlib.sha256(staging_app_yaml.encode()).hexdigest(),
+        },
+    }
+    responses_path = tmp_path / "fake-overlay-glab-responses.json"
+    responses_path.write_text(json.dumps(responses), encoding="utf-8")
+    fake_bin = tmp_path / "fake-overlay-bin"
+    fake_bin.mkdir()
+    fake_glab = fake_bin / "glab"
+    fake_glab.write_text(
+        """#!/usr/bin/env python3
+import json
+import os
+import sys
+
+with open(os.environ["FAKE_GLAB_RESPONSES"], encoding="utf-8") as source:
+    responses = json.load(source)
+if len(sys.argv) != 3 or sys.argv[1] != "api" or sys.argv[2] not in responses:
+    print(f"unexpected glab invocation: {sys.argv}", file=sys.stderr)
+    raise SystemExit(2)
+print(json.dumps(responses[sys.argv[2]]))
+""",
+        encoding="utf-8",
+    )
+    fake_glab.chmod(0o755)
+    env = os.environ.copy()
+    env["FAKE_GLAB_RESPONSES"] = str(responses_path)
+    env["PATH"] = f"{fake_bin}{os.pathsep}{env['PATH']}"
+    return repo, env, candidate_sha
+
+
+def run_overlay_init(
+    tmp_path: Path, repo: Path, env: dict[str, str], sha: str, evidence: str = APP_URL
+) -> tuple[subprocess.CompletedProcess[str], Path]:
+    return run_init(
+        tmp_path,
+        "--target-branch",
+        "main",
+        "--mr-mode",
+        "production-non-promotion",
+        "--staging-flow-exists",
+        "false",
+        "--staging-flow-evidence",
+        evidence,
+        "--staging-application-evidence",
+        STAGING_APP_URL,
+        "--not-applicable-reason",
+        "production overlay is reconciled from main, not staging",
+        cwd=repo,
+        env=env,
+        head_sha=sha,
+    )
 
 
 def test_ordinary_state_is_initialized_for_staging(tmp_path: Path) -> None:
@@ -786,6 +1043,263 @@ def test_non_promotion_requires_remote_without_staging_branch(tmp_path: Path) ->
     assert result.returncode == 0, result.stderr
     state = json.loads(output.read_text(encoding="utf-8"))
     assert state["promotion"]["staging_flow_exists"] is False
+
+
+def test_non_promotion_attests_prod_overlay_with_staging_branch(tmp_path: Path) -> None:
+    repo, env, sha = setup_production_overlay_repo(
+        tmp_path, staging_missing_overlay=True
+    )
+    result, output = run_overlay_init(tmp_path, repo, env, sha)
+
+    assert result.returncode == 0, result.stderr
+    state = json.loads(output.read_text(encoding="utf-8"))
+    attested = state["non_promotion"]
+    assert attested["enabled"] is True
+    assert attested["candidate_mr_sha"] == sha
+    assert attested["overlay_paths"] == [OVERLAY]
+    assert attested["application"]["url"] == APP_URL
+    assert attested["staging_application"]["url"] == STAGING_APP_URL
+    assert len(attested["attestation_sha256"]) == 64
+
+
+@pytest.mark.parametrize("suffix", ["-390", "-7", "-1234567890123"])
+def test_non_promotion_accepts_numeric_staging_cluster_overlay(
+    tmp_path: Path, suffix: str,
+) -> None:
+    repo, env, sha = setup_production_overlay_repo(
+        tmp_path, staging_missing_overlay=True, staging_overlay_suffix=suffix
+    )
+    result, output = run_overlay_init(tmp_path, repo, env, sha)
+
+    assert result.returncode == 0, result.stderr
+    state = json.loads(output.read_text(encoding="utf-8"))
+    assert state["non_promotion"]["staging_application"]["url"] == STAGING_APP_URL
+
+
+@pytest.mark.parametrize("suffix", ["-prod", "-eu-390", "-390-other"])
+def test_non_promotion_rejects_invalid_staging_overlay_suffix(
+    tmp_path: Path, suffix: str,
+) -> None:
+    repo, env, sha = setup_production_overlay_repo(
+        tmp_path, staging_overlay_suffix=suffix
+    )
+    result, output = run_overlay_init(tmp_path, repo, env, sha)
+
+    assert result.returncode == 2
+    assert not output.exists()
+    assert "staging Application must use its separate staging overlay" in result.stderr
+
+
+def test_non_promotion_attests_issue_170_network_policy_topology(
+    tmp_path: Path,
+) -> None:
+    repo, env, sha = setup_production_overlay_repo(
+        tmp_path,
+        staging_missing_overlay=True,
+        network_policy_only=True,
+        deployment_doc=True,
+    )
+    result, output = run_overlay_init(tmp_path, repo, env, sha)
+    assert result.returncode == 0, result.stderr
+    attested = json.loads(output.read_text(encoding="utf-8"))["non_promotion"]
+    assert attested["overlay_paths"] == [NETWORK_POLICY]
+    assert attested["deployment_plan_paths"] == [DEPLOYMENT_PLAN]
+
+
+@pytest.mark.parametrize("staging_branch", ["not-a-real-staging", "main"])
+def test_non_promotion_rejects_alternate_staging_branch(
+    tmp_path: Path, staging_branch: str
+) -> None:
+    repo, env, sha = setup_production_overlay_repo(tmp_path)
+    result, output = run_init(
+        tmp_path,
+        "--target-branch",
+        "main",
+        "--mr-mode",
+        "production-non-promotion",
+        "--staging-flow-exists",
+        "false",
+        "--staging-branch",
+        staging_branch,
+        "--staging-flow-evidence",
+        APP_URL,
+        "--staging-application-evidence",
+        STAGING_APP_URL,
+        "--not-applicable-reason",
+        "production overlay is not staging",
+        cwd=repo,
+        env=env,
+        head_sha=sha,
+    )
+    assert result.returncode == 2
+    assert not output.exists()
+    assert "requires staging_branch=staging" in result.stderr
+
+
+def test_non_promotion_rejects_wrong_gitlab_head(tmp_path: Path) -> None:
+    repo, env, sha = setup_production_overlay_repo(tmp_path, wrong_mr_sha=True)
+    result, output = run_overlay_init(tmp_path, repo, env, sha)
+    assert result.returncode == 2
+    assert not output.exists()
+    assert "MR SHA does not match head_sha" in result.stderr
+
+
+def test_non_promotion_requires_exact_work_item_url(tmp_path: Path) -> None:
+    repo, env, sha = setup_production_overlay_repo(tmp_path)
+    responses_path = Path(env["FAKE_GLAB_RESPONSES"])
+    responses = json.loads(responses_path.read_text(encoding="utf-8"))
+    mr = responses[f"projects/{quote(PROJECT_PATH, safe='')}/merge_requests/42"]
+    mr["description"] += "0"
+    responses_path.write_text(json.dumps(responses), encoding="utf-8")
+
+    result, output = run_overlay_init(tmp_path, repo, env, sha)
+    assert result.returncode == 2
+    assert not output.exists()
+    assert "issue plan path does not match MR Work Item" in result.stderr
+
+
+def test_non_promotion_rejects_business_code_with_overlay(tmp_path: Path) -> None:
+    repo, env, sha = setup_production_overlay_repo(tmp_path, business_code=True)
+    result, output = run_overlay_init(tmp_path, repo, env, sha)
+    assert result.returncode == 2
+    assert not output.exists()
+    assert "non-production path: service.py" in result.stderr
+
+
+def test_non_promotion_rejects_image_mutation_inside_prod_overlay(
+    tmp_path: Path,
+) -> None:
+    repo, env, sha = setup_production_overlay_repo(tmp_path, image_mutation=True)
+    result, output = run_overlay_init(tmp_path, repo, env, sha)
+    assert result.returncode == 2
+    assert not output.exists()
+    assert "permits NetworkPolicy spec or NodePool selector patches only" in result.stderr
+
+
+def test_non_promotion_rejects_image_patch_inside_prod_overlay(tmp_path: Path) -> None:
+    repo, env, sha = setup_production_overlay_repo(tmp_path, image_patch=True)
+    result, output = run_overlay_init(tmp_path, repo, env, sha)
+    assert result.returncode == 2
+    assert not output.exists()
+    assert "permits NetworkPolicy spec or NodePool selector patches only" in result.stderr
+
+
+def test_non_promotion_rejects_staging_overlay_drift(tmp_path: Path) -> None:
+    repo, env, sha = setup_production_overlay_repo(tmp_path, staging_drift=True)
+    result, output = run_overlay_init(tmp_path, repo, env, sha)
+    assert result.returncode == 2
+    assert not output.exists()
+    assert "staging already differs on production path" in result.stderr
+
+
+def test_non_promotion_rejects_unrelated_application(tmp_path: Path) -> None:
+    repo, env, sha = setup_production_overlay_repo(tmp_path, wrong_application=True)
+    result, output = run_overlay_init(tmp_path, repo, env, sha)
+    assert result.returncode == 2
+    assert not output.exists()
+    assert "Application must own a prod-* overlay" in result.stderr
+
+
+def test_non_promotion_rejects_staging_application_consuming_prod_overlay(
+    tmp_path: Path,
+) -> None:
+    repo, env, sha = setup_production_overlay_repo(
+        tmp_path, staging_uses_prod_overlay=True
+    )
+    result, output = run_overlay_init(tmp_path, repo, env, sha)
+    assert result.returncode == 2
+    assert not output.exists()
+    assert "staging Application must use its separate staging overlay" in result.stderr
+
+
+def test_non_promotion_rejects_unprotected_gitops_evidence(tmp_path: Path) -> None:
+    repo, env, sha = setup_production_overlay_repo(
+        tmp_path, unprotected_application=True
+    )
+    result, output = run_overlay_init(tmp_path, repo, env, sha)
+    assert result.returncode == 2
+    assert not output.exists()
+    assert "GitOps evidence must be the protected main branch" in result.stderr
+
+
+def test_non_promotion_rejects_fabricated_evidence_url(tmp_path: Path) -> None:
+    repo, env, sha = setup_production_overlay_repo(tmp_path)
+    result, output = run_overlay_init(
+        tmp_path,
+        repo,
+        env,
+        sha,
+        "https://gitlab.addx.ai/engineering/skills/-/blob/main/fake.yaml",
+    )
+    assert result.returncode == 2
+    assert not output.exists()
+    assert "must be a DEV/argocd-apps main blob URL" in result.stderr
+
+
+def test_non_promotion_audit_rechecks_live_attestation(tmp_path: Path) -> None:
+    repo, env, sha = setup_production_overlay_repo(tmp_path)
+    result, state_file = run_overlay_init(tmp_path, repo, env, sha)
+    assert result.returncode == 0, result.stderr
+    state = json.loads(state_file.read_text(encoding="utf-8"))
+    evidence = tmp_path / "application.yaml"
+    evidence.write_text("name: sample-prod-us\n", encoding="utf-8")
+    audit_file = tmp_path / "audit.json"
+    audit = {
+        "status": "verified",
+        "mr_iid": 42,
+        "target_branch": "main",
+        "head_sha": sha,
+        "pipeline_status": "success",
+        "unresolved_discussions": 0,
+        "mergeable": True,
+        "audited_at_utc": datetime.now(UTC).isoformat(),
+        "release": {
+            "workflow_evidence": {
+                "name": "staging-flow-not-applicable",
+                "evidence_url": APP_URL,
+                "target_environment": "prod-us",
+                "observed_value": "sample-prod-us",
+                "verifier_tool": "GitLab API",
+                "evidence_file": str(evidence),
+                "verified_at_utc": datetime.now(UTC).isoformat(),
+            },
+            "non_promotion_attestation_sha256": state["non_promotion"][
+                "attestation_sha256"
+            ],
+        },
+    }
+    audit_file.write_text(json.dumps(audit), encoding="utf-8")
+    command = [
+        sys.executable,
+        str(AUDIT_SCRIPT),
+        "--state",
+        str(state_file),
+        "--audit-result",
+        str(audit_file),
+    ]
+    passed = subprocess.run(
+        command, cwd=repo, env=env, text=True, capture_output=True, check=False
+    )
+    assert passed.returncode == 0, passed.stderr
+
+    audit["release"]["non_promotion_attestation_sha256"] = "0" * 64
+    audit_file.write_text(json.dumps(audit), encoding="utf-8")
+    rejected = subprocess.run(
+        command, cwd=repo, env=env, text=True, capture_output=True, check=False
+    )
+    assert rejected.returncode == 1
+    assert "production overlay attestation changed" in rejected.stderr
+
+    audit["release"]["non_promotion_attestation_sha256"] = state["non_promotion"][
+        "attestation_sha256"
+    ]
+    audit_file.write_text(json.dumps(audit), encoding="utf-8")
+    git(repo, "push", "origin", ":refs/heads/staging")
+    disappeared = subprocess.run(
+        command, cwd=repo, env=env, text=True, capture_output=True, check=False
+    )
+    assert disappeared.returncode == 1
+    assert "staging branch disappeared since attestation" in disappeared.stderr
 
 
 def test_emergency_hotfix_requires_complete_backport_metadata(

@@ -32,11 +32,15 @@ from pathlib import Path
 
 TESTS = Path(__file__).resolve().parent
 SCRIPT = TESTS.parent / "scripts" / "buzz_feishu_group_sync.py"
-SPEC = importlib.util.spec_from_file_location("buzz_feishu_group_sync", SCRIPT)
-FGS = importlib.util.module_from_spec(SPEC)
-assert SPEC.loader is not None
-sys.modules[SPEC.name] = FGS
-SPEC.loader.exec_module(FGS)
+FGS = sys.modules.get("buzz_feishu_group_sync")
+if FGS is None:
+    SPEC = importlib.util.spec_from_file_location("buzz_feishu_group_sync", SCRIPT)
+    FGS = importlib.util.module_from_spec(SPEC)
+    assert SPEC.loader is not None
+    sys.modules[SPEC.name] = FGS
+    SPEC.loader.exec_module(FGS)
+elif Path(getattr(FGS, "__file__", "")).resolve() != SCRIPT.resolve():
+    raise RuntimeError("group sync fixture requires the approved script source")
 
 # 纯 Python 的 BIP-340 一次签名约 0.12 s、验签约 0.14 s，每轮都要一次；这些函数是纯函数，测试里加缓存、
 # 把 nonce 随机数固定成全零（L1-FGS-001 单独换成 spy 验证真的每次要新随机数），整套测试才不会慢一个数量级。
@@ -155,7 +159,12 @@ def fmsg(message_id, sender_open, content, *, sender_type="user", mentions=None,
 
 
 def text_of(call):
-    return call["args"][call["args"].index("--text") + 1]
+    args = call['args']
+    if '--text' in args:
+        return args[args.index('--text') + 1]
+    card = json.loads(args[args.index('--content') + 1])
+    return '\n'.join(e['text']['content'] for e in card.get('elements', [])
+                     if isinstance(e.get('text'), dict) and e['text'].get('tag') == 'plain_text')
 
 
 def union_of(open_id):
@@ -822,6 +831,8 @@ class FakeWorld:
                     {"pubkey": target, "role": tags.get("role", "member")}]
             else:
                 self.members = [m for m in self.members if m["pubkey"] != target]
+        elif ev["kind"] == 30177:  # a managed-agent policy (ADR-0019/0022): the relay does not look into its content
+            self.relay_events.append(dict(ev))
         elif ev["kind"] in (7, 5, 9, 40003):
             if signer not in roles:
                 return 400, b'{"error":"restricted: not a channel member"}'
@@ -1141,7 +1152,8 @@ class FakeWorld:
                     return ok({"user": {"open_id": path.rsplit("/", 1)[1]}})
                 return fail(args, 41050)
             if method == "GET" and path == "/open-apis/application/v6/scopes":
-                return ok({"scopes": [{"scope_name": s, "grant_status": 1} for s in sorted(self.bot_scopes)]})
+                assert as_ == "bot"
+                return {"ok": True, "identity": "bot", "data": {"scopes": [{"scope_name": s, "scope_type": "tenant", "grant_status": 1} for s in sorted(self.bot_scopes)]}}
         raise AssertionError(f"unexpected lark command {args}")
 
     def _card_refusal(self, args):
@@ -1171,8 +1183,10 @@ class FakeWorld:
             if kind == "id" and value != "all" and not value.startswith("ou_"):
                 return fail(args, 230099, "card_invalid",
                             message="ErrCode: 100290 there is an invalid user resource (at/person) in your card")
-        shape = (isinstance(card, dict) and card.get("schema") == "2.0" and isinstance((card.get("header") or {}).get("title"), dict)
-                 and (card["header"]["title"].get("content") or "").strip() and isinstance((card.get("body") or {}).get("elements"), list))
+        shape = (isinstance(card, dict) and isinstance((card.get("header") or {}).get("title"), dict)
+                 and (card["header"]["title"].get("content") or "").strip()
+                 and ((card.get('schema') == '2.0' and isinstance((card.get('body') or {}).get('elements'), list))
+                      or ('schema' not in card and isinstance(card.get('elements'), list))))
         if not shape:
             return fail(args, 230099, "card_invalid", message="ErrCode: 11310 card content invalid")
         return None
@@ -1299,6 +1313,9 @@ class FakeWorld:
                 "sender": {"id": self.conv(sender["id"], id_type) if sender["sender_type"] == "user" else sender["id"],
                            "id_type": id_type if sender["sender_type"] == "user" else "app_id",
                            "sender_type": sender["sender_type"], "tenant_key": "tk"}}
+        for field in ("sync_to_chat_info", "parent_id", "root_id"):
+            if field in msg:
+                item[field] = msg[field]
         if msg.get("mentions"):
             item["mentions"] = [{"id": self.conv(m["id"], id_type), "id_type": id_type, "key": m["key"],
                                  "name": m.get("name", ""), "tenant_key": "tk"} for m in msg["mentions"]]
@@ -1369,6 +1386,9 @@ class Env:
             "lark_cli": LARK_CLI,
             "desk_pubkey": AGENT_PK,
             "message_format": "text",  # most cases pin what is said as text; the card cases say "card"
+            # Binding claims (ADR-0022) add a relay read and a kind:30177 write to every round: the older suites pin the
+            # behaviour around them with claims off; test_buzz_feishu_group_sync_binding_claims.py turns them on.
+            "binding_claim": False,
         }
         cfg.update(overrides)
         self.config = write_owner_only(tmp / "config.json", json.dumps(cfg))
@@ -1431,6 +1451,78 @@ class DeskConfigMigration(TmpCase):
 
 
 # ================================ L1 ================================
+
+
+class RelayClaimQueries(TmpCase):
+    def config(self):
+        signer = self.tmp / "signer.env"
+        write_owner_only(signer, "BUZZ_PRIVATE_KEY=" + OWNER_KEY + "\n")
+        return {"people_api": {"signer_env_file": str(signer)}}
+
+    def test_each_query_signs_with_the_request_time_not_the_round_start(self):
+        seen = []
+
+        def http(url, headers, timeout, body=None):
+            event = json.loads(base64.b64decode(headers["Authorization"][6:], validate=True))
+            seen.append(event["created_at"])
+            return 200, b"[]"
+
+        clock = iter((NOW + timedelta(seconds=70), NOW + timedelta(seconds=140)))
+        for _ in range(2):
+            self.assertEqual(FGS._relay_query(self.config(), "https://relay.example.test", [{"kinds": [30177]}],
+                                              http, NOW, auth_clock=lambda: next(clock)), [])
+        self.assertEqual(seen, [ts(NOW) + 70, ts(NOW) + 140])
+
+    def test_claim_query_verifies_only_mirror_candidates_and_rejects_forged_ones(self):
+        ordinary = FGS.sign_event(OWNER_KEY, 30177, [["d", AGENT_PK]], json.dumps({"feishu": {"app_id": AGENT_APP}}), ts(NOW))
+        mirror = FGS.sign_event(OWNER_KEY, 30177, [["d", MIRROR_PK]], json.dumps({"feishu": {"mirror": True}}), ts(NOW))
+        revoked = FGS.sign_event(OWNER_KEY, 30177, [["d", MIRROR_PK]],
+                                 json.dumps({"feishu": {"mirror": False}}), ts(NOW) + 1)
+        forged = dict(mirror, content=json.dumps({"feishu": {"mirror": True, "bindings": ["forged"]}}))
+        verified = []
+        original = FGS._nip01_event_verified
+
+        def verify(event):
+            verified.append(event)
+            return original(event)
+
+        def http(url, headers, timeout, body=None):
+            return 200, json.dumps([ordinary, mirror, revoked, forged]).encode()
+
+        with mock.patch.object(FGS, "_nip01_event_verified", side_effect=verify):
+            result = FGS._relay_query(self.config(), "https://relay.example.test", [{"kinds": [30177]}],
+                                      http, NOW, mirror_candidates_only=True)
+        self.assertEqual(result, [mirror, revoked])
+        self.assertEqual(verified, [mirror, revoked, forged])
+        profile = FGS.sign_event(MIRROR_KEY, 0, [["auth", OWNER_PK]], "{}", ts(NOW))
+        view = FGS.read_binding_claims(lambda filters: result if filters[0]["kinds"] == [30177] else [profile])
+        self.assertEqual(view.claims, ())
+
+    def test_agent_index_query_verifies_only_requested_app_candidates(self):
+        unrelated = FGS.sign_event(OWNER_KEY, 30177, [["d", AGENT_PK]],
+                                   json.dumps({"feishu": {"app_id": TEAM_BOT_APP}}), ts(NOW))
+        wanted = FGS.sign_event(OWNER_KEY, 30177, [["d", AGENT2_PK]],
+                                json.dumps({"feishu": {"app_id": AGENT_APP}}), ts(NOW))
+        changed = FGS.sign_event(OWNER_KEY, 30177, [["d", AGENT2_PK]],
+                                 json.dumps({"feishu": {"app_id": TEAM_BOT_APP}}), ts(NOW) + 1)
+        verified = []
+        original = FGS._nip01_event_verified
+
+        def verify(event):
+            verified.append(event)
+            return original(event)
+
+        def http(url, headers, timeout, body=None):
+            return 200, json.dumps([unrelated, wanted, changed]).encode()
+
+        with mock.patch.object(FGS, "_nip01_event_verified", side_effect=verify):
+            result = FGS._relay_query(self.config(), "https://relay.example.test", [{"kinds": [30177]}],
+                                      http, NOW, candidate_apps={AGENT_APP})
+        self.assertEqual(result, [wanted, changed])
+        self.assertEqual(verified, [wanted, changed])
+        profile = FGS.sign_event(AGENT2_KEY, 0, [["auth", OWNER_PK]], "{}", ts(NOW))
+        self.assertEqual(FGS.parse_agent_directory([*result, profile], {AGENT2_PK}, set()).apps,
+                         {AGENT2_PK: TEAM_BOT_APP})
 
 
 class PeopleApi(TmpCase):
@@ -2879,6 +2971,46 @@ class RoundThreads(TmpCase):
         w.members = [m for m in w.members if m["pubkey"] != CAROL_PK]
         return w
 
+    def test_reply_to_synced_chat_projection_uses_the_real_thread_root(self):
+        """A reply to a thread message projected into the main chat must target its
+        real root; Feishu returns 2200 for reply_in_thread on the projection ID."""
+        w = self.base()
+        root, source, projection = "om_root", "om_source", "om_projection"
+        w.messages = [fmsg(root, ALICE_OPEN, "original idea", when=NOW - timedelta(hours=7)),
+                      fmsg(projection, ALICE_OPEN, "research this", mentions=[{"id": AGENT_BOT_MEMBER,
+                                                                                 "key": "@_user_1", "name": "helper-agent"}])]
+        w.messages[-1]["sync_to_chat_info"] = {"type": 1, "related_message_id": source}
+        actual = fmsg(source, ALICE_OPEN, "research this", thread_id="omt_root")
+        actual.update(root_id=root, parent_id=root,
+                      sync_to_chat_info={"type": 2, "related_message_id": projection})
+        w.threads[root] = [actual]
+        env = Env(self.tmp)
+        env.round(w)
+        projection_event = env.state()["f2b"][projection]
+        w.events.append(event(eid(70), AGENT_PK, "answer", created_at=T0 + 1,
+                              tags=[("e", projection_event, "", "reply")]))
+        report = env.round(w, now=NOW + timedelta(minutes=1))
+        replies = [c for c in w.lark_sends() if c["args"][1] == "+messages-reply"]
+        self.assertEqual(len(replies), 1)
+        self.assertEqual(replies[0]["args"][replies[0]["args"].index("--message-id") + 1], root)
+        self.assertEqual(report["to_feishu"], 1)
+        self.assertEqual(env.state()["b2f"][eid(70)], "om_sent000001")
+
+    def test_inconsistent_projection_source_defers_without_sending(self):
+        w = self.base()
+        projection = fmsg("om_projection", ALICE_OPEN, "research this")
+        projection["sync_to_chat_info"] = {"type": 1, "related_message_id": "om_missing"}
+        w.messages = [projection]
+        env = Env(self.tmp)
+        env.round(w)
+        projection_event = env.state()["f2b"]["om_projection"]
+        w.events.append(event(eid(71), AGENT_PK, "answer", created_at=T0 + 1,
+                              tags=[("e", projection_event, "", "reply")]))
+        report = env.round(w, now=NOW + timedelta(minutes=1))
+        self.assertGreaterEqual(report["errors"], 1)
+        self.assertNotIn(eid(71), env.state()["b2f"])
+        self.assertEqual(w.lark_sends(), [])
+
     def test_buzz_reply_to_an_old_feishu_message_opens_a_polled_thread(self):
         """L2-1-FGS-038: Buzz 上回复一条早已出了发现窗口（6 小时）的飞书消息：回复发进飞书话题后，这个话题会被轮询，之后话题里的回复回到 Buzz。"""
         w = self.base()
@@ -3523,7 +3655,8 @@ class IdentityContract(TmpCase):
             "members_to_buzz", "members_removed_from_buzz", "members_refused", "members_protected", "members_unresolved",
             "people_cache_failed", "member_events_blocked", "reactions_to_buzz", "reactions_withdrawn_in_buzz",
             "approvals_to_buzz", "agent_intros_sent", "agent_intros_relayed", "agent_intro_failures",
-            "agent_intro_unknown", "agent_intro_stopped"})
+            "agent_intro_unknown", "agent_intro_stopped",
+            "claim_conflict", "claims_unreadable", "claim_published", "claim_publish_failed", "claim_takeovers"})
         self.assertFalse(FGS.needs_attention(report))
         self.assertTrue(FGS.needs_attention(dict(report, identity_conflicts=1)))
 
@@ -5835,6 +5968,22 @@ class RoundThreadRoots(TmpCase):
         self.assertNotIn(eid(2), env.state()["b2f"])
         self.assertEqual(env.state()["floor"], floor)
 
+    def test_a_dropped_historical_root_is_not_backfilled_for_a_new_reply(self):
+        """An explicit Buzz history cutoff keeps old thread roots out of Feishu while a new reply still arrives."""
+        w = self.world()
+        env = self.start(w)
+        cutoff = ts(NOW) + 30
+        state = FGS.load_state(env.state_dir)
+        state.buzz_floor = state.buzz_since = cutoff
+        FGS.save_state(env.state_dir, state)
+        w.events = [self.root(1, created_at=ts(NOW) - 86400),
+                    self.reply(2, BOB_PK, "新回复", eid(1), at=cutoff + 10)]
+        report = self.go(env, w)
+        self.assertEqual([s["text"] for s in self.sent(w)], ["Bob（Buzz）：新回复"])
+        self.assertIsNone(self.sent(w)[0]["parent"])
+        self.assertNotIn(eid(1), env.state()["b2f"])
+        self.assertEqual((report["thread_roots_backfilled"], report["thread_root_unavailable"]), (0, 1))
+
     def test_state_written_before_this_change_keeps_working(self):
         """L2-1-FGS-316: 旧版未记录发送应用的未决回复停止重试，新回复仍补发根并进入话题。"""
         legacy = ["binding", "floor", "buzz_since", "feishu_since", "buzz_floor", "feishu_floor", "b2f", "f2b", "attempts", "threads",
@@ -5847,7 +5996,9 @@ class RoundThreadRoots(TmpCase):
                   # 成员同步失败状态的 Buzz 根、飞书 fallback、最近正文和 active 标志（L1-FGS-051B）
                   "member_notice_event", "member_notice_feishu", "member_notice_sender", "member_notice_content", "member_notice_active",
                   # Agent 入群介绍：升级基线和每个 binding 只发一次的幂等账本
-                  "agent_intros_initialized", "agent_intros", "agent_intro_senders"]
+                  "agent_intros_initialized", "agent_intros", "agent_intro_senders", "agent_intro_formats",
+                  # 绑定认领（ADR-0022）：停止提示与已计入的过期对手；旧 state 缺它们时从空开始（L2-1-FGS-924）
+                  "claim_notes", "claim_takeovers"]
         w = self.world()
         env = self.start(w)
         state = env.state()
@@ -5941,7 +6092,7 @@ class RoundThreadRoots(TmpCase):
         sent = self.sent(w)
         self.assertEqual([(s["verb"], s["text"]) for s in sent], [("+messages-send", "Alice（Buzz）：话题根"), ("+messages-reply", "Bob（Buzz）：回复")])
         self.assertEqual(sent[1]["parent"], w.sent_keys[self.key_of(eid(1))])
-        self.assertEqual(report["skipped"], {"agent_bot_unavailable": 1})
+        self.assertEqual(report["skipped"], {"agent_bot_unavailable": 1, "bot": 2})
 
     def test_the_root_is_on_disk_as_pending_before_it_is_sent(self):
         """L2-1-FGS-322: 补发的根和普通消息一样：发送之前 pending 标记（带首次尝试时间）已经落盘，进程在发送后被杀也知道它可能已发出。"""

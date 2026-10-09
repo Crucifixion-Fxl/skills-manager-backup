@@ -9,6 +9,8 @@ description: Mock Engine 本地开发环境管理。启动/停止 mock 服务、
 
 ## Description
 
+首次接入/变更扫描与日常认证入口见 [SaaS 接入](references/saas-access.md)；已有平台业务契约与授权门禁仍在本 Skill 维护。
+
 适用场景：
 
 - **启动/停止 mock 环境**：`make mock-up` 一键拉起所有依赖服务

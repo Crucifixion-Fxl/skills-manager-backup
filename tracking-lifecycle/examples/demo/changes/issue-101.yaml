@@ -1,0 +1,16 @@
+schemaVersion: 1
+kind: change
+issue: "101"
+host: demo
+applicationId: 1
+baseDigest: 520cce2c836cbfa2eb9572e12bde2633cd691bc3792e9247b0798dc0df117254
+operations:
+  - event:
+      type: PAGE
+      trackerType: BASE
+      spm: [home]
+    field: parameters.source
+    before: { exists: false }
+    after:
+      valueType: string
+      isRequired: false

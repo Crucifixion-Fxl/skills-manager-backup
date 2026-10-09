@@ -9,7 +9,7 @@
 - `{cloud_provider}` — 云厂商 (aws/gcp/tencent)
 - `{account_id}` — 账户/项目 ID
 - `{region}` — 区域
-- `{resource_type}` — 资源类型 (ec2/rds/redis/elb/msk 等)
+- `{resource_type}` — 资源类型（AWS: ec2/rds/elb/msk；腾讯云: cvm/cdb/redis/clb/ckafka；按实际云厂商选择）
 - `{resource_id}` — 资源标识
 
 ## Prompt
@@ -18,6 +18,8 @@
 - AWS → @aws-cli
 - GCP → @gcp-cli
 - 腾讯云 → @tencent-cloud-cli
+
+**CN 当前只路由腾讯云**：prod `100014919455` / `cn-main`；staging、tech-service `100052802231`。AWS CN 旧账户只作历史追溯；必须核对真实目标资源归属（迁移期共享资源可能仍在 prod 腾讯账户），不能从环境名推导凭据。
 
 账户信息参考 `references/infra/cloud-accounts.md` 中的账户与项目列表。如果本文件未包含所需信息，依次查找其他可用 skill 的 references（如 k8s-ops、aws-cli、gcp-cli 等）和全局 references。
 

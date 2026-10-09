@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "tool": "buzz",
+  "owner": "buzz",
+  "provider": "delegated",
+  "authContract": "references/saas-access.md",
+  "verification": "source-verified",
+  "runtimeVerification": "pending",
+  "deploymentVersion": "unknown",
+  "origin": "https://buzz-sg.addx.live"
+}

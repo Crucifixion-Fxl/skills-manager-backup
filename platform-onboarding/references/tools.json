@@ -1,0 +1,3193 @@
+{
+  "schemaVersion": 2,
+  "platformTriage": [
+    {
+      "id": "metabase",
+      "disposition": "deployment-example-only",
+      "reason": "common-apps.md的MB_SITE_URL是部署模板，未找到实例部署或运行证据。",
+      "sources": [
+        "skills/delivery/cicd-opensource/references/common-apps.md"
+      ]
+    },
+    {
+      "id": "n8n",
+      "disposition": "existing-owner-route",
+      "reason": "实际部署源码已发现；新增owner持有真实入口、认证方法、官方API或fork路由。部署/身份/权限仍明确pending。",
+      "sources": [
+        "skills/agent-harness/n8n/references/source-discovery.json",
+        "skills/agent-harness/n8n/references/saas-access.md"
+      ],
+      "deploymentEvidence": {
+        "repo": "https://gitlab.addx.ai/DEV/k8s",
+        "researchCommit": "47800f690df48d1f46174593809dd67e9773a48e",
+        "path": "clusters/aws-769494896000-us-data/n8n/values.yaml",
+        "origin": "https://n8n.addx.live"
+      },
+      "owner": "n8n"
+    },
+    {
+      "id": "graylog",
+      "disposition": "existing-owner-route",
+      "reason": "实际部署源码已发现；新增owner持有真实入口、认证方法、官方API或fork路由。部署/身份/权限仍明确pending。",
+      "sources": [
+        "skills/observability/graylog/references/source-discovery.json",
+        "skills/observability/graylog/references/saas-access.md"
+      ],
+      "deploymentEvidence": {
+        "repo": "https://gitlab.addx.ai/DEV/argocd-apps",
+        "researchCommit": "b9173bec59b0a81c76bf4ace95302bc6a4edddc6",
+        "path": "aws-002497567426-us-tech-service/graylog-staging-us.yaml",
+        "serviceRepo": "https://gitlab.addx.ai/DATA/audit-service",
+        "serviceRevision": "staging",
+        "servicePath": "k8s/graylog/overlays/staging-us"
+      },
+      "owner": "graylog"
+    },
+    {
+      "id": "dittofeed",
+      "disposition": "existing-owner-route",
+      "reason": "实际部署源码已发现；新增owner持有真实入口、认证方法、官方API或fork路由。部署/身份/权限仍明确pending。",
+      "sources": [
+        "skills/experimentation/dittofeed/references/source-discovery.json",
+        "skills/experimentation/dittofeed/references/saas-access.md"
+      ],
+      "deploymentEvidence": {
+        "repo": "https://gitlab.addx.ai/DEV/argocd-apps",
+        "researchCommit": "b9173bec59b0a81c76bf4ace95302bc6a4edddc6",
+        "paths": [
+          "aws-769494896000-us-data/dittofeed-prod-us.yaml",
+          "aws-769494896000-us-data/dittofeed-staging-us.yaml"
+        ],
+        "serviceRepo": "https://gitlab.addx.ai/CLOUD/dittofeed",
+        "serviceRevisions": [
+          "deploy/addx-prod",
+          "deploy/addx-staging"
+        ],
+        "servicePaths": [
+          "k8s/overlays/prod-us",
+          "k8s/overlays/staging-us"
+        ]
+      },
+      "owner": "dittofeed"
+    },
+    {
+      "id": "tableau",
+      "disposition": "instance-unconfirmed",
+      "reason": "数据目录工具列表提到Tableau，未提供实例/部署/认证证据。",
+      "sources": [
+        "AGENTS.md",
+        "skills/data/datahub/SKILL.md"
+      ]
+    },
+    {
+      "id": "victoriametrics",
+      "disposition": "existing-owner-route",
+      "reason": "实际CN声明及待切换tech-service租户入口由Prometheus、performance-preflight和k8s owner持有；未知认证不访问目标。",
+      "sources": [
+        "skills/observability/prometheus/SKILL.md",
+        "skills/quality/performance-preflight/references/endpoints.md"
+      ]
+    },
+    {
+      "id": "thanos",
+      "disposition": "existing-owner-route",
+      "reason": "真实各区域历史指标入口与CN迁移共存由既有指标owner维护；旧HTTP入口不表示当前免认证。",
+      "sources": [
+        "skills/quality/performance-preflight/references/endpoints.md"
+      ]
+    },
+    {
+      "id": "vmalert",
+      "disposition": "existing-owner-route",
+      "reason": "实际告警评估平台声明及待切换域名由Prometheus/VM告警链路维护，不能作为PromQL base。",
+      "sources": [
+        "skills/observability/prometheus/SKILL.md",
+        "skills/delivery/cicd-developer/references/victoriametrics/alerting.md"
+      ]
+    }
+  ],
+  "verification": "source-only catalog; runtime status belongs to per-SaaS evidence",
+  "tools": [
+    {
+      "id": "tracking",
+      "label": "埋点平台",
+      "owner": "tracking-lifecycle",
+      "reference": "skills/observability/tracking-lifecycle/references/saas-access.md",
+      "accessProfile": "skills/observability/tracking-lifecycle/references/auth-profile.json",
+      "strategy": "existing-contract-plus-opencli",
+      "verification": "source-verified",
+      "runtimeVerification": "read-only-pilot-verified",
+      "authDiscovery": "skills/observability/tracking-lifecycle/references/auth-discovery.json",
+      "sourceDiscovery": "skills/observability/tracking-lifecycle/references/source-discovery.json",
+      "sourceDigest": "9f3154b8aac8186cff66540fd6b36003f5164d8c5a81bc8ed26abe9d0e907672",
+      "domainCandidates": [
+        "gitlab.addx.ai",
+        "s1-imfile.feishucdn.com",
+        "test",
+        "us-analytics-management.theunismart.com"
+      ]
+    },
+    {
+      "id": "troubleshooting",
+      "label": "Troubleshooting",
+      "owner": "troubleshooting",
+      "reference": "skills/observability/troubleshooting/references/saas-access.md",
+      "accessProfile": "skills/observability/troubleshooting/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/observability/troubleshooting/references/auth-discovery.json",
+      "sourceDiscovery": "skills/observability/troubleshooting/references/source-discovery.json",
+      "sourceDigest": "19935c69e453072e9c1c8a01db3c01fea62507475e75c587c8f28361fbd3e7f5",
+      "domainCandidates": [
+        "gitlab.addx.ai",
+        "localhost",
+        "micro-app-platform-us.addx.live",
+        "troubleshooting-eu.addx.live",
+        "troubleshooting-staging-eu.addx.live",
+        "troubleshooting-staging-us.addx.live",
+        "troubleshooting-us.addx.live"
+      ]
+    },
+    {
+      "id": "micro-app",
+      "label": "Micro App",
+      "owner": "micro-app",
+      "reference": "skills/development/micro-app/references/saas-access.md",
+      "accessProfile": "skills/development/micro-app/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/development/micro-app/references/auth-discovery.json",
+      "sourceDiscovery": "skills/development/micro-app/references/source-discovery.json",
+      "businessConsumers": [
+        "micro-app-auth-integration"
+      ],
+      "sourceDigest": "7a38949c16c2571f5ea9592a9defe474cafac4ca3d4ef23041aff245898c2bf4",
+      "domainCandidates": [
+        "gitlab.addx.ai",
+        "micro-app-platform-us.addx.live"
+      ]
+    },
+    {
+      "id": "feishu",
+      "label": "效能业务飞书 OAuth（非普通飞书 OpenAPI）",
+      "owner": "feishu-auth",
+      "reference": "skills/development/feishu-auth/references/saas-access.md",
+      "accessProfile": "skills/development/feishu-auth/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/development/feishu-auth/references/auth-discovery.json",
+      "sourceDiscovery": "skills/development/feishu-auth/references/source-discovery.json",
+      "sourceDigest": "d34c02faf4cf643950a0a610aafb484c7a7f9eb0a8ba10843f9d8e2f5fc3756b",
+      "domainCandidates": [
+        "gitlab.addx.ai"
+      ]
+    },
+    {
+      "id": "gitlab",
+      "label": "GitLab CI/MR/Issue",
+      "owner": "gitlab",
+      "reference": "skills/delivery/gitlab/references/saas-access.md",
+      "accessProfile": "skills/delivery/gitlab/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/delivery/gitlab/references/auth-discovery.json",
+      "sourceDiscovery": "skills/delivery/gitlab/references/source-discovery.json",
+      "businessConsumers": [
+        "gitlab-mr"
+      ],
+      "sourceDigest": "80d461f9b06bce596fa3353a459ef189e2f7c30aa62bae9d3e7e090399b6f2ce",
+      "domainCandidates": [
+        "docs.gitlab.com",
+        "gitlab.addx.ai"
+      ]
+    },
+    {
+      "id": "grafana",
+      "label": "Grafana",
+      "owner": "grafana",
+      "reference": "skills/observability/grafana/references/saas-access.md",
+      "accessProfile": "skills/observability/grafana/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/observability/grafana/references/auth-discovery.json",
+      "sourceDigest": "30dc979837203fd9a6c0c4f182f02744719385e59033ce3dbe8bce021673e9f5",
+      "domainCandidates": [
+        "grafana.addx.live",
+        "grafana.com"
+      ]
+    },
+    {
+      "id": "sentry",
+      "label": "Sentry",
+      "owner": "sentry",
+      "reference": "skills/observability/sentry/references/saas-access.md",
+      "accessProfile": "skills/observability/sentry/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "officialCandidate": "https://github.com/getsentry/sentry-for-ai",
+      "authDiscovery": "skills/observability/sentry/references/auth-discovery.json",
+      "sourceDigest": "fc973eaac0293c8838984ec722d9c8b36e9f0ce67cc607986b30203e28973d4b",
+      "domainCandidates": [
+        "docs.sentry.io",
+        "sentry-cn.addx.live",
+        "sentry-eu.addx.live",
+        "sentry-us.addx.live"
+      ]
+    },
+    {
+      "id": "argocd",
+      "label": "Argo CD",
+      "owner": "argocd",
+      "reference": "skills/delivery/argocd/references/saas-access.md",
+      "accessProfile": "skills/delivery/argocd/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/delivery/argocd/references/auth-discovery.json",
+      "sourceDigest": "a9667df6b5b54ed4394a5422482deec8e7bb39c000e536691577ffcc48c1a5ee",
+      "domainCandidates": [
+        "argo-cd.readthedocs.io",
+        "argocd-cn-k8s.addx.live",
+        "argocd-cn-staging.addx.live",
+        "argocd-cn-tech-service-tke.addx.live",
+        "argocd-eu-data.addx.live",
+        "argocd-eu-staging.addx.live",
+        "argocd-eu-tech-service.addx.live",
+        "argocd-eu.addx.live",
+        "argocd-sg-devops.addx.live",
+        "argocd-us-data.addx.live",
+        "argocd-us-prod-gke.addx.live",
+        "argocd-us-staging.addx.live",
+        "argocd-us-tech-service-gke.addx.live",
+        "argocd-us-tech-service.addx.live",
+        "argocd-us.addx.live",
+        "casdoor-cn-tech-service-tke.addx.live",
+        "gitlab.addx.ai"
+      ]
+    },
+    {
+      "id": "growthbook",
+      "label": "GrowthBook",
+      "owner": "growthbook",
+      "reference": "skills/experimentation/growthbook/references/saas-access.md",
+      "accessProfile": "skills/experimentation/growthbook/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/experimentation/growthbook/references/auth-discovery.json",
+      "sourceDigest": "41055adc6c892309150f6e25ae2e4310a32ce7615389c58917d6ca6fed91a989",
+      "domainCandidates": [
+        "docs.growthbook.io",
+        "raw.githubusercontent.com",
+        "us-ab-management-api.addx.live",
+        "us-ab-management.addx.live"
+      ]
+    },
+    {
+      "id": "zendesk",
+      "label": "Zendesk",
+      "owner": "zendesk",
+      "reference": "skills/customer-care/zendesk/references/saas-access.md",
+      "accessProfile": "skills/customer-care/zendesk/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/customer-care/zendesk/references/auth-discovery.json",
+      "businessConsumers": [
+        "zendesk-admin-config",
+        "zendesk-helpcenter"
+      ],
+      "sourceDigest": "30c8d8c2e5b720287ffac5ba9f995cbf2ea11ddbc4a59cd50be4e23dea3fa536",
+      "domainCandidates": [
+        "developer.zendesk.com"
+      ]
+    },
+    {
+      "id": "dagster",
+      "label": "Dagster",
+      "owner": "dagster",
+      "reference": "skills/data/dagster/references/saas-access.md",
+      "accessProfile": "skills/data/dagster/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/data/dagster/references/auth-discovery.json",
+      "sourceDigest": "6962a0722e5809fe593bbe1de79c6897208bcdc9c6d3d3361783298ee08fce03",
+      "domainCandidates": [
+        "dagster.addx.live",
+        "main.archive.dagster-docs.io"
+      ]
+    },
+    {
+      "id": "superset",
+      "label": "Superset",
+      "owner": "superset",
+      "reference": "skills/data/superset/references/saas-access.md",
+      "accessProfile": "skills/data/superset/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/data/superset/references/auth-discovery.json",
+      "businessConsumers": [
+        "sla-alert-analysis"
+      ],
+      "sourceDigest": "62d5509b6e6acf6ccbd29d3b5e0be8d095835a1b60953982721c01b0215a7f5e",
+      "domainCandidates": [
+        "nocodb.addx.live",
+        "superset-us.addx.live",
+        "superset.apache.org"
+      ]
+    },
+    {
+      "id": "ninedata",
+      "label": "NineData",
+      "owner": "ninedata",
+      "reference": "skills/data/ninedata/references/saas-access.md",
+      "accessProfile": "skills/data/ninedata/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/data/ninedata/references/auth-discovery.json",
+      "sourceDigest": "9973b4b86d538364ead111197c154bd4f374a83428763215a4d72adb5b3b400a",
+      "domainCandidates": [
+        "docs.ninedata.cloud",
+        "gitlab.addx.ai",
+        "your-ninedata-domain.example.com"
+      ]
+    },
+    {
+      "id": "crowdin",
+      "label": "Crowdin",
+      "owner": "crowdin",
+      "reference": "skills/development/crowdin/references/saas-access.md",
+      "accessProfile": "skills/development/crowdin/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/development/crowdin/references/auth-discovery.json",
+      "sourceDigest": "7101ae47344c82ba9a4ad47ecf9d79a870a2c7803ad51ad52b8dd1c7a53cd843",
+      "domainCandidates": [
+        "api.crowdin.com",
+        "support.crowdin.com"
+      ]
+    },
+    {
+      "id": "nexus",
+      "label": "Nexus",
+      "owner": "addx-nexus-usage",
+      "reference": "skills/delivery/addx-nexus-usage/references/saas-access.md",
+      "accessProfile": "skills/delivery/addx-nexus-usage/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/delivery/addx-nexus-usage/references/auth-discovery.json",
+      "sourceDigest": "dfd59ab09681d07823e402e2d687322e223fe33f3d1259d3816f335180944e7c",
+      "domainCandidates": [
+        "gitlab.addx.ai",
+        "help.sonatype.com",
+        "nexus-sg.addx.live"
+      ]
+    },
+    {
+      "id": "paprika",
+      "label": "Paprika",
+      "owner": "paprika",
+      "reference": "skills/product/paprika/references/saas-access.md",
+      "accessProfile": "skills/product/paprika/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/product/paprika/references/auth-discovery.json",
+      "sourceDigest": "a29bad3d79f35424c499f8064ec668c7c2626c81e6fd3e8cd1209fc38f5ae302",
+      "domainCandidates": [
+        "api.paprika.art",
+        "paprika.art"
+      ]
+    },
+    {
+      "id": "audience",
+      "label": "Audience Sync / User Research",
+      "owner": "audience-sync",
+      "reference": "skills/experimentation/audience-sync/references/saas-access.md",
+      "accessProfile": "skills/experimentation/audience-sync/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/experimentation/audience-sync/references/auth-discovery.json",
+      "sourceDiscovery": "skills/experimentation/audience-sync/references/source-discovery.json",
+      "sourceDigest": "ea6d12797c69f8e8b02c790017ac2b43aea76fa6061e4b64d71a8f1990f56282",
+      "domainCandidates": [
+        "audience-workflow-api-prod-us.addx.live",
+        "gitlab.addx.ai",
+        "micro-app-platform-us.addx.live"
+      ]
+    },
+    {
+      "id": "dapp",
+      "label": "dapp",
+      "owner": "dapp",
+      "reference": "skills/observability/dapp/references/saas-access.md",
+      "accessProfile": "skills/observability/dapp/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/observability/dapp/references/auth-discovery.json",
+      "sourceDiscovery": "skills/observability/dapp/references/source-discovery.json",
+      "businessConsumers": [
+        "sla-metric",
+        "sla-alert-analysis"
+      ],
+      "sourceDigest": "affdf74a04841320a20a52724dd8f8555da4f742c44e9fcf9a36c3122e22328e",
+      "domainCandidates": [
+        "dapp-api.addx.live",
+        "dapp.addx.live",
+        "gitlab.addx.ai"
+      ]
+    },
+    {
+      "id": "nocodb",
+      "label": "NocoDB / 领星集成",
+      "owner": "nocodb",
+      "reference": "skills/data/nocodb/references/saas-access.md",
+      "accessProfile": "skills/data/nocodb/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/data/nocodb/references/auth-discovery.json",
+      "sourceDigest": "5029b145ba35e0338fde9d435311f8cc543ae9a9a2059edbdb97f0ffc8aed2c8",
+      "domainCandidates": [
+        "docs.nocodb.com",
+        "nocodb-cn.addx.live",
+        "nocodb-eu.addx.live",
+        "nocodb.addx.live",
+        "nocodb.com"
+      ]
+    },
+    {
+      "id": "cs-workspace",
+      "label": "CS Workspace",
+      "owner": "cs-workspace",
+      "reference": "skills/customer-care/cs-workspace/references/saas-access.md",
+      "accessProfile": "skills/customer-care/cs-workspace/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/customer-care/cs-workspace/references/auth-discovery.json",
+      "sourceDiscovery": "skills/customer-care/cs-workspace/references/source-discovery.json",
+      "sourceDigest": "b9c7899746420027685e4d3a90878b1a93f934d3869e5895601d6a66d3a572e4",
+      "domainCandidates": [
+        "cs.addx.live",
+        "gitlab.addx.ai"
+      ]
+    },
+    {
+      "id": "console",
+      "label": "管理后台",
+      "owner": "addx-console-admin",
+      "reference": "skills/business-operations/addx-console-admin/references/saas-access.md",
+      "accessProfile": "skills/business-operations/addx-console-admin/references/auth-profile.json",
+      "strategy": "existing-contract-plus-opencli",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/business-operations/addx-console-admin/references/auth-discovery.json",
+      "sourceDiscovery": "skills/business-operations/addx-console-admin/references/source-discovery.json",
+      "sourceDigest": "5e5dfc3f378657d4fda49c0285e2316db9ca119895ceab90f23f94fc34eda53c",
+      "domainCandidates": [
+        "192.168.31.7",
+        "addx-device-config.s3.amazonaws.com",
+        "addxai.zendesk.com",
+        "api-eu.addx.live",
+        "api-pre-eu.addx.live",
+        "api-pre-us.addx.live",
+        "api-pre.addx.live",
+        "api-stage.addx.live",
+        "api-staging-eu.addx.live",
+        "api-staging-us.addx.live",
+        "api-us.addx.live",
+        "api.addx.live",
+        "arco.design",
+        "bitbucket-internal.addx.live",
+        "console.addx.live",
+        "example.invalid",
+        "gitlab.addx.ai",
+        "revenus-sharing-backend-test.addx.live",
+        "revenus-sharing-backend.addx.live",
+        "unpkg.com"
+      ]
+    },
+    {
+      "id": "cicd",
+      "label": "CICD 上线单",
+      "owner": "cicd-platform",
+      "reference": "skills/delivery/cicd-platform/references/saas-access.md",
+      "accessProfile": "skills/delivery/cicd-platform/references/auth-profile.json",
+      "strategy": "existing-contract-plus-opencli",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/delivery/cicd-platform/references/auth-discovery.json",
+      "sourceDiscovery": "skills/delivery/cicd-platform/references/source-discovery.json",
+      "sourceDigest": "bc6d8674ec65ddf43db5db11134971ba59ce39dd294b20d9394fba6e4070bf7d",
+      "domainCandidates": [
+        "cicd.addx.live",
+        "gitlab.addx.ai"
+      ]
+    },
+    {
+      "id": "gitlab-approval",
+      "label": "合并审批接入",
+      "owner": "gitlab-feishu-approval-onboarding",
+      "reference": "skills/delivery/gitlab-feishu-approval-onboarding/references/saas-access.md",
+      "accessProfile": "skills/delivery/gitlab-feishu-approval-onboarding/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/delivery/gitlab-feishu-approval-onboarding/references/auth-discovery.json",
+      "sourceDiscovery": "skills/delivery/gitlab-feishu-approval-onboarding/references/source-discovery.json",
+      "sourceDigest": "39e78b2515d628ac49413945dff5b28ee4925d6085d0ba9f9d0a1791e386e1f0",
+      "domainCandidates": [
+        "gitlab-feishu-approval.addx.live",
+        "gitlab.addx.ai"
+      ]
+    },
+    {
+      "id": "device-cloud",
+      "label": "Device Cloud Test",
+      "owner": "device-cloud-test-management",
+      "reference": "skills/quality/device-cloud-test-management/references/saas-access.md",
+      "accessProfile": "skills/quality/device-cloud-test-management/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/quality/device-cloud-test-management/references/auth-discovery.json",
+      "sourceDiscovery": "skills/quality/device-cloud-test-management/references/source-discovery.json",
+      "sourceDigest": "6f4c7d1a06e01f1159d33a333e7b4d73823d46972f4af1d50df236b7b62c95d9",
+      "domainCandidates": [
+        "gitlab.addx.ai"
+      ]
+    },
+    {
+      "id": "qatools",
+      "label": "QA Tools",
+      "owner": "qatools",
+      "reference": "skills/quality/qatools/references/saas-access.md",
+      "accessProfile": "skills/quality/qatools/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/quality/qatools/references/auth-discovery.json",
+      "sourceDiscovery": "skills/quality/qatools/references/source-discovery.json",
+      "sourceDigest": "fba5ce1ea87ff6edc83dde32cf96b538a774f98dc2bac6abfe9c132ff88a60a4",
+      "domainCandidates": [
+        "gitlab.addx.ai",
+        "localhost",
+        "micro-app-platform-us.addx.live",
+        "qa-tools-pre.addx.live",
+        "qa-tools-staging.addx.live",
+        "qa-tools.addx.live"
+      ]
+    },
+    {
+      "id": "litellm",
+      "label": "LiteLLM C 端",
+      "owner": "litellm",
+      "reference": "skills/infrastructure/litellm/references/saas-access.md",
+      "accessProfile": "skills/infrastructure/litellm/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/infrastructure/litellm/references/auth-discovery.json",
+      "sourceDiscovery": "skills/infrastructure/litellm/references/source-discovery.json",
+      "businessConsumers": [
+        "litellm-cend-integration"
+      ],
+      "sourceDigest": "5bb27d7b3af4c2d10a9d583918ccfbc03917b576e6de7e6b542da60a10b02906",
+      "domainCandidates": [
+        "docs.litellm.ai"
+      ]
+    },
+    {
+      "id": "prometheus",
+      "label": "Prometheus",
+      "owner": "prometheus",
+      "reference": "skills/observability/prometheus/references/saas-access.md",
+      "accessProfile": "skills/observability/prometheus/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/observability/prometheus/references/auth-discovery.json",
+      "sourceDigest": "0de24a7748d1f15ef91d62ccba8095cc27002509b4ea1d5b78bb880996bbad24",
+      "domainCandidates": [
+        "prometheus-us-data.addx.live",
+        "prometheus.io",
+        "victoria-metrics-cn-tech-service-tke.addx.live",
+        "vm-alert-cn-tech-service-tke.addx.live"
+      ]
+    },
+    {
+      "id": "datahub",
+      "label": "DataHub",
+      "owner": "datahub",
+      "reference": "skills/data/datahub/references/saas-access.md",
+      "accessProfile": "skills/data/datahub/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/data/datahub/references/auth-discovery.json",
+      "sourceDigest": "248f1521ffabca54b5d7197815c9abeb9a1a067ddbe8e202017588d6ace3a143",
+      "domainCandidates": [
+        "datahub.addx.live",
+        "docs.datahub.com"
+      ]
+    },
+    {
+      "id": "aws",
+      "label": "AWS",
+      "owner": "aws-cli",
+      "reference": "skills/infrastructure/aws-cli/references/saas-access.md",
+      "accessProfile": "skills/infrastructure/aws-cli/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/infrastructure/aws-cli/references/auth-discovery.json",
+      "sourceDigest": "ec61ffdbb0828e0b0bd34bd101f1da7fe28bbdef13aa7306e17201ee78a51633",
+      "domainCandidates": [
+        "awscli.amazonaws.com",
+        "docs.aws.amazon.com"
+      ]
+    },
+    {
+      "id": "harbor",
+      "label": "Harbor",
+      "owner": "harbor",
+      "reference": "skills/delivery/harbor/references/saas-access.md",
+      "accessProfile": "skills/delivery/harbor/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/delivery/harbor/references/auth-discovery.json",
+      "sourceDigest": "75986b410e446b9c2da4c2125aca31855b4a3e58fad00211d37da959ecbd2d5e",
+      "domainCandidates": [
+        "gitlab.addx.ai",
+        "goharbor.io",
+        "harbor-02231-cn-staging-pub.addx.live"
+      ]
+    },
+    {
+      "id": "jenkins",
+      "label": "Jenkins",
+      "owner": "jenkins",
+      "reference": "skills/delivery/jenkins/references/saas-access.md",
+      "accessProfile": "skills/delivery/jenkins/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/delivery/jenkins/references/auth-discovery.json",
+      "sourceDigest": "114cdb29de8c169706ab4738008e177caad67119249ca0dcc7eff77ee79fc2e0",
+      "domainCandidates": [
+        "jenkins-next.addx.live",
+        "jenkins.addx.live",
+        "www.jenkins.io"
+      ]
+    },
+    {
+      "id": "temporal",
+      "label": "Temporal",
+      "owner": "temporal",
+      "reference": "skills/agent-harness/temporal/references/saas-access.md",
+      "accessProfile": "skills/agent-harness/temporal/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/agent-harness/temporal/references/auth-discovery.json",
+      "sourceDigest": "01cf8be9c9173a701d4144df403d12b75dc00e9714128e3bd5b95cfbb96f422a",
+      "domainCandidates": [
+        "docs.temporal.io"
+      ]
+    },
+    {
+      "id": "apollo-permission",
+      "label": "Apollo",
+      "owner": "apollo-permission",
+      "reference": "skills/security/apollo-permission/references/saas-access.md",
+      "accessProfile": "skills/security/apollo-permission/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "sourceDigest": "2dbd457cd5fd3cbe233be52f6631509252ecf98f3061a0aad26aa157259ede81",
+      "domainCandidates": [
+        "apollo-cn.addx.live",
+        "apollo-us.addx.live"
+      ]
+    },
+    {
+      "id": "vault-kv-manager",
+      "label": "Vault",
+      "owner": "vault-kv-manager",
+      "reference": "skills/security/vault-kv-manager/references/saas-access.md",
+      "accessProfile": "skills/security/vault-kv-manager/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/security/vault-kv-manager/references/auth-discovery.json",
+      "sourceDigest": "2dbe2a91212018b6760168fe3d30fa689a264d1ee94a3389cbae0215e921f00d",
+      "domainCandidates": [
+        "applink.feishu.cn",
+        "developer.hashicorp.com",
+        "vault-active.vault.svc",
+        "vault-builder-active.vault-builder.svc.cluster.local",
+        "vault-cn-internal.addx.live",
+        "vault-cn.addx.live",
+        "vault-cn.builder.addx.live",
+        "vault-eu.addx.live",
+        "vault-us-new.addx.live"
+      ]
+    },
+    {
+      "id": "figma",
+      "label": "Figma",
+      "owner": "figma",
+      "reference": "skills/product/figma/references/saas-access.md",
+      "accessProfile": "skills/product/figma/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/product/figma/references/auth-discovery.json",
+      "sourceDiscovery": "skills/product/figma/references/source-discovery.json",
+      "businessConsumers": [
+        "figma-i18n"
+      ],
+      "sourceDigest": "f8b1bc9061deff4f90c7750ba0daf311a8cdde3f3b368b653368962ff40f2c6b",
+      "domainCandidates": [
+        "developers.figma.com",
+        "support.crowdin.com"
+      ]
+    },
+    {
+      "id": "feishu-project",
+      "label": "Feishu Project",
+      "owner": "feishu-project",
+      "reference": "skills/collaboration/feishu-project/references/saas-access.md",
+      "accessProfile": "skills/collaboration/feishu-project/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/collaboration/feishu-project/references/auth-discovery.json",
+      "sourceDiscovery": "skills/collaboration/feishu-project/references/source-discovery.json",
+      "sourceDigest": "f2312362097d55f9160b2f35444334ef3d57e168be69d8884c292bf1751822eb",
+      "domainCandidates": [
+        "project.feishu.cn"
+      ]
+    },
+    {
+      "id": "device-settings",
+      "label": "Device settings",
+      "owner": "device-setting-override",
+      "reference": "skills/experimentation/device-setting-override/references/saas-access.md",
+      "accessProfile": "skills/experimentation/device-setting-override/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/experimentation/device-setting-override/references/auth-discovery.json",
+      "sourceDiscovery": "skills/experimentation/device-setting-override/references/source-discovery.json",
+      "sourceDigest": "dbfa449b3acd471e05064749fc44197f65229f748cf36689ec34bce8ccf7a9c5",
+      "domainCandidates": [
+        "api-eu.vicohome.io",
+        "api-stage.addx.live",
+        "api-staging-eu.vicohome.io",
+        "api-staging-us.vicohome.io",
+        "api-us.addx.live",
+        "api.addx.live",
+        "console-test.addx.live",
+        "gitlab.addx.ai",
+        "revenus-sharing-backend.addx.live",
+        "thanos-",
+        "thanos-cn.addx.live",
+        "thanos-prod-eu.addx.live",
+        "thanos-prod-us.addx.live",
+        "thanos-staging-eu.addx.live",
+        "thanos-staging-us.addx.live"
+      ]
+    },
+    {
+      "id": "firmware-mgr",
+      "label": "FirmWare Manager",
+      "owner": "firmware-mgr",
+      "reference": "skills/hardware/firmware-mgr/references/saas-access.md",
+      "accessProfile": "skills/hardware/firmware-mgr/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/hardware/firmware-mgr/references/auth-discovery.json",
+      "sourceDiscovery": "skills/hardware/firmware-mgr/references/source-discovery.json",
+      "sourceDigest": "23cdc594554ec6900d99db30cd14aabb09e1e7a27df94027c89d24a95b0e39d2",
+      "domainCandidates": [
+        "addx-firmware-cn.s3.cn-north-1.amazonaws.com.cn",
+        "firmware-mgr-test.addx.live",
+        "firmware-mgr.addx.live",
+        "gitlab.addx.ai"
+      ]
+    },
+    {
+      "id": "mock-engine",
+      "label": "Mock Engine",
+      "owner": "mock-engine",
+      "reference": "skills/quality/mock-engine/references/saas-access.md",
+      "accessProfile": "skills/quality/mock-engine/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/quality/mock-engine/references/auth-discovery.json",
+      "sourceDiscovery": "skills/quality/mock-engine/references/source-discovery.json",
+      "sourceDigest": "83aec4b20c487c0d5a76b0609641902ba1aa4bd9d026c1b3524a7a3fe6971f32",
+      "domainCandidates": [
+        "gitlab.addx.ai",
+        "localhost"
+      ]
+    },
+    {
+      "id": "gcp",
+      "label": "GCP",
+      "owner": "gcp-cli",
+      "reference": "skills/infrastructure/gcp-cli/references/saas-access.md",
+      "accessProfile": "skills/infrastructure/gcp-cli/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/infrastructure/gcp-cli/references/auth-discovery.json",
+      "sourceDigest": "a07846acf31035d638bde4feb17f798c164e93d7f64b0a4066b3f3ec0e75e1f7",
+      "domainCandidates": [
+        "cloud.google.com",
+        "dl.google.com",
+        "docs.cloud.google.com",
+        "packages.cloud.google.com"
+      ]
+    },
+    {
+      "id": "azure",
+      "label": "Azure",
+      "owner": "azure-cli",
+      "reference": "skills/infrastructure/azure-cli/references/saas-access.md",
+      "accessProfile": "skills/infrastructure/azure-cli/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/infrastructure/azure-cli/references/auth-discovery.json",
+      "sourceDigest": "99c8976c9f2b4e39075cbf643aaaf56e56ea9bd44754eaf3b6568d0380f9180c",
+      "domainCandidates": [
+        "aka.ms",
+        "learn.microsoft.com",
+        "my-openai.openai.azure.com",
+        "packages.microsoft.com"
+      ]
+    },
+    {
+      "id": "aliyun",
+      "label": "Aliyun",
+      "owner": "aliyun-cli",
+      "reference": "skills/infrastructure/aliyun-cli/references/saas-access.md",
+      "accessProfile": "skills/infrastructure/aliyun-cli/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/infrastructure/aliyun-cli/references/auth-discovery.json",
+      "sourceDigest": "0019f485ed7d91a7485acc5871458abf319d0772ef7f76f421ea1d6b11ff7c55",
+      "domainCandidates": [
+        "aliyuncli.alicdn.com",
+        "github.com",
+        "www.alibabacloud.com"
+      ]
+    },
+    {
+      "id": "oci",
+      "label": "OCI",
+      "owner": "oci-cli",
+      "reference": "skills/infrastructure/oci-cli/references/saas-access.md",
+      "accessProfile": "skills/infrastructure/oci-cli/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/infrastructure/oci-cli/references/auth-discovery.json",
+      "sourceDigest": "a8b90b8b11ac524ae49d87291d1e4d0f8b22c801e06a4f3c432878d4f3edaa3c",
+      "domainCandidates": [
+        "docs.oracle.com",
+        "raw.githubusercontent.com"
+      ]
+    },
+    {
+      "id": "tencent-cloud",
+      "label": "Tencent Cloud",
+      "owner": "tencent-cloud-cli",
+      "reference": "skills/infrastructure/tencent-cloud-cli/references/saas-access.md",
+      "accessProfile": "skills/infrastructure/tencent-cloud-cli/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/infrastructure/tencent-cloud-cli/references/auth-discovery.json",
+      "sourceDigest": "97038414807782ea672f7a8846faff6e2466f56e7d010df64ebfb80be2d6f8fb",
+      "domainCandidates": [
+        "github.com"
+      ]
+    },
+    {
+      "id": "ucloud",
+      "label": "UCloud",
+      "owner": "ucloud-cli",
+      "reference": "skills/infrastructure/ucloud-cli/references/saas-access.md",
+      "accessProfile": "skills/infrastructure/ucloud-cli/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/infrastructure/ucloud-cli/references/auth-discovery.json",
+      "sourceDigest": "8e83f07ef2a66afc542f008beae967d118d01dc2bc9398f49719beee143cfe0f",
+      "domainCandidates": [
+        "docs.ucloud.cn",
+        "github.com",
+        "pkg.go.dev"
+      ]
+    },
+    {
+      "id": "stripe",
+      "label": "stripe",
+      "owner": "stripe",
+      "reference": "skills/experimentation/stripe/references/saas-access.md",
+      "strategy": "official-first",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "officialCandidate": "https://github.com/stripe/ai",
+      "authDiscovery": "skills/experimentation/stripe/references/auth-discovery.json",
+      "accessProfile": "skills/experimentation/stripe/references/auth-profile.json",
+      "businessConsumers": [
+        "stripe-product"
+      ],
+      "sourceDigest": "0c543f166356af9b44ec32c09db22a0528faa8cf64c26905636a5c8a9aae06fa",
+      "domainCandidates": [
+        "docs.stripe.com"
+      ]
+    },
+    {
+      "id": "lingxing",
+      "label": "lingxing",
+      "owner": "lingxing-api",
+      "reference": "skills/data/lingxing-api/SKILL.md",
+      "strategy": "existing-contract",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/data/lingxing-api/references/auth-discovery.json",
+      "sourceDiscovery": "skills/data/lingxing-api/references/source-discovery.json",
+      "sourceDigest": "6f8ef3c766b1987b1b91f04ff78c306114457faa41fb4324139957eafaaf4cde",
+      "domainCandidates": [
+        "apidoc.lingxing.com",
+        "nocodb.addx.live",
+        "nocodb.com"
+      ]
+    },
+    {
+      "id": "customer-care",
+      "label": "CustomerCare / SmartPopup",
+      "owner": "customer-care",
+      "reference": "skills/customer-care/customer-care/references/saas-access.md",
+      "accessProfile": "skills/customer-care/customer-care/references/auth-profile.json",
+      "authDiscovery": "skills/customer-care/customer-care/references/auth-discovery.json",
+      "sourceDiscovery": "skills/customer-care/customer-care/references/source-discovery.json",
+      "strategy": "existing-owner-contract",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "sourceDigest": "b2f2d91a8f78af153a2e7c91b9e0f2aea143c3d249ef7925d0e8cdaac52e158a",
+      "domainCandidates": [
+        "customer-care-admin-staging.addx.live",
+        "customer-care-admin.addx.live",
+        "gitlab.addx.ai"
+      ]
+    },
+    {
+      "id": "engagement-admin",
+      "label": "Engagement Admin",
+      "owner": "engagement-admin",
+      "reference": "skills/experimentation/engagement-admin/references/saas-access.md",
+      "accessProfile": "skills/experimentation/engagement-admin/references/auth-profile.json",
+      "authDiscovery": "skills/experimentation/engagement-admin/references/auth-discovery.json",
+      "sourceDiscovery": "skills/experimentation/engagement-admin/references/source-discovery.json",
+      "strategy": "existing-owner-contract",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "businessConsumers": [
+        "engagement-h5-paywall-creation"
+      ],
+      "sourceDigest": "622b4777b1184be376a767217ad728c8c1e210df30969e09fd0514fe37b132e4",
+      "domainCandidates": [
+        "engagement-admin-staging.addx.live",
+        "engagement-admin.addx.live",
+        "gitlab.addx.ai"
+      ]
+    },
+    {
+      "id": "buildbuddy",
+      "label": "BuildBuddy",
+      "owner": "buildbuddy",
+      "reference": "skills/infrastructure/buildbuddy/references/saas-access.md",
+      "accessProfile": "skills/infrastructure/buildbuddy/references/auth-profile.json",
+      "authDiscovery": "skills/infrastructure/buildbuddy/references/auth-discovery.json",
+      "sourceDiscovery": "skills/infrastructure/buildbuddy/references/source-discovery.json",
+      "strategy": "existing-owner-contract",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "businessConsumers": [
+        "buildbuddy-deploy"
+      ],
+      "sourceDigest": "4709f6a6abcc2551c7cf5b3bdcef43d937665a98daa39055df1c79b199b26a03",
+      "domainCandidates": [
+        "buildbuddy-sg-ui.addx.live",
+        "gitlab.addx.ai",
+        "www.buildbuddy.io"
+      ]
+    },
+    {
+      "id": "vaultwarden",
+      "label": "Vaultwarden credential-provider",
+      "owner": "vaultwarden",
+      "reference": "skills/security/vaultwarden/references/saas-access.md",
+      "accessProfile": "skills/security/vaultwarden/references/auth-profile.json",
+      "authDiscovery": "skills/security/vaultwarden/references/auth-discovery.json",
+      "sourceDiscovery": "skills/security/vaultwarden/references/source-discovery.json",
+      "strategy": "existing-owner-contract",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "businessConsumers": [
+        "credential-provider"
+      ],
+      "sourceDigest": "cb5d538c0ccc4996e6bff596d462361d4be5531523d7f615c5c5fd443324fd66",
+      "domainCandidates": [
+        "bitwarden.com",
+        "github.com",
+        "gitlab.addx.ai",
+        "vaultwarden.builder.addx.live"
+      ]
+    },
+    {
+      "id": "rerun-hub",
+      "label": "Rerun Hub",
+      "owner": "rerun-hub",
+      "reference": "skills/hardware/rerun-hub/references/saas-access.md",
+      "accessProfile": "skills/hardware/rerun-hub/references/auth-profile.json",
+      "authDiscovery": "skills/hardware/rerun-hub/references/auth-discovery.json",
+      "sourceDiscovery": "skills/hardware/rerun-hub/references/source-discovery.json",
+      "strategy": "existing-owner-contract",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "businessConsumers": [
+        "rerun-hub-data"
+      ],
+      "sourceDigest": "388e99e8220e21e045fa7238e0645ce25c7d8edf96677700317a226e07ee4965",
+      "domainCandidates": [
+        "gitlab.addx.ai",
+        "pages.addx.ai",
+        "rerun.io"
+      ]
+    },
+    {
+      "id": "worktime",
+      "label": "研发工时和项目",
+      "owner": "worktime",
+      "reference": "skills/collaboration/worktime/references/saas-access.md",
+      "accessProfile": "skills/collaboration/worktime/references/auth-profile.json",
+      "authDiscovery": "skills/collaboration/worktime/references/auth-discovery.json",
+      "sourceDiscovery": "skills/collaboration/worktime/references/source-discovery.json",
+      "strategy": "existing-owner-contract",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "businessConsumers": [
+        "worktime-filing"
+      ],
+      "sourceDigest": "106e9f0026eafd1f47e154cd1481e37f35a10bf54deee265792526396ce92007",
+      "domainCandidates": [
+        "127.0.0.1",
+        "emp.addx.live",
+        "gitlab.addx.ai"
+      ]
+    },
+    {
+      "id": "buzz",
+      "label": "Buzz",
+      "owner": "buzz",
+      "reference": "skills/collaboration/buzz/references/saas-access.md",
+      "accessProfile": "skills/collaboration/buzz/references/auth-profile.json",
+      "authDiscovery": "skills/collaboration/buzz/references/auth-discovery.json",
+      "sourceDiscovery": "skills/collaboration/buzz/references/source-discovery.json",
+      "strategy": "existing-owner-contract",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "businessConsumers": [
+        "buzz-agent-setup"
+      ],
+      "sourceDigest": "7bdea2a9052a2ff4ed21a6db714cf43116666ee8706e1567cc60dd2f4db34f3f",
+      "domainCandidates": [
+        "buzz-sg.addx.live",
+        "gitlab.addx.ai"
+      ]
+    },
+    {
+      "id": "flink",
+      "label": "Flink",
+      "owner": "flink",
+      "reference": "skills/data/flink/references/saas-access.md",
+      "accessProfile": "skills/data/flink/references/auth-profile.json",
+      "authDiscovery": "skills/data/flink/references/auth-discovery.json",
+      "sourceDiscovery": "skills/data/flink/references/source-discovery.json",
+      "strategy": "existing-owner-contract",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "businessConsumers": [
+        "flink-job-development"
+      ],
+      "sourceDigest": "a4384acca1ee722b5a1233ffcdbd3df09061b99416eab472083ce368c2e1d1ea",
+      "domainCandidates": [
+        "flink-",
+        "flink-history-",
+        "flink-session-rest",
+        "flink-staging-us.addx.live",
+        "gitlab.addx.ai",
+        "nightlies.apache.org"
+      ]
+    },
+    {
+      "id": "reportportal",
+      "label": "ReportPortal",
+      "owner": "reportportal",
+      "reference": "skills/quality/reportportal/references/saas-access.md",
+      "accessProfile": "skills/quality/reportportal/references/auth-profile.json",
+      "authDiscovery": "skills/quality/reportportal/references/auth-discovery.json",
+      "sourceDiscovery": "skills/quality/reportportal/references/source-discovery.json",
+      "strategy": "existing-owner-contract",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "businessConsumers": [
+        "api-synthetic-monitoring"
+      ],
+      "sourceDigest": "45c2e90be9a73be1f87d4ed3ed022afa16025bd3300e5b668b6783f29078a879",
+      "domainCandidates": [
+        "developers.reportportal.io",
+        "github.com",
+        "gitlab.addx.ai",
+        "reportportal-staging.builder.addx.live",
+        "reportportal.builder.addx.live",
+        "reportportal.io"
+      ]
+    },
+    {
+      "id": "n8n",
+      "label": "n8n",
+      "owner": "n8n",
+      "reference": "skills/agent-harness/n8n/references/saas-access.md",
+      "accessProfile": "skills/agent-harness/n8n/references/auth-profile.json",
+      "authDiscovery": "skills/agent-harness/n8n/references/auth-discovery.json",
+      "sourceDiscovery": "skills/agent-harness/n8n/references/source-discovery.json",
+      "strategy": "official-api-plus-deployment-source",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "sourceDigest": "6b9ce6251419533624a45987923a2e42dfc57081df587609b10a2fc78290fca4",
+      "domainCandidates": [
+        "github.com",
+        "gitlab.addx.ai",
+        "n8n.addx.live"
+      ]
+    },
+    {
+      "id": "graylog",
+      "label": "Graylog",
+      "owner": "graylog",
+      "reference": "skills/observability/graylog/references/saas-access.md",
+      "accessProfile": "skills/observability/graylog/references/auth-profile.json",
+      "authDiscovery": "skills/observability/graylog/references/auth-discovery.json",
+      "sourceDiscovery": "skills/observability/graylog/references/source-discovery.json",
+      "strategy": "official-api-plus-deployment-source",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "sourceDigest": "6ada5ad2bbf04737b706158f1eba63c548aa4a85656f31a4f4ec215d884aa10d",
+      "domainCandidates": [
+        "gitlab.addx.ai",
+        "go2docs.graylog.org",
+        "graylog-staging-us.addx.live"
+      ]
+    },
+    {
+      "id": "dittofeed",
+      "label": "Dittofeed AddX fork",
+      "owner": "dittofeed",
+      "reference": "skills/experimentation/dittofeed/references/saas-access.md",
+      "accessProfile": "skills/experimentation/dittofeed/references/auth-profile.json",
+      "authDiscovery": "skills/experimentation/dittofeed/references/auth-discovery.json",
+      "sourceDiscovery": "skills/experimentation/dittofeed/references/source-discovery.json",
+      "strategy": "fork-source-plus-official-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "sourceDigest": "f1c525e7c99ef1a0144ce26585cadcf3547feec38222023830e7a2b05bda6814",
+      "domainCandidates": [
+        "ditto.addx.live",
+        "docs.dittofeed.com",
+        "gitlab.addx.ai"
+      ]
+    },
+    {
+      "id": "apify",
+      "label": "Apify",
+      "owner": "apify",
+      "reference": "skills/data/apify/references/saas-access.md",
+      "accessProfile": "skills/data/apify/references/auth-profile.json",
+      "authDiscovery": "skills/data/apify/references/auth-discovery.json",
+      "sourceDiscovery": "skills/data/apify/references/source-discovery.json",
+      "strategy": "official-first-or-private-source-contract",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "businessConsumers": [
+        "voc-analysis"
+      ],
+      "sourceDigest": "e30acd5850a922a23af8a2dae1a37d07ce4bd6b2da56e5d547674aaac0343a3c",
+      "domainCandidates": [
+        "console.apify.com",
+        "docs.apify.com",
+        "github.com",
+        "gitlab.addx.ai",
+        "mcp.apify.com"
+      ]
+    },
+    {
+      "id": "pagerduty",
+      "label": "PagerDuty",
+      "owner": "pagerduty",
+      "reference": "skills/observability/pagerduty/references/saas-access.md",
+      "accessProfile": "skills/observability/pagerduty/references/auth-profile.json",
+      "authDiscovery": "skills/observability/pagerduty/references/auth-discovery.json",
+      "sourceDiscovery": "skills/observability/pagerduty/references/source-discovery.json",
+      "strategy": "official-first-or-private-source-contract",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "businessConsumers": [
+        "sre-agent"
+      ],
+      "sourceDigest": "008906f6d21d183536ad4d1d99e88157b20f51cbec4195f755adfaf0a368cfff",
+      "domainCandidates": [
+        "addx-oncall.pagerduty.com",
+        "docs.pagerduty.com",
+        "github.com",
+        "gitlab.addx.ai",
+        "mcp.pagerduty.com"
+      ]
+    },
+    {
+      "id": "typeform",
+      "label": "Typeform（直接执行器）",
+      "owner": "typeform",
+      "reference": "skills/product/typeform/references/saas-access.md",
+      "accessProfile": "skills/product/typeform/references/auth-profile.json",
+      "authDiscovery": "skills/product/typeform/references/auth-discovery.json",
+      "sourceDiscovery": "skills/product/typeform/references/source-discovery.json",
+      "strategy": "official-first-or-private-source-contract",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "businessConsumers": [
+        "survey-research-workflow"
+      ],
+      "sourceDigest": "1b8b1257b17aec145f5400732e74db37308e7ebc1c703db028c2fa326d36e564",
+      "domainCandidates": [
+        "api.typeform.com",
+        "gitlab.addx.ai",
+        "www.typeform.com"
+      ]
+    },
+    {
+      "id": "datahub-schema-search",
+      "label": "DataHub Schema Search",
+      "owner": "datahub-schema-search",
+      "reference": "skills/data/datahub-schema-search/references/saas-access.md",
+      "accessProfile": "skills/data/datahub-schema-search/references/auth-profile.json",
+      "authDiscovery": "skills/data/datahub-schema-search/references/auth-discovery.json",
+      "sourceDiscovery": "skills/data/datahub-schema-search/references/source-discovery.json",
+      "strategy": "official-first-or-private-source-contract",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "businessConsumers": [],
+      "sourceDigest": "541223c47503e983c90ec5c11a96f797cf2c6cc913859f7665cdfcb0f426e439",
+      "domainCandidates": [
+        "datahub-schema-search.addx.live",
+        "gitlab.addx.ai"
+      ]
+    },
+    {
+      "id": "argocd-fleet-scanner",
+      "label": "Argo CD Fleet Scanner",
+      "owner": "argocd-fleet-scanner",
+      "reference": "skills/infrastructure/argocd-fleet-scanner/references/saas-access.md",
+      "accessProfile": "skills/infrastructure/argocd-fleet-scanner/references/auth-profile.json",
+      "authDiscovery": "skills/infrastructure/argocd-fleet-scanner/references/auth-discovery.json",
+      "sourceDiscovery": "skills/infrastructure/argocd-fleet-scanner/references/source-discovery.json",
+      "strategy": "official-first-or-private-source-contract",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "businessConsumers": [
+        "argocd-fleet-scan"
+      ],
+      "sourceDigest": "9b42e2e9855e3b1f1472f1f06f822314859f90ef0e87f2c72a84716ba8f1647d",
+      "domainCandidates": [
+        "argocd-fleet.addx.live",
+        "gitlab.addx.ai"
+      ]
+    }
+  ],
+  "unclassifiedReferences": [
+    {
+      "skill": "clawplex-remote-auth",
+      "reference": "skills/agent-harness/clawplex-remote-auth/SKILL.md",
+      "domainCandidates": [
+        "app.corp.com",
+        "example.com",
+        "gateway",
+        "github.com",
+        "sandbox-vnc.corp.com",
+        "sellercentral.amazon.com",
+        "sentry.io"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "app.corp.com": [
+          "untriaged-external-reference"
+        ],
+        "example.com": [
+          "placeholder"
+        ],
+        "gateway": [
+          "untriaged-external-reference"
+        ],
+        "github.com": [
+          "source-or-reference"
+        ],
+        "sandbox-vnc.corp.com": [
+          "untriaged-external-reference"
+        ],
+        "sellercentral.amazon.com": [
+          "untriaged-external-reference"
+        ],
+        "sentry.io": [
+          "untriaged-external-reference"
+        ]
+      }
+    },
+    {
+      "skill": "dev-infra",
+      "reference": "skills/agent-harness/dev-infra/SKILL.md",
+      "domainCandidates": [
+        "127.0.0.1",
+        "docs.localstack.cloud",
+        "localhost"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "127.0.0.1": [
+          "local-or-cluster-address"
+        ],
+        "docs.localstack.cloud": [
+          "official-reference-candidate"
+        ],
+        "localhost": [
+          "local-or-cluster-address"
+        ]
+      }
+    },
+    {
+      "skill": "domain-workspace-onboarding",
+      "reference": "skills/agent-harness/domain-workspace-onboarding/SKILL.md",
+      "domainCandidates": [
+        "gitlab.addx.ai",
+        "gitlab.example",
+        "workspace.example"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "gitlab.addx.ai": [
+          "source-or-reference"
+        ],
+        "gitlab.example": [
+          "placeholder"
+        ],
+        "workspace.example": [
+          "placeholder"
+        ]
+      }
+    },
+    {
+      "skill": "failure-feedback",
+      "reference": "skills/agent-harness/failure-feedback/SKILL.md",
+      "domainCandidates": [
+        "gitlab.addx.ai"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "gitlab.addx.ai": [
+          "source-or-reference"
+        ]
+      }
+    },
+    {
+      "skill": "feishu-remote-login",
+      "reference": "skills/agent-harness/feishu-remote-login/SKILL.md",
+      "domainCandidates": [
+        "localhost"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "localhost": [
+          "local-or-cluster-address"
+        ]
+      }
+    },
+    {
+      "skill": "platform-onboarding",
+      "reference": "skills/agent-harness/platform-onboarding/SKILL.md",
+      "domainCandidates": [
+        "github.com"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "github.com": [
+          "source-or-reference"
+        ]
+      }
+    },
+    {
+      "skill": "skill-contribution",
+      "reference": "skills/agent-harness/skill-contribution/SKILL.md",
+      "domainCandidates": [
+        "gitlab.addx.ai"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "gitlab.addx.ai": [
+          "source-or-reference"
+        ]
+      }
+    },
+    {
+      "skill": "tool-skill-creator",
+      "reference": "skills/agent-harness/tool-skill-creator/SKILL.md",
+      "domainCandidates": [
+        "clawhub.ai",
+        "github.com",
+        "grafana.com",
+        "skills.sh",
+        "us-analytics-management.theunismart.com"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "clawhub.ai": [
+          "untriaged-external-reference"
+        ],
+        "github.com": [
+          "source-or-reference"
+        ],
+        "grafana.com": [
+          "untriaged-external-reference"
+        ],
+        "skills.sh": [
+          "untriaged-external-reference"
+        ],
+        "us-analytics-management.theunismart.com": [
+          "instance-candidate-needs-owner-verification"
+        ]
+      }
+    },
+    {
+      "skill": "web-access",
+      "reference": "skills/agent-harness/web-access/SKILL.md",
+      "domainCandidates": [
+        "127.0.0.1",
+        "us-analytics-management.theunismart.com"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "127.0.0.1": [
+          "local-or-cluster-address"
+        ],
+        "us-analytics-management.theunismart.com": [
+          "instance-candidate-needs-owner-verification"
+        ]
+      }
+    },
+    {
+      "skill": "feishu-channel-rules",
+      "reference": "skills/collaboration/feishu-channel-rules/SKILL.md",
+      "domainCandidates": [
+        "www.example.com"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "www.example.com": [
+          "placeholder"
+        ]
+      }
+    },
+    {
+      "skill": "feishu-session-collab",
+      "reference": "skills/collaboration/feishu-session-collab/SKILL.md",
+      "domainCandidates": [
+        "applink.feishu.cn",
+        "docs.gitlab.com",
+        "github.com",
+        "gitlab.addx.ai",
+        "open.feishu.cn"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "applink.feishu.cn": [
+          "untriaged-external-reference"
+        ],
+        "docs.gitlab.com": [
+          "official-reference-candidate"
+        ],
+        "github.com": [
+          "source-or-reference"
+        ],
+        "gitlab.addx.ai": [
+          "source-or-reference"
+        ],
+        "open.feishu.cn": [
+          "untriaged-external-reference"
+        ]
+      }
+    },
+    {
+      "skill": "gitlab-issue-sop",
+      "reference": "skills/collaboration/gitlab-issue-sop/SKILL.md",
+      "domainCandidates": [
+        "example.feishu.cn",
+        "gitlab.addx.ai",
+        "gitlab.com",
+        "us-analytics-management.theunismart.com"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "example.feishu.cn": [
+          "placeholder"
+        ],
+        "gitlab.addx.ai": [
+          "source-or-reference"
+        ],
+        "gitlab.com": [
+          "source-or-reference"
+        ],
+        "us-analytics-management.theunismart.com": [
+          "instance-candidate-needs-owner-verification"
+        ]
+      }
+    },
+    {
+      "skill": "gitlab-pages-html",
+      "reference": "skills/collaboration/gitlab-pages-html/SKILL.md",
+      "domainCandidates": [
+        "docs.gitlab.com"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "docs.gitlab.com": [
+          "official-reference-candidate"
+        ]
+      }
+    },
+    {
+      "skill": "mylibrary",
+      "reference": "skills/collaboration/mylibrary/SKILL.md",
+      "domainCandidates": [
+        "pages.addx.ai"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "pages.addx.ai": [
+          "source-or-reference"
+        ]
+      }
+    },
+    {
+      "skill": "reply-feishu",
+      "reference": "skills/collaboration/reply-feishu/SKILL.md",
+      "domainCandidates": [
+        "...",
+        "example.com",
+        "grafana.example.com",
+        "monitor.example.com",
+        "open.feishu.cn"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "...": [
+          "untriaged-external-reference"
+        ],
+        "example.com": [
+          "placeholder"
+        ],
+        "grafana.example.com": [
+          "placeholder"
+        ],
+        "monitor.example.com": [
+          "placeholder"
+        ],
+        "open.feishu.cn": [
+          "untriaged-external-reference"
+        ]
+      }
+    },
+    {
+      "skill": "weekly-report-publish",
+      "reference": "skills/collaboration/weekly-report-publish/SKILL.md",
+      "domainCandidates": [
+        "team.pages.example.com",
+        "your-gitlab.example.com"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "team.pages.example.com": [
+          "placeholder"
+        ],
+        "your-gitlab.example.com": [
+          "placeholder"
+        ]
+      }
+    },
+    {
+      "skill": "bad-review-interception",
+      "reference": "skills/customer-care/bad-review-interception/SKILL.md",
+      "domainCandidates": [
+        "datahub-schema-search.addx.live",
+        "gitlab.addx.ai",
+        "superset-us.addx.live",
+        "us-analytics-management.theunismart.com"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "datahub-schema-search.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "gitlab.addx.ai": [
+          "source-or-reference"
+        ],
+        "superset-us.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "us-analytics-management.theunismart.com": [
+          "instance-candidate-needs-owner-verification"
+        ]
+      }
+    },
+    {
+      "skill": "collect-sdk-integration",
+      "reference": "skills/data/collect-sdk-integration/SKILL.md",
+      "domainCandidates": [
+        "gitlab.addx.ai",
+        "nexus-sg.addx.live",
+        "pages.addx.ai"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "gitlab.addx.ai": [
+          "source-or-reference"
+        ],
+        "nexus-sg.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "pages.addx.ai": [
+          "source-or-reference"
+        ]
+      }
+    },
+    {
+      "skill": "dagster-project-prepare",
+      "reference": "skills/data/dagster-project-prepare/SKILL.md",
+      "domainCandidates": [
+        "dapp.addx.live",
+        "gitlab.addx.ai"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "dapp.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "gitlab.addx.ai": [
+          "source-or-reference"
+        ]
+      }
+    },
+    {
+      "skill": "dagster-python-asset-register",
+      "reference": "skills/data/dagster-python-asset-register/SKILL.md",
+      "domainCandidates": [
+        "archive-api.open-meteo.com"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "archive-api.open-meteo.com": [
+          "untriaged-external-reference"
+        ]
+      }
+    },
+    {
+      "skill": "data-driven-investigation",
+      "reference": "skills/data/data-driven-investigation/SKILL.md",
+      "domainCandidates": [
+        "blog.weskill.org",
+        "dataheadhunters.com",
+        "en.wikipedia.org",
+        "gitlab.addx.ai",
+        "mixtape.scunning.com",
+        "online.hbs.edu",
+        "otexts.com",
+        "scikit-learn.org"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "blog.weskill.org": [
+          "untriaged-external-reference"
+        ],
+        "dataheadhunters.com": [
+          "untriaged-external-reference"
+        ],
+        "en.wikipedia.org": [
+          "untriaged-external-reference"
+        ],
+        "gitlab.addx.ai": [
+          "source-or-reference"
+        ],
+        "mixtape.scunning.com": [
+          "untriaged-external-reference"
+        ],
+        "online.hbs.edu": [
+          "untriaged-external-reference"
+        ],
+        "otexts.com": [
+          "untriaged-external-reference"
+        ],
+        "scikit-learn.org": [
+          "untriaged-external-reference"
+        ]
+      }
+    },
+    {
+      "skill": "kb-bird-encyclopedia",
+      "reference": "skills/data/kb-bird-encyclopedia/SKILL.md",
+      "domainCandidates": [
+        "api-us.vicohome.io",
+        "bird-guide-cdn-prod-us.kiwibit.com"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "api-us.vicohome.io": [
+          "untriaged-external-reference"
+        ],
+        "bird-guide-cdn-prod-us.kiwibit.com": [
+          "untriaged-external-reference"
+        ]
+      }
+    },
+    {
+      "skill": "argocd-deploy",
+      "reference": "skills/delivery/argocd-deploy/SKILL.md",
+      "domainCandidates": [
+        "kubernetes.default.svc",
+        "localhost",
+        "oidc.eks.us-east-1.amazonaws.com",
+        "vault-active.vault.svc",
+        "vault-cn.builder.addx.live",
+        "vault-us-internal-new.addx.live"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "kubernetes.default.svc": [
+          "local-or-cluster-address"
+        ],
+        "localhost": [
+          "local-or-cluster-address"
+        ],
+        "oidc.eks.us-east-1.amazonaws.com": [
+          "untriaged-external-reference"
+        ],
+        "vault-active.vault.svc": [
+          "local-or-cluster-address"
+        ],
+        "vault-cn.builder.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "vault-us-internal-new.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ]
+      }
+    },
+    {
+      "skill": "cicd-developer",
+      "reference": "skills/delivery/cicd-developer/SKILL.md",
+      "domainCandidates": [
+        "127.0.0.1",
+        "argo-cd.readthedocs.io",
+        "argocd-image-updater.readthedocs.io",
+        "argoproj.github.io",
+        "cloud.tencent.com",
+        "entitlement-service.tdd-demo",
+        "github.com",
+        "gitlab.addx.ai",
+        "grafana-us.addx.live",
+        "harbor-02231-cn-staging-pub.addx.live",
+        "kubernetes.default.svc",
+        "logs-eu-staging.addx.live",
+        "logs-us-staging.addx.live",
+        "oidc.eks.",
+        "vault-",
+        "vault-active.vault.svc",
+        "vault-cn-internal.addx.live",
+        "vault-cn.addx.live",
+        "vault-cn.builder.addx.live",
+        "vault-eu-internal.addx.live",
+        "vault-eu.builder.addx.live",
+        "vault-us-internal-new.addx.live",
+        "vault-us.builder.addx.live",
+        "victoria-metrics-cn-tech-service-tke.addx.live",
+        "vm-alert-cn-tech-service-tke.addx.live"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "127.0.0.1": [
+          "local-or-cluster-address"
+        ],
+        "argo-cd.readthedocs.io": [
+          "untriaged-external-reference"
+        ],
+        "argocd-image-updater.readthedocs.io": [
+          "untriaged-external-reference"
+        ],
+        "argoproj.github.io": [
+          "untriaged-external-reference"
+        ],
+        "cloud.tencent.com": [
+          "untriaged-external-reference"
+        ],
+        "entitlement-service.tdd-demo": [
+          "untriaged-external-reference"
+        ],
+        "github.com": [
+          "source-or-reference"
+        ],
+        "gitlab.addx.ai": [
+          "source-or-reference"
+        ],
+        "grafana-us.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "harbor-02231-cn-staging-pub.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "kubernetes.default.svc": [
+          "local-or-cluster-address"
+        ],
+        "logs-eu-staging.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "logs-us-staging.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "oidc.eks.": [
+          "untriaged-external-reference"
+        ],
+        "vault-": [
+          "untriaged-external-reference"
+        ],
+        "vault-active.vault.svc": [
+          "local-or-cluster-address"
+        ],
+        "vault-cn-internal.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "vault-cn.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "vault-cn.builder.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "vault-eu-internal.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "vault-eu.builder.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "vault-us-internal-new.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "vault-us.builder.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "victoria-metrics-cn-tech-service-tke.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "vm-alert-cn-tech-service-tke.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ]
+      }
+    },
+    {
+      "skill": "cicd-opensource",
+      "reference": "skills/delivery/cicd-opensource/SKILL.md",
+      "domainCandidates": [
+        "gitlab.addx.ai",
+        "grafana.addx.live",
+        "kubernetes.default.svc",
+        "metabase.addx.live",
+        "n8n.addx.live",
+        "nocodb.addx.live",
+        "vault-active.vault.svc"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "gitlab.addx.ai": [
+          "source-or-reference"
+        ],
+        "grafana.addx.live": [
+          "deployment-example-candidate"
+        ],
+        "kubernetes.default.svc": [
+          "local-or-cluster-address"
+        ],
+        "metabase.addx.live": [
+          "deployment-example-candidate"
+        ],
+        "n8n.addx.live": [
+          "deployment-example-candidate"
+        ],
+        "nocodb.addx.live": [
+          "deployment-example-candidate"
+        ],
+        "vault-active.vault.svc": [
+          "local-or-cluster-address"
+        ]
+      }
+    },
+    {
+      "skill": "code-submit",
+      "reference": "skills/delivery/code-submit/SKILL.md",
+      "domainCandidates": [
+        "gitlab.addx.ai",
+        "localhost"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "gitlab.addx.ai": [
+          "source-or-reference"
+        ],
+        "localhost": [
+          "local-or-cluster-address"
+        ]
+      }
+    },
+    {
+      "skill": "gitlab-ci",
+      "reference": "skills/delivery/gitlab-ci/SKILL.md",
+      "domainCandidates": [
+        "docs.gitlab.com",
+        "gitlab-ci-token"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "docs.gitlab.com": [
+          "official-reference-candidate"
+        ],
+        "gitlab-ci-token": [
+          "untriaged-external-reference"
+        ]
+      }
+    },
+    {
+      "skill": "gitlab-instance-runners",
+      "reference": "skills/delivery/gitlab-instance-runners/SKILL.md",
+      "domainCandidates": [
+        "a4x-paas.feishu.cn",
+        "docs.gitlab.com",
+        "victoria-metrics-sg-devops.addx.live"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "a4x-paas.feishu.cn": [
+          "untriaged-external-reference"
+        ],
+        "docs.gitlab.com": [
+          "official-reference-candidate"
+        ],
+        "victoria-metrics-sg-devops.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ]
+      }
+    },
+    {
+      "skill": "gitlab-my-mrs",
+      "reference": "skills/delivery/gitlab-my-mrs/SKILL.md",
+      "domainCandidates": [
+        "gitlab.addx.ai"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "gitlab.addx.ai": [
+          "source-or-reference"
+        ]
+      }
+    },
+    {
+      "skill": "gitlab-pipeline-health",
+      "reference": "skills/delivery/gitlab-pipeline-health/SKILL.md",
+      "domainCandidates": [
+        "docs.gitlab.com"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "docs.gitlab.com": [
+          "official-reference-candidate"
+        ]
+      }
+    },
+    {
+      "skill": "applepay-tester",
+      "reference": "skills/development/applepay-tester/SKILL.md",
+      "domainCandidates": [
+        "developer.apple.com"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "developer.apple.com": [
+          "official-reference-candidate"
+        ]
+      }
+    },
+    {
+      "skill": "architect",
+      "reference": "skills/development/architect/SKILL.md",
+      "domainCandidates": [
+        "docs.claude.com",
+        "github.com",
+        "import-linter.readthedocs.io",
+        "pages.addx.ai",
+        "www.archunit.org"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "docs.claude.com": [
+          "official-reference-candidate"
+        ],
+        "github.com": [
+          "source-or-reference"
+        ],
+        "import-linter.readthedocs.io": [
+          "untriaged-external-reference"
+        ],
+        "pages.addx.ai": [
+          "source-or-reference"
+        ],
+        "www.archunit.org": [
+          "untriaged-external-reference"
+        ]
+      }
+    },
+    {
+      "skill": "crossplane-provider-author",
+      "reference": "skills/development/crossplane-provider-author/SKILL.md",
+      "domainCandidates": [
+        "api.example.com",
+        "github.com",
+        "gitlab.addx.ai",
+        "ninedata.addx.live",
+        "open.feishu.cn",
+        "payment-service",
+        "pkg.go.dev",
+        "pod"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "api.example.com": [
+          "placeholder"
+        ],
+        "github.com": [
+          "source-or-reference"
+        ],
+        "gitlab.addx.ai": [
+          "source-or-reference"
+        ],
+        "ninedata.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "open.feishu.cn": [
+          "untriaged-external-reference"
+        ],
+        "payment-service": [
+          "untriaged-external-reference"
+        ],
+        "pkg.go.dev": [
+          "untriaged-external-reference"
+        ],
+        "pod": [
+          "untriaged-external-reference"
+        ]
+      }
+    },
+    {
+      "skill": "design-doc-style",
+      "reference": "skills/development/design-doc-style/SKILL.md",
+      "domainCandidates": [
+        "cdn.example.com",
+        "github.com"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "cdn.example.com": [
+          "placeholder"
+        ],
+        "github.com": [
+          "source-or-reference"
+        ]
+      }
+    },
+    {
+      "skill": "ios-dev-setup",
+      "reference": "skills/development/ios-dev-setup/SKILL.md",
+      "domainCandidates": [
+        "a4x-paas.feishu.cn"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "a4x-paas.feishu.cn": [
+          "untriaged-external-reference"
+        ]
+      }
+    },
+    {
+      "skill": "iot-service-dev-setup",
+      "reference": "skills/development/iot-service-dev-setup/SKILL.md",
+      "domainCandidates": [
+        "localhost"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "localhost": [
+          "local-or-cluster-address"
+        ]
+      }
+    },
+    {
+      "skill": "local-fullstack-debug",
+      "reference": "skills/development/local-fullstack-debug/SKILL.md",
+      "domainCandidates": [
+        "10.0.2.2",
+        "192.168.1.100",
+        "localhost"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "10.0.2.2": [
+          "untriaged-external-reference"
+        ],
+        "192.168.1.100": [
+          "untriaged-external-reference"
+        ],
+        "localhost": [
+          "local-or-cluster-address"
+        ]
+      }
+    },
+    {
+      "skill": "microservice-integrate",
+      "reference": "skills/development/microservice-integrate/SKILL.md",
+      "domainCandidates": [
+        "api-cn.addx.live",
+        "api-eu.addx.live",
+        "api-us-stage-new.addx.live",
+        "api-us.addx.live",
+        "gitlab.addx.ai",
+        "pages.addx.ai",
+        "qa-tools-staging.addx.live"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "api-cn.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "api-eu.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "api-us-stage-new.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "api-us.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "gitlab.addx.ai": [
+          "source-or-reference"
+        ],
+        "pages.addx.ai": [
+          "source-or-reference"
+        ],
+        "qa-tools-staging.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ]
+      }
+    },
+    {
+      "skill": "service-catalog-onboarding",
+      "reference": "skills/development/service-catalog-onboarding/SKILL.md",
+      "domainCandidates": [
+        "engagement-admin-staging.addx.live",
+        "engagement-admin.addx.live",
+        "engagement-service.addx.live",
+        "engagement-service.svc.cluster.local",
+        "gitlab.addx.ai"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "engagement-admin-staging.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "engagement-admin.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "engagement-service.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "engagement-service.svc.cluster.local": [
+          "untriaged-external-reference"
+        ],
+        "gitlab.addx.ai": [
+          "source-or-reference"
+        ]
+      }
+    },
+    {
+      "skill": "service-catalog-search",
+      "reference": "skills/development/service-catalog-search/SKILL.md",
+      "domainCandidates": [
+        "...",
+        "192.168.20.24",
+        "backstage.io",
+        "localhost"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "...": [
+          "untriaged-external-reference"
+        ],
+        "192.168.20.24": [
+          "untriaged-external-reference"
+        ],
+        "backstage.io": [
+          "untriaged-external-reference"
+        ],
+        "localhost": [
+          "local-or-cluster-address"
+        ]
+      }
+    },
+    {
+      "skill": "engagement-touchpoint-integration",
+      "reference": "skills/experimentation/engagement-touchpoint-integration/SKILL.md",
+      "domainCandidates": [
+        "a4x-paas.feishu.cn",
+        "api-staging-us.vicoo.tech",
+        "engagement-admin-staging.addx.live",
+        "engagement-admin.addx.live",
+        "gitlab.addx.ai",
+        "marketing-cms-staging-us.addx.live",
+        "superset-us.addx.live",
+        "troubleshooting-eu.addx.live",
+        "troubleshooting-staging-eu.addx.live",
+        "troubleshooting-staging-us.addx.live",
+        "troubleshooting-us.addx.live",
+        "us-ab-management.addx.live"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "a4x-paas.feishu.cn": [
+          "untriaged-external-reference"
+        ],
+        "api-staging-us.vicoo.tech": [
+          "untriaged-external-reference"
+        ],
+        "engagement-admin-staging.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "engagement-admin.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "gitlab.addx.ai": [
+          "source-or-reference"
+        ],
+        "marketing-cms-staging-us.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "superset-us.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "troubleshooting-eu.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "troubleshooting-staging-eu.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "troubleshooting-staging-us.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "troubleshooting-us.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "us-ab-management.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ]
+      }
+    },
+    {
+      "skill": "lab-feature-onboarding",
+      "reference": "skills/experimentation/lab-feature-onboarding/SKILL.md",
+      "domainCandidates": [
+        "marketing-cms-pre-us.addx.live",
+        "marketing-cms-staging-us.addx.live",
+        "us-analytics-management.theunismart.com"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "marketing-cms-pre-us.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "marketing-cms-staging-us.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "us-analytics-management.theunismart.com": [
+          "instance-candidate-needs-owner-verification"
+        ]
+      }
+    },
+    {
+      "skill": "device-cloud-host-usage",
+      "reference": "skills/hardware/device-cloud-host-usage/SKILL.md",
+      "domainCandidates": [
+        "device-cloud.builder.addx.live",
+        "gitlab.addx.ai",
+        "nexus-sg.addx.live"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "device-cloud.builder.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "gitlab.addx.ai": [
+          "source-or-reference"
+        ],
+        "nexus-sg.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ]
+      }
+    },
+    {
+      "skill": "embed-bazel-module-usage",
+      "reference": "skills/hardware/embed-bazel-module-usage/SKILL.md",
+      "domainCandidates": [
+        "bcr.bazel.build",
+        "gitlab.addx.ai",
+        "pages.addx.ai"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "bcr.bazel.build": [
+          "untriaged-external-reference"
+        ],
+        "gitlab.addx.ai": [
+          "source-or-reference"
+        ],
+        "pages.addx.ai": [
+          "source-or-reference"
+        ]
+      }
+    },
+    {
+      "skill": "embed-ci-setup",
+      "reference": "skills/hardware/embed-ci-setup/SKILL.md",
+      "domainCandidates": [
+        "example.invalid"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "example.invalid": [
+          "placeholder"
+        ]
+      }
+    },
+    {
+      "skill": "embedded-signal-validation",
+      "reference": "skills/hardware/embedded-signal-validation/SKILL.md",
+      "domainCandidates": [
+        "pages.addx.ai"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "pages.addx.ai": [
+          "source-or-reference"
+        ]
+      }
+    },
+    {
+      "skill": "oscilloscope-automation",
+      "reference": "skills/hardware/oscilloscope-automation/SKILL.md",
+      "domainCandidates": [
+        "pages.addx.ai"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "pages.addx.ai": [
+          "source-or-reference"
+        ]
+      }
+    },
+    {
+      "skill": "trackman-shot-export",
+      "reference": "skills/hardware/trackman-shot-export/SKILL.md",
+      "domainCandidates": [
+        "golf-player-activities.trackmangolf.com",
+        "tm-short.me",
+        "web-dynamic-reports.trackmangolf.com"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "golf-player-activities.trackmangolf.com": [
+          "untriaged-external-reference"
+        ],
+        "tm-short.me": [
+          "untriaged-external-reference"
+        ],
+        "web-dynamic-reports.trackmangolf.com": [
+          "untriaged-external-reference"
+        ]
+      }
+    },
+    {
+      "skill": "k8s-ops",
+      "reference": "skills/infrastructure/k8s-ops/SKILL.md",
+      "domainCandidates": [
+        "argocd-cn-tech-service-tke.addx.live",
+        "casdoor-cn-tech-service-tke.addx.live",
+        "cloud.tencent.com",
+        "gitlab.addx.ai",
+        "vault-active.vault.svc",
+        "vault-cn-internal.addx.live",
+        "vault-cn.addx.live",
+        "vault-cn.builder.addx.live",
+        "victoria-metrics-cn-tech-service-tke.addx.live",
+        "vm-alert-cn-tech-service-tke.addx.live"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "argocd-cn-tech-service-tke.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "casdoor-cn-tech-service-tke.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "cloud.tencent.com": [
+          "untriaged-external-reference"
+        ],
+        "gitlab.addx.ai": [
+          "source-or-reference"
+        ],
+        "vault-active.vault.svc": [
+          "local-or-cluster-address"
+        ],
+        "vault-cn-internal.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "vault-cn.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "vault-cn.builder.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "victoria-metrics-cn-tech-service-tke.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "vm-alert-cn-tech-service-tke.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ]
+      }
+    },
+    {
+      "skill": "ops-guardrails",
+      "reference": "skills/infrastructure/ops-guardrails/SKILL.md",
+      "domainCandidates": [
+        "127.0.0.1"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "127.0.0.1": [
+          "local-or-cluster-address"
+        ]
+      }
+    },
+    {
+      "skill": "toil-report",
+      "reference": "skills/infrastructure/toil-report/SKILL.md",
+      "domainCandidates": [
+        "docs.anthropic.com"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "docs.anthropic.com": [
+          "official-reference-candidate"
+        ]
+      }
+    },
+    {
+      "skill": "a4x-logger-onboarding",
+      "reference": "skills/observability/a4x-logger-onboarding/SKILL.md",
+      "domainCandidates": [
+        "gitlab-ci-token",
+        "gitlab.addx.ai",
+        "localhost",
+        "maven.apache.org",
+        "nexus.addx.live",
+        "www.w3.org"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "gitlab-ci-token": [
+          "untriaged-external-reference"
+        ],
+        "gitlab.addx.ai": [
+          "source-or-reference"
+        ],
+        "localhost": [
+          "local-or-cluster-address"
+        ],
+        "maven.apache.org": [
+          "untriaged-external-reference"
+        ],
+        "nexus.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "www.w3.org": [
+          "untriaged-external-reference"
+        ]
+      }
+    },
+    {
+      "skill": "grafana-dashboard-alert-update",
+      "reference": "skills/observability/grafana-dashboard-alert-update/SKILL.md",
+      "domainCandidates": [
+        "grafana.com"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "grafana.com": [
+          "untriaged-external-reference"
+        ]
+      }
+    },
+    {
+      "skill": "log-ingestion-elasticsearch",
+      "reference": "skills/observability/log-ingestion-elasticsearch/SKILL.md",
+      "domainCandidates": [
+        "10.0.5.20",
+        "127.0.0.1",
+        "vpc-elasticsearch-eu-yfklxtdj2matdledzkd6j4icrm.eu-central-1.es.amazonaws.com"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "10.0.5.20": [
+          "untriaged-external-reference"
+        ],
+        "127.0.0.1": [
+          "local-or-cluster-address"
+        ],
+        "vpc-elasticsearch-eu-yfklxtdj2matdledzkd6j4icrm.eu-central-1.es.amazonaws.com": [
+          "untriaged-external-reference"
+        ]
+      }
+    },
+    {
+      "skill": "observability-design",
+      "reference": "skills/observability/observability-design/SKILL.md",
+      "domainCandidates": [
+        "docs.growthbook.io",
+        "docs.snowplow.io",
+        "gitlab.addx.ai",
+        "seatunnel.apache.org",
+        "us-ab-management-api.addx.live",
+        "us-test-ab-management-api.addx.live"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "docs.growthbook.io": [
+          "official-reference-candidate"
+        ],
+        "docs.snowplow.io": [
+          "official-reference-candidate"
+        ],
+        "gitlab.addx.ai": [
+          "source-or-reference"
+        ],
+        "seatunnel.apache.org": [
+          "untriaged-external-reference"
+        ],
+        "us-ab-management-api.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "us-test-ab-management-api.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ]
+      }
+    },
+    {
+      "skill": "sentry-onboarding",
+      "reference": "skills/observability/sentry-onboarding/SKILL.md",
+      "domainCandidates": [
+        "sentry-cn.addx.live",
+        "sentry-eu.addx.live",
+        "sentry-us.addx.live"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "sentry-cn.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "sentry-eu.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "sentry-us.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ]
+      }
+    },
+    {
+      "skill": "ai-paper-visual-storytelling",
+      "reference": "skills/product/ai-paper-visual-storytelling/SKILL.md",
+      "domainCandidates": [
+        "github.com",
+        "litellm.addx.live",
+        "margindoc.dev"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "github.com": [
+          "source-or-reference"
+        ],
+        "litellm.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "margindoc.dev": [
+          "untriaged-external-reference"
+        ]
+      }
+    },
+    {
+      "skill": "audience-user-research",
+      "reference": "skills/product/audience-user-research/SKILL.md",
+      "domainCandidates": [
+        "audience-workflow-api-prod-us.addx.live",
+        "audience-workflow-api-staging-us.addx.live",
+        "datahub-schema-search.addx.live",
+        "form.typeform.com",
+        "www.typeform.com"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "audience-workflow-api-prod-us.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "audience-workflow-api-staging-us.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "datahub-schema-search.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "form.typeform.com": [
+          "untriaged-external-reference"
+        ],
+        "www.typeform.com": [
+          "untriaged-external-reference"
+        ]
+      }
+    },
+    {
+      "skill": "operations-console-design",
+      "reference": "skills/product/operations-console-design/SKILL.md",
+      "domainCandidates": [
+        "admin.engagement.internal"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "admin.engagement.internal": [
+          "untriaged-external-reference"
+        ]
+      }
+    },
+    {
+      "skill": "project-positioning",
+      "reference": "skills/product/project-positioning/SKILL.md",
+      "domainCandidates": [
+        "github.com"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "github.com": [
+          "source-or-reference"
+        ]
+      }
+    },
+    {
+      "skill": "story-craftsman",
+      "reference": "skills/product/story-craftsman/SKILL.md",
+      "domainCandidates": [
+        "en.wikipedia.org",
+        "martinfowler.com"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "en.wikipedia.org": [
+          "untriaged-external-reference"
+        ],
+        "martinfowler.com": [
+          "untriaged-external-reference"
+        ]
+      }
+    },
+    {
+      "skill": "architecture-smell-scan",
+      "reference": "skills/quality/architecture-smell-scan/SKILL.md",
+      "domainCandidates": [
+        "pages.addx.ai"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "pages.addx.ai": [
+          "source-or-reference"
+        ]
+      }
+    },
+    {
+      "skill": "code-review",
+      "reference": "skills/quality/code-review/SKILL.md",
+      "domainCandidates": [
+        "...",
+        "atlasgo.io",
+        "docs.percona.com",
+        "github.com",
+        "gitlab.addx.ai"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "...": [
+          "untriaged-external-reference"
+        ],
+        "atlasgo.io": [
+          "untriaged-external-reference"
+        ],
+        "docs.percona.com": [
+          "official-reference-candidate"
+        ],
+        "github.com": [
+          "source-or-reference"
+        ],
+        "gitlab.addx.ai": [
+          "source-or-reference"
+        ]
+      }
+    },
+    {
+      "skill": "create-pir",
+      "reference": "skills/quality/create-pir/SKILL.md",
+      "domainCandidates": [
+        "api-eu.vicohome.io",
+        "api-pre-eu.vicohome.io",
+        "api-pre-us.kiwibit.com",
+        "api-pre-us.vicohome.io",
+        "api-staging-eu.vicohome.io",
+        "api-staging-us.kiwibit.com",
+        "api-staging-us.vicohome.io",
+        "api-us.kiwibit.com",
+        "api-us.vicohome.io",
+        "api.addx.live"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "api-eu.vicohome.io": [
+          "untriaged-external-reference"
+        ],
+        "api-pre-eu.vicohome.io": [
+          "untriaged-external-reference"
+        ],
+        "api-pre-us.kiwibit.com": [
+          "untriaged-external-reference"
+        ],
+        "api-pre-us.vicohome.io": [
+          "untriaged-external-reference"
+        ],
+        "api-staging-eu.vicohome.io": [
+          "untriaged-external-reference"
+        ],
+        "api-staging-us.kiwibit.com": [
+          "untriaged-external-reference"
+        ],
+        "api-staging-us.vicohome.io": [
+          "untriaged-external-reference"
+        ],
+        "api-us.kiwibit.com": [
+          "untriaged-external-reference"
+        ],
+        "api-us.vicohome.io": [
+          "untriaged-external-reference"
+        ],
+        "api.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ]
+      }
+    },
+    {
+      "skill": "opencode-review-inject",
+      "reference": "skills/quality/opencode-review-inject/SKILL.md",
+      "domainCandidates": [
+        "xxx"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "xxx": [
+          "untriaged-external-reference"
+        ]
+      }
+    },
+    {
+      "skill": "performance-preflight",
+      "reference": "skills/quality/performance-preflight/SKILL.md",
+      "domainCandidates": [
+        "datahub.addx.live",
+        "gitlab.addx.ai",
+        "grafana.addx.live",
+        "prometheus-us-data.addx.live",
+        "superset.addx.live",
+        "thanos-cn.addx.live",
+        "thanos-prod-eu.addx.live",
+        "thanos-prod-us.addx.live",
+        "troubleshooting-eu.addx.live",
+        "troubleshooting-staging-eu.addx.live",
+        "troubleshooting-staging-us.addx.live",
+        "troubleshooting-us.addx.live",
+        "victoria-metrics-cn-tech-service-tke.addx.live",
+        "victoria-metrics-cn.addx.live",
+        "vm-alert-cn-tech-service-tke.addx.live"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "datahub.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "gitlab.addx.ai": [
+          "source-or-reference"
+        ],
+        "grafana.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "prometheus-us-data.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "superset.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "thanos-cn.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "thanos-prod-eu.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "thanos-prod-us.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "troubleshooting-eu.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "troubleshooting-staging-eu.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "troubleshooting-staging-us.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "troubleshooting-us.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "victoria-metrics-cn-tech-service-tke.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "victoria-metrics-cn.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ],
+        "vm-alert-cn-tech-service-tke.addx.live": [
+          "instance-candidate-needs-owner-verification"
+        ]
+      }
+    },
+    {
+      "skill": "share-device",
+      "reference": "skills/quality/share-device/SKILL.md",
+      "domainCandidates": [
+        "api-eu.vicohome.io",
+        "api-pre-eu.vicohome.io",
+        "api-pre-us.kiwibit.com",
+        "api-pre-us.vicohome.io",
+        "api-staging-eu.vicohome.io",
+        "api-staging-us.kiwibit.com",
+        "api-staging-us.vicohome.io",
+        "api-us.kiwibit.com",
+        "api-us.vicohome.io"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "api-eu.vicohome.io": [
+          "untriaged-external-reference"
+        ],
+        "api-pre-eu.vicohome.io": [
+          "untriaged-external-reference"
+        ],
+        "api-pre-us.kiwibit.com": [
+          "untriaged-external-reference"
+        ],
+        "api-pre-us.vicohome.io": [
+          "untriaged-external-reference"
+        ],
+        "api-staging-eu.vicohome.io": [
+          "untriaged-external-reference"
+        ],
+        "api-staging-us.kiwibit.com": [
+          "untriaged-external-reference"
+        ],
+        "api-staging-us.vicohome.io": [
+          "untriaged-external-reference"
+        ],
+        "api-us.kiwibit.com": [
+          "untriaged-external-reference"
+        ],
+        "api-us.vicohome.io": [
+          "untriaged-external-reference"
+        ]
+      }
+    },
+    {
+      "skill": "testing-strategy",
+      "reference": "skills/quality/testing-strategy/SKILL.md",
+      "domainCandidates": [
+        "192.168.20.24",
+        "a4x-paas.feishu.cn"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "192.168.20.24": [
+          "untriaged-external-reference"
+        ],
+        "a4x-paas.feishu.cn": [
+          "untriaged-external-reference"
+        ]
+      }
+    },
+    {
+      "skill": "buzz-data-access-admin",
+      "reference": "skills/security/buzz-data-access-admin/SKILL.md",
+      "domainCandidates": [
+        "docs.aws.amazon.com",
+        "docs.gitlab.com",
+        "github.com",
+        "gitlab.addx.ai"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "docs.aws.amazon.com": [
+          "official-reference-candidate"
+        ],
+        "docs.gitlab.com": [
+          "official-reference-candidate"
+        ],
+        "github.com": [
+          "source-or-reference"
+        ],
+        "gitlab.addx.ai": [
+          "source-or-reference"
+        ]
+      }
+    },
+    {
+      "skill": "codebase-vulnerability-analysis",
+      "reference": "skills/security/codebase-vulnerability-analysis/SKILL.md",
+      "domainCandidates": [
+        "blog.cloudflare.com",
+        "github.com"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "blog.cloudflare.com": [
+          "untriaged-external-reference"
+        ],
+        "github.com": [
+          "source-or-reference"
+        ]
+      }
+    },
+    {
+      "skill": "gitlab-bulk-members",
+      "reference": "skills/security/gitlab-bulk-members/SKILL.md",
+      "domainCandidates": [
+        "gitlab.addx.ai"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "gitlab.addx.ai": [
+          "source-or-reference"
+        ]
+      }
+    },
+    {
+      "skill": "ingress-security-scan",
+      "reference": "skills/security/ingress-security-scan/SKILL.md",
+      "domainCandidates": [
+        "gitlab.addx.ai"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "gitlab.addx.ai": [
+          "source-or-reference"
+        ]
+      }
+    },
+    {
+      "skill": "k8s-security-scan",
+      "reference": "skills/security/k8s-security-scan/SKILL.md",
+      "domainCandidates": [
+        "a4x-paas.feishu.cn",
+        "gitlab-ci-token",
+        "gitlab.addx.ai"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "a4x-paas.feishu.cn": [
+          "untriaged-external-reference"
+        ],
+        "gitlab-ci-token": [
+          "untriaged-external-reference"
+        ],
+        "gitlab.addx.ai": [
+          "source-or-reference"
+        ]
+      }
+    },
+    {
+      "skill": "local-security-check",
+      "reference": "skills/security/local-security-check/SKILL.md",
+      "domainCandidates": [
+        "agentskills.io",
+        "api.example.com",
+        "arxiv.org",
+        "owasp.org"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "agentskills.io": [
+          "untriaged-external-reference"
+        ],
+        "api.example.com": [
+          "placeholder"
+        ],
+        "arxiv.org": [
+          "untriaged-external-reference"
+        ],
+        "owasp.org": [
+          "untriaged-external-reference"
+        ]
+      }
+    },
+    {
+      "skill": "opensource-audit",
+      "reference": "skills/security/opensource-audit/SKILL.md",
+      "domainCandidates": [
+        "applink.feishu.cn",
+        "monitoring.internal.example.com"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "applink.feishu.cn": [
+          "untriaged-external-reference"
+        ],
+        "monitoring.internal.example.com": [
+          "placeholder"
+        ]
+      }
+    },
+    {
+      "skill": "security-compliance-review",
+      "reference": "skills/security/security-compliance-review/SKILL.md",
+      "domainCandidates": [
+        "applink.feishu.cn",
+        "arxiv.org",
+        "owasp.org"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "applink.feishu.cn": [
+          "untriaged-external-reference"
+        ],
+        "arxiv.org": [
+          "untriaged-external-reference"
+        ],
+        "owasp.org": [
+          "untriaged-external-reference"
+        ]
+      }
+    },
+    {
+      "skill": "trufflehog-cli",
+      "reference": "skills/security/trufflehog-cli/SKILL.md",
+      "domainCandidates": [
+        "api.anthropic.com",
+        "api.deepseek.com",
+        "api.github.com",
+        "api.openai.com",
+        "applink.feishu.cn",
+        "generativelanguage.googleapis.com",
+        "github.com",
+        "gitlab.addx.ai",
+        "slack.com"
+      ],
+      "disposition": "needs-platform-triage",
+      "domainClassifications": {
+        "api.anthropic.com": [
+          "untriaged-external-reference"
+        ],
+        "api.deepseek.com": [
+          "untriaged-external-reference"
+        ],
+        "api.github.com": [
+          "untriaged-external-reference"
+        ],
+        "api.openai.com": [
+          "untriaged-external-reference"
+        ],
+        "applink.feishu.cn": [
+          "untriaged-external-reference"
+        ],
+        "generativelanguage.googleapis.com": [
+          "untriaged-external-reference"
+        ],
+        "github.com": [
+          "source-or-reference"
+        ],
+        "gitlab.addx.ai": [
+          "source-or-reference"
+        ],
+        "slack.com": [
+          "untriaged-external-reference"
+        ]
+      }
+    }
+  ]
+}

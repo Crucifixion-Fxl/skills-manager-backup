@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "tool": "pagerduty",
+  "owner": "pagerduty",
+  "status": "source-reviewed-runtime-pending",
+  "contract": "saas-access.md",
+  "notes": "现有helper宿主PAGERDUTY_API_TOKEN，以Authorization: Token token=访问https://api.pagerduty.com。官方区分account token与user token，前者可选read-only/full，后者随用户权限；不能从变量名推断token类型/subject。官方账号API Access Keys及用户API设置管理申请/撤销，操作须明确授权。实际AddX SSO、token类别/权限、生命周期和账号归属pending。",
+  "runtimeCallsPerformed": false,
+  "credentialHandling": "No login, credential reads, token issuance, global installation or SaaS business calls performed.",
+  "credentialEnv": "PAGERDUTY_API_TOKEN"
+}

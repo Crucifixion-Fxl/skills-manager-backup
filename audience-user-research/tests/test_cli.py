@@ -11,6 +11,7 @@ from unittest.mock import MagicMock, patch
 from urllib.parse import quote
 
 from user_research.cli import main
+from user_research.client import MAX_REQUEST_BYTES
 from user_research.operations import (
     HOST_ATTACHMENT_OPERATIONS,
     OPERATION_SPECS,
@@ -182,6 +183,72 @@ class CliTests(unittest.TestCase):
         self.assertIn(form_url, rendered)
         self.assertNotIn("#uid=", rendered)
 
+    def test_typeform_editor_and_published_preview_urls_survive_cli_scrubbing(self) -> None:
+        research_id = "research_" + "b" * 26
+        form_url = "https://form.typeform.com/to/Form123"
+        editor_url = "https://admin.typeform.com/form/Form123/create?block=welcome"
+        preview_url = form_url + "?__dangerous-disable-submissions"
+        for operation, result in (
+            (
+                "personal_research_journey_form",
+                {"form_url": form_url, "form_edit_url": editor_url},
+            ),
+            (
+                "personal_research_journey_form_publish",
+                {
+                    "form_url": form_url,
+                    "form_edit_url": editor_url,
+                    "form_preview_url": preview_url,
+                    "form_public": True,
+                },
+            ),
+            (
+                "personal_research_journey_status",
+                {
+                    "bindings": {
+                        "form_url": form_url,
+                        "form_edit_url": editor_url,
+                        "form_preview_url": preview_url,
+                    }
+                },
+            ),
+        ):
+            client = MagicMock()
+            client.verify_self_context.return_value = CONTEXT
+            client.call.return_value = {
+                "project_id": "kiwibit",
+                "binding_revision": CONTEXT["binding_revision"],
+                "research_id": research_id,
+                **result,
+            }
+            request = {"path": {"research_id": research_id}, "query": {}, "body": {}}
+            with (
+                self.subTest(operation=operation),
+                patch("user_research.cli.AudienceClient", return_value=client),
+                patch("user_research.cli.AudienceClientConfig.from_environment"),
+                patch("sys.stdin", SimpleNamespace(buffer=BytesIO(json.dumps(request).encode()))),
+                patch("builtins.print") as output,
+            ):
+                self.assertEqual(main([operation, "--request-stdin"]), 0)
+                rendered = output.call_args.args[0]
+                self.assertIn(editor_url, rendered)
+                self.assertIn(form_url, rendered)
+                if operation != "personal_research_journey_form":
+                    self.assertIn(preview_url, rendered)
+                else:
+                    self.assertNotIn("form_preview_url", rendered)
+
+        sensitive_preview = preview_url + "&uid=cafebabeface0123456789abcdef0123"
+        client.call.return_value["bindings"]["form_preview_url"] = sensitive_preview
+        with (
+            patch("user_research.cli.AudienceClient", return_value=client),
+            patch("user_research.cli.AudienceClientConfig.from_environment"),
+            patch("sys.stdin", SimpleNamespace(buffer=BytesIO(json.dumps(request).encode()))),
+            patch("builtins.print") as output,
+        ):
+            self.assertEqual(main(["personal_research_journey_status", "--request-stdin"]), 0)
+        self.assertNotIn("form_preview_url", output.call_args.args[0])
+
     def test_encoded_uid_links_and_encoded_emails_are_removed(self) -> None:
         uid = "cafebabeface0123456789abcdef0123"
         form_url = "https://form.typeform.com/to/Form123"
@@ -352,7 +419,7 @@ class CliTests(unittest.TestCase):
 
     def test_stdin_size_is_bounded_before_configuration_or_network(self) -> None:
         with (
-            patch("sys.stdin", SimpleNamespace(buffer=BytesIO(b"x" * (32 * 1024 + 1)))),
+            patch("sys.stdin", SimpleNamespace(buffer=BytesIO(b"x" * (MAX_REQUEST_BYTES + 1)))),
             patch("user_research.cli.AudienceClient") as client,
             patch("builtins.print") as output,
         ):
@@ -361,6 +428,35 @@ class CliTests(unittest.TestCase):
         self.assertEqual(
             json.loads(output.call_args.args[0]), {"error": "request_too_large", "ok": False}
         )
+
+    def test_large_native_replace_stdin_is_accepted(self) -> None:
+        client = MagicMock()
+        client.verify_self_context.return_value = {
+            **CONTEXT,
+            "allowed_actions": ["forms.create"],
+        }
+        client.call.return_value = None
+        request = {
+            "path": {"research_id": "research_" + "b" * 26, "form_id": "Form123"},
+            "body": {
+                "idea_id": "idea_" + "a" * 26,
+                "expected_provider_revision": "c" * 64,
+                "expected_affected_scope_digest": "d" * 64,
+                "acknowledge_published_risk": True,
+                "body": {"title": "Native form", "description": "x" * 40000},
+            },
+        }
+        raw = json.dumps(request).encode()
+        self.assertGreater(len(raw), 32 * 1024)
+        with (
+            patch("user_research.cli.AudienceClient", return_value=client),
+            patch("user_research.cli.AudienceClientConfig.from_environment"),
+            patch("sys.stdin", SimpleNamespace(buffer=BytesIO(raw))),
+            patch("builtins.print") as output,
+        ):
+            self.assertEqual(main(["personal_research_journey_form_replace", "--request-stdin"]), 0)
+        self.assertEqual(client.call.call_args.kwargs["body"], request["body"])
+        self.assertTrue(json.loads(output.call_args.args[0])["ok"])
 
     def test_attachment_operation_requires_output_and_prints_metadata_only(self) -> None:
         client = MagicMock()

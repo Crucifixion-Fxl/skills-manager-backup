@@ -9,6 +9,8 @@ description: 查询和管理 Grafana 监控面板、告警规则、数据源。�
 
 ## Description
 
+首次接入/变更扫描与日常认证入口见 [SaaS 接入](references/saas-access.md)；已有平台业务契约与授权门禁仍在本 Skill 维护。
+
 适用场景：查找 Dashboard、查看告警状态、管理数据源、排查服务监控问题。
 
 ### 专项资源路由
@@ -44,6 +46,8 @@ description: 查询和管理 Grafana 监控面板、告警规则、数据源。�
 | 区域 K8s | `us-ai-k8s-cluster`, `eu-ai-k8s-cluster`, `cn-ai-k8s-cluster` | 按区域的 K8s 集群 |
 | 业务功能 | `Alert`, `Bind`, `OTA指标`, `埋点监控`, `增值服务` | 特定功能监控 |
 | 客户端 | `Android 直播统计`, `IOS 直播统计`, `iOS 支付统计`, `iOS 绑定统计` | 移动端统计 |
+
+CN 当前部署全部使用腾讯云（prod `100014919455`，staging / tech-service `100052802231`）。Folder 或旧 Dashboard 名不会随迁移自动变化；查询前核对实际 datasource 和 `cluster` 标签，不能从 `AWS` Folder 或旧 CN 名称推断仍是 EKS，也不能把退役集群的历史指标当作当前健康状态。当前集群入口见 `k8s-ops/references/cn-tencent-inventory.md`。
 
 ### Dashboard 命名规范
 

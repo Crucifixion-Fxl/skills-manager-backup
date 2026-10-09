@@ -290,3 +290,11 @@ AI：
 - Prisma schema（字段权威）：`admin/prisma/schema.prisma`
 - Zod 输入校验（写操作字段权威）：`admin/src/lib/schemas.ts`
 - 领域类型（运行时 JSON 形状）：`admin/src/types/rule.ts`
+
+### 只读验收与身份边界
+
+只读授权不能仅按 HTTP 方法判断。`GET /api/dryrun/batch/{runId}` 会 best-effort 同步 Dagster 状态回数据库，纯只读验收禁止调用；POST Dry Run 会启动任务，也不属于只读。可先读取 `/api/health` 与 `/api/facts?tenant_id=default`，核对业务响应和网页，但匿名响应及通用“管理员”标签不能证明个人登录身份。SmartPopup 的可选 SSO 与 Warranty 的独立飞书鉴权分别核验，不能把旧 staging 文档的匿名说明套用所有模块。
+
+分别验证本机与远端，并与网页对照业务结果；保留真实传输错误，不把本机成功或源码认证开关当作远端成功。具体账号、配置路径、部署版本、查询结果和清理证据写入验收报告。
+
+登录入口返回明确的 OAuth 配置错误时，记录脱敏错误并停止该认证链路；这属于服务端配置阻塞，不能反复要求用户扫码，也不能绕过签名校验或借用其他模块身份。正常人工登录等待与服务端配置错误应分别处理。

@@ -16,8 +16,18 @@ from pathlib import Path
 from typing import Any, Mapping
 
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_ROOT / "skill-analytics"))
+_SCRIPT_PATH = Path(__file__).resolve()
+_ANALYTICS_RUNTIME = next(
+    (
+        ancestor / "runtime/coding-session"
+        for ancestor in (_SCRIPT_PATH.parents[4], _SCRIPT_PATH.parents[3])
+        if (ancestor / "runtime/coding-session/skill_analytics").is_dir()
+    ),
+    None,
+)
+if _ANALYTICS_RUNTIME is None:
+    raise ModuleNotFoundError("could not locate runtime/coding-session/skill_analytics")
+sys.path.insert(0, str(_ANALYTICS_RUNTIME))
 
 from skill_analytics.identity import GitLabIdentityResolver  # noqa: E402
 from skill_analytics.langfuse_client import LangfuseClient  # noqa: E402

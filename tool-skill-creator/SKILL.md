@@ -3,11 +3,15 @@ name: tool-skill-creator
 description: 内部工具 Skill 化的全流程项目经理。引导用户完成工具分档决策、信息采集、SKILL.md 编写、格式验证和迭代优化五个阶段，最终产出可用的工具类 Skill。当用户说"把 XX 工具做成 Skill"、"帮我 Skill 化 XX 系统"、或需要将内部工具（SaaS/自建系统/管理后台）接入 AI Agent 生态时触发。
 ---
 
+**写入 memory 时**：遵循 [极简写入规约](../dev-infra/references/memory-writing.md)：只增量写长期约束与入口，默认≤5条/≤10行/约≤200字，语义去重；保留既有授权边界和安全门禁，详情留文档。此规约不新增写入授权。
+
 # tool-skill-creator
 
 内部工具 Skill 化的项目经理 — 引导用户从零完成工具类 Skill 的创建。
 
 ## Description
+
+SaaS 首次接入或功能/认证变化时，使用 [platform-onboarding](../platform-onboarding/SKILL.md) 扫描、比较官方能力并补 OpenCLI；日常登录使用 [web-access](../web-access/SKILL.md)。本 Skill 继续负责一般工具分档与 Skill 编写，避免重复维护一套 SaaS 登录/浏览器逆向教程。
 
 本 Skill 覆盖内部工具 Skill 化的完整生命周期，分为五个阶段：
 
@@ -27,7 +31,7 @@ description: 内部工具 Skill 化的全流程项目经理。引导用户完成
 
 本 Skill 专注于工具 Skill 化的流程管控和信息采集。评估与迭代环节委托给 [skill-creator](https://github.com/anthropics/skills/blob/main/skills/skill-creator/SKILL.md) 执行。
 
-编写规范和模板详见 [内部工具 Skill 化指南](../docs/05-user-guide/tool-skill-guide.md)，本 Skill 不重复其中内容，而是引用并按流程执行。
+编写规范和模板详见 [内部工具 Skill 化指南](../docs/agent-harness/guides/tool-skill-guide.md)，本 Skill 不重复其中内容，而是引用并按流程执行。
 
 ## Rules
 
@@ -69,7 +73,7 @@ description: 内部工具 Skill 化的全流程项目经理。引导用户完成
 
 在进入档位路径前，先问用户：**"这个工具有没有使用文档（如飞书文档）？有的话请提供链接。"**
 
-如果有飞书文档，按 [`feishu-channel-rules`](../lark/feishu-channel-rules/SKILL.md)
+如果有飞书文档，按 [`feishu-channel-rules`](../../collaboration/feishu-channel-rules/SKILL.md)
 使用本地策略批准的 profile 执行
 `"$APPROVED_NODE" "$APPROVED_LARK_CLI_ENTRY" --profile <approved-profile> docs +fetch --as user --doc <飞书文档URL>`，提取业务规则、
 操作流程和注意事项，作为编写 SKILL.md 的重要输入。身份或权限核验失败时停止，不回退到
@@ -153,7 +157,7 @@ npx skills add vercel-labs/agent-browser --skill agent-browser --agent claude-co
 
 #### 选择模板
 
-根据档位选择对应模板（模板详见 [tool-skill-guide.md 第 5 章](../docs/05-user-guide/tool-skill-guide.md#5-工具类-skill-编写规范)）：
+根据档位选择对应模板（模板详见 [tool-skill-guide.md 第 5 章](../docs/agent-harness/guides/tool-skill-guide.md#5-工具类-skill-编写规范)）：
 
 | 档位 | 模板 | Skill 厚度 |
 |------|------|-----------|
@@ -216,13 +220,13 @@ T3-Browser 档位需要创建 `references/` 目录存放抓取的 API 文档。T
 
 Skill 创建完成后，**必须**更新仓库根目录的 `AGENTS.md`：
 
-1. 在对应档位表格的 **Skill 列**填入 Skill 名称（如 `tracker-manager`）
+1. 在对应档位表格的 **Skill 列**填入 Skill 名称（如 `tracking-lifecycle`）
 2. 如果工具尚未在表格中，新增一行（含 URL、认证方式、Skill 名）
 3. 对应档位：T2 → `## T2: 有公开 REST API`，T3 → `## T3: 自建系统`，T3-Browser → `## T3-Browser`
 
-示例：将 `tracker-manager` Skill 注册到 AGENTS.md：
+示例：将 `tracking-lifecycle` Skill 注册到 AGENTS.md：
 ```
-| 埋点平台 | `https://us-analytics-management.theunismart.com` | 无（需逆向） | ... | `tracker-manager` |
+| 埋点平台 | `https://us-analytics-management.theunismart.com` | 无（需逆向） | ... | `tracking-lifecycle` |
 ```
 
 ### Rule 4 — Phase 4: 验证
@@ -245,7 +249,7 @@ uv run python scripts/validate.py --skill <tool-name>
 
 #### 质量检查
 
-按档位执行对应的质量检查清单（清单详见 [tool-skill-guide.md 第 8 章](../docs/05-user-guide/tool-skill-guide.md#8-质量检查清单)）：
+按档位执行对应的质量检查清单（清单详见 [tool-skill-guide.md 第 8 章](../docs/agent-harness/guides/tool-skill-guide.md#8-质量检查清单)）：
 
 - 通用项：name 与目录一致、description 包含做什么+何时触发、**已通过实际探索发现并记录了业务规则**
 - T1 专项：MCP 安装方式已说明、已通过 MCP 探索发现命名/标签约定、行数 < 100
@@ -304,7 +308,7 @@ AI：Phase 1 判定 T3-Browser → Phase 2 安装 agent-browser → snapshot -i 
 
 ## References
 
-- [内部工具 Skill 化指南](../docs/05-user-guide/tool-skill-guide.md) — 分档策略、编写模板、质量检查清单
+- [内部工具 Skill 化指南](../docs/agent-harness/guides/tool-skill-guide.md) — 分档策略、编写模板、质量检查清单
 - [skill-creator](https://github.com/anthropics/skills/blob/main/skills/skill-creator/SKILL.md) — Anthropic 官方 Skill 创建工具（Phase 5 评估与迭代）
 - [AGENTS.md 模板](../AGENTS.md) — 全公司内部工具清单
-- [addx-console-admin 实战示例](../addx-console-admin/SKILL.md) — T3-Browser 档位的完整实战参考
+- [addx-console-admin 实战示例](../../business-operations/addx-console-admin/SKILL.md) — T3-Browser 档位的完整实战参考

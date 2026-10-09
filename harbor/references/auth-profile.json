@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "tool": "harbor",
+  "provider": "delegated",
+  "owner": "harbor",
+  "authContract": "SKILL.md",
+  "verification": "source-verified",
+  "runtimeVerification": "pending",
+  "authDiscovery": "references/auth-discovery.json"
+}

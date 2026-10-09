@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "tool": "argocd-fleet-scanner",
+  "owner": "argocd-fleet-scanner",
+  "repo": "https://gitlab.addx.ai/DEV/argocd-fleet-scanner",
+  "researchCommit": null,
+  "routeEntries": [],
+  "verification": "source-verified",
+  "deploymentConsistency": "pending",
+  "officialReferences": [],
+  "needsResearch": [
+    "Runtime identity, resource permissions and credential lifecycle",
+    "Actual service/installed MCP version, account region and source/runtime consistency"
+  ],
+  "apiDiscovery": {
+    "method": "这是AddX私有在线scanner，不是公开ArgoCD产品API的别名；service源码https://gitlab.addx.ai/DEV/argocd-fleet-scanner已由部署记录定位，commit和API路由待研究，不猜endpoint或假定支持官方ArgoCD MCP。优先版本匹配的service自身OpenAPI/路由源码。argocd-fleet-scan的本地kubectl fallback仍按其K8s context/RBAC门禁；ArgoCD单实例访问由argocd owner管理。线上scanner的读取/配置/手动扫描副作用需source发现后按本owner授权、回读，不以本地扫描成功证明在线认证。",
+    "coverage": "Source and public entrypoints located; runtime pending"
+  },
+  "deploymentEvidence": {
+    "repo": "https://gitlab.addx.ai/DEV/k8s",
+    "researchCommit": "47800f690df48d1f46174593809dd67e9773a48e",
+    "path": "docs/plans/2026-07-20-image-updater-git-writeback.md",
+    "notes": "Names DEV/argocd-fleet-scanner project1533 and application CR source ownership; does not establish current runtime auth/API/source revision."
+  },
+  "consumerEvidence": {
+    "repo": "https://gitlab.addx.ai/engineering/skills",
+    "researchCommit": "bac8d3ee819650381b8a613a6e8526c153d7b244",
+    "paths": [
+      "skills/argocd-fleet-scan/SKILL.md"
+    ]
+  }
+}

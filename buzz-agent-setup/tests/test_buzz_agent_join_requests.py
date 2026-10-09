@@ -475,6 +475,42 @@ class AgentEnvTest(JoinTestCase):
 
 
 class DiscoveryTest(JoinTestCase):
+    def assert_copyable_approval(self, content: str) -> str:
+        lines = content.splitlines()
+        approve = f"/approve {self.record()['join_id']}"
+        deny = f"/deny {self.record()['join_id']}"
+        self.assertEqual(lines.count(approve), 1, content)
+        self.assertEqual(lines.count(deny), 1, content)
+        self.assertIn("不需要 @", content)
+        self.assertIn("原入群申请", content)
+        self.assertIn("回复", content)
+        self.assertIn("不要另发群消息", content)
+        return lines[lines.index(approve)]
+
+    def test_request_command_is_copyable_without_mention_or_extra_text(self) -> None:
+        """L2-JOIN-162-001: copy one displayed line in the original Thread -> approved."""
+        self.baseline()
+        self.invite_by_admin()
+        self.run_once()
+        request = self.relay.sent[0]
+        command = self.assert_copyable_approval(request["content"])
+        self.relay.reply(NEW_CH, OWNER, request["id"], command)
+        self.run_once()
+        self.assertEqual(self.record()["outcome"], "approved")
+        self.assertEqual(self.record()["state"], "ACTIVE")
+
+    def test_owner_arrival_reminder_also_has_standalone_commands(self) -> None:
+        """L2-JOIN-162-002: owner joining later gets the same exact-copy instructions."""
+        self.baseline()
+        self.invite_by_admin(owner_role=None)
+        self.run_once()
+        self.assert_copyable_approval(self.relay.sent[0]["content"])
+        self.relay.channels[NEW_CH]["members"][OWNER] = "member"
+        self.run_once()
+        self.assertEqual(len(self.relay.sent), 2)
+        self.assert_copyable_approval(self.relay.sent[1]["content"])
+        self.assertEqual(self.relay.sent[1]["reply_to"], self.record()["request_event"])
+
     def test_first_run_records_existing_extra_channels_as_baseline_and_touches_nothing(self) -> None:
         self.relay.channel(OLD_CH, "旧频道", {ADMIN: "owner", AGENT: "bot"})
         result = self.run_once()
@@ -576,7 +612,35 @@ class DiscoveryTest(JoinTestCase):
         self.assertEqual(self.record()["outcome"], "auto_approved")
         self.assertEqual(self.record()["state"], "ACTIVE")
         self.assertIn("正在开通", self.relay.sent[0]["content"])
+        self.assertIn("没有正在处理任务时", self.relay.sent[0]["content"])
+        self.assertIn("刷新频道订阅", self.relay.sent[0]["content"])
+        self.assertIn("不会打断正在进行的工作", self.relay.sent[0]["content"])
+        self.assertNotIn("重启", self.relay.sent[0]["content"])
         self.assertIn(NEW_CH, self.env_channels())
+
+    def test_an_owner_signed_feishu_member_event_still_requires_approval(self) -> None:
+        """The group sync signs kind 9000 with the channel owner key, but its durable Feishu markers prove that the
+        action came through the bridge rather than a direct Buzz owner invite.  The bridge cannot prove which Feishu
+        member clicked Add, so the agent must ask its owner instead of auto-approving the membership.
+        """
+        self.baseline()
+        self.relay.channel(NEW_CH, "飞书群", {OWNER: "owner"})
+        self.clock.sleep(10)
+        event = self.relay.invite(NEW_CH, OWNER, AGENT)
+        event["tags"] += [
+            ["feishu-member-op", "4c5dffabc37dd7abb53b5e7b5b1acf78ca89696328042c040d0d5f931719cfb0"],
+            ["feishu-member-stream", "7e1d0e3987555fe973bcf54aec1b08197266241f9dc0e1b9c96bc43b8c6ec37a"],
+            ["feishu-member-seq", "1"],
+        ]
+
+        result = self.run_once()
+
+        self.assertEqual(result["status"], "ok", result)
+        self.assertEqual(self.record()["state"], "REQUESTED")
+        self.assertIsNone(self.record()["outcome"])
+        self.assertEqual(self.env_channels(), [HOME_CH])
+        self.assertIn("需要 owner 同意", self.relay.sent[0]["content"])
+        self.assertNotIn("正在开通", self.relay.sent[0]["content"])
 
     def test_an_invite_from_a_plain_member_is_declined_and_the_agent_leaves(self) -> None:
         self.baseline()
@@ -1051,6 +1115,21 @@ class ReviewFindingsTest(JoinTestCase):
         self.assertEqual({path: path.read_text(encoding="utf-8") for path in files}, files)
         self.assertEqual(len(self.relay.sent), sent)
         self.assertEqual(self.record()["state"], "ACTIVE")
+
+    def test_prompt_append_does_not_require_display_cells_or_a_header(self) -> None:
+        """The writer appends between markers; it does not interpret display labels."""
+        row = f"| — | `{NEW_CH}` | owner approved |"
+        for old_row in (f"| | `{HOME_CH}` | |", f"| home | `{HOME_CH}` | approved |"):
+            with self.subTest(old_row=old_row):
+                original = f"{join.PROMPT_BEGIN}\n{old_row}\n{join.PROMPT_END}\n"
+                self.prompt.write_text(original, encoding="utf-8")
+                self.prompt.chmod(0o600)
+                self.assertTrue(join.add_channel_to_prompt(self.prompt, NEW_CH, row))
+                expected = original.replace(join.PROMPT_END, f"{row}\n{join.PROMPT_END}")
+                self.assertEqual(self.prompt.read_text(encoding="utf-8"), expected)
+                self.assertTrue(join.add_channel_to_prompt(self.prompt, NEW_CH, row))
+                self.assertEqual(self.prompt.read_text(encoding="utf-8"), expected)
+                self.assertEqual(stat.S_IMODE(self.prompt.stat().st_mode), 0o600)
 
     def test_the_active_message_is_not_sent_twice_after_a_crash(self) -> None:
         self.approve()

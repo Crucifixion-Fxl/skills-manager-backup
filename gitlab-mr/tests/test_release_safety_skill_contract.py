@@ -2,9 +2,11 @@ import sys
 from pathlib import Path
 
 GITLAB_MR = Path(__file__).parents[1]
-SKILLS = GITLAB_MR.parent
+SKILLS = GITLAB_MR.parents[1]
 REPO_ROOT = SKILLS.parent
 sys.path.insert(0, str(GITLAB_MR / "lib"))
+sys.path.insert(0, str(REPO_ROOT / "scripts"))
+from gitlab_ci_config import merged_text  # noqa: E402
 
 from release_workflow_policy import (
     PolicyError,
@@ -34,11 +36,11 @@ def test_orchestrators_delegate_review_repairs() -> None:
     assert "`main` / `master` / `release/*`" in gitlab_mr
     assert '--target-branch "$TARGET_BRANCH"' in gitlab_mr
     assert "创建或更新后统一验证" in gitlab_mr
-    assert "face-review-repair" in read(SKILLS / "code-submit" / "SKILL.md")
+    assert "face-review-repair" in read(SKILLS / "delivery/code-submit" / "SKILL.md")
 
 
 def test_review_repair_keeps_review_and_repair_responsibilities_separate() -> None:
-    repair = read(SKILLS / "face-review-repair" / "SKILL.md")
+    repair = read(SKILLS / "quality/face-review-repair" / "SKILL.md")
 
     assert "评审意见是假设，不是可以直接照抄的实现方案" in repair
     assert "本 Skill 不用于发起一次新的代码评审" in repair
@@ -216,7 +218,7 @@ def test_post_merge_local_cleanup_is_prompted_explicit_and_deterministic() -> No
 
 
 def test_code_submit_preserves_tests_and_delegates_production_targets() -> None:
-    code_submit = read(SKILLS / "code-submit" / "SKILL.md")
+    code_submit = read(SKILLS / "delivery/code-submit" / "SKILL.md")
 
     assert "新增和修改的测试代码必须正常暂存" in code_submit
     assert "委托 `gitlab-mr`" in code_submit
@@ -230,7 +232,7 @@ def test_code_submit_preserves_tests_and_delegates_production_targets() -> None:
 
 def test_resume_decisions_cannot_bypass_review_repair() -> None:
     background = read(GITLAB_MR / "reference" / "background-drive.md")
-    repair = read(SKILLS / "face-review-repair" / "SKILL.md")
+    repair = read(SKILLS / "quality/face-review-repair" / "SKILL.md")
 
     assert "approve 只代表用户同意处理目标" in background
     assert "`uncertain` 不能直接执行" in background
@@ -243,13 +245,13 @@ def test_resume_decisions_cannot_bypass_review_repair() -> None:
 
 
 def test_release_safety_ci_covers_all_contract_inputs() -> None:
-    ci = read(REPO_ROOT / ".gitlab-ci.yml")
+    ci = merged_text(REPO_ROOT)
     job = ci.split("gitlab-mr:release-safety-unit:", maxsplit=1)[1].split(
         "\n# ",
         maxsplit=1,
     )[0]
 
-    assert "scripts/tests/test_validate_skill.py skills/gitlab-mr/tests" in job
+    assert "scripts/tests/test_validate_skill.py skills/delivery/gitlab-mr/tests" in job
     assert "scripts/validate.py" in job
     assert "scripts/tests/test_validate_skill.py" in job
-    assert "skills/code-submit/SKILL.md" in job
+    assert "skills/delivery/code-submit/SKILL.md" in job

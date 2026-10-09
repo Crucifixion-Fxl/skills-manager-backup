@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "tool": "buzz",
+  "owner": "buzz",
+  "status": "source-reviewed-runtime-pending",
+  "contract": "../../../agent-harness/buzz-agent-setup/references/runtime-setup.md",
+  "notes": "Nostr/NIP-OA背书身份；人由Desktop生成密钥pair后管理员准入，Agent由owner背书；不读取私钥。普通Agent/executor与broker权限门禁继续按owner references，未知live权限不升级。",
+  "credentialHandling": "No login, secret reads, token issuance, or SaaS business calls performed.",
+  "referenceBase": "owner-skill-root for SKILL.md/contractEntrypoints/referenceSources paths; contract field resolves from this JSON directory; upstream repository entrypoints stay repository-relative"
+}

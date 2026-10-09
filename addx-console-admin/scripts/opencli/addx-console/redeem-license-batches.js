@@ -1,0 +1,4 @@
+import {cli,Strategy} from '@jackwener/opencli/registry';
+import {identity,request} from './native.mjs';
+import {redeemLicenseRead} from './redeem-license-batch-records.mjs';
+cli({site:'addx-console',name:'redeem-license-batches',access:'read',description:'Read default bounded redeem license batch product/model/category labels and counts; omit codes/prefix/IDs/URLs/persons',strategy:Strategy.LOCAL,browser:false,args:[{name:'page',type:'int',default:1,help:'Positive default-filter source page'},{name:'limit',type:'int',default:10,help:'Source page size 1 to 10; server per-batch fanout remains unbounded'}],columns:['productName','deviceCategoryLabel','modelNames','generatedCount','availableCount','usedCount','disabledCount','requestedPage','returnedRows','total'],func:args=>redeemLicenseRead(args,{identity,request})});

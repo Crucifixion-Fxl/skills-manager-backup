@@ -861,3 +861,24 @@ class TestExclusiveSiblingsAutoCancellation:
         assert len(exec_actions) == 1
         assert exec_actions[0]["cg_id"] == cg_id
         assert exec_actions[0]["solution_idx"] == 0
+
+
+@pytest.mark.parametrize("title,expected", [
+    ("tencent-100052802231-cn-staging pod unhealthy", "cn-staging"),
+    ("staging-cn application latency", "cn-staging"),
+    ("tencent-100052802231-cn-tech-service pod unhealthy", "cn-tech-service"),
+    ("tencent-100014919455-cn-main pod unhealthy", "cn-prod"),
+    ("prod-cn application latency", "cn-prod"),
+])
+def test_cn_migration_preserves_environment_boundary(title, expected, state_dir, skill_base_dir, mgr):
+    incident = _make_incident("CN-MIGRATION", title=title)
+    with patch("dispatcher_loop.get_pd_token", return_value="fake-token"), \
+         patch("dispatcher_loop.oncall_poll", return_value={
+             "total_triggered": 1, "new_count": 1, "new_incidents": [incident],
+             "last_poll": "2026-09-28T00:00:00Z",
+         }), \
+         patch("dispatcher_loop.get_feishu_webhook", return_value=("https://hook", "secret")), \
+         patch("dispatcher_loop.send_elements_card"):
+        result = run_loop(state_dir, skill_base_dir)
+    assert result["summary"]["cgs_created"] == 1
+    assert mgr.load_state()["active_correlation_groups"]["CG-1"]["environment"] == expected

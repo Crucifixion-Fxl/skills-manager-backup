@@ -23,7 +23,7 @@ class AllowlistTests(unittest.TestCase):
         self.assertIn("personal_audience_sync_capabilities", expected)
         self.assertIn("personal_idea_create", expected)
         self.assertEqual(
-            len({name for name in expected if name.startswith("personal_research_")}), 18
+            len({name for name in expected if name.startswith("personal_research_")}), 21
         )
         self.assertEqual(
             generated["personal_research_journey_responses_csv"].response_mode,
@@ -75,6 +75,33 @@ class AllowlistTests(unittest.TestCase):
             entries["personal_research_journey_form_publish"]["path"],
             "/api/platform/v3/projects/{project_id}/research/{research_id}/journey/form/publish",
         )
+        native_form_path = (
+            "/api/platform/v3/projects/{project_id}/research/{research_id}/journey/form/{form_id}"
+        )
+        self.assertEqual(entries["personal_research_journey_form_definition"]["method"], "GET")
+        self.assertEqual(
+            entries["personal_research_journey_form_definition"]["path"],
+            native_form_path + "/definition",
+        )
+        self.assertEqual(
+            entries["personal_research_journey_form_definition"]["query"],
+            ["idea_id"],
+        )
+        self.assertEqual(entries["personal_research_journey_form_replace"]["method"], "PUT")
+        self.assertEqual(entries["personal_research_journey_form_patch"]["method"], "PATCH")
+        self.assertEqual(
+            entries["personal_research_journey_form_replace"]["path"], native_form_path
+        )
+        self.assertEqual(entries["personal_research_journey_form_patch"]["path"], native_form_path)
+        self.assertEqual(
+            OPERATION_SPECS[Operation("personal_research_journey_form_definition")].required_action,
+            "forms.read",
+        )
+        for name in (
+            "personal_research_journey_form_replace",
+            "personal_research_journey_form_patch",
+        ):
+            self.assertEqual(OPERATION_SPECS[Operation(name)].required_action, "forms.create")
         self.assertEqual(entries["personal_voc_execution_start"]["method"], "POST")
         self.assertEqual(entries["personal_voc_execution_get"]["method"], "GET")
         self.assertIn("{platform_run_id}", entries["personal_voc_execution_get"]["path"])

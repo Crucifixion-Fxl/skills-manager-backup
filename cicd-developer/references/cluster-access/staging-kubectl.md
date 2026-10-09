@@ -71,7 +71,6 @@ addx-cluster-login <cluster>
 ```bash
 addx-cluster-login us-staging
 addx-cluster-login eu-staging
-addx-cluster-login cn-staging
 ```
 
 当前 wrapper 显式使用 `--skip-open-browser`：复制终端打印的登录 URL 到浏览器，
@@ -90,7 +89,6 @@ cluster 内所有 `staging-*` namespace。
 ```bash
 kubectl get pods -n staging-us
 kubectl get pods -n staging-eu
-kubectl get pods -n staging-cn
 ```
 
 然后在目标 `staging-*` namespace 内验证常用只读 / debug 流程：
@@ -156,4 +154,11 @@ kubectl -n staging-<app-or-team> get rollouts
 
 本参考按 [addx-cluster-login README 与脚本](https://gitlab.addx.ai/DEV/addx-cluster-login/-/tree/f62f608f998dfd88dc17de35ea26d92da1f7b4c7)
 校对；这里只证明仓库接入合同，不代表所有 endpoint 当前可用。CN wrapper 仍指向
-AWS `cn-eks-staging`，不要把同名 region 或入口域名当作腾讯云 staging 的访问授权。
+已退役 AWS `cn-eks-staging`（2026-10-05 复核：`addx-cluster-login` main 的
+`clusters/cn-staging.yaml` 仍是 `aws-801447536674`）。当前 CN staging 为腾讯云
+`100052802231/cls-riukakjb`，本参考将 CN wrapper 标为 pending-verification；核实新
+wrapper/issuer/RBAC 前不能运行旧 cn-staging alias 或复用 AWS kubeconfig。
+在新 wrapper 就绪前，平台人员用已授权腾讯云身份获取 kubeconfig：
+`tccli tke DescribeClusterKubeconfig --ClusterId cls-riukakjb --IsExtranet true --region ap-beijing`
+（先 `tccli sts GetCallerIdentity` 确认 `AccountId=100052802231`），不要使用旧腾讯
+`cls-i860hdh9` 或 AWS context。见 `../cn-tencent-migration.md`。

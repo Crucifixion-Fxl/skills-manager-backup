@@ -144,7 +144,7 @@ spec:
 > **StorageClass 说明：**
 > - EKS 集群：`gp3`（默认）
 > - GKE 集群：`standard-rwo`
-> - TKE 集群：`cbs`
+> - TKE 集群：读取精确目标 StorageClass/values；不能默认 `cbs` 或复制其他集群的 `cbs-topo`
 
 ## base/service.yaml
 
@@ -223,13 +223,15 @@ spec:
 
 ### TKE 集群（腾讯云 CLB）
 
-```yaml
-metadata:
-  annotations:
-    kubernetes.io/ingress.class: qcloud
-  labels:
-    ingress.addx.io/sg: office
-```
+当前 CN 全部是 TKE。上面的 AWS ALB YAML 不能只改 ingress.class 或补 TLS 后使用。
+先读取精确目标 `argocd-apps` Application source/valueFiles 与 `k8s` 的当前 CLB contract，
+核验 qcloud controller、该 controller 支持的证书来源（如 staging 已验证的 Secret `data.qcloud_cert_id`，
+或目标实际使用的 `ingress.cloud.tencent.com/certificate` annotation）、TLS、direct-access 支持和实际
+附着安全组。`ingress.addx.io/sg: office` 只有目标 Kyverno 注入与 CLB 实际 SG 均验证后才有意义。
+内部工具必须有 office/VPN 限制及应用认证，公开 C 端服务必须有 WAF。缺少受审的目标 recipe
+或任一证据时 STOP + Ops Todo；不要复制旧账号的 CLB/certificate/SG ID。
+
+当前路由及 Vault 差异见 `cicd-developer/references/cn-tencent-migration.md`。
 
 ## base/configmap.yaml
 
@@ -324,16 +326,18 @@ patches:
 | eu-eks-tech-service | `harbor-01084-eu-tech.addx.live` |
 | eu-eks-prod | `harbor-74031-eu-prod.addx.live` |
 | eu-staging | `harbor-39070-eu-staging.addx.live` |
-| cn-eks-tech-service | `harbor-58989-cn-tech.addx.live` |
-| cn-prod | `harbor-74192-cn-prod.addx.live` |
-| cn-eks-dev | `harbor-80144-cn-dev.addx.live` |
-| cn-staging | `harbor-80144-cn-staging.addx.live` |
 | sg-devops | `harbor-12571-sg-devops.addx.live` |
 | us-prod-data | `harbor-76949-us-data.addx.live` |
 | eu-prod-data | `harbor-76949-eu-data.addx.live` |
-| cn-k8s (TKE) | `harbor-cn.addx.live` |
+| cn-k8s (TKE prod，100014919455) | `harbor-cn.addx.live` |
+| cn-tke-staging (100052802231) | `harbor-02231-cn-staging.addx.live`（部署内网入口） |
+| cn-tke-tech-service (100052802231，目标待切换，业务准入 blocked) | `harbor-02231-cn-tech-service.addx.live` |
 | us-tech-service-gke | `harbor-a4xt-us-tech.addx.live` |
 | us-prod-gke | `harbor-a4xp-us-prod.addx.live` |
+
+CN staging 的 Pod 镜像示例为 `harbor-02231-cn-staging.addx.live/base/<name>:<tag>`；SG 同步使用同一 registry 的 `harbor-02231-cn-staging-pub.addx.live`。采用内网域名前，确认平台同步的 `harbor-registry-secret` 在 Docker `auths` 中有精确内网 hostname；缺失则先由平台补齐并验证，不自动切换现存 image refs 或 Secret。网络、token realm 与部署证据见 [Harbor 双入口合同](../../harbor/SKILL.md)。
+
+CN tech-service 表中为待切换的私网目标；受限公网 `harbor-02231-cn-tech-service-pub.addx.live` 用于外部同步。平台组件目前使用 `harbor-registry-pull`，不能照抄 staging 的 Secret 名；须核验实际 Secret 分发及新域名 auth key。准入仍为 blocked，不由模板地址更新自动开放部署。
 
 ## overlays/staging-us/external-secret.yaml
 
@@ -436,11 +440,9 @@ spec:
 | `aws-769494896000-eu-data/` | eu-prod-data |
 | `aws-390709477306-us-staging/` | us-staging |
 | `aws-390709477306-eu-staging/` | eu-staging |
-| `aws-589899215075-cn-tech-service/` | cn-eks-tech-service |
-| `aws-741924744516-cn-prod/` | cn-prod |
-| `aws-801447536674-cn-dev/` | cn-eks-dev |
-| `aws-801447536674-cn-staging/` | cn-staging |
-| `tencent-100014919455-cn-main/` | cn-k8s (TKE) |
+| `tencent-100014919455-cn-main/` | cn-k8s (TKE prod) |
+| `tencent-100052802231-cn-staging/` | cn-tke-staging |
+| `tencent-100052802231-cn-tech-service/` | cn-tke-tech-service（业务准入 blocked） |
 | `gcp-a4xcloud-tech-service-us-us-tech-service/` | us-tech-service-gke |
 | `gcp-a4xcloud-p-us-us-prod/` | us-prod-gke |
 

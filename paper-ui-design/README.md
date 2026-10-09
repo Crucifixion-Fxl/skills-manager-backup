@@ -78,7 +78,7 @@ AI 依赖命名来识别组件，**不规范的命名会导致扫描结果不准
 
 ## 设计系统 Token
 
-Token 文件位于本 Skill 目录下：`~/.claude/skills/paper-ui-design/ds_token.md`
+Token 文件位于本 Skill 目录下：`~/.claude/skills/product/paper-ui-design/ds_token.md`
 
 **可直接编辑此文件**来修改色板、字体、间距等参数，修改后立即生效，无需改动项目代码。
 
@@ -130,7 +130,7 @@ Paper MCP 工具为 deferred tools，**首次调用前须通过 ToolSearch 加�
 ## 文件结构
 
 ```
-~/.claude/skills/paper-ui-design/
+~/.claude/skills/product/paper-ui-design/
 ├── README.md       ← 本文件：环境配置、规范说明
 ├── SKILL.md        ← AI 执行逻辑（Workflow、Rules、Examples）
 ├── ds_token.md     ← 设计系统 Token（用户可编辑）

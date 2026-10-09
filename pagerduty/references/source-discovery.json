@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "tool": "pagerduty",
+  "owner": "pagerduty",
+  "repo": "https://gitlab.addx.ai/engineering/skills",
+  "researchCommit": "bac8d3ee819650381b8a613a6e8526c153d7b244",
+  "routeEntries": [
+    "skills/sre-agent/SKILL.md",
+    "skills/sre-agent/scripts/pagerduty_api.py",
+    "skills/sre-agent/references/investigation-prompt-template.md"
+  ],
+  "verification": "source-verified",
+  "deploymentConsistency": "pending",
+  "officialReferences": [
+    "https://docs.pagerduty.com/developer/authentication",
+    "https://docs.pagerduty.com/account-admin/api-access-keys",
+    "https://docs.pagerduty.com/developer/rest-api-overview",
+    "https://docs.pagerduty.com/developer/mcp-tooling-remote-server",
+    "https://github.com/PagerDuty/pagerduty-mcp-server"
+  ],
+  "needsResearch": [
+    "Runtime identity, resource permissions and credential lifecycle",
+    "Actual service/installed MCP version, account region and source/runtime consistency"
+  ],
+  "apiDiscovery": {
+    "method": "优先官方hosted remote MCP https://mcp.pagerduty.com/mcp（API token或OAuth）及REST API docs；官方local MCP仓库现已deprecated，不能当首选新安装。实际tools/list和当前账户scope决定可用能力。现有incident helper保持业务consumer；小范围读取精确incident/account关联证据不证明写权限。acknowledge/resolve、通知/派单、service/schedule/escalation修改与事件发送需明确授权和SRE门禁；REST与Events API分开。",
+    "coverage": "Source and public entrypoints located; runtime pending"
+  }
+}

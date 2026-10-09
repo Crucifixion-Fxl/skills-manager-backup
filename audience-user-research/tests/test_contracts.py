@@ -43,6 +43,9 @@ class ContractTests(unittest.TestCase):
             "personal_research_prepare_selection",
             "personal_research_journey_form",
             "personal_research_journey_form_publish",
+            "personal_research_journey_form_definition",
+            "personal_research_journey_form_replace",
+            "personal_research_journey_form_patch",
             "personal_research_journey_operation",
             "personal_research_journey_status",
             "personal_research_journey_links",
@@ -252,6 +255,93 @@ class ContractTests(unittest.TestCase):
         self.assertIn("not a bare URL", platform)
         self.assertIn("without selection, materialization, Brevo or Campaign Draft", prompt)
 
+    def test_typeform_preview_guidance_uses_only_api_returned_published_sandbox(self) -> None:
+        skill = (ROOT / "SKILL.md").read_text(encoding="utf-8")
+        journey = (ROOT / "references/typeform-research.md").read_text(encoding="utf-8")
+        platform = (ROOT / "references/platform-api.md").read_text(encoding="utf-8")
+        output = (ROOT / "references/result-output.md").read_text(encoding="utf-8")
+        for content in (skill, journey, platform, output):
+            self.assertIn("form_edit_url", content)
+            self.assertIn("form_preview_url", content)
+            self.assertIn("form_url", content)
+        self.assertIn("仅在公开状态得到 API 证实后报告 `form_public=true`", skill)
+        self.assertIn("附着已有表单不会改变其公开状态", skill)
+        self.assertIn("Attaching an existing form does not change its public state", journey)
+        self.assertIn("缺失则说明未提供，绝不自行拼接", skill)
+        self.assertIn("?__dangerous-disable-submissions", journey)
+        self.assertIn("not access control", journey)
+        self.assertIn("never substitute it for `form_url`", journey)
+        self.assertIn("only available after publication", output)
+        document = json.loads((ROOT / "contracts/project-control-plane.openapi.json").read_text())
+        schemas = document["components"]["schemas"]
+        self.assertIn("form_edit_url", schemas["ResearchBinding"]["properties"])
+        self.assertIn("form_preview_url", schemas["ResearchBinding"]["properties"])
+        self.assertIn("form_preview_url", schemas["FormPublication"]["properties"])
+
+    def test_post_publish_update_requires_exact_target_diff_and_fresh_confirmation(self) -> None:
+        skill = (ROOT / "SKILL.md").read_text(encoding="utf-8")
+        journey = (ROOT / "references/typeform-research.md").read_text(encoding="utf-8")
+        platform = (ROOT / "references/platform-api.md").read_text(encoding="utf-8")
+        output = (ROOT / "references/result-output.md").read_text(encoding="utf-8")
+        recovery = (ROOT / "references/errors-and-recovery.md").read_text(encoding="utf-8")
+        for content in (skill, journey, platform, output):
+            self.assertIn("Idea", content)
+            self.assertIn("Research", content)
+            self.assertIn("form_id", content)
+            self.assertIn("form_edit_url", content)
+            self.assertIn("form_preview_url", content)
+            self.assertIn("PUT", content)
+            self.assertIn("PATCH", content)
+        self.assertIn("不直调 Typeform", skill)
+        self.assertIn("这份问卷和这次差异", skill)
+        self.assertIn("已有答卷数", skill)
+        self.assertIn("**所有**受影响的 Idea/Research", skill)
+        self.assertIn("affected-scope digest", journey)
+        self.assertIn("every affected same-Project Idea/Research", platform)
+        self.assertIn("shared across Projects", output)
+        self.assertIn("before asking", journey)
+        self.assertIn("does not patch an individual question", journey)
+        self.assertIn("affected list and diff and seek a new", output)
+        self.assertIn("Never silently replay", recovery)
+        self.assertIn("do not send another PUT/PATCH", recovery)
+        document = json.loads((ROOT / "contracts/project-control-plane.openapi.json").read_text())
+        schemas = document["components"]["schemas"]
+        read = schemas["NativeFormRevision"]["properties"]
+        self.assertNotIn("form_preview_url", read)
+        self.assertIn("form_preview_url", schemas["ResearchBinding"]["properties"])
+        self.assertIn("form_preview_url", schemas["FormPublication"]["properties"])
+        self.assertIn("personal_research_journey_status", platform)
+        self.assertIn(
+            "return `NativeFormRevision`, which does not include `form_preview_url`",
+            platform,
+        )
+        self.assertIn("journey status", journey)
+        self.assertIn("journey status", output)
+        for field in (
+            "affected_research",
+            "affected_scope_digest",
+            "provider_revision",
+            "response_count",
+            "form_public",
+            "body",
+            "put_body",
+        ):
+            self.assertIn(field, read)
+        for schema_name, payload_field in (
+            ("NativeFormReplace", "body"),
+            ("NativeFormPatch", "operations"),
+        ):
+            required = schemas[schema_name]["required"]
+            self.assertTrue(
+                {
+                    "idea_id",
+                    "expected_provider_revision",
+                    "expected_affected_scope_digest",
+                    "acknowledge_published_risk",
+                    payload_field,
+                }.issubset(required)
+            )
+
     def test_idea_summary_includes_audience_coverage_and_idea_report(self) -> None:
         skill = (ROOT / "SKILL.md").read_text(encoding="utf-8")
         platform = (ROOT / "references/platform-api.md").read_text(encoding="utf-8")
@@ -296,6 +386,28 @@ class ContractTests(unittest.TestCase):
             "the model never supplies or modifies the origin",
             host,
         )
+
+    def test_complete_clone_transport_limits_are_documented(self) -> None:
+        host = (ROOT / "references/host-configuration.md").read_text(encoding="utf-8")
+        for marker in (
+            "1 MiB",
+            "4 MiB",
+            "64 KiB",
+            "`request_too_large`",
+            "`response_too_large`",
+            "`invalid_env_file`",
+        ):
+            self.assertIn(marker, host)
+
+    def test_host_configuration_uses_packaged_cli_path(self) -> None:
+        host = (ROOT / "references/host-configuration.md").read_text(encoding="utf-8")
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        for script in ("preflight.py", "api.py"):
+            packaged_path = f"/absolute/path/to/skills/product/audience-user-research/scripts/{script}"
+            self.assertIn(packaged_path, host)
+            self.assertIn(packaged_path, readme)
+            self.assertTrue((ROOT / "scripts" / script).is_file())
+        self.assertNotIn("/absolute/path/to/user-research/scripts/", host)
 
     def test_semantics_define_token_only_discovery_and_safe_stops(self) -> None:
         skill = (ROOT / "SKILL.md").read_text(encoding="utf-8").lower()
@@ -460,6 +572,7 @@ class ContractTests(unittest.TestCase):
             "unmatched_count": 0,
             "source_fingerprint": "b" * 64,
             "source_revision_id": "isum_" + "b" * 26,
+            "recovery_complete": True,
             "idea_detail_url": idea_url,
             "members": [
                 {
@@ -561,23 +674,11 @@ class ContractTests(unittest.TestCase):
         owner = json.loads((ROOT / "contracts/semantic-owner.json").read_text())
         self.assertEqual(source["semantic_owner_file"], owner)
         self.assertEqual(owner["repository"], "lli/user-research-skill")
-        self.assertEqual(owner["revision"], "9e69106486b81fadf834e38cc2f338678e3a0694")
-        self.assertEqual(
-            owner["pending_overlay"]["revision"],
-            "14dab06b962a792332da11a839e58ee209f60986",
-        )
-        self.assertEqual(owner["pending_overlay"]["merge_request"], "lli/user-research-skill!144")
-        self.assertEqual(owner["pending_overlay"]["status"], "open_unmerged")
-        publication = (
-            ROOT.parents[1] / "docs/04-user-stories/audience-user-research-publication.md"
-        ).read_text(encoding="utf-8")
-        self.assertIn(owner["revision"], publication)
-        self.assertIn(owner["pending_overlay"]["revision"], publication)
         self.assertNotIn("contracts/source.json", source["files"])
         self.assertFalse(any(".egg-info/" in relative for relative in source["files"]))
         self.assertIn("references/datahub-schema-search.md", source["files"])
         self.assertNotIn(".gitlab-ci.yml", source["files"])
-        self.assertNotIn("skills/datahub-schema-search/SKILL.md", source["files"])
+        self.assertNotIn("skills/data/datahub-schema-search/SKILL.md", source["files"])
         for relative, expected in source["files"].items():
             self.assertEqual(hashlib.sha256((ROOT / relative).read_bytes()).hexdigest(), expected)
 
@@ -615,7 +716,7 @@ class ContractTests(unittest.TestCase):
 
     def test_eval_contract_covers_full_optional_recovery_and_results(self) -> None:
         evaluations = json.loads((ROOT / "evals/evals.json").read_text())
-        self.assertEqual(evaluations["contract"]["case_count"], 19)
+        self.assertEqual(evaluations["contract"]["case_count"], 20)
         self.assertTrue(evaluations["contract"]["hide_tool_tokens"])
         slugs = {item["slug"] for item in evaluations["evals"]}
         self.assertEqual(
@@ -640,6 +741,7 @@ class ContractTests(unittest.TestCase):
                 "uj-resume-history-results-matrix",
                 "uj-recoverable-exceptions",
                 "project-shared-research-reuse",
+                "published-shared-form-update-confirmation",
             },
         )
         full = next(item for item in evaluations["evals"] if item["slug"].startswith("coldstart-"))

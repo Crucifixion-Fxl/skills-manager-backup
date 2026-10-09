@@ -633,8 +633,10 @@ const wait = async (ms) => {
 };
 const page = {
   url: () => 'https://open.feishu.cn/page/cli',
+  locator: () => ({ count: async () => 1 }),
   goto: async (url) => { if (process.env.STUB_CALLS) fs.appendFileSync(process.env.STUB_CALLS, url + '\n'); },
   $: async () => null,
+  locator: () => ({ count: async () => 1 }),
   waitForTimeout: wait,
   evaluate: async () => 'page text',
   screenshot: async ({ path }) => { if (process.env.STUB_SHOT_ERR) throw new Error('screenshot boom'); fs.writeFileSync(path, 'png'); },

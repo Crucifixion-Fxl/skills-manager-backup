@@ -136,11 +136,11 @@ class RuntimePluginInstallTest(unittest.TestCase):
     def codex_fixture(self) -> tuple[dict[str, object], Path, Path, str]:
         cache_root = self.root / "codex-cache"
         install = cache_root / "addx" / "addx" / "1.0.0"
-        skill = install / "skills" / "buzz-agent-setup" / "SKILL.md"
+        skill = install / "skills" / "agent-harness" / "buzz-agent-setup" / "SKILL.md"
         skill.parent.mkdir(parents=True)
         skill.write_text("---\nname: buzz-agent-setup\n---\n", encoding="utf-8")
         source = self.root / "marketplace"
-        source_skill = source / "skills" / "buzz-agent-setup" / "SKILL.md"
+        source_skill = source / "skills" / "agent-harness" / "buzz-agent-setup" / "SKILL.md"
         source_skill.parent.mkdir(parents=True)
         source_skill.write_bytes(skill.read_bytes())
         revision = "b" * 40
@@ -172,8 +172,8 @@ class RuntimePluginInstallTest(unittest.TestCase):
             if command == ["rev-parse", "HEAD"]:
                 stdout = f"{revision}\n"
             elif command == ["status", "--porcelain", "--untracked-files=no"]:
-                source_skill = source / "skills/buzz-agent-setup/SKILL.md"
-                stdout = "" if source_skill.read_bytes() == clean_skill else " M skills/buzz-agent-setup/SKILL.md\n"
+                source_skill = source / "skills/agent-harness/buzz-agent-setup/SKILL.md"
+                stdout = "" if source_skill.read_bytes() == clean_skill else " M skills/agent-harness/buzz-agent-setup/SKILL.md\n"
             elif command == ["branch", "--show-current"]:
                 stdout = "test/runtime-fixture\n"
             else:
@@ -201,7 +201,7 @@ class RuntimePluginInstallTest(unittest.TestCase):
     def test_rejects_codex_cache_that_differs_from_marketplace_snapshot(self) -> None:
         module = load_module()
         listing, cache_root, source, revision = self.codex_fixture()
-        skill = cache_root / "addx/addx/1.0.0/skills/buzz-agent-setup/SKILL.md"
+        skill = cache_root / "addx/addx/1.0.0/skills/agent-harness/buzz-agent-setup/SKILL.md"
         skill.write_text("---\nname: buzz-agent-setup\n---\ndrift\n", encoding="utf-8")
         with mock.patch.object(
             module.subprocess,
@@ -216,7 +216,7 @@ class RuntimePluginInstallTest(unittest.TestCase):
     def test_rejects_dirty_codex_marketplace_snapshot(self) -> None:
         module = load_module()
         listing, cache_root, source, _ = self.codex_fixture()
-        source_skill = source / "skills/buzz-agent-setup/SKILL.md"
+        source_skill = source / "skills/agent-harness/buzz-agent-setup/SKILL.md"
         source_skill.write_text(source_skill.read_text() + "dirty\n", encoding="utf-8")
         with mock.patch.object(
             module.subprocess,
@@ -240,6 +240,117 @@ class RuntimePluginInstallTest(unittest.TestCase):
                 module.resolve_codex_install(
                     listing, cache_root, "addx@addx", ["buzz-agent-setup"]
                 )
+
+    def test_registered_classified_and_mixed_installs(self) -> None:
+        module = load_module()
+        skills = self.install / "skills"
+        (skills / "agent-harness").mkdir()
+        (skills / "buzz-agent-setup").rename(skills / "agent-harness/buzz-agent-setup")
+        receipt = module.resolve_install(
+            self.registry, "addx@addx-engineering", ["buzz-agent-setup", "gitlab-issue-sop"]
+        )
+        self.assertEqual(receipt["required_skills"], ["buzz-agent-setup", "gitlab-issue-sop"])
+        (skills / "collaboration").mkdir()
+        (skills / "gitlab-issue-sop").rename(skills / "collaboration/gitlab-issue-sop")
+        module.resolve_install(
+            self.registry, "addx@addx-engineering", ["buzz-agent-setup", "gitlab-issue-sop"]
+        )
+
+    def test_rejects_duplicate_names_across_flat_and_category(self) -> None:
+        module = load_module()
+        duplicate = self.install / "skills/agent-harness/buzz-agent-setup/SKILL.md"
+        duplicate.parent.mkdir(parents=True)
+        duplicate.write_text("---\nname: buzz-agent-setup\n---\n")
+        with self.assertRaisesRegex(ValueError, "ambiguous"):
+            module.resolve_install(self.registry, "addx@addx-engineering", ["buzz-agent-setup"])
+        (self.install / "skills/other").mkdir()
+        (self.install / "skills/buzz-agent-setup").rename(
+            self.install / "skills/other/buzz-agent-setup"
+        )
+        with self.assertRaisesRegex(ValueError, "ambiguous"):
+            module.resolve_install(self.registry, "addx@addx-engineering", ["buzz-agent-setup"])
+
+    def test_rejects_symlink_at_every_skill_ancestor_or_file(self) -> None:
+        module = load_module()
+        for component in ("skills", "category", "skill", "file"):
+            with self.subTest(component=component):
+                install = self.root / ("links-" + component)
+                skill = install / "skills/category/buzz-agent-setup/SKILL.md"
+                skill.parent.mkdir(parents=True)
+                skill.write_text("---\nname: buzz-agent-setup\n---\n")
+                node = {"skills":install/"skills", "category":skill.parent.parent,
+                        "skill":skill.parent, "file":skill}[component]
+                outside = self.root / ("outside-" + component)
+                node.rename(outside)
+                node.symlink_to(outside, target_is_directory=component != "file")
+                with self.assertRaisesRegex(ValueError, "symlink"):
+                    module._validate_install_root(install, ["buzz-agent-setup"])
+
+    def test_wrong_or_ambiguous_frontmatter_never_supplies_identity(self) -> None:
+        module = load_module()
+        skill = self.install / "skills/buzz-agent-setup/SKILL.md"
+        for content in ("---\nname: wrong\n---\n", "---\nname: buzz-agent-setup\n",
+                        "---\nname: buzz-agent-setup\nname: wrong\n---\n"):
+            with self.subTest(content=content):
+                skill.write_text(content)
+                with self.assertRaisesRegex(ValueError, "frontmatter"):
+                    module.resolve_install(self.registry, "addx@addx-engineering", ["buzz-agent-setup"])
+
+    def test_skill_name_cannot_escape_and_deeper_examples_are_not_scanned(self) -> None:
+        module = load_module()
+        for name in ("../buzz-agent-setup", "category/buzz-agent-setup", "/tmp", "a.b"):
+            with self.subTest(name=name), self.assertRaisesRegex(ValueError, "invalid Skill"):
+                module._validate_install_root(self.install, [name])
+        nested = self.install / "skills/category/examples/hidden/SKILL.md"
+        nested.parent.mkdir(parents=True)
+        nested.write_text("---\nname: hidden\n---\n")
+        with self.assertRaisesRegex(ValueError, "missing required Skill"):
+            module._validate_install_root(self.install, ["hidden"])
+        # A real flat skill's fixtures/resources do not become plugin entries.
+        nested = self.install / "skills/buzz-agent-setup/hidden/SKILL.md"
+        nested.parent.mkdir(parents=True)
+        nested.write_text("---\nname: hidden\n---\n")
+        with self.assertRaisesRegex(ValueError, "missing required Skill"):
+            module._validate_install_root(self.install, ["hidden"])
+
+    def test_codex_legacy_flat_cache_can_match_classified_git_source(self) -> None:
+        module = load_module()
+        listing, cache_root, source, revision = self.codex_fixture()
+        skills = cache_root / "addx/addx/1.0.0/skills"
+        (skills / "agent-harness/buzz-agent-setup").rename(skills / "buzz-agent-setup")
+        with mock.patch.object(module.subprocess, "run", side_effect=self.fake_git_run(source, revision)):
+            receipt = module.resolve_codex_install(listing, cache_root, "addx@addx", ["buzz-agent-setup"])
+        self.assertEqual(receipt["git_commit_sha"], revision)
+
+    def test_classified_cache_with_real_git_snapshot_retains_git_and_digest_gates(self) -> None:
+        module = load_module()
+        listing, cache_root, source, _ = self.codex_fixture()
+        for command in (["init", "-q"], ["add", "skills"],
+                        ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                         "commit", "-q", "-m", "fixture"]):
+            subprocess.run(["git", "-C", str(source), *command], check=True, capture_output=True)
+        receipt = module.resolve_codex_install(listing, cache_root, "addx@addx", ["buzz-agent-setup"])
+        expected = subprocess.check_output(["git", "-C", str(source), "rev-parse", "HEAD"], text=True).strip()
+        self.assertEqual(receipt["git_commit_sha"], expected)
+        installed = cache_root / "addx/addx/1.0.0/skills/agent-harness/buzz-agent-setup/SKILL.md"
+        original = installed.read_bytes()
+        installed.write_bytes(original + b"drift\n")
+        with self.assertRaisesRegex(ValueError, "differs from marketplace"):
+            module.resolve_codex_install(listing, cache_root, "addx@addx", ["buzz-agent-setup"])
+        installed.write_bytes(original)
+        (source / "skills/agent-harness/buzz-agent-setup/SKILL.md").write_bytes(original + b"dirty\n")
+        with self.assertRaisesRegex(ValueError, "tracked changes"):
+            module.resolve_codex_install(listing, cache_root, "addx@addx", ["buzz-agent-setup"])
+
+    def test_classified_cache_install_metadata_cannot_override_git_revision(self) -> None:
+        module = load_module()
+        listing, cache_root, source, revision = self.codex_fixture()
+        (cache_root / "addx/addx/1.0.0/.codex-marketplace-install.json").write_text(
+            json.dumps({"source_type":"git", "revision":"c"*40})
+        )
+        with mock.patch.object(module.subprocess, "run", side_effect=self.fake_git_run(source, revision)):
+            with self.assertRaisesRegex(ValueError, "disagrees with marketplace"):
+                module.resolve_codex_install(listing, cache_root, "addx@addx", ["buzz-agent-setup"])
 
 
 if __name__ == "__main__":

@@ -6,6 +6,8 @@
 
 ## Issue 管理
 
+AI 调用以下写 API 时，必须同时遵循 [Agent 环境与中断恢复契约](agent-session-context.md)：create 在 description 放创建快照，update/close 在追加 note 留当前会话回执，并 GET 核对结果。所有批量脚本也遵循同一规则。
+
 | 用途 | Method | Path | 关键 body 字段 |
 |------|--------|------|----------------|
 | 列 issues | GET | `/projects/:id/issues` | query: `labels`, `state`, `per_page`, `page` |

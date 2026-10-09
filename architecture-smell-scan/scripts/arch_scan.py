@@ -13,7 +13,7 @@
 
 只依赖 Python 标准库（有 PyYAML 时用它读忽略名单）；重复代码检测经 npx 调 jscpd，可选。
 被扫仓的一切内容都当作不可信输入：不在被扫仓目录里执行任何外部程序的配置加载。
-规则正本：public/dev-standards/architecture/architecture-smells.html
+规则正本：docs/quality/standards/reference-pages/architecture/architecture-smells.html
 """
 from __future__ import annotations
 

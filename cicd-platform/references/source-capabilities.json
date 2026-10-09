@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "checkedOn": "2026-10-06",
+  "verification": "public initial frontend bundle source only; no authentication or business calls",
+  "runtimeVerification": "pending",
+  "scope": "initial bundle authentication hints; lazy routes and full UI functionality not covered",
+  "sourceFiles": {
+    "cicd-0.js": "edc278fdff92feee897a0220b496184f6e3690171cb54baa81adc3b41e7dc751",
+    "cicd-1.js": "2b7cb4a12c5cd202d729c870ff5aa4c675ab0d81f134ab40593bad128fa5bcd2"
+  },
+  "uiOrigin": "https://cicd.addx.live",
+  "apiBasePath": "/api",
+  "authentication": {
+    "header": "Authorization",
+    "scheme": "Bearer",
+    "storage": "structured cache; exact extraction remains unverified"
+  },
+  "identityCandidate": {
+    "method": "GET",
+    "path": "/api/user/info",
+    "subjectCandidate": null
+  },
+  "requiredAdapterChanges": [
+    "stable subject from owner or live contract",
+    "cache extraction and retention verification",
+    "role and workflow gates"
+  ]
+}

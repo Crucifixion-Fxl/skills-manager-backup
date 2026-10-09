@@ -1,0 +1,16 @@
+schemaVersion: 1
+kind: baseline
+host: demo
+application: demo_app
+applicationId: 1
+release:
+  id: 1
+  version: 1-0-0
+  status: 3
+events:
+  - type: PAGE
+    trackerType: BASE
+    spm: [home]
+    point: home
+    name: Home
+    parameters: []

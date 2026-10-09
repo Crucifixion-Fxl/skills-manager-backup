@@ -9,6 +9,8 @@ AddX SG Nexus Repository Manager 使用指南。只记录公司内部地址、�
 
 ## Description
 
+首次接入/变更扫描与日常认证入口见 [SaaS 接入](references/saas-access.md)；已有平台业务契约与授权门禁仍在本 Skill 维护。
+
 | 项目 | 信息 |
 |------|------|
 | 服务地址 | `https://nexus-sg.addx.live/` |
@@ -161,3 +163,9 @@ curl -fL \
 - `team-example-raw` 是团队自己的 hosted repository。
 - repository 使用的 blob store 是 `s3-*`。
 - CI 使用团队账号，凭证来自受控变量或密钥系统。
+
+远端读取模式分别记录：经 SSH 租约调用本机 companion，只证明远端租约可用；不能当作开发机直接访问 Nexus 的原生 API。需要直接原生闭环时，本机和开发机分别访问目标 REST API，比对明确字段并对照网页。匿名仓库列表读取不等于个人身份、私有仓库或上传权限；不要下载 proxy 制品制造读取样本，因为下载可能填充缓存。
+
+网页的 Continue without login 匿名模式与账号密码登录并存，按实际实例分别核验权限。匿名模式只证明公开可见仓库/组件范围，不能证明个人身份或私有仓库授权；缺少本人凭据不阻断已允许的公开读取，将认证范围单独记为未覆盖。网页输入账号密码不代替原生 Basic/CI 凭据，也不单凭输入框推断已部署 LDAP realm；保留平台原生认证契约，不猜上传、删除或管理权限。
+
+组件元数据可用官方 GET /service/rest/v1/components?repository=<已确认仓库>，并用实际返回组件 ID 读取 /components/{id}，只投影仓库、格式、分组、名称、版本和资产数，不访问 downloadUrl 或文件内容。单页有 continuationToken 时不把该页数量当仓库总数；游标不写日志。网页搜索须加仓库范围，关键词精确短语仍可能跨多个版本且展示有上限，选择与原生结果相同的实际版本再对照详情。仓库列表、单页组件、单个详情分别记录范围；anonymous 元数据不证明个人身份或私有授权。当前 UI 可能并存旧 ExtJS 隐藏 DOM 与新界面，优先目标可见可访问树，避免旧隐藏表格冒充当前结果；只提取所需元数据，不保存完整列表快照或下载链接。

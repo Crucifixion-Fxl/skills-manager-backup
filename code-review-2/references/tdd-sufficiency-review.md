@@ -1,6 +1,6 @@
 # TDD 充分性 review 方法
 
-与 [`testing-coverage-review.md`](./testing-coverage-review.md) 互补。前者检查"L1-L4 分层覆盖是否齐全 / 文档-代码-CI 对账是否闭环"，本文档检查"**团队是否真的在实践 TDD**（test-first vs test-after）"。
+与 [`testing-coverage-review.md`](testing-coverage-review.md) 互补。前者检查"L1-L4 分层覆盖是否齐全 / 文档-代码-CI 对账是否闭环"，本文档检查"**团队是否真的在实践 TDD**（test-first vs test-after）"。
 
 本文是团队 / 项目级历史审计，不定义单个 MR 的 TDD Level。每个 MR 的等级、证据优先级和
 非门禁语义，以
@@ -405,7 +405,7 @@ TDD 充分性审查一次性做不完，建议用 `/loop 20m` 节奏分轮推进
 
 建议专门建一个 sub-issue：
 - 标题：`[review] TDD 充分性 — per-author 报告 + 集体欠债`
-- labels：按 [GitLab Label 治理规范](../../../docs/standards/gitlab-label-governance.md) 使用 `type::maintenance`、`priority::p1`、`status::ready`、`area/testing`
+- labels：按 [GitLab Label 治理规范](../../../../docs/collaboration/standards/gitlab-label-governance.md) 使用 `type::maintenance`、`priority::p1`、`status::ready`、`area/testing`
 - 描述内容：
   - 团队整体数据表（近 500 commit NoTest%）
   - 每人 ✅ 好习惯 / ❌ 坏习惯 / 🎯 优化建议

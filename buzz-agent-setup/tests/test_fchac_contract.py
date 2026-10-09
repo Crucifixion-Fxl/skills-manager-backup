@@ -8,6 +8,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 import re
+import sys
 import unittest
 from urllib.parse import parse_qsl, urlsplit
 
@@ -25,11 +26,13 @@ SYNC_REFERENCE = SKILL_DIR / "references" / "gitlab-buzz-sync.md"
 SYNC_EXAMPLE = SKILL_DIR / "references" / "scripts" / "gitlab-buzz-sync.example.json"
 APPROVAL = SKILL_DIR / "references" / "approval-authz.md"
 CREDENTIALS = SKILL_DIR / "references" / "agent-credentials.md"
-REPO = SKILL_DIR.parents[1]
-LEGACY_SYNC_ADR = REPO / "docs" / "05-adr" / "0001-buzz-agent-setup-gitlab-sync-audience-and-identity.md"
-SYNC_ADR = REPO / "docs" / "05-adr" / "0004-run-gitlab-sync-as-desk-owned-agent-step.md"
-HTML = REPO / "public" / "work-methods" / "buzz-agent-collaboration.html"
-CI = REPO / ".gitlab-ci.yml"
+REPO = SKILL_DIR.parents[2]
+sys.path.insert(0, str(REPO / "scripts"))
+from gitlab_ci_config import merged_text
+LEGACY_SYNC_ADR = REPO / "docs" / "agent-harness" / "adr" / "0001-buzz-agent-setup-gitlab-sync-audience-and-identity.md"
+SYNC_ADR = REPO / "docs" / "agent-harness" / "adr" / "0004-run-gitlab-sync-as-desk-owned-agent-step.md"
+HTML = REPO / "docs" / "agent-harness" / "guides" / "work-methods" / "buzz-agent-collaboration.html"
+ROOT_CI = REPO / ".gitlab-ci.yml"
 BI_ISSUE_RECEIPT = (
     TEST_DIR / "fixtures" / "nh-bi-issue-write-live-receipt-20260915.json"
 )
@@ -97,7 +100,7 @@ class FchacSkillContractTest(unittest.TestCase):
             "一次过 CI 比例",
         ):
             self.assertIn(invariant, text)
-        self.assertIn("public/work-methods/buzz-agent-collaboration.html", text)
+        self.assertIn("docs/agent-harness/guides/work-methods/buzz-agent-collaboration.html", text)
         self.assertIn("candidate_html_sha256=fcc080f547934845329038d506b3e6b5ea6cb2930d276654f3d55a8bc3fe9c16", text)
         self.assertIn("published_pages_commit=ae3fe2188ba20d22dde21581e7d16d15e45a5016", text)
         self.assertIn("published_html_sha256=f2dc3b278bca06b42fdad75f014f0425963f7b9276db27f997a786426952f7e4", text)
@@ -126,7 +129,8 @@ class FchacSkillContractTest(unittest.TestCase):
             "豁免",
         ):
             self.assertIn(invariant, section)
-        self.assertIn("接新需求先有 Issue，再动手", skill)
+        self.assertIn("研发需求先有 Issue，再动手", skill)
+        self.assertIn("不创建 GitLab Issue 代替业务工作项", section)
         self.assertLess(model.index("## Issue 先行"), model.index("## DEV-ASSESSMENT"))
 
     def test_desk_stays_a_router_and_hands_development_to_role_agents(self) -> None:
@@ -781,7 +785,7 @@ class FchacSkillContractTest(unittest.TestCase):
                 "visibility=public",
             ),
         )
-        self.assertFalse((REPO / "public" / "work-methods" / "gitlab-buzz-bridge.html").exists())
+        self.assertFalse((REPO / "docs" / "agent-harness" / "guides" / "work-methods" / "gitlab-buzz-bridge.html").exists())
 
     def test_binding_loss_fails_closed_in_each_contract_document(self) -> None:
         self.assert_document_contains_all(
@@ -798,14 +802,11 @@ class FchacSkillContractTest(unittest.TestCase):
                 "fail closed；不创建 Thread、不提交 change digest、不推进 waterline",
             ),
         )
-    def test_html_blob_hash_matches_model_provenance_and_ci_watches_only_owned_page(self) -> None:
+    def test_html_blob_hash_matches_model_provenance(self) -> None:
         digest = hashlib.sha256(HTML.read_bytes()).hexdigest()
         model = MODEL.read_text(encoding="utf-8")
         self.assertIn(f"candidate_html_sha256={digest}", model)
         self.assertNotIn("bridge_html_sha256=", model)
-        ci = CI.read_text(encoding="utf-8")
-        self.assertIn("public/work-methods/buzz-agent-collaboration.html", ci)
-        self.assertNotIn("public/work-methods/gitlab-buzz-bridge.html", ci)
 
     def test_gitlab_sync_is_canonical_and_bridge_design_stays_in_buzz_deploy(self) -> None:
         self.assert_document_contains_all(
@@ -816,7 +817,7 @@ class FchacSkillContractTest(unittest.TestCase):
                 "[issue-thread-routing.md](references/issue-thread-routing.md)",
             ),
         )
-        self.assertFalse((REPO / "public" / "work-methods" / "gitlab-buzz-bridge.html").exists())
+        self.assertFalse((REPO / "docs" / "agent-harness" / "guides" / "work-methods" / "gitlab-buzz-bridge.html").exists())
         self.assert_document_contains_all(MODEL, (BUZZ_DEPLOY_BRIDGE,))
 
     def test_html_fragment_links_reveal_and_reposition_diagrams(self) -> None:
@@ -1086,8 +1087,8 @@ class FchacSkillContractTest(unittest.TestCase):
             (
                 "public 与 private 项目都同步",
                 "confidential Issue、internal／confidential 评论默认不发",
-                "docs/05-adr/0001-buzz-agent-setup-gitlab-sync-audience-and-identity.md",
-                "docs/05-adr/0004-run-gitlab-sync-as-desk-owned-agent-step.md",
+                "docs/agent-harness/adr/0001-buzz-agent-setup-gitlab-sync-audience-and-identity.md",
+                "docs/agent-harness/adr/0004-run-gitlab-sync-as-desk-owned-agent-step.md",
                 "Desk-owned Agent Step",
                 "Desk 身份的白名单环境变量",
             ),
@@ -1383,11 +1384,18 @@ class FchacSkillContractTest(unittest.TestCase):
         self.assertIn("平台管理员授权", text)
         self.assertIn("ACT", text)
 
-    def test_router_runtime_is_in_audited_scripts_and_ci(self) -> None:
+    def test_router_runtime_is_in_audited_scripts(self) -> None:
         self.assertTrue((SKILL_DIR / "scripts" / "issue_thread_router.py").is_file())
-        ci = (SKILL_DIR.parents[1] / ".gitlab-ci.yml").read_text(encoding="utf-8")
-        self.assertIn("skills/buzz-agent-setup/tests", ci)
-        self.assertIn("scripts/validate.py --skill skills/buzz-agent-setup --security", ci)
+        ci = merged_text(REPO)
+        self.assertIn("skills/agent-harness/buzz-agent-setup/tests", ci)
+        # The shared security job now covers every skill path on MRs.
+        security = (REPO / '.gitlab/ci/validate-security.yml').read_text()
+        self.assertIn('scripts/validate.py --security', security)
+        self.assertIn('"skills/**/*"', security)
+        self.assertIn('merge_request_event', security)
+        self.assertTrue((SKILL_DIR / "scripts" / "run_offline_tests.py").is_file())
+        root_ci = ROOT_CI.read_text(encoding="utf-8")
+        self.assertNotIn(".gitlab/ci/buzz-agent-setup-unit.yml", root_ci)
 
     def test_deployment_baseline_is_git_pinned_and_state_recovery_is_atomic(self) -> None:
         self.assert_document_contains_all(

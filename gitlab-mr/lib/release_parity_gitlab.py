@@ -112,16 +112,23 @@ def load_gitlab_provenance(
         raise InputError("cannot find the first merged staging MR for canonical branch")
     if not all(isinstance(item, dict) for item in canonical_mrs):
         raise InputError("canonical staging MR query returned invalid items")
-    origin = canonical_mrs[0]
-    canonical_origin_mr_iid = origin.get("iid")
+    origin_summary = canonical_mrs[0]
+    canonical_origin_mr_iid = origin_summary.get("iid")
     if type(canonical_origin_mr_iid) is not int:
         raise InputError("canonical origin MR iid must be an integer")
+    # GitLab's MR list response can omit diff_refs. Bind the selected origin
+    # to its detail endpoint before reading the first staging base SHA.
+    origin = glab_object(f"{mr_path}/{canonical_origin_mr_iid}")
+    if origin.get("iid") != canonical_origin_mr_iid:
+        raise InputError("canonical origin MR detail iid differs from list")
     require_mr(
         origin,
         CANONICAL_ORIGIN_MR,
         target_branch=staging_branch,
         state="merged",
     )
+    if origin["source_branch"] != verification["source_branch"]:
+        raise InputError("canonical origin MR source branch differs from verification")
     if not any(
         item.get("iid") == canonical_verification_mr_iid for item in canonical_mrs
     ):

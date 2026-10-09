@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "cf11e38b-bd17-4158-a4a0-45632cf67028",
+  "path": "credential-provider",
+  "path_key": "credential-provider",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/security/credential-provider",
+    "branch": null
+  }
+}

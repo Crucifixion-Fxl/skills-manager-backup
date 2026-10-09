@@ -109,11 +109,10 @@ def load_config(path: Path) -> dict[str, Any]:
     projects = gitlab.get("projects")
     if (
         not isinstance(projects, list)
-        or not projects
         or not all(sync._positive_int(item) for item in projects)
         or len(set(projects)) != len(projects)
     ):
-        raise SendError("gitlab.projects must be a non-empty unique project list")
+        raise SendError("gitlab.projects must be a unique list of positive project ids")
 
     channels = config.get("channels")
     if (
@@ -284,11 +283,7 @@ class StructuredSources:
     def __init__(self, config: dict[str, Any], channel_id: str, env: dict[str, str], buzz: BuzzClient):
         self.config = config
         self.channel_id = channel_id
-        self.token = env.get(config["gitlab"]["token_env"], "")
-        try:
-            sync.validate_token(self.token, config["gitlab"]["token_env"])
-        except sync.SyncError as exc:
-            raise SendError(str(exc)) from None
+        self.env = env
         self.buzz = buzz
         self.opener = urllib.request.build_opener(sync.NoRedirectHandler())
         self._objects: dict[tuple[int, str, int], dict[str, Any]] = {}
@@ -296,13 +291,19 @@ class StructuredSources:
     def _gitlab_object(self, project_id: int, object_kind: str, iid: int) -> dict[str, Any]:
         if project_id not in self.config["gitlab"]["projects"]:
             raise SendError("GitLab source project is outside the configured allowlist")
+        token_env = self.config["gitlab"]["token_env"]
+        token = self.env.get(token_env, "")
+        try:
+            sync.validate_token(token, token_env)
+        except sync.SyncError as exc:
+            raise SendError(str(exc)) from None
         key = (project_id, object_kind, iid)
         if key in self._objects:
             return self._objects[key]
         resource = "issues" if object_kind == "issue" else "merge_requests"
         base = self.config["gitlab"]["base_url"].rstrip("/")
         url = f"{base}/api/v4/projects/{project_id}/{resource}/{iid}"
-        request = urllib.request.Request(url, headers={"PRIVATE-TOKEN": self.token, "Accept": "application/json"})
+        request = urllib.request.Request(url, headers={"PRIVATE-TOKEN": token, "Accept": "application/json"})
         try:
             with self.opener.open(request, timeout=sync.GITLAB_REQUEST_TIMEOUT_SECONDS) as response:
                 raw = response.read(sync.GITLAB_RESPONSE_MAX_BYTES + 1)

@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "tool": "vaultwarden",
+  "owner": "vaultwarden",
+  "repo": "https://gitlab.addx.ai/public-tools/credential-provider",
+  "researchCommit": null,
+  "routeEntries": [
+    "docs/architecture/credential-provider/cli-commands.md",
+    "src/lib/bw-token-status.ts"
+  ],
+  "verification": "existing-reference-only",
+  "deploymentConsistency": "pending",
+  "needsResearch": [
+    "deployment SHA/version and auth configuration",
+    "subject and resource permissions"
+  ],
+  "officialReferences": [
+    "https://bitwarden.com/help/cli/",
+    "https://github.com/dani-garcia/vaultwarden"
+  ],
+  "apiDiscovery": {
+    "method": "Version-matched official CLI/API reference plus AddX deployment/private extension source",
+    "officialReferences": [
+      "https://bitwarden.com/help/cli/",
+      "https://github.com/dani-garcia/vaultwarden"
+    ],
+    "deploymentRouteEntries": [
+      "docs/architecture/credential-provider/cli-commands.md",
+      "src/lib/bw-token-status.ts"
+    ],
+    "coverage": "Do not copy public API; deploy version and private-extension inventory pending"
+  },
+  "referenceBase": "owner-skill-root for SKILL.md/contractEntrypoints/referenceSources paths; contract field resolves from this JSON directory; upstream repository entrypoints stay repository-relative"
+}

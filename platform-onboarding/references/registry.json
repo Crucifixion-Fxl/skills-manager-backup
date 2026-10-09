@@ -1,0 +1,924 @@
+{
+  "tools": [
+    {
+      "id": "tracking",
+      "label": "埋点平台",
+      "owner": "tracking-lifecycle",
+      "reference": "skills/observability/tracking-lifecycle/references/saas-access.md",
+      "accessProfile": "skills/observability/tracking-lifecycle/references/auth-profile.json",
+      "strategy": "existing-contract-plus-opencli",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/observability/tracking-lifecycle/references/auth-discovery.json",
+      "sourceDiscovery": "skills/observability/tracking-lifecycle/references/source-discovery.json"
+    },
+    {
+      "id": "troubleshooting",
+      "label": "Troubleshooting",
+      "owner": "troubleshooting",
+      "reference": "skills/observability/troubleshooting/references/saas-access.md",
+      "accessProfile": "skills/observability/troubleshooting/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/observability/troubleshooting/references/auth-discovery.json",
+      "sourceDiscovery": "skills/observability/troubleshooting/references/source-discovery.json"
+    },
+    {
+      "id": "micro-app",
+      "label": "Micro App",
+      "owner": "micro-app",
+      "reference": "skills/development/micro-app/references/saas-access.md",
+      "accessProfile": "skills/development/micro-app/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/development/micro-app/references/auth-discovery.json",
+      "sourceDiscovery": "skills/development/micro-app/references/source-discovery.json",
+      "businessConsumers": [
+        "micro-app-auth-integration"
+      ]
+    },
+    {
+      "id": "feishu",
+      "label": "效能业务飞书 OAuth（非普通飞书 OpenAPI）",
+      "owner": "feishu-auth",
+      "reference": "skills/development/feishu-auth/references/saas-access.md",
+      "accessProfile": "skills/development/feishu-auth/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/development/feishu-auth/references/auth-discovery.json",
+      "sourceDiscovery": "skills/development/feishu-auth/references/source-discovery.json"
+    },
+    {
+      "id": "gitlab",
+      "label": "GitLab CI/MR/Issue",
+      "owner": "gitlab",
+      "reference": "skills/delivery/gitlab/references/saas-access.md",
+      "accessProfile": "skills/delivery/gitlab/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/delivery/gitlab/references/auth-discovery.json",
+      "sourceDiscovery": "skills/delivery/gitlab/references/source-discovery.json",
+      "businessConsumers": [
+        "gitlab-mr"
+      ]
+    },
+    {
+      "id": "grafana",
+      "label": "Grafana",
+      "owner": "grafana",
+      "reference": "skills/observability/grafana/references/saas-access.md",
+      "accessProfile": "skills/observability/grafana/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/observability/grafana/references/auth-discovery.json"
+    },
+    {
+      "id": "sentry",
+      "label": "Sentry",
+      "owner": "sentry",
+      "reference": "skills/observability/sentry/references/saas-access.md",
+      "accessProfile": "skills/observability/sentry/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "officialCandidate": "https://github.com/getsentry/sentry-for-ai",
+      "authDiscovery": "skills/observability/sentry/references/auth-discovery.json"
+    },
+    {
+      "id": "argocd",
+      "label": "Argo CD",
+      "owner": "argocd",
+      "reference": "skills/delivery/argocd/references/saas-access.md",
+      "accessProfile": "skills/delivery/argocd/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/delivery/argocd/references/auth-discovery.json"
+    },
+    {
+      "id": "growthbook",
+      "label": "GrowthBook",
+      "owner": "growthbook",
+      "reference": "skills/experimentation/growthbook/references/saas-access.md",
+      "accessProfile": "skills/experimentation/growthbook/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/experimentation/growthbook/references/auth-discovery.json"
+    },
+    {
+      "id": "zendesk",
+      "label": "Zendesk",
+      "owner": "zendesk",
+      "reference": "skills/customer-care/zendesk/references/saas-access.md",
+      "accessProfile": "skills/customer-care/zendesk/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/customer-care/zendesk/references/auth-discovery.json",
+      "businessConsumers": [
+        "zendesk-admin-config",
+        "zendesk-helpcenter"
+      ]
+    },
+    {
+      "id": "dagster",
+      "label": "Dagster",
+      "owner": "dagster",
+      "reference": "skills/data/dagster/references/saas-access.md",
+      "accessProfile": "skills/data/dagster/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/data/dagster/references/auth-discovery.json"
+    },
+    {
+      "id": "superset",
+      "label": "Superset",
+      "owner": "superset",
+      "reference": "skills/data/superset/references/saas-access.md",
+      "accessProfile": "skills/data/superset/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/data/superset/references/auth-discovery.json",
+      "businessConsumers": [
+        "sla-alert-analysis"
+      ]
+    },
+    {
+      "id": "ninedata",
+      "label": "NineData",
+      "owner": "ninedata",
+      "reference": "skills/data/ninedata/references/saas-access.md",
+      "accessProfile": "skills/data/ninedata/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/data/ninedata/references/auth-discovery.json"
+    },
+    {
+      "id": "crowdin",
+      "label": "Crowdin",
+      "owner": "crowdin",
+      "reference": "skills/development/crowdin/references/saas-access.md",
+      "accessProfile": "skills/development/crowdin/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/development/crowdin/references/auth-discovery.json"
+    },
+    {
+      "id": "nexus",
+      "label": "Nexus",
+      "owner": "addx-nexus-usage",
+      "reference": "skills/delivery/addx-nexus-usage/references/saas-access.md",
+      "accessProfile": "skills/delivery/addx-nexus-usage/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/delivery/addx-nexus-usage/references/auth-discovery.json"
+    },
+    {
+      "id": "paprika",
+      "label": "Paprika",
+      "owner": "paprika",
+      "reference": "skills/product/paprika/references/saas-access.md",
+      "accessProfile": "skills/product/paprika/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/product/paprika/references/auth-discovery.json"
+    },
+    {
+      "id": "audience",
+      "label": "Audience Sync / User Research",
+      "owner": "audience-sync",
+      "reference": "skills/experimentation/audience-sync/references/saas-access.md",
+      "accessProfile": "skills/experimentation/audience-sync/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/experimentation/audience-sync/references/auth-discovery.json",
+      "sourceDiscovery": "skills/experimentation/audience-sync/references/source-discovery.json"
+    },
+    {
+      "id": "dapp",
+      "label": "dapp",
+      "owner": "dapp",
+      "reference": "skills/observability/dapp/references/saas-access.md",
+      "accessProfile": "skills/observability/dapp/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/observability/dapp/references/auth-discovery.json",
+      "sourceDiscovery": "skills/observability/dapp/references/source-discovery.json",
+      "businessConsumers": [
+        "sla-metric",
+        "sla-alert-analysis"
+      ]
+    },
+    {
+      "id": "nocodb",
+      "label": "NocoDB / 领星集成",
+      "owner": "nocodb",
+      "reference": "skills/data/nocodb/references/saas-access.md",
+      "accessProfile": "skills/data/nocodb/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/data/nocodb/references/auth-discovery.json"
+    },
+    {
+      "id": "cs-workspace",
+      "label": "CS Workspace",
+      "owner": "cs-workspace",
+      "reference": "skills/customer-care/cs-workspace/references/saas-access.md",
+      "accessProfile": "skills/customer-care/cs-workspace/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/customer-care/cs-workspace/references/auth-discovery.json",
+      "sourceDiscovery": "skills/customer-care/cs-workspace/references/source-discovery.json"
+    },
+    {
+      "id": "console",
+      "label": "管理后台",
+      "owner": "addx-console-admin",
+      "reference": "skills/business-operations/addx-console-admin/references/saas-access.md",
+      "accessProfile": "skills/business-operations/addx-console-admin/references/auth-profile.json",
+      "strategy": "existing-contract-plus-opencli",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/business-operations/addx-console-admin/references/auth-discovery.json",
+      "sourceDiscovery": "skills/business-operations/addx-console-admin/references/source-discovery.json"
+    },
+    {
+      "id": "cicd",
+      "label": "CICD 上线单",
+      "owner": "cicd-platform",
+      "reference": "skills/delivery/cicd-platform/references/saas-access.md",
+      "accessProfile": "skills/delivery/cicd-platform/references/auth-profile.json",
+      "strategy": "existing-contract-plus-opencli",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/delivery/cicd-platform/references/auth-discovery.json",
+      "sourceDiscovery": "skills/delivery/cicd-platform/references/source-discovery.json"
+    },
+    {
+      "id": "gitlab-approval",
+      "label": "合并审批接入",
+      "owner": "gitlab-feishu-approval-onboarding",
+      "reference": "skills/delivery/gitlab-feishu-approval-onboarding/references/saas-access.md",
+      "accessProfile": "skills/delivery/gitlab-feishu-approval-onboarding/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/delivery/gitlab-feishu-approval-onboarding/references/auth-discovery.json",
+      "sourceDiscovery": "skills/delivery/gitlab-feishu-approval-onboarding/references/source-discovery.json"
+    },
+    {
+      "id": "device-cloud",
+      "label": "Device Cloud Test",
+      "owner": "device-cloud-test-management",
+      "reference": "skills/quality/device-cloud-test-management/references/saas-access.md",
+      "accessProfile": "skills/quality/device-cloud-test-management/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/quality/device-cloud-test-management/references/auth-discovery.json",
+      "sourceDiscovery": "skills/quality/device-cloud-test-management/references/source-discovery.json"
+    },
+    {
+      "id": "qatools",
+      "label": "QA Tools",
+      "owner": "qatools",
+      "reference": "skills/quality/qatools/references/saas-access.md",
+      "accessProfile": "skills/quality/qatools/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/quality/qatools/references/auth-discovery.json",
+      "sourceDiscovery": "skills/quality/qatools/references/source-discovery.json"
+    },
+    {
+      "id": "litellm",
+      "label": "LiteLLM C 端",
+      "owner": "litellm",
+      "reference": "skills/infrastructure/litellm/references/saas-access.md",
+      "accessProfile": "skills/infrastructure/litellm/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/infrastructure/litellm/references/auth-discovery.json",
+      "sourceDiscovery": "skills/infrastructure/litellm/references/source-discovery.json",
+      "businessConsumers": [
+        "litellm-cend-integration"
+      ]
+    },
+    {
+      "id": "prometheus",
+      "label": "Prometheus",
+      "owner": "prometheus",
+      "reference": "skills/observability/prometheus/references/saas-access.md",
+      "accessProfile": "skills/observability/prometheus/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/observability/prometheus/references/auth-discovery.json"
+    },
+    {
+      "id": "datahub",
+      "label": "DataHub",
+      "owner": "datahub",
+      "reference": "skills/data/datahub/references/saas-access.md",
+      "accessProfile": "skills/data/datahub/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/data/datahub/references/auth-discovery.json"
+    },
+    {
+      "id": "aws",
+      "label": "AWS",
+      "owner": "aws-cli",
+      "reference": "skills/infrastructure/aws-cli/references/saas-access.md",
+      "accessProfile": "skills/infrastructure/aws-cli/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/infrastructure/aws-cli/references/auth-discovery.json"
+    },
+    {
+      "id": "harbor",
+      "label": "Harbor",
+      "owner": "harbor",
+      "reference": "skills/delivery/harbor/references/saas-access.md",
+      "accessProfile": "skills/delivery/harbor/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/delivery/harbor/references/auth-discovery.json"
+    },
+    {
+      "id": "jenkins",
+      "label": "Jenkins",
+      "owner": "jenkins",
+      "reference": "skills/delivery/jenkins/references/saas-access.md",
+      "accessProfile": "skills/delivery/jenkins/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/delivery/jenkins/references/auth-discovery.json"
+    },
+    {
+      "id": "temporal",
+      "label": "Temporal",
+      "owner": "temporal",
+      "reference": "skills/agent-harness/temporal/references/saas-access.md",
+      "accessProfile": "skills/agent-harness/temporal/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/agent-harness/temporal/references/auth-discovery.json"
+    },
+    {
+      "id": "apollo-permission",
+      "label": "Apollo",
+      "owner": "apollo-permission",
+      "reference": "skills/security/apollo-permission/references/saas-access.md",
+      "accessProfile": "skills/security/apollo-permission/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending"
+    },
+    {
+      "id": "vault-kv-manager",
+      "label": "Vault",
+      "owner": "vault-kv-manager",
+      "reference": "skills/security/vault-kv-manager/references/saas-access.md",
+      "accessProfile": "skills/security/vault-kv-manager/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/security/vault-kv-manager/references/auth-discovery.json"
+    },
+    {
+      "id": "figma",
+      "label": "Figma",
+      "owner": "figma",
+      "reference": "skills/product/figma/references/saas-access.md",
+      "accessProfile": "skills/product/figma/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/product/figma/references/auth-discovery.json",
+      "sourceDiscovery": "skills/product/figma/references/source-discovery.json",
+      "businessConsumers": [
+        "figma-i18n"
+      ]
+    },
+    {
+      "id": "feishu-project",
+      "label": "Feishu Project",
+      "owner": "feishu-project",
+      "reference": "skills/collaboration/feishu-project/references/saas-access.md",
+      "accessProfile": "skills/collaboration/feishu-project/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/collaboration/feishu-project/references/auth-discovery.json",
+      "sourceDiscovery": "skills/collaboration/feishu-project/references/source-discovery.json"
+    },
+    {
+      "id": "device-settings",
+      "label": "Device settings",
+      "owner": "device-setting-override",
+      "reference": "skills/experimentation/device-setting-override/references/saas-access.md",
+      "accessProfile": "skills/experimentation/device-setting-override/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/experimentation/device-setting-override/references/auth-discovery.json",
+      "sourceDiscovery": "skills/experimentation/device-setting-override/references/source-discovery.json"
+    },
+    {
+      "id": "firmware-mgr",
+      "label": "FirmWare Manager",
+      "owner": "firmware-mgr",
+      "reference": "skills/hardware/firmware-mgr/references/saas-access.md",
+      "accessProfile": "skills/hardware/firmware-mgr/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/hardware/firmware-mgr/references/auth-discovery.json",
+      "sourceDiscovery": "skills/hardware/firmware-mgr/references/source-discovery.json"
+    },
+    {
+      "id": "mock-engine",
+      "label": "Mock Engine",
+      "owner": "mock-engine",
+      "reference": "skills/quality/mock-engine/references/saas-access.md",
+      "accessProfile": "skills/quality/mock-engine/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/quality/mock-engine/references/auth-discovery.json",
+      "sourceDiscovery": "skills/quality/mock-engine/references/source-discovery.json"
+    },
+    {
+      "id": "gcp",
+      "label": "GCP",
+      "owner": "gcp-cli",
+      "reference": "skills/infrastructure/gcp-cli/references/saas-access.md",
+      "accessProfile": "skills/infrastructure/gcp-cli/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/infrastructure/gcp-cli/references/auth-discovery.json"
+    },
+    {
+      "id": "azure",
+      "label": "Azure",
+      "owner": "azure-cli",
+      "reference": "skills/infrastructure/azure-cli/references/saas-access.md",
+      "accessProfile": "skills/infrastructure/azure-cli/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/infrastructure/azure-cli/references/auth-discovery.json"
+    },
+    {
+      "id": "aliyun",
+      "label": "Aliyun",
+      "owner": "aliyun-cli",
+      "reference": "skills/infrastructure/aliyun-cli/references/saas-access.md",
+      "accessProfile": "skills/infrastructure/aliyun-cli/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/infrastructure/aliyun-cli/references/auth-discovery.json"
+    },
+    {
+      "id": "oci",
+      "label": "OCI",
+      "owner": "oci-cli",
+      "reference": "skills/infrastructure/oci-cli/references/saas-access.md",
+      "accessProfile": "skills/infrastructure/oci-cli/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/infrastructure/oci-cli/references/auth-discovery.json"
+    },
+    {
+      "id": "tencent-cloud",
+      "label": "Tencent Cloud",
+      "owner": "tencent-cloud-cli",
+      "reference": "skills/infrastructure/tencent-cloud-cli/references/saas-access.md",
+      "accessProfile": "skills/infrastructure/tencent-cloud-cli/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/infrastructure/tencent-cloud-cli/references/auth-discovery.json"
+    },
+    {
+      "id": "ucloud",
+      "label": "UCloud",
+      "owner": "ucloud-cli",
+      "reference": "skills/infrastructure/ucloud-cli/references/saas-access.md",
+      "accessProfile": "skills/infrastructure/ucloud-cli/references/auth-profile.json",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/infrastructure/ucloud-cli/references/auth-discovery.json"
+    },
+    {
+      "id": "stripe",
+      "label": "stripe",
+      "owner": "stripe",
+      "reference": "skills/experimentation/stripe/references/saas-access.md",
+      "strategy": "official-first",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "officialCandidate": "https://github.com/stripe/ai",
+      "authDiscovery": "skills/experimentation/stripe/references/auth-discovery.json",
+      "accessProfile": "skills/experimentation/stripe/references/auth-profile.json",
+      "businessConsumers": [
+        "stripe-product"
+      ]
+    },
+    {
+      "id": "lingxing",
+      "label": "lingxing",
+      "owner": "lingxing-api",
+      "reference": "skills/data/lingxing-api/SKILL.md",
+      "strategy": "existing-contract",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/data/lingxing-api/references/auth-discovery.json",
+      "sourceDiscovery": "skills/data/lingxing-api/references/source-discovery.json"
+    },
+    {
+      "id": "customer-care",
+      "label": "CustomerCare / SmartPopup",
+      "owner": "customer-care",
+      "reference": "skills/customer-care/customer-care/references/saas-access.md",
+      "accessProfile": "skills/customer-care/customer-care/references/auth-profile.json",
+      "authDiscovery": "skills/customer-care/customer-care/references/auth-discovery.json",
+      "sourceDiscovery": "skills/customer-care/customer-care/references/source-discovery.json",
+      "strategy": "existing-owner-contract",
+      "verification": "source-verified",
+      "runtimeVerification": "pending"
+    },
+    {
+      "id": "engagement-admin",
+      "label": "Engagement Admin",
+      "owner": "engagement-admin",
+      "reference": "skills/experimentation/engagement-admin/references/saas-access.md",
+      "accessProfile": "skills/experimentation/engagement-admin/references/auth-profile.json",
+      "authDiscovery": "skills/experimentation/engagement-admin/references/auth-discovery.json",
+      "sourceDiscovery": "skills/experimentation/engagement-admin/references/source-discovery.json",
+      "strategy": "existing-owner-contract",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "businessConsumers": [
+        "engagement-h5-paywall-creation"
+      ]
+    },
+    {
+      "id": "buildbuddy",
+      "label": "BuildBuddy",
+      "owner": "buildbuddy",
+      "reference": "skills/infrastructure/buildbuddy/references/saas-access.md",
+      "accessProfile": "skills/infrastructure/buildbuddy/references/auth-profile.json",
+      "authDiscovery": "skills/infrastructure/buildbuddy/references/auth-discovery.json",
+      "sourceDiscovery": "skills/infrastructure/buildbuddy/references/source-discovery.json",
+      "strategy": "existing-owner-contract",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "businessConsumers": [
+        "buildbuddy-deploy"
+      ]
+    },
+    {
+      "id": "vaultwarden",
+      "label": "Vaultwarden credential-provider",
+      "owner": "vaultwarden",
+      "reference": "skills/security/vaultwarden/references/saas-access.md",
+      "accessProfile": "skills/security/vaultwarden/references/auth-profile.json",
+      "authDiscovery": "skills/security/vaultwarden/references/auth-discovery.json",
+      "sourceDiscovery": "skills/security/vaultwarden/references/source-discovery.json",
+      "strategy": "existing-owner-contract",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "businessConsumers": [
+        "credential-provider"
+      ]
+    },
+    {
+      "id": "rerun-hub",
+      "label": "Rerun Hub",
+      "owner": "rerun-hub",
+      "reference": "skills/hardware/rerun-hub/references/saas-access.md",
+      "accessProfile": "skills/hardware/rerun-hub/references/auth-profile.json",
+      "authDiscovery": "skills/hardware/rerun-hub/references/auth-discovery.json",
+      "sourceDiscovery": "skills/hardware/rerun-hub/references/source-discovery.json",
+      "strategy": "existing-owner-contract",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "businessConsumers": [
+        "rerun-hub-data"
+      ]
+    },
+    {
+      "id": "worktime",
+      "label": "研发工时和项目",
+      "owner": "worktime",
+      "reference": "skills/collaboration/worktime/references/saas-access.md",
+      "accessProfile": "skills/collaboration/worktime/references/auth-profile.json",
+      "authDiscovery": "skills/collaboration/worktime/references/auth-discovery.json",
+      "sourceDiscovery": "skills/collaboration/worktime/references/source-discovery.json",
+      "strategy": "existing-owner-contract",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "businessConsumers": [
+        "worktime-filing"
+      ]
+    },
+    {
+      "id": "buzz",
+      "label": "Buzz",
+      "owner": "buzz",
+      "reference": "skills/collaboration/buzz/references/saas-access.md",
+      "accessProfile": "skills/collaboration/buzz/references/auth-profile.json",
+      "authDiscovery": "skills/collaboration/buzz/references/auth-discovery.json",
+      "sourceDiscovery": "skills/collaboration/buzz/references/source-discovery.json",
+      "strategy": "existing-owner-contract",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "businessConsumers": [
+        "buzz-agent-setup"
+      ]
+    },
+    {
+      "id": "flink",
+      "label": "Flink",
+      "owner": "flink",
+      "reference": "skills/data/flink/references/saas-access.md",
+      "accessProfile": "skills/data/flink/references/auth-profile.json",
+      "authDiscovery": "skills/data/flink/references/auth-discovery.json",
+      "sourceDiscovery": "skills/data/flink/references/source-discovery.json",
+      "strategy": "existing-owner-contract",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "businessConsumers": [
+        "flink-job-development"
+      ]
+    },
+    {
+      "id": "reportportal",
+      "label": "ReportPortal",
+      "owner": "reportportal",
+      "reference": "skills/quality/reportportal/references/saas-access.md",
+      "accessProfile": "skills/quality/reportportal/references/auth-profile.json",
+      "authDiscovery": "skills/quality/reportportal/references/auth-discovery.json",
+      "sourceDiscovery": "skills/quality/reportportal/references/source-discovery.json",
+      "strategy": "existing-owner-contract",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "businessConsumers": [
+        "api-synthetic-monitoring"
+      ]
+    },
+    {
+      "id": "n8n",
+      "label": "n8n",
+      "owner": "n8n",
+      "reference": "skills/agent-harness/n8n/references/saas-access.md",
+      "accessProfile": "skills/agent-harness/n8n/references/auth-profile.json",
+      "authDiscovery": "skills/agent-harness/n8n/references/auth-discovery.json",
+      "sourceDiscovery": "skills/agent-harness/n8n/references/source-discovery.json",
+      "strategy": "official-api-plus-deployment-source",
+      "verification": "source-verified",
+      "runtimeVerification": "pending"
+    },
+    {
+      "id": "graylog",
+      "label": "Graylog",
+      "owner": "graylog",
+      "reference": "skills/observability/graylog/references/saas-access.md",
+      "accessProfile": "skills/observability/graylog/references/auth-profile.json",
+      "authDiscovery": "skills/observability/graylog/references/auth-discovery.json",
+      "sourceDiscovery": "skills/observability/graylog/references/source-discovery.json",
+      "strategy": "official-api-plus-deployment-source",
+      "verification": "source-verified",
+      "runtimeVerification": "pending"
+    },
+    {
+      "id": "dittofeed",
+      "label": "Dittofeed AddX fork",
+      "owner": "dittofeed",
+      "reference": "skills/experimentation/dittofeed/references/saas-access.md",
+      "accessProfile": "skills/experimentation/dittofeed/references/auth-profile.json",
+      "authDiscovery": "skills/experimentation/dittofeed/references/auth-discovery.json",
+      "sourceDiscovery": "skills/experimentation/dittofeed/references/source-discovery.json",
+      "strategy": "fork-source-plus-official-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending"
+    },
+    {
+      "id": "apify",
+      "label": "Apify",
+      "owner": "apify",
+      "reference": "skills/data/apify/references/saas-access.md",
+      "accessProfile": "skills/data/apify/references/auth-profile.json",
+      "authDiscovery": "skills/data/apify/references/auth-discovery.json",
+      "sourceDiscovery": "skills/data/apify/references/source-discovery.json",
+      "strategy": "official-first-or-private-source-contract",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "businessConsumers": [
+        "voc-analysis"
+      ]
+    },
+    {
+      "id": "pagerduty",
+      "label": "PagerDuty",
+      "owner": "pagerduty",
+      "reference": "skills/observability/pagerduty/references/saas-access.md",
+      "accessProfile": "skills/observability/pagerduty/references/auth-profile.json",
+      "authDiscovery": "skills/observability/pagerduty/references/auth-discovery.json",
+      "sourceDiscovery": "skills/observability/pagerduty/references/source-discovery.json",
+      "strategy": "official-first-or-private-source-contract",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "businessConsumers": [
+        "sre-agent"
+      ]
+    },
+    {
+      "id": "typeform",
+      "label": "Typeform（直接执行器）",
+      "owner": "typeform",
+      "reference": "skills/product/typeform/references/saas-access.md",
+      "accessProfile": "skills/product/typeform/references/auth-profile.json",
+      "authDiscovery": "skills/product/typeform/references/auth-discovery.json",
+      "sourceDiscovery": "skills/product/typeform/references/source-discovery.json",
+      "strategy": "official-first-or-private-source-contract",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "businessConsumers": [
+        "survey-research-workflow"
+      ]
+    },
+    {
+      "id": "datahub-schema-search",
+      "label": "DataHub Schema Search",
+      "owner": "datahub-schema-search",
+      "reference": "skills/data/datahub-schema-search/references/saas-access.md",
+      "accessProfile": "skills/data/datahub-schema-search/references/auth-profile.json",
+      "authDiscovery": "skills/data/datahub-schema-search/references/auth-discovery.json",
+      "sourceDiscovery": "skills/data/datahub-schema-search/references/source-discovery.json",
+      "strategy": "official-first-or-private-source-contract",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "businessConsumers": []
+    },
+    {
+      "id": "argocd-fleet-scanner",
+      "label": "Argo CD Fleet Scanner",
+      "owner": "argocd-fleet-scanner",
+      "reference": "skills/infrastructure/argocd-fleet-scanner/references/saas-access.md",
+      "accessProfile": "skills/infrastructure/argocd-fleet-scanner/references/auth-profile.json",
+      "authDiscovery": "skills/infrastructure/argocd-fleet-scanner/references/auth-discovery.json",
+      "sourceDiscovery": "skills/infrastructure/argocd-fleet-scanner/references/source-discovery.json",
+      "strategy": "official-first-or-private-source-contract",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "businessConsumers": [
+        "argocd-fleet-scan"
+      ]
+    },
+    {
+      "id": "resourcespace",
+      "label": "ResourceSpace DAM",
+      "owner": "resourcespace",
+      "reference": "skills/collaboration/resourcespace/references/saas-access.md",
+      "accessProfile": "skills/collaboration/resourcespace/references/auth-profile.json",
+      "strategy": "official-signed-api-plus-opencli",
+      "verification": "source-verified",
+      "runtimeVerification": "runtime-verified-local-poc"
+    }
+  ],
+  "platformTriage": [
+    {
+      "id": "metabase",
+      "disposition": "deployment-example-only",
+      "reason": "common-apps.md的MB_SITE_URL是部署模板，未找到实例部署或运行证据。",
+      "sources": [
+        "skills/delivery/cicd-opensource/references/common-apps.md"
+      ]
+    },
+    {
+      "id": "n8n",
+      "disposition": "existing-owner-route",
+      "reason": "实际部署源码已发现；新增owner持有真实入口、认证方法、官方API或fork路由。部署/身份/权限仍明确pending。",
+      "sources": [
+        "skills/agent-harness/n8n/references/source-discovery.json",
+        "skills/agent-harness/n8n/references/saas-access.md"
+      ],
+      "deploymentEvidence": {
+        "repo": "https://gitlab.addx.ai/DEV/k8s",
+        "researchCommit": "47800f690df48d1f46174593809dd67e9773a48e",
+        "path": "clusters/aws-769494896000-us-data/n8n/values.yaml",
+        "origin": "https://n8n.addx.live"
+      },
+      "owner": "n8n"
+    },
+    {
+      "id": "graylog",
+      "disposition": "existing-owner-route",
+      "reason": "实际部署源码已发现；新增owner持有真实入口、认证方法、官方API或fork路由。部署/身份/权限仍明确pending。",
+      "sources": [
+        "skills/observability/graylog/references/source-discovery.json",
+        "skills/observability/graylog/references/saas-access.md"
+      ],
+      "deploymentEvidence": {
+        "repo": "https://gitlab.addx.ai/DEV/argocd-apps",
+        "researchCommit": "b9173bec59b0a81c76bf4ace95302bc6a4edddc6",
+        "path": "aws-002497567426-us-tech-service/graylog-staging-us.yaml",
+        "serviceRepo": "https://gitlab.addx.ai/DATA/audit-service",
+        "serviceRevision": "staging",
+        "servicePath": "k8s/graylog/overlays/staging-us"
+      },
+      "owner": "graylog"
+    },
+    {
+      "id": "dittofeed",
+      "disposition": "existing-owner-route",
+      "reason": "实际部署源码已发现；新增owner持有真实入口、认证方法、官方API或fork路由。部署/身份/权限仍明确pending。",
+      "sources": [
+        "skills/experimentation/dittofeed/references/source-discovery.json",
+        "skills/experimentation/dittofeed/references/saas-access.md"
+      ],
+      "deploymentEvidence": {
+        "repo": "https://gitlab.addx.ai/DEV/argocd-apps",
+        "researchCommit": "b9173bec59b0a81c76bf4ace95302bc6a4edddc6",
+        "paths": [
+          "aws-769494896000-us-data/dittofeed-prod-us.yaml",
+          "aws-769494896000-us-data/dittofeed-staging-us.yaml"
+        ],
+        "serviceRepo": "https://gitlab.addx.ai/CLOUD/dittofeed",
+        "serviceRevisions": [
+          "deploy/addx-prod",
+          "deploy/addx-staging"
+        ],
+        "servicePaths": [
+          "k8s/overlays/prod-us",
+          "k8s/overlays/staging-us"
+        ]
+      },
+      "owner": "dittofeed"
+    },
+    {
+      "id": "tableau",
+      "disposition": "instance-unconfirmed",
+      "reason": "数据目录工具列表提到Tableau，未提供实例/部署/认证证据。",
+      "sources": [
+        "AGENTS.md",
+        "skills/data/datahub/SKILL.md"
+      ]
+    },
+    {
+      "id": "victoriametrics",
+      "disposition": "existing-owner-route",
+      "reason": "实际CN声明及待切换tech-service租户入口由Prometheus、performance-preflight和k8s owner持有；未知认证不访问目标。",
+      "sources": [
+        "skills/observability/prometheus/SKILL.md",
+        "skills/quality/performance-preflight/references/endpoints.md"
+      ]
+    },
+    {
+      "id": "thanos",
+      "disposition": "existing-owner-route",
+      "reason": "真实各区域历史指标入口与CN迁移共存由既有指标owner维护；旧HTTP入口不表示当前免认证。",
+      "sources": [
+        "skills/quality/performance-preflight/references/endpoints.md"
+      ]
+    },
+    {
+      "id": "vmalert",
+      "disposition": "existing-owner-route",
+      "reason": "实际告警评估平台声明及待切换域名由Prometheus/VM告警链路维护，不能作为PromQL base。",
+      "sources": [
+        "skills/observability/prometheus/SKILL.md",
+        "skills/delivery/cicd-developer/references/victoriametrics/alerting.md"
+      ]
+    }
+  ]
+}

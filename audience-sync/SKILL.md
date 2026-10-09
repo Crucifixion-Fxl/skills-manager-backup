@@ -7,6 +7,8 @@ description: 通过生产 Audience Platform 验证 Project key 权限并完成�
 
 ## Description
 
+首次接入/变更扫描与日常认证入口见 [SaaS 接入](references/saas-access.md)；已有平台业务契约与授权门禁仍在本 Skill 维护。
+
 使用 `https://audience-workflow-api-prod-us.addx.live` 和安全注入的 Project Personal key。
 先阅读[宿主配置](references/host-configuration.md)，选择原生工具或随仓 Python 客户端的启动方式，
 再验证每把已提供 key 对应的 Project 和允许操作。多把已提供 key 可以直接进行只读验证，
@@ -64,3 +66,9 @@ description: 通过生产 Audience Platform 验证 Project key 权限并完成�
 
 离线格式通过就称 key 已认证；在原生工具宿主中寻找未分发的 Python 脚本；
 把排队状态当成功，或为同一次含糊的同步结果换 key 再提交。
+
+### Project Personal Key 的验收与清理
+
+在实际 Project 页面核对 Key 的资源绑定、有效期和 scope 选项，不能因名称包含 readonly 就声称 Key 本身只读。没有只读 scope 选项时，原有只读授权不自动涵盖更宽权限的凭据创建；先准备明确的 Project、名称、期限、只读调用范围和撤销计划，再取得对应授权。
+
+使用平台当前契约核对创建、列表回读和删除路由。创建响应中的明文 Key 仅私下进入进程；先通过目标平台当前用户探针核验签发者，再将本次 Key 的签发/列表回读绑定到该身份。业务消费者调用 `get_project_personal_key_context` 核验 Project、credential_profile 与 allowed_actions；若响应没有人名或用户 ID，不能把它单独当作个人身份探针。之后才调用对应 Project 的 GET 操作。Admin 只用于已授权的 Key 生命周期，不作为 Project API 的业务回退。网页登录成功、Project 列表可见与 Key 原生 API 通过分别记录。验收后只删除本次创建的 Key、清理两端临时凭据与通道；不重复执行用户已明确跳过的撤销后拒绝测试。

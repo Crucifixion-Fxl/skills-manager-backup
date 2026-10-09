@@ -26,10 +26,12 @@ VALIDATOR = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(VALIDATOR)
 APPROVAL_SPEC = importlib.util.spec_from_file_location(
     "weekly_report_validate_approval",
-    SCRIPT_DIR.parents[1]
-    / "weekly-report-publish"
-    / "scripts"
-    / "validate_approval.py",
+    next(
+        candidate for candidate in (
+            VALIDATOR.REPOSITORY_ROOT / "skills/collaboration/weekly-report-publish/scripts/validate_approval.py",
+            VALIDATOR.REPOSITORY_ROOT / "skills/weekly-report-publish/scripts/validate_approval.py",
+        ) if candidate.is_file()
+    ),
 )
 if APPROVAL_SPEC is None or APPROVAL_SPEC.loader is None:
     raise RuntimeError("weekly report approval validator could not be loaded")

@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "tool": "sentry",
+  "owner": "sentry",
+  "instance": {
+    "selection": "Use target/environment mapping in owner SKILL; never enumerate unrelated profiles or silently fall back.",
+    "contract": "SKILL.md",
+    "currentVersion": "unknown; historical values are not runtime evidence",
+    "addressEvidence": "Owner SKILL.md environment tables are the address SSOT; credential variables and exceptions in auth.nativeCredentialPath are selected-instance constraints."
+  },
+  "auth": {
+    "nativeCredentialPath": "Region-selected SENTRY_US/CN/EU_URL and corresponding SENTRY_US/CN/EU_AUTH_TOKEN; Bearer. Legacy SENTRY_AUTH_TOKEN only when explicitly scoped.",
+    "missingCredentialWorkflow": "User logs into selected regional instance; Developer Settings internal integration for Issue & Event Read, Project Read, Organization Read. Existing release-only org token is insufficient for issue lookup.",
+    "subjectAndResourcePermissionVerification": "GET /api/0/organizations/{organization_slug}/ and /api/0/projects/{organization_slug}/{project_slug}/environments/ within selected org; verify integration owner/project and explicit staging environment. No production fallback.",
+    "issuanceConsumptionRevocation": "Create/revoke personal or internal-integration token in owning instance settings; token scopes and org/project membership both constrain API access.",
+    "credentialHandling": "Private injection only; never print/store secrets in repository, command arguments, chat or receipts. Discovery itself performs no login/token creation."
+  },
+  "nativeRoute": {
+    "business": "Owner SKILL + version-matched official CLI/API documentation",
+    "loginRecovery": "web-access for human web interaction; official CLI only where explicitly documented",
+    "refresh": "platform-onboarding only for concrete auth/version/interface drift",
+    "runtimeProvider": "delegated",
+    "adapterStatus": "delegated contract only; no new runnable provider or full API mirror implemented"
+  },
+  "referenceSources": [
+    {
+      "kind": "owner-contract",
+      "path": "SKILL.md"
+    },
+    {
+      "kind": "primary-official",
+      "url": "https://docs.sentry.io/api/auth/",
+      "checkedOn": "2026-10-07",
+      "use": "authentication discovery; match actual deployed version before business calls",
+      "status": "retrieved",
+      "limitation": "Official documentation does not prove instance compatibility."
+    }
+  ],
+  "versionPolicy": {
+    "probe": "Self-hosted release/image digest from instance deployment owner or About; region deployments may differ. Never infer version from SDK release.",
+    "compatibility": "Unknown deployment version requires non-mutating capability evidence before business usage; do not promote latest upstream docs to deployed compatibility."
+  },
+  "verification": {
+    "source": "source-verified",
+    "fixture": "not-run: reference-only changes",
+    "runtime": "pending",
+    "sourceCandidate": "8d736bd81ab8500e51cf6be3d71d1ffa70937cae",
+    "scope": "Owner repository contract and primary documentation research only. No credential inspection, login, token issuance/revocation or online business calls.",
+    "pendingReasons": [
+      "Target deployment version, selected subject and exact resource permissions have not been runtime verified.",
+      "Token/login workflow needs independently authorized selected-instance validation; no runnable unified provider is claimed."
+    ]
+  }
+}

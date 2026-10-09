@@ -7,6 +7,8 @@
 Last verified: **2026-04-28** (during setting-override evaluation). Re-query before any go/no-go decision; freshness > 30 days = re-verify.
 最近一次验证：**2026-04-28**。做 go/no-go 决策前必须重新查；超过 30 天未验证必须重新验证。
 
+> CN 云迁移后这些 2026-04-28 数值只作历史对照。当前 prod = 腾讯云 `100014919455` / cn-main，staging 与 tech-service = `100052802231`；先按 [当前端点路由](endpoints.md) 重新采集，不能把旧值当作新环境 baseline。
+
 ## 1. Cross-region pod counts (prod)
 ## 1. 三区 pod 数量（prod）
 
@@ -125,5 +127,5 @@ Computed as `endpoint QPS ÷ kiss TCP CurrEstab`:
 python3 references/query-helpers.py anchors
 ```
 
-Or run individual recipes from [recipes/](recipes/) and update this file in place.
-或从 [recipes/](recipes/) 跑单条配方，原地更新本文。
+Or run individual recipes from [recipes/](recipes) and update this file in place.
+或从 [recipes/](recipes) 跑单条配方，原地更新本文。

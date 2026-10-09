@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "tool": "apify",
+  "owner": "apify",
+  "repo": "https://gitlab.addx.ai/engineering/skills",
+  "researchCommit": "bac8d3ee819650381b8a613a6e8526c153d7b244",
+  "routeEntries": [
+    "skills/voc-analysis/SKILL.md",
+    "skills/voc-analysis/references/apify-setup.md"
+  ],
+  "verification": "source-verified",
+  "deploymentConsistency": "pending",
+  "officialReferences": [
+    "https://github.com/apify/agent-skills",
+    "https://docs.apify.com/integrations/mcp",
+    "https://docs.apify.com/api/v2"
+  ],
+  "needsResearch": [
+    "Runtime identity, resource permissions and credential lifecycle",
+    "Actual service/installed MCP version, account region and source/runtime consistency"
+  ],
+  "apiDiscovery": {
+    "method": "优先官方agent-skills及hosted MCP，再按API v2文档选择确切只读资源。Actor运行、build、schedule和创建/改删storage不仅是查询，可能产生费用或外部采集，需明确范围、成本/资源上限和授权。先核对subject与已有run/dataset归属；读取限已知ID和小分页，不为了验证登录启动Actor。",
+    "coverage": "Source and public entrypoints located; runtime pending"
+  }
+}

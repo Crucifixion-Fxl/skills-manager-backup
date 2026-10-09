@@ -9,7 +9,7 @@ description: 定期给代码仓做架构体检：AI 先扫出模块地图，脚�
 
 周期性（人工或 Buzz 定时触发，**不进 CI**）给**一个代码仓**做架构体检：看模块边界、依赖方向、模块命名和改动历史，不看函数 / 类怎么写。文件级只看两件事：特别长的文件（M18）和 bug 特别多的文件（M19），两者叠在一起的是热点文件。
 
-**规则正本**：[`public/dev-standards/architecture/architecture-smells.html`](../../public/dev-standards/architecture/architecture-smells.html)（人读版：`https://pages.addx.ai/engineering/skills/dev-standards/architecture/architecture-smells.html`）。本 skill 只是执行面：改规则先改正本，再同步 [references/checklist.md](references/checklist.md)。
+**规则正本**：[`docs/quality/standards/reference-pages/architecture/architecture-smells.html`](../../../docs/quality/standards/reference-pages/architecture/architecture-smells.html)（人读版：`https://pages.addx.ai/engineering/skills/dev-standards/architecture/architecture-smells.html`）。本 skill 只是执行面：改规则先改正本，再同步 [references/checklist.md](references/checklist.md)。
 
 ## 边界
 

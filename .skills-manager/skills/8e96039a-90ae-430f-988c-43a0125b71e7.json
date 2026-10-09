@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "8e96039a-90ae-430f-988c-43a0125b71e7",
+  "path": "n8n",
+  "path_key": "n8n",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/agent-harness/n8n",
+    "branch": null
+  }
+}

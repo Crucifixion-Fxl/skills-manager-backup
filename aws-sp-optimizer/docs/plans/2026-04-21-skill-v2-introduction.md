@@ -4,7 +4,7 @@
 
 - **状态**：首次完整提交（v2）
 - **分支**：`feat/aws-sp-optimizer-v2`
-- **Skill 路径**：`skills/aws-sp-optimizer/`
+- **Skill 路径**：`skills/infrastructure/aws-sp-optimizer/`
 - **主入口**：`python -m scripts.aws_sp_optimizer --org <alias>`
 - **测试**：346 passed（pytest）
 
@@ -45,7 +45,7 @@ AWS 官方在 Cost Explorer 里提供 Savings Plan Recommendation，但存在几
 ### 2.2 文件结构
 
 ```
-skills/aws-sp-optimizer/
+skills/infrastructure/aws-sp-optimizer/
 ├── SKILL.md                          # 入口，触发场景 + 执行流程
 ├── scripts/
 │   ├── aws_sp_optimizer.py           # CLI + run_optimizer 编排
@@ -215,7 +215,7 @@ P7/P8/P9 是 v2 的增量（相对 v1 而言），但在本 MR 中不作为"增�
 - 输出解读：[`references/output-interpretation.md`](../../references/output-interpretation.md)
 - 报告模板：[`references/presentation-template.md`](../../references/presentation-template.md)
 - 失败处理：[`references/failure-handling.md`](../../references/failure-handling.md)
-- 排除过滤深度设计：[`2026-04-20-exclude-filter-subsystem.md`](./2026-04-20-exclude-filter-subsystem.md)
+- 排除过滤深度设计：[`2026-04-20-exclude-filter-subsystem.md`](2026-04-20-exclude-filter-subsystem.md)
 
 ---
 

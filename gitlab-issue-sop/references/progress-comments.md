@@ -14,6 +14,8 @@
 
 ## 标准模板
 
+AI 使用下列任一模板或示例时，都须附上 [Agent 操作与恢复信息](agent-session-context.md#回执模板)，使用当前 session。创建、字段更新、close/reopen、认领与清理的写入顺序和回读遵循同一契约；合并到已有进展 comment，避免重复回执。
+
 ```markdown
 ## 进展更新 (YYYY-MM-DD)
 
@@ -42,14 +44,18 @@
 | 方案文档提交 commit | **是**（附文档链接或 commit） |
 | status label 变化 | **是**（说明为什么变） |
 | 从 issue 创建开发 branch | **是**（说明 branch 名称，进入实现） |
-| MR 创建 | **是**（附 MR 链接） |
+| AI 会话开始改该 Issue（改文件、push、开 MR，或把状态推向 in-progress） | **是**（本会话还没有未被取代的 active 认领时，先写认领；模板见下） |
+| 该 Issue 分支的 git push | **是**（branch、短 SHA、harness、session id）。还没有 MR 时用下方 push 模板；已经有 MR 时刷新 gitlab-mr issue-sync 回执，不另写空 note |
+| MR 创建 | **是**（附 MR 链接，走 gitlab-mr issue-sync，回执带 harness 和 session id） |
+| MR 更新（HEAD、目标分支或交付范围变化） | **是**（刷新同一条 issue-sync 回执，不另写空 note） |
 | MR 合并 | **是**（说明合并到哪个分支 / 是否已部署） |
 | 部署验证完成 | **是**（说明生产环境验证通过 → 可 close） |
 | 阻塞发生 | **是**（说明阻塞原因 + 预期解除时间） |
 | 阻塞解除 | **是**（说明怎么解除的） |
-| scope 变化 | **是**（说明为什么变；重大变化需 **同步改描述** 并 comment 说明改了什么） |
+| scope 变化 | **是**（已确认的变化追加 requirement revision；需要新的 source snapshot 时新建 Attempt，不覆盖原始描述） |
 | 设计讨论中产生关键决策 | **是**（决策记录） |
-| 日常 "今天写代码了" | 否（噪声） |
+| session 清理 | **是**（把本会话 active 认领标成 released 或 paused，写清剩余项；删 worktree 之前先写）。未合并或未验收不算完成 |
+| 日常 "今天写代码了" / 本地每次 commit | 否（噪声） |
 
 ## 不要做的事
 
@@ -126,6 +132,54 @@ git checkout -b feature/foo
 - 请 reviewer 在 issue 或文档上批注
 - review 通过后从本 issue Create branch 开始实现
 ```
+
+## AI 接手 comment 模板
+
+```markdown
+## AI 接手 (YYYY-MM-DD)
+
+- agent: <agent 名>
+- harness: <grok|claude|codex|glm|other>
+- session id: <运行时读到的 id，没有则 unknown>
+- 恢复指针: <channel UUID + thread root，或 worktree 路径>
+- branch: <分支名，还没有则写 尚未创建>
+- intent: <一句话>
+- status: active
+```
+
+换会话接手时，在同一模板加一行 `supersedes: <上一条 note id>`，不编辑旧 note。
+
+## push comment 模板
+
+还没有 MR 时使用。已经有 MR 时改刷新 gitlab-mr issue-sync 回执。
+
+```markdown
+## 进展更新 (YYYY-MM-DD)
+
+已 push 本 Issue 分支。
+
+- branch: <name>
+- sha: <短 SHA>
+- harness: <grok|claude|codex|glm|other>
+- session id: <id 或 unknown>
+```
+
+## session 清理 comment 模板
+
+```markdown
+## 进展更新 (YYYY-MM-DD)
+
+本会话认领改为 released（或 paused）。
+
+- harness: <...>
+- session id: <id 或 unknown>
+- status: released
+- 剩余: <未合并的 MR、未验收项；没有则写无>
+```
+
+paused 时把上一行改成 `status: paused`。这条比同一会话更早的 active 认领更新，不编辑旧 note。
+
+未合并或未验收的工作不要写成完成。
 
 ## 分支创建 comment 模板
 

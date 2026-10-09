@@ -32,7 +32,7 @@ from pathlib import Path
 
 
 SKILL = Path(__file__).resolve().parents[1]
-REPO = SKILL.parents[1]
+REPO = SKILL.parents[2]
 REFS = SKILL / "references"
 SCRIPTS = SKILL / "scripts"
 RUNTIME = REFS / "runtime-setup.md"
@@ -41,7 +41,7 @@ FEISHU_SYNC = REFS / "feishu-group-sync.md"
 SYSTEMD_README = REFS / "systemd" / "README.md"
 RUNBOOK = REFS / "local-upgrade-runbook.md"
 ENTRYPOINT = SKILL / "SKILL.md"
-FAILOVER_PROFILES = REPO / "skills" / "harness-failover" / "assets" / "profiles.default.json"
+FAILOVER_PROFILES = REPO / "skills" / "agent-harness" / "harness-failover" / "assets" / "profiles.default.json"
 REGISTER_SCRIPT = REFS / "scripts" / "feishu_register_agent_apps.sh"
 RUN_AGENT = REFS / "scripts" / "run-agent.py"
 
@@ -158,7 +158,7 @@ RUNBOOK_FACTS = {
         "两种别放进同一个目录",
     ),
     "## 2. 改了什么，该动哪几处": (
-        "git diff <旧 40 位> <新 40 位> -- skills/buzz-agent-setup/scripts skills/buzz-agent-setup/references/scripts",
+        "git diff <旧 40 位> <新 40 位> -- skills/agent-harness/buzz-agent-setup/scripts skills/agent-harness/buzz-agent-setup/references/scripts",
         "不用于豁免 full convergence",
         "所有 pin 仍统一切新 SHA",
         "长期保留多个 release pin",
@@ -423,6 +423,11 @@ class HeadlessBrowserQrDocsTest(ContractCase):
     def test_the_qr_and_scope_link_notes_are_written(self) -> None:
         self.assert_contains_all(self.section, "feishu-group-sync.md 「agent 的飞书身份」", QR_FACTS)
 
+    def test_a_remote_dev_machine_cites_remote_web_session(self) -> None:
+        self.assertIn("远程开发机", self.section)
+        self.assertIn("使用 `web-access` skill", self.section)
+        self.assertIn("人就在这台机器前", self.section)
+
     def test_every_image_send_uses_a_path_inside_the_current_directory(self) -> None:
         lines = [line for line in self.section.splitlines() if "--image" in line]
         self.assertTrue(lines)
@@ -480,7 +485,7 @@ class LocalUpgradeRunbookTest(ContractCase):
                 )
 
     def test_the_diff_command_watches_directories_that_exist(self) -> None:
-        for path in ("skills/buzz-agent-setup/scripts", "skills/buzz-agent-setup/references/scripts"):
+        for path in ("skills/agent-harness/buzz-agent-setup/scripts", "skills/agent-harness/buzz-agent-setup/references/scripts"):
             with self.subTest(path=path):
                 self.assertTrue((REPO / path).is_dir())
 
@@ -763,7 +768,7 @@ class LocalUpgradeRunbookTest(ContractCase):
                 ["git", "-C", str(repo), "config", "user.name", "Test"],
                 check=True,
             )
-            source = repo / "skills/buzz-agent-setup/SKILL.md"
+            source = repo / "skills/agent-harness/buzz-agent-setup/SKILL.md"
             source.parent.mkdir(parents=True)
             original = "---\nname: buzz-agent-setup\n---\n$Format:%H$\n"
             source.write_text(original, encoding="utf-8")
@@ -797,7 +802,7 @@ class LocalUpgradeRunbookTest(ContractCase):
             attributes = repo / ".git/info/attributes"
             attributes.parent.mkdir(parents=True, exist_ok=True)
             attributes.write_text(
-                "skills/buzz-agent-setup/SKILL.md export-subst\n",
+                "skills/agent-harness/buzz-agent-setup/SKILL.md export-subst\n",
                 encoding="utf-8",
             )
             release = root / "release"
@@ -1013,6 +1018,7 @@ class CanonicalAgentLauncherTest(unittest.TestCase):
                 "BUZZ_ACP_AGENT_OWNER=owner\n"
                 "BUZZ_ACP_BINARY=/usr/bin/true\n"
                 f"BUZZ_ACP_BINARY_SHA256={buzz_acp_digest}\n"
+                f"BUZZ_ACP_RECOVERY_REVISION={'a' * 40}\n"
                 f"BUZZ_ACP_AGENT_COMMAND='{executables['media-proxy']}'\n"
                 f"BUZZ_ACP_MEDIA_ADAPTER_COMMAND='{executables['claude-agent-acp']}'\n"
                 f"BUZZ_ACP_MEDIA_BUZZ_CLI='{executables['buzz']}'\n"
@@ -1042,6 +1048,14 @@ class CanonicalAgentLauncherTest(unittest.TestCase):
             self.assertNotIn("HOSTILE_MARKER", environment)
             self.assertEqual(environment["BUZZ_PRIVATE_KEY"], "$OWNER_TOKEN")
             self.assertNotIn("parent-secret-must-not-expand", environment.values())
+            expected_recovery = home / ".local/state/buzz-recovery/demo/runtime"
+            self.assertEqual(environment.get("BUZZ_ACP_RECOVERY_DIR"), str(expected_recovery))
+            self.assertEqual(expected_recovery.stat().st_mode & 0o777, 0o700)
+            configured_text = env_file.read_text()
+            env_file.write_text(configured_text.replace(f"BUZZ_ACP_RECOVERY_REVISION={'a' * 40}\n", ""))
+            with self.assertRaises(launcher.LauncherError):
+                launcher.prepare_launch("demo", home=home, uid=os.geteuid(), username="fixture-user")
+            env_file.write_text(configured_text)
 
             agents.chmod(0o770)
             with self.assertRaises(launcher.LauncherError):

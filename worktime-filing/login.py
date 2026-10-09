@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """worktime-filing skill 登录脚本。
 
-启本地随机端口等待 OAuth 回调，拿到 token 写入 ~/.claude/skills/worktime-filing/.env。
+启本地随机端口等待 OAuth 回调，拿到 token 写入 ~/.claude/skills/collaboration/worktime-filing/.env。
 用法：
-    python3 ~/.claude/skills/worktime-filing/login.py
+    python3 ~/.claude/skills/collaboration/worktime-filing/login.py
 """
 import http.server
 import os

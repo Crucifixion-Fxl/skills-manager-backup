@@ -23,6 +23,15 @@ description: Create and review .gitlab-ci.yml files based on GitLab CI best prac
 - 🟡 **建议改进**：不符合最佳实践
 - 🟢 **可选优化**：进一步优化空间
 
+## Issue lifecycle gate
+
+- 创建或修改项目 CI 配置前，按 [`gitlab-issue-sop` 生命周期契约](../../collaboration/gitlab-issue-sop/references/lifecycle-binding.md) 验证 Root Issue 与当前仓 Work Item。只读审查可在缺少 binding 时输出事实，但不得给出可用于 merge/release 的 PASS。
+- MR pipeline 的可信 adapter 从 MR 描述中只提取唯一的完整 `Work Item:` / `Root Issue:` URL 作为候选，然后实时验证 Work Item 属于 MR target project、GitLab 将当前 MR 列为该 Work Item 的 related MR，并在跨项目时验证 Root↔Work Item 原生 Issue link。不得要求 `Closes`/`Fixes`/`Resolves` 或依赖 `closes_issues` 放行。
+- adapter 输出的 `root_issue_binding` 与 `work_item_binding` 至少包含 contract version、host、project ID、Issue IID/URL、state、assignee IDs、snapshot digest 和 `verified_at`。分支名、commit message、自由文本裸 `#IID` 或客户端 JSON 不可信。
+- 读取 Issue、related-MR 与 Issue-link API 的 adapter 必须使用明确批准、具备最小 read-api 权限的凭据；当前全局 Code Review 使用 `MR_USER_TOKEN`，不得静默回退到能力不足的 `CI_JOB_TOKEN`。
+- consumer job 必须 fail closed：binding 缺失、关闭、无 assignee、项目不匹配、关系为零/多义、snapshot 无法核验或 revision 漂移时，不运行会给出通过结论的 review/release Gate。
+- pipeline 完成后只把 terminal pipeline ID/status、exact commit SHA、artifact/report 固定链接和证据边界写回 Work Item；完整日志保留为 CI artifact。写回需幂等并读回。
+
 ## 公司标准
 
 ### Runner Tag 规范
@@ -113,7 +122,7 @@ include:
 | R4b | **`stages:` 必须包含 `test`** —— 本实例大多数仓的 `ci_config_path` 指向 `engineering/ci-templates` 的 `entrypoint.yml`，它强制注入 `ci:init` 在 `test` stage。缺 `test` → MR pipeline **创建即 failed，0 job，`yaml_errors: null`，CI Lint 还显示 valid**，极难诊断 | 🔴 强制 |
 
 > **注意：审查 `.gitlab-ci.yml` 时它可能不是真正的入口。** 先查 `ci_config_path`；指向 `engineering/ci-templates` 的仓，其 pipeline 里还有一批**删不掉的注入 job**（`.pre` 的凭据扫描与仓边界检查、`test` 的 `ci:init`、`.post` 的 AI code review）。
-> 清单、触发条件与 `global:code-review` 的三档，以 `addx:api-synthetic-monitoring` 的 [`references/ci-templates-contract.md`](../api-synthetic-monitoring/references/ci-templates-contract.md) 为准——**不要在本 skill 里另写一份**。
+> 清单、触发条件与 `global:code-review` 的三档，以 `addx:api-synthetic-monitoring` 的 [`references/ci-templates-contract.md`](../../observability/api-synthetic-monitoring/references/ci-templates-contract.md) 为准——**不要在本 skill 里另写一份**。
 
 ### 可靠性
 

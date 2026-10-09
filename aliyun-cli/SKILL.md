@@ -9,6 +9,8 @@ description: 通过 aliyun CLI 管理阿里云资源。当用户提到阿里云�
 
 ## Description
 
+首次接入/变更扫描与日常认证入口见 [SaaS 接入](references/saas-access.md)；已有平台业务契约与授权门禁仍在本 Skill 维护。
+
 本 Skill 提供阿里云 CLI 的标准化操作流程，覆盖资源查询、状态检查和变更操作。阿里云 API 用法通过 WebSearch 查询官方文档，本 Skill 只记录公司特有的账户信息、命名约定和操作红线。
 
 ## 运行环境路由（最高优先级）

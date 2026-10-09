@@ -33,7 +33,7 @@ description: >-
    - `skill-proposal-discovery` 每周复用最近 4 份周报 / 28 天的脱敏候选账本，只处理上次 cutoff 之后新增或语义发生变化的证据。仍须满足至少 3 个独立任务、2 个不同上下文和 AddX Skill 对比门槛；没有变化时明确写“本周无新提案”。
    - 两项任务共享冻结场景和增量索引，分别给结论。周报草稿必须进入 `awaiting_human_review`；人工明确接受前不得自动发布或进入工时填写。
 3. 重大 Issue/MR 完成、真实使用推翻已有成功判断，或 evaluator 出现 false pass 时，可以提示增加一次显式复盘，但不能静默创建 Issue、修改 Skill 或发布结果。
-4. 普通 `SessionEnd` hook 复用 analytics plugin 的 `hooks/review_coding_session.py` → `skill-analytics/scripts/review_history.py`：只更新 `~/.loongsuite-pilot/reviews/` 下 `0600` 的 content-free session/branch/MR 索引、source fingerprint 和 locator，默认保留 28 天；不运行完整复盘，不创建 Review Task，也不调用 LLM。weekly run 从该索引按 `version_key + evidence_cutoff_at` 选择新增/变化 session，再用本 Skill 的 extractor 打开最多 8 个必要文本窗口。
+4. 普通 `SessionEnd` hook 复用 analytics plugin 的 `hooks/review_coding_session.py` → `runtime/coding-session/scripts/review_history.py`：只更新 `~/.loongsuite-pilot/reviews/` 下 `0600` 的 content-free session/branch/MR 索引、source fingerprint 和 locator，默认保留 28 天；不运行完整复盘，不创建 Review Task，也不调用 LLM。weekly run 从该索引按 `version_key + evidence_cutoff_at` 选择新增/变化 session，再用本 Skill 的 extractor 打开最多 8 个必要文本窗口。
 5. 单一任务内的重复执行失败、错误假设或鬼打墙交给 `execution-review`；公司已有 Skill 通过 Plugin 目录与安装流程处理，不得把“未安装”误报为新 Skill 需求；跨任务评价工作习惯或提出新增/更新 Skill 才由本 Skill 负责。
 
 ## 增量扫描与 token 预算

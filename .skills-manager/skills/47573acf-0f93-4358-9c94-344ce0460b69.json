@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "47573acf-0f93-4358-9c94-344ce0460b69",
+  "path": "android-dev-setup",
+  "path_key": "android-dev-setup",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/development/android-dev-setup",
+    "branch": null
+  }
+}

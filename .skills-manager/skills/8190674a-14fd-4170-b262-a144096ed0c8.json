@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "8190674a-14fd-4170-b262-a144096ed0c8",
+  "path": "nocodb",
+  "path_key": "nocodb",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/data/nocodb",
+    "branch": null
+  }
+}

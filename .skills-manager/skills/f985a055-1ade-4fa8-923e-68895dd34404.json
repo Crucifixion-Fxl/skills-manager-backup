@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "f985a055-1ade-4fa8-923e-68895dd34404",
+  "path": "testing-strategy",
+  "path_key": "testing-strategy",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/quality/testing-strategy",
+    "branch": null
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "tool": "buildbuddy",
+  "owner": "buildbuddy",
+  "repo": "https://gitlab.addx.ai/DEV/buildbuddy",
+  "researchCommit": null,
+  "routeEntries": [
+    "k8s/base/ingress-ui.yaml",
+    "k8s/base/ingress-ci.yaml",
+    "k8s/base/ingress-dev.yaml"
+  ],
+  "verification": "existing-reference-only",
+  "deploymentConsistency": "pending",
+  "needsResearch": [
+    "deployment SHA/version and auth configuration",
+    "subject and resource permissions"
+  ],
+  "officialReferences": [
+    "https://www.buildbuddy.io/docs/cli/",
+    "https://www.buildbuddy.io/docs/config/"
+  ],
+  "apiDiscovery": {
+    "method": "Version-matched official CLI/API reference plus AddX deployment/private extension source",
+    "officialReferences": [
+      "https://www.buildbuddy.io/docs/cli/",
+      "https://www.buildbuddy.io/docs/config/"
+    ],
+    "deploymentRouteEntries": [
+      "k8s/base/ingress-ui.yaml",
+      "k8s/base/ingress-ci.yaml",
+      "k8s/base/ingress-dev.yaml"
+    ],
+    "coverage": "Do not copy public API; deploy version and private-extension inventory pending"
+  },
+  "referenceBase": "owner-skill-root for SKILL.md/contractEntrypoints/referenceSources paths; contract field resolves from this JSON directory; upstream repository entrypoints stay repository-relative"
+}

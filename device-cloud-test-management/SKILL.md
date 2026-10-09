@@ -12,7 +12,7 @@ description: 通过一次飞书/Casdoor SSO 查询并运行 kb-tests 云测用�
 只使用本 Skill 自带入口，不依赖 `DEVT/device-cloud` checkout：
 
 ```text
-skills/device-cloud-test-management/scripts/device_cloud.py
+skills/quality/device-cloud-test-management/scripts/device_cloud.py
 ```
 
 ## 使用前提：AI 必须能读取用例定义
@@ -25,7 +25,7 @@ skills/device-cloud-test-management/scripts/device_cloud.py
 首次使用先运行一次用例查询作为前置检查：
 
 ```bash
-python skills/device-cloud-test-management/scripts/device_cloud.py search-cases \
+python skills/quality/device-cloud-test-management/scripts/device_cloud.py search-cases \
   --text '<用例关键词>'
 ```
 
@@ -60,7 +60,7 @@ python skills/device-cloud-test-management/scripts/device_cloud.py search-cases 
 ### 1. 解析 App
 
 ```bash
-python skills/device-cloud-test-management/scripts/device_cloud.py inspect-app \
+python skills/quality/device-cloud-test-management/scripts/device_cloud.py inspect-app \
   --app-url '<APP_URL>'
 ```
 
@@ -71,14 +71,14 @@ python skills/device-cloud-test-management/scripts/device_cloud.py inspect-app \
 用户没有给 UID 时，先搜索：
 
 ```bash
-python skills/device-cloud-test-management/scripts/device_cloud.py search-cases \
+python skills/quality/device-cloud-test-management/scripts/device_cloud.py search-cases \
   --module '直播'
 
-python skills/device-cloud-test-management/scripts/device_cloud.py search-cases \
+python skills/quality/device-cloud-test-management/scripts/device_cloud.py search-cases \
   --module '设备设置' \
   --submodule 'video'
 
-python skills/device-cloud-test-management/scripts/device_cloud.py search-cases \
+python skills/quality/device-cloud-test-management/scripts/device_cloud.py search-cases \
   --text '快速进入直播'
 ```
 
@@ -112,7 +112,7 @@ python skills/device-cloud-test-management/scripts/device_cloud.py search-cases 
 先生成预检，不创建 TestPlan：
 
 ```bash
-python skills/device-cloud-test-management/scripts/device_cloud.py run \
+python skills/quality/device-cloud-test-management/scripts/device_cloud.py run \
   --app-url '<APP_URL>' \
   --uid '<UID>' \
   --dry-run
@@ -121,7 +121,7 @@ python skills/device-cloud-test-management/scripts/device_cloud.py run \
 把完整预检结果及其中的 `confirmation.token`、`planName` 展示给用户。只有用户明确确认该资源分组和并发计划后，才原样携带该摘要和计划名执行：
 
 ```bash
-python skills/device-cloud-test-management/scripts/device_cloud.py run \
+python skills/quality/device-cloud-test-management/scripts/device_cloud.py run \
   --app-url '<APP_URL>' \
   --uid '<UID>' \
   --plan-name '<PREFLIGHT_PLAN_NAME>' \
@@ -133,7 +133,7 @@ python skills/device-cloud-test-management/scripts/device_cloud.py run \
 上面是默认的云端 Host 容器执行。用户明确要求“本地 Client 使用云端资源”时，必须使用受控入口：
 
 ```bash
-python skills/device-cloud-test-management/scripts/device_cloud.py run-local \
+python skills/quality/device-cloud-test-management/scripts/device_cloud.py run-local \
   --app-url '<APP_URL>' \
   --uid '<UID>' \
   --client-root '<DEVICE_CLOUD_CLIENT_ROOT>' \
@@ -158,10 +158,10 @@ Client 和 `kb-tests` 是否包含既有 Job 绑定、飞书 SSO 邮箱和平台
 ### 5. 停止
 
 ```bash
-python skills/device-cloud-test-management/scripts/device_cloud.py cancel job \
+python skills/quality/device-cloud-test-management/scripts/device_cloud.py cancel job \
   --job-id <JOB_ID>
 
-python skills/device-cloud-test-management/scripts/device_cloud.py cancel plan \
+python skills/quality/device-cloud-test-management/scripts/device_cloud.py cancel plan \
   --plan-id <PLAN_ID>
 ```
 
@@ -172,7 +172,7 @@ python skills/device-cloud-test-management/scripts/device_cloud.py cancel plan \
 禁止只看页面错误文本就下结论。默认运行：
 
 ```bash
-python skills/device-cloud-test-management/scripts/device_cloud.py diagnose \
+python skills/quality/device-cloud-test-management/scripts/device_cloud.py diagnose \
   full --job-id <JOB_ID> --output-dir '<OUTPUT_DIR>'
 ```
 
@@ -210,6 +210,14 @@ SSO: browser launched at HH:MM:SS
 - 没有有效会话时只允许一个进程打开系统默认浏览器。
 - Server 校验 token 并使用登录邮箱写入真实 `launchedBy`。
 - 不输出任何 token 或 Secret 值。
+
+## 只读登录与资源验收
+
+优先保留 owner CLI 的同进程 session、Token 和系统 keyring 流程。网页登录辅助验收时，前端身份入口为 `/api/auth/userinfo`，直接 Server 的入口为 `/auth/userinfo`；正常 OAuth Bearer 经服务端签名、issuer、audience、expiry 校验后返回身份。该登录生命周期可能同步本地用户目录、角色初始化标记和 `lastLoginAt`，即使已有用户也可能更新；明确记录这些认证副作用，不能把身份 GET 描述为纯 SELECT，也不能将它们与资源业务写入混为一谈。先核对服务端返回的预期邮箱、姓名和访问级别，再查询业务资源；本地解码 JWT 不能替代服务端身份核验。
+
+前端资源 GraphQL 使用配置的同域 `/graphql`，不要从 `/api/auth/userinfo` 推导出 `/api/graphql`。只读元数据候选为固定 query `deviceConnection(first: 10)`，仅选择 `edges { node { resourceType deviceModel online } }`、`totalCount` 和 `pageInfo { hasNextPage }`，按类型、型号、在线状态分组计数；不得顺带读取设备标识、连接信息、账号、任务内容或触发 mutation。执行前仍须追踪 resolver、主查询、自动辅助查询和懒初始化的完整副作用链，匹配目标部署契约。请求携带 Bearer、身份端点成功或 GraphQL 返回数据，都不能证明资源 resolver 将请求绑定到该身份；保护和资源权限未被证实时明确标记“授权未覆盖”，不报告完整授权 PASS。
+
+与网页对照时，分别核对原始类型枚举与 UI 中文显示映射、同筛选和同页的分组数量、当前返回行数及页面总数；返回数量不等于全量，动态快照也不证明跨页实体一致。正常 SignOut 可能跳到 Casdoor `/api/logout` 并返回 `status: ok`；精确记录实际退出响应、页面状态、临时凭据与文件清理结果，不臆测已返回登录页，也不将退出响应当作所有会话已撤销的证明。
 
 ## 终态输出
 

@@ -3,34 +3,18 @@ name: voc-analysis
 description: VOC (Voice of Customer) 分析与市场竞争情报研究。通过 Apify Agent Skills 和 Web Search 从 Reddit、Twitter、Amazon、App Store、YouTube、Facebook Groups、Discord 等多平台采集用户反馈，进行语义标注、痛点挖掘、情感分析和竞品对比，生成数据驱动的市场洞察报告。当用户提到 VOC 分析、用户反馈分析、市场调研、竞品分析、用户评论分析、pain point 分析、customer feedback、market research、competitive intelligence、产品评价分析、用户画像、customer sentiment、review analysis，或需要从多平台采集和分析用户声音时使用此 Skill。即使用户只说"帮我看看用户怎么评价这个产品"或"分析一下竞品"，也应触发。
 ---
 
+平台认证与接入唯一正本：[apify](../../data/apify/SKILL.md)。本流程保留业务授权与执行门禁，不复制登录或 Token 申请方式。
+
+
 # VOC Analysis — 市场调研与用户声音分析
 
 ## Description
 
 Senior market research analyst workflow for comprehensive, data-driven VOC (Voice of Customer) analysis and competitive intelligence. Covers the full pipeline: multi-platform data collection (Reddit, Twitter, Amazon, App Store, YouTube, etc.) via Apify Agent Skills and web search, LLM semantic tagging, Python statistical counting, and Chinese report generation with English quotes preserved.
 
-## Prerequisites: Apify API Key (MANDATORY — 必须先完成)
+## Prerequisites: Apify access
 
-**Apify 是本 Skill 的核心依赖，没有 Apify 无法执行 VOC 分析。**
-
-Before starting ANY research, you MUST verify Apify is configured:
-
-1. Check `APIFY_TOKEN` environment variable: `echo $APIFY_TOKEN`
-2. Or check `.env` file for `APIFY_TOKEN=...`
-
-**If no API key is found, STOP IMMEDIATELY. Do NOT proceed. Tell the user:**
-
-> "**本 Skill 必须使用 Apify 进行多平台数据采集，没有 API Key 无法开始调研。**
->
-> 请按以下步骤操作：
-> 1. 联系 **陈敬敏 (Jingmin Chen)** 获取 APIFY_TOKEN
-> 2. 安装 Apify Agent Skills: `npx skills add apify/agent-skills`
-> 3. 配置环境变量: 在 `.env` 文件中添加 `APIFY_TOKEN=<your-token>`
-> 4. 配置完成后再来找我开始调研。"
-
-**Apify 不是可选项。** 仅靠 Web Search 无法完成完整的 VOC 分析（数据量不足、无法结构化采集、无法覆盖多平台）。必须确保 Apify 可用后才能开始工作。
-
-Read `references/apify-setup.md` for detailed installation and configuration steps.
+Apify 是本流程的核心依赖，采集前必须按[Apify 平台 owner](../../data/apify/SKILL.md)确认宿主注入与实际权限。缺少访问能力时停止采集，经web-access恢复；不读取.env或凭据缓存，不打印Token，不在本业务Skill重复申请/登录教程。官方采集Skill入口与部署兼容由owner维护；获授权的VOC数据采集仍执行本流程的业务范围与费用约束。
 
 ## Rules
 

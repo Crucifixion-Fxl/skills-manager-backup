@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "tool": "azure",
+  "provider": "delegated",
+  "owner": "azure-cli",
+  "authContract": "SKILL.md",
+  "verification": "source-verified",
+  "runtimeVerification": "pending",
+  "authDiscovery": "references/auth-discovery.json"
+}

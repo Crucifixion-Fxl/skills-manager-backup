@@ -1,6 +1,6 @@
 # 飞书群 ↔ 频道：成员与表情双向同步，飞书里同意 agent 入群
 
-`buzz_feishu_group_sync.py` 的双向部分（[ADR-0020](../../../docs/05-adr/0020-sync-feishu-group-membership-and-reactions-both-ways.md)，engineering/skills#148）。群同步的其余部分（身份、Setup、配置、state、systemd）见 [feishu-group-sync.md](feishu-group-sync.md)。
+`buzz_feishu_group_sync.py` 的双向部分（[ADR-0020](../../../../docs/agent-harness/adr/0020-sync-feishu-group-membership-and-reactions-both-ways.md)，engineering/skills#148）。群同步的其余部分（身份、Setup、配置、state、systemd）见 [feishu-group-sync.md](feishu-group-sync.md)。
 
 以前成员和表情都只有一个方向：以 Buzz 频道为准改飞书群，人的表情两边都不同步。现在缺省两个方向都走：在飞书群里拉人、拉 agent、移人，频道跟着变；两边都能看到对方的表情；agent 的 owner 在飞书里就能同意 agent 入群。
 
@@ -82,7 +82,7 @@ bot 名额不足，或成员写入没有被飞书 / Buzz Relay 接受；不带�
 
 ### 认人
 
-- **agent**：飞书里只看得到 bot 的 app_id。依次查本机配置、ADR-0019 的目录；都不认识时全量读一次 relay 上的 kind:30177（和它们 agent 的 kind 0，按 ADR-0019 的规则校验）建 app_id → pubkey 的反查表。查不到的 bot 是别人的普通 bot，记下来，不再为它查。
+- **agent**：飞书里只看得到 bot 的 app_id。依次查本机配置、ADR-0019 的目录；都不认识时全量读一次 relay 上的 kind:30177，先按目标 app_id 找候选身份，再校验该身份的全部策略（包括后来换掉 app_id 的策略）的 canonical id 和签名，并结合对应 agent 的 kind 0 按 ADR-0019 建 app_id → pubkey 的反查表。查不到的 bot 是别人的普通 bot，记下来，不再为它查。
 - **人**：bridge 的人员接口**只回答本频道现存成员**，频道外的人它不告诉你是谁。所以一个人被拉进群时，按顺序看：
   1. 他已经是频道成员（bridge 认得）；
   2. 本频道 30 天内见过他（离开频道、又被拉回群的老成员；state 的 `people_seen`）；
@@ -106,7 +106,7 @@ bot 名额不足，或成员写入没有被飞书 / Buzz Relay 接受；不带�
 - **Buzz → 飞书**：频道里的人（以及本机没有凭据、由本频道 Desk bot 代发的 agent）打的表情，由 **Desk bot** 打到飞书对应消息上。飞书对同一条消息、同一个表情、同一个操作者只留一个，所以按「消息 × 表情」计数：第一个人打时加，最后一个人撤回时才去掉。有自己 bot 的 agent 照旧用自己的 bot。
 - **飞书 → Buzz**：两边都有副本的消息登记在 state 的 `rwatch` 里，读 24 小时；入群申请（正文里有 `buzz-join:v1 JOIN-…`）读 7 天，最多 200 条。每轮用 `im reactions batch_query`（owner 的 user 身份，每条最多 10 个，多的翻页）读一次。已绑定的人打的表情，由镜像身份在 Buzz 对应事件上打同一个（kind 7，带 `feishu-author` 标签：`["feishu-author", <这个人的 pubkey>]`，在进程内签名，请求带镜像的 x-auth-tag）；他在飞书里撤回，镜像就发 kind 5 撤回自己那条。
 - **防回声**：bot 在飞书上打的表情（Desk bot、agent bot）不回 Buzz；镜像（以及别的机器的镜像）在 Buzz 上打的表情不回飞书。
-- **对照表**：只同步 `reaction_map` 里有对应的表情（缺省多了 ❌ → CrossMark，与 ✅ → DONE 成对），没有对应的记一次 `reaction_emoji_unmapped`。
+- **对照表**：只同步 `reaction_map` 里有对应的表情（缺省多了 ❌ → CrossMark，与 ✅ → DONE 成对）。入站额外将飞书 `CheckMark` 作为 `DONE` 的别名，明确配置的 `CheckMark` 映射优先；出站 ✅ 仍用 `DONE`。旧账本中 `skipped` 的反应在仍被监测、飞书当前仍存在时重新检查映射，不要求用户取消后重选；已撤回或已过监测期的不复活。没有对应映射的仍只记一次 `reaction_emoji_unmapped`。同一人的 `CheckMark` 和 `DONE` 共存时共享一条 Buzz reaction，最后一个撤回时才撤回 Buzz。
 - **同一表情只留一个**：relay 对同一身份、同一目标、同一表情只留一个 reaction，所以飞书里几个人打同一个表情，Buzz 上是镜像的一个（带第一个人的 `feishu-author`），最后一个人撤回才撤。
 - **不重发**：镜像打表情前先在 `f2r` 记 `pending:<首次时间>`，应答丢了下一轮用首次的时间重发同一个事件，relay 说已有就算送达；超过 relay 的 900 秒时钟窗口才放弃。成员事件（9000/9001）在 `member_events` 保留完整签名事件：窗口内逐字节重发；超窗、signer 改变，或一次未知结果后的精确重试被拒时停住并提示人工核对，不用新 id 猜测旧请求是否生效，也不会在下一轮偷偷恢复重试。
 - **限制**：两边显示的打表情者是 Desk bot 或镜像，不是本人；几个人打同一个表情合并成一个；只读 `rwatch` 里的消息；某条消息一轮读不全（翻页超限、飞书说查不了）时，这一轮不判定它的撤回。
@@ -116,7 +116,17 @@ bot 名额不足，或成员写入没有被飞书 / Buzz Relay 接受；不带�
 agent 的入群申请（ADR-0018）会被镜像到飞书群。agent 的 owner 在飞书里就能回答：
 
 - 在申请消息上打 ✅ 或 ❌；
-- 或者在申请的话题里回复一整行 `/approve JOIN-<id>` / `/deny JOIN-<id>`。
+- 或者点原申请消息的“回复”，发送申请里单独列出的一整行命令，**不需要 @ Agent**；不要另发群消息、@Desk 或加解释文字。同意与拒绝分别为（用申请里的真实编号替换示例）：
+
+```text
+/approve JOIN-<id>
+```
+
+```text
+/deny JOIN-<id>
+```
+
+待审批时真实 @ Agent，会在触发话题收到原因和操作说明；审批命令发错话题、编号不对或非 owner 操作，也会提示而不批准。说明由入群服务发送，不启动 Agent 的业务任务。详见 [审批反馈](agent-channel-join.md#未审批时直接--agent)。
 
 群同步把前者当普通表情带进 Buzz（镜像在申请上打 ✅/❌，带 `feishu-author`）；后者不走 `buzz messages send`（它加不了标签），由镜像在进程内签成话题回复（kind 9，「[飞书] 名字：/approve JOIN-<id>」），带 `feishu-author` 和 `["join", "JOIN-<id>"]`，只发这一条；发送用首次的时间，应答丢了重发的是同一个事件，relay 不会多存一条。
 
@@ -139,6 +149,42 @@ python3 <skill>/scripts/buzz_agent_feishu_app.py --owner-env ~/.config/buzz/env 
 `--dry-run` 影响，拿不到锁就退出码 1，稍后再跑。
 
 **已接受的风险**（ADR-0020）：跑同步的那台机器（频道 owner/admin 的）技术上能替 agent owner 伪造一条同意；bridge 的「飞书账号 ↔ pubkey」绑定也进了审批的信任链。
+
+## 跨机绑定认领
+
+[ADR-0022](../../../../docs/agent-harness/adr/0022-claim-a-channel-to-group-binding-with-a-lease-in-the-mirrors-kind-30177.md)（infra/buzz-deploy#97）。本机的 state 锁和「一个 state 目录一个绑定」挡不住两台机器各自同步同一个频道、或把两个频道绑到同一个群；成员双向同步以后，两套同步还会互相改频道成员。所以每套同步在自己镜像身份的 kind:30177 里写一条租约认领，每轮读别人的来判冲突。
+
+**写在哪里**：镜像的 30177 content 里的 `feishu.bindings`（同时声明 `"mirror": true`），每个绑定一条：
+
+```json
+{"channel": "<频道 UUID>", "chat_ref": "<64 位 hex>", "claimed_at": 1790000000, "heartbeat": 1790000600,
+ "takeover_of": "<可选：被接管的镜像 pubkey>",
+ "policy": {"remove_extras": true, "feishu_unmapped_senders": "context", "buzz_unmapped_senders": "skip",
+            "membership_sync": "two_way", "reaction_sync": "two_way"}}
+```
+
+- `chat_ref` = `SHA-256("buzz-feishu-chat:v1:" + chat_id)` 的小写 hex；chat_id 不出现在任何公开事件里。`policy` 只有布尔和枚举，让频道成员知道自己的频道正怎样被同步。
+- 由 `people_api` 的 `signer_env_file` 那把 key 签名；它必须是镜像 kind 0 里 NIP-OA 背书的 owner，不是就不写，本轮报错说明（`errors` 加一、`skipped` 里记 `claim_owner_mismatch`），同步照常。
+- 读改写在 owner 的策略锁下做（`~/.local/state/buzz-agent-feishu-app/locks/<owner>.lock`，与 `buzz_agent_feishu_app.py` 同一把），只改本绑定那一条，其余字段和别的绑定的条目原样保留（同一个镜像服务几个绑定时互不覆盖）。镜像还没有 30177 时按 `--mirror` 的保守值新建。
+
+**每轮怎么判**（身份和频道成员核对之后、任何同步之前）：
+
+- 从 relay 一次读取所有 30177，先按未信任正文找曾声明镜像的身份，再校验这些身份的**全部策略**（包括后来撤销镜像声明的策略）的 canonical id 和签名；未通过验签的记录不能参与最新策略判断。agent 的 app_id 反查另行筛身份并验签，不复用这份镜像候选。每个 relay 查询都用请求当时的新 NIP-98 时间签名，避免长轮次复用轮首时间而被 60 秒有效期拒绝。只认该镜像 NIP-OA owner 签名的最新一条。心跳在 **30 分钟**租期内才有效；自己的心跳比 **10 分钟**旧、或 `policy` 变了才重写。
+- 同一个频道的别的认领，只认「声明方是本频道 bot 成员、它的 owner 是频道 owner/admin」的；同一个群（`chat_ref` 相同、频道不同）的认领不核对角色。
+- 谁赢：`claimed_at` 早的赢，相同时镜像 pubkey 小的赢；带 `takeover_of` 指名接管的胜过被指名的一方（互相指名时后接管的赢）。自己的认领过期后回来，按「现在」重新认领，不拿旧 `claimed_at` 挤掉接管者。
+- **输了**：本轮整个绑定不同步（消息、表情、成员都停，游标不前进，首轮则绑定不开始），报告 `claim_conflict`（`same_channel` / `same_chat` / `taken_over`）、退出码 3。群里（owner bot）和频道里（镜像）各提示一次：「飞书群同步：本频道已由「<镜像名>」所在的机器同步，这边已停。」（同群是「本群已由……同步到另一个频道，这边已停。」，被接管是「……接管同步，这边已停。」）。提示失败时按同一个幂等键 / 同一个事件 id 在去重窗口内重试，记在 state 的 `claim_notes`；冲突消失后清掉，下一次冲突再提示。输家仍写一条待命认领，赢家停止心跳 30 分钟后自动接管。
+- **被指名接管**（对方 `takeover_of` 是本机镜像）：停下，并从自己的 30177 里撤掉这一条。
+- **对方过期**：忽略，照常同步，报告的 `claim_takeovers` 对每条过期认领只计一次（记在 state 的同名字段里）。
+- **读不到认领**（relay 查询失败）：消息和表情照常，成员同步暂停这一轮（两套同步互改成员伤害最大），报告 `claims_unreadable`。
+- **写不了认领**（锁被占、relay 拒绝或连不上）：照常同步，`claim_publish_failed`，下一轮重试。
+
+**接管与交接**：换机器时旧机器停掉，新机器最多等 30 分钟自动接管；急的话在新机器上跑一次 `round --take-over`，立即写一条带 `takeover_of` 的认领，旧机器下一轮看到就停下并撤掉自己那条。state 不共享：拷还是不拷 state 目录见 [local-upgrade-runbook.md](local-upgrade-runbook.md)「换机器同步同一个绑定」。
+
+**预检**：`bind` / `create-chat` 先查认领，频道（`create-chat`）或频道与群（`bind`）已被**别的镜像**的有效认领占着就拒绝（阻断项 `claimed_by_other_mirror`，`claimed_by` 写明镜像名和 pubkey 前 12 位），什么都不改；本机镜像自己的旧认领不算（换绑时旧群那条还在租期里，由首轮 `--take-over` 或等它过期解决）；读不到认领只给警告 `claims_unreadable`。
+
+**开关**：`binding_claim`（缺省 `true`）；写 `false` 关掉认领的发布和检查，回到只靠本机防重。
+
+**代价**（ADR 已接受）：两套同步恰好同时开始时会重复一两轮；频道 owner/admin 能伪造一条更早的认领让别人停下；认领在 relay 上全员可读，暴露「某个频道 UUID 正被同步到某个群的哈希」和同步策略；没升级的同步不发认领、发现不了。
 
 ## state 与报告
 
@@ -174,3 +220,7 @@ python3 <skill>/scripts/buzz_agent_feishu_app.py --owner-env ~/.config/buzz/env 
 - 表情的「打的人」显示为 bot / 镜像，多人同一表情合并；24 小时（入群申请 7 天）之外的消息不读表情。
 - 同一分钟里对同一个人两边做相反操作时，结果以下一轮为准收敛（冲突规则见上）。
 - 目录或反查表读不到的那一轮：别的机器的镜像认不出（会像以前一样被代发一次），新拉进群的别人的 agent 这一轮加不进频道。
+
+## 验收
+
+整条用户故事的 L4 用例和回执 oracle 见 [feishu-member-sync-l4.md](feishu-member-sync-l4.md)（L4-148-01…09）。

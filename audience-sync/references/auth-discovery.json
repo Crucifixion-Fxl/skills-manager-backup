@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "tool": "audience",
+  "owner": "audience-sync",
+  "instances": [
+    "https://audience-workflow-api-prod-us.addx.live",
+    "https://micro-app-platform-us.addx.live/audience-sync-us"
+  ],
+  "nativeRoute": "Audience Project Personal key (not browser session / service provider key)",
+  "loginFlow": {
+    "reuseFirst": true,
+    "steps": "复用 AUDIENCE_SYNC_API_KEY 或多别名 AUDIENCE_SYNC_API_KEYS；只读验证每把用户已提供 key 的 Project 与允许操作。缺少/无效 key 仅返回原生 Audience 入口，由用户在应用内申请 Project Personal key。",
+    "authorization": "Login, token creation/rotation/revocation and business writes require the current task scope; this discovery performs none."
+  },
+  "tokenMechanism": "Bearer Project Personal key；不能用 Brevo/Athena/平台服务 secret 替代；别名不是权限证据。",
+  "subjectPermission": "GET /api/platform/v3/personal-key（get_project_personal_key_context），然后目标 Project capabilities；Project 匹配、owner scope、allowed operations 按返回值。",
+  "expiryRevoke": "key expiry/revoke UI 与服务端实现未在发布契约中说明；需平台 owner 提供 key 生命周期/撤销回读，失效时返回入口不循环重试。",
+  "officialRefs": [],
+  "sources": [
+    {
+      "kind": "owner-contract",
+      "path": "../SKILL.md",
+      "status": "contract-recorded"
+    },
+    {
+      "kind": "repository",
+      "repository": "https://gitlab.addx.ai/services/audiences",
+      "researchCommit": "53097e58faf98280e08560ef7361a5e1af3b140c",
+      "entries": [
+        "audience-workflow/api/audience-sync-v2.openapi.json"
+      ],
+      "status": "published-contract-source",
+      "sha256": "a1720465b316b19158bcffb4e4525af5e522762868a98db79c5c062d168c0f33"
+    },
+    {
+      "kind": "repository",
+      "repository": "https://gitlab.addx.ai/services/audiences",
+      "researchCommit": "d40108fe69eb5eeaa6879ca4e9aee7f513aa6e2e",
+      "entries": [
+        "audience-workflow/api/project-control-plane.openapi.json"
+      ],
+      "status": "published-contract-source",
+      "sha256": "7ea8ccad8e98135279e2979d6fe5b2c4ad0021be126053a87fc287d11e69d675"
+    }
+  ],
+  "versionPolicy": {
+    "researchCommit": null,
+    "deployedCommit": null,
+    "deploymentMatch": "unknown",
+    "refreshTriggers": [
+      "authentication contract change",
+      "deployed version change",
+      "reproducible auth failure"
+    ],
+    "rule": "Candidate source and published contracts do not establish deployed compatibility. Verify the target instance version and read-only supported capabilities before enabling an adapter.",
+    "publishedContractRevisions": {
+      "audience-workflow/api/audience-sync-v2.openapi.json": "53097e58faf98280e08560ef7361a5e1af3b140c",
+      "audience-workflow/api/project-control-plane.openapi.json": "d40108fe69eb5eeaa6879ca4e9aee7f513aa6e2e"
+    }
+  },
+  "verification": {
+    "source": "source-verified",
+    "fixture": "not-run-in-this-discovery",
+    "runtime": "not-attempted",
+    "scope": "Read-only documentation/repository discovery; no login, token issuance, credential inspection or business API execution."
+  }
+}

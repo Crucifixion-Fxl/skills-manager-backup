@@ -12,7 +12,7 @@ TARGET = ROOT / "contracts" / "source.json"
 CONTRACT_SOURCE = {
     "availability": "reviewed_feature_commit",
     "repository": "services/audiences",
-    "revision": "d81d9387f432bb063651e71f3012e5a5531adb2b",
+    "revision": "febf67312b1fe32821bba84d7037add7981143bc",
 }
 CONTRACTS = {
     "audience-platform-public-v1.openapi.json": {
@@ -26,8 +26,8 @@ CONTRACTS = {
     "project-control-plane.openapi.json": {
         "availability": "reviewed_feature_commit",
         "repository": "services/audiences",
-        "revision": "d81d9387f432bb063651e71f3012e5a5531adb2b",
-        "sha256": "2e4635a4a21e5c6f21f72829bb046a2e287363adc42f2409c3fa1a5856dd720f",
+        "revision": "febf67312b1fe32821bba84d7037add7981143bc",
+        "sha256": "9b4732b21da0194aecc1ba696ed1ed51f259fa792493b3ba9fcbdc97cd1f2b07",
         "source_path": "audience-workflow/api/project-control-plane.openapi.json",
     },
 }
@@ -70,20 +70,10 @@ def _declared_files() -> tuple[str, ...]:
 
 def expected_lock() -> dict[str, object]:
     owner = json.loads((ROOT / "contracts/semantic-owner.json").read_text(encoding="utf-8"))
-    if set(owner) != {"availability", "origin", "repository", "revision", "pending_overlay"}:
+    if set(owner) != {"repository", "origin", "availability", "revision"}:
         raise ValueError("invalid_semantic_owner")
     revision = owner.get("revision")
     if not isinstance(revision, str) or len(revision) != 40:
-        raise ValueError("invalid_semantic_owner")
-    overlay = owner.get("pending_overlay")
-    if not isinstance(overlay, dict) or set(overlay) != {"merge_request", "revision", "status"}:
-        raise ValueError("invalid_semantic_owner")
-    if (
-        overlay.get("merge_request") != "lli/user-research-skill!144"
-        or overlay.get("status") != "open_unmerged"
-        or not isinstance(overlay.get("revision"), str)
-        or len(overlay["revision"]) != 40
-    ):
         raise ValueError("invalid_semantic_owner")
     files = {
         relative: hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()

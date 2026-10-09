@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "a578978a-8bbf-4826-bad3-a8fb72946731",
+  "path": "feishu-session-collab",
+  "path_key": "feishu-session-collab",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/collaboration/feishu-session-collab",
+    "branch": null
+  }
+}

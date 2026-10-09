@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "6ea99f20-919a-42a0-8572-f22d84e0e63c",
+  "path": "iot-service-dev-setup",
+  "path_key": "iot-service-dev-setup",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/development/iot-service-dev-setup",
+    "branch": null
+  }
+}

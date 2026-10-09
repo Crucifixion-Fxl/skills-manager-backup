@@ -47,6 +47,13 @@ def test_skips_exhausted_unavailable_and_unknown_candidates():
     assert d.to == "codex-buzz"
 
 
+def test_leaves_an_exhausted_codex_profile():
+    d = W.decide("codex-buzz", health(**{"codex-buzz": "exhausted"}), PS)
+    assert (d.action, d.to) == ("switch", "grok")
+    d = W.decide("codex-buzz", health(grok="exhausted", **{"codex-buzz": "exhausted"}), PS)
+    assert (d.action, d.to) == ("switch", "claude-buzz")
+
+
 def test_unknown_candidate_allowed_only_when_asked():
     h = health(grok="exhausted", **{"claude-buzz": "unknown", "codex-buzz": "unavailable", "glm": "exhausted"})
     assert W.decide("grok", h, PS).action == "stuck"

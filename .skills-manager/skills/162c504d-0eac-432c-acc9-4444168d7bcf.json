@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "162c504d-0eac-432c-acc9-4444168d7bcf",
+  "path": "resourcespace",
+  "path_key": "resourcespace",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/collaboration/resourcespace",
+    "branch": null
+  }
+}

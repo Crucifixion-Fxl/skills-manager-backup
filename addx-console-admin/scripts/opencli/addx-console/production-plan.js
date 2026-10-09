@@ -1,0 +1,4 @@
+import {cli,Strategy} from '@jackwener/opencli/registry';
+import {identity,request} from './native.mjs';
+import {productionPlanId,productionPlanDetail} from './production-plan-records.mjs';
+cli({site:'addx-console',name:'production-plan',access:'read',description:'Read existing default production plan selected model/factory IDs and workstation metadata; excludes raw configuration/rules',strategy:Strategy.LOCAL,browser:false,args:[{name:'id',type:'int',required:true,help:'Exact existing ID from production-plans'}],columns:['id','name','publishStatus','modelCount','models','modelTypes','categoryIds','manufacturerCount','manufacturerIds','processCount','artCount','artIds','artNames'],func:async(args)=>{const id=productionPlanId(args);await identity();return[productionPlanDetail(await request('/produce/plan/default-produce-plan/'+id,'POST',{}),id)];}});

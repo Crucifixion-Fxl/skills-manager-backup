@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "tool": "datahub-schema-search",
+  "owner": "datahub-schema-search",
+  "status": "source-reviewed-runtime-pending",
+  "contract": "saas-access.md",
+  "notes": "既有Skill声明独立服务入口与/docs，但未声明认证机制；不宣称匿名、不套DATAHUB_TOKEN或DataHub SSO。宿主变量、subject、实际认证/角色、申请/撤销及生命周期均pending。只有部署/source认证契约核对后才能连接验证。",
+  "runtimeCallsPerformed": false,
+  "credentialHandling": "No login, credential reads, token issuance, global installation or SaaS business calls performed."
+}

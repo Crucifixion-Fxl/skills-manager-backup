@@ -200,11 +200,9 @@ Superset **没有 service account 机制**，只能用用户名+密码换 JWT。
 
 ### 申请流程
 
-**找李文斑申请**，申请时必须说清三件事：
+按 [结构化数据访问申请](data-access.md) 收集 Agent、业务背景、数据范围、受众/出口、频率及有效期，以 Creator 本人提交飞书审批。陈敬敏批准后，由李文斑按 [buzz-data-access-admin](../../../security/buzz-data-access-admin/SKILL.md) 创建专用账号、核对 IAM Role、提交 Lake Formation Terraform MR，并完成 apply 和 Agent 身份正负向验收。
 
-1. 这个账号服务哪个 agent（账号名建议直接体现，如 `agent-naturehood`、`agent-cs`）
-2. agent 的使用场景（要查什么、给谁看、多久查一次）
-3. **需要限定到哪个业务线/数据范围**——这是关键，审批人据此配 Row Level Security 和 dataset 权限
+审批通过只表示可执行；验收成功才能说已开通。拒绝、撤回、过期先停止；扩权或续期重新申请。账号名采用 `agent_` 前缀，例如 `agent_naturehood_bi`，不能复用个人或其他 Agent 账号。
 
 ### 权限范围按业务线收窄（实例）
 
@@ -218,7 +216,7 @@ Superset **没有 service account 机制**，只能用用户名+密码换 JWT。
 ### 账号档位
 
 - 角色给 **Gamma + SQL Lab**；SQL 只允许 SELECT。允许 `-bi` 在本业务 workspace 直接建／改 Dashboard 与 Chart；**Dataset／Database／Connection 保持只读**
-- 数据范围通过 dataset 授权 + Row Level Security 限定到该 agent 的业务线
+- 数据范围按已批准的库表、列与产品行边界，通过 Lake Formation 显式权限/data cells filter 和受限 Superset 权限验证；Dataset RLS 不代表 SQL Lab 原始 SQL 的完整隔离
 - 密码进 agent 自己的 `.env`（600），不进 git、不进频道消息、不进 prompt 正文
 
 ### 验证（拿到账号后必做）
@@ -261,3 +259,25 @@ SUPERSET_USERNAME=ai-bot        # 出事查不出是谁、撤销全停、权限�
 SUPERSET_USERNAME=agent-naturehood   # 只有喂鸟器业务权限，找李文斑申请时已限定
 SUPERSET_PASSWORD=<该账号自己的密码>
 ```
+
+## 独立授权的 Issue 写入口
+
+Owner 明确只授权 Issue 创建、评论、标题/描述及关闭/重开时，可使用
+`scripts/gitlab_issue_access.py`；不升级已有 Reporter/Planner 身份，也不打开
+`gitlab_project_token.py` 的通用写方法。此入口仅支持 `create/comment/update/close/reopen`，
+拒绝描述和评论中的 quick-action 行；不允许任意 endpoint、项目迁移、删除、MR 或代码写入。
+
+Owner launcher 固定原 `BUZZ_GITLAB_PROJECT_TOKEN_MAP`，以及 0600 的
+`BUZZ_GITLAB_ISSUE_GRANT`、`BUZZ_GITLAB_ISSUE_PROVISIONING_RECEIPT`。
+Grant 使用 `agent-issue-access-v1`，绑定当前 map、helper 文件 SHA-256、provisioning receipt
+及每项目独立 bot/token ID。仅在每个项目以自身身份完成真实五类操作并读回后，才能记录对应
+Issue IID、评论 ID、验证时间及 owner 授权来源；不得用离线通过替代真实 canary。
+每次写前重新核对自身 PAT、external 身份、当前精确角色和唯一项目 membership，写后读回。
+未知结果禁止自动重写。配置/凭据/实现变化使相关 grant 失效，需要重新核验。
+
+```bash
+python3 <frozen-release>/gitlab_issue_access.py --project-id <mapped-id> \
+  --action comment --issue-iid <iid> --data-file <json-with-body>
+```
+
+此入口约束调用路径；同 UID 的 Python 进程不能因此被视为操作系统级凭据隔离。

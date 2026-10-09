@@ -1,7 +1,7 @@
 """Shared helpers for the L2-3 (real Desk) and L3 (routing) tests on the localstack.
 
 Both layers need the localstack up with its Desk and role buzz-acp agents running on the current prompts:
-  python3 skills/buzz-agent-setup/tests/localstack/stack.py agents --restart desk,role
+  python3 skills/agent-harness/buzz-agent-setup/tests/localstack/stack.py agents --restart desk,role
 They share the GitLab project and channel with L2-2, so never run them concurrently with L2-2 or each other.
 Only 127.0.0.1 services are contacted. Sync runs from `stack.py timer-run` (ADR-0008), and routing is
 the deterministic Canvas gate under the Desk identity, never a route Workflow.

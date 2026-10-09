@@ -2,10 +2,15 @@
 
 本页记录 `buzz_feishu_group_sync.py round` 的消息、话题、卡片以外的正文安全与图片契约。配置、预检、报告字段、卡片格式和运维入口见 [feishu-group-sync.md](feishu-group-sync.md)；成员与表情双向同步见 [feishu-two-way-sync.md](feishu-two-way-sync.md)；非成员与代发策略见 [feishu-routing-policy.md](feishu-routing-policy.md)。
 
+hostd 的 Agent 自有 bot 出口使用可恢复对应关系的 Card 1.0，不显示独立卡片标题（发送者由飞书展示）。新投递的正文超过 240 字或 6 行时，默认展示前 120 个可见字符（换行计一个字符；Markdown 链接地址和成对格式标记不占字数），剩余内容接入 `expanded: false` 的原生折叠面板，不重复预览；不再以 4 个原始行截短。切分跨越链接、强调或代码时，在两个组件分别闭合／重开格式，只接续正文。GitLab Issue／MR 通知按生产者的边界 header 精确识别：正文首先展示对象标题和链接，其后是评论／已打开等事件状态；机器 header 与专用通知行不展示，不改变 Buzz 原消息及路由判断。普通消息和中间引用的 header 不按通知改写。真实提及和底部 Buzz 原文链接始终保留在面板外。超长链接地址撑大预览时降为纯文字预览并标注省略；超过飞书卡片字节限制时明确标注截断，保留原文入口。这是 hostd 的展示策略，不是飞书客户端自动「更多」的阈值设置。已有待确认投递保留原请求格式和幂等键，不为改变外观重发历史消息。
+
+Agent 自有出口按话题调度。完整签名历史读取后，先把未处理候选的精确 ID、作者、频道、时间和父引用持久保存，不保存消息正文，也不以队列记录授权投递。每轮最多尝试一个顶层候选，失败也消耗额度；失败从 30 秒开始退避，最多 300 秒。同一话题保持依赖顺序，其他独立话题可继续；每 8 次选择按候选的等待时间安排一次，避免持续的新消息饿死旧消息。旧游标被未结算候选保留，UNKNOWN 不重新发起写入。实际投递仍执行当前身份、权限和真实根消息核验。5 秒只是两次候选调用之间的让出预算：完整历史读取、一次网络调用和原有最多 8 层依赖处理不被强制中断，因此不是端到端 5 秒承诺。
+
+
 ### 4. 运行：`round`
 
 ```bash
-python3 scripts/buzz_feishu_group_sync.py round --config <cfg.json> --state-dir <dir> [--allow-bulk-removal] [--skip-backlog]
+python3 scripts/buzz_feishu_group_sync.py round --config <cfg.json> --state-dir <dir> [--allow-bulk-removal] [--skip-backlog] [--take-over]
 ```
 
 每次调用跑一轮，由 owner 的 `systemd --user` timer 每分钟触发一次；单元示例见主参考。

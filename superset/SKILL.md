@@ -9,6 +9,8 @@ description: Apache Superset 数据可视化与 BI 平台操作。查询 Dashboa
 
 ## Description
 
+首次接入/变更扫描与日常认证入口见 [SaaS 接入](references/saas-access.md)；已有平台业务契约与授权门禁仍在本 Skill 维护。
+
 适用场景：Dashboard 浏览、Chart 管理、SQL Lab 即席查询、Dataset 巡检。
 
 ## Rules
@@ -206,3 +208,15 @@ charts=$(curl -s -H "Authorization: Bearer $SUPERSET_TOKEN" \
 # 示例：DDL 已确认该表按 days(dvce_created_tstamp) 分区，因此使用有界 dvce_created_tstamp 过滤和 LIMIT
 {"database_id": 1, "sql": "SELECT event_name, collector_tstamp FROM analytics.dwd_base_event_hi WHERE dvce_created_tstamp >= TIMESTAMP '2026-07-22 00:00:00' AND dvce_created_tstamp < TIMESTAMP '2026-07-29 00:00:00' LIMIT 500", "schema": "analytics"}
 ```
+
+### 服务账号来源与两端验证
+
+使用用户明确指定的 Agent 环境文件时，仅在所在机器进程内读取 Superset 所需字段，不打印或复制整个文件，不执行文件里的 shell 代码。实际 `SUPERSET_USER`/`SUPERSET_USERNAME` 必须先与独立的 `SUPERSET_EXPECTED_USER` 比较；不能把 expected 值先赋给实际用户名再比较。SSH 登录 shell 的默认账号不代表指定 Agent 账号。
+
+保持已有 login2 表单流程：先核验实际账号与预期身份，再以目标页及 `/api/v1/me/` 的真实响应确认登录。密码尽量留在凭据来源机器的进程中；需要跨机器使用会话时，通过加密、受控通道在进程内交接，不落盘或输出。分别验证本机和远端的目标身份及只读结果。原生 HTTP 消费、端口转发租约和浏览器身份是不同验证项，只记录实际完成的项。
+
+### Cookie 与受限隧道闭环
+
+两端直连成功不代替隧道验收。需要 tunnel 模式时，使用本任务隔离的 SSH 连接，将远端 loopback 转发到本机 loopback 的固定平台只读适配器；只允许明确的 GET 路径，固定 origin、预期身份与资源范围，用短时随机租约及本次平台 Cookie 校验请求。Cookie 只经受控 stdin/加密通道交接，不进入 URL、日志或配置文件。必须在远端发起真实请求、观察适配器实际转发，并与本机身份及业务结果比较。
+
+SSH multiplex 控制 socket 路径要短：系统临时目录加 SSH 随机后缀可能超过 macOS Unix socket 长度限制。使用短路径的私有临时目录，不改全局 SSH 配置；避免继承用户已有转发。清理时终止本任务 SSH/适配器进程并删除临时控制目录，以转发端口已无监听作为证据；重新 bind 失败可能只是 TIME_WAIT，不能直接判为残留隧道。清理探针不携带 Cookie，也不额外调用已明确跳过的撤销后拒绝测试。

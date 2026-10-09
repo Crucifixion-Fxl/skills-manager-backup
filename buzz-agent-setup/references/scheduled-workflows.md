@@ -1,8 +1,10 @@
 # 定时分析 Workflow
 
-业务 Channel 用 Buzz `schedule` 唤醒角色 Agent 做**只读分析**。方法在对应 Skill；本页只规定目录、cron 专属参数和最终报告的站立受众。GitLab → Buzz 同步不是 Workflow，见 [gitlab-buzz-sync.md](gitlab-buzz-sync.md)。
+业务 Channel 的分析类 Buzz `schedule` 唤醒角色 Agent 做**只读分析**。方法在对应 Skill；本页只规定目录、cron 专属参数和最终报告的站立受众。GitLab → Buzz 同步不是 Workflow，见 [gitlab-buzz-sync.md](gitlab-buzz-sync.md)。
 
 下发：`"$BUZZ_CLI" workflows create --channel <CH> --yaml "$(cat <file>)"`。改现网 yaml 是跨出 skills 仓的写操作，要另走 ACT。
+
+**新建频道另一个默认项**：[每日讨论回写](channel-issue-workflow.md)，由注册Desk/明确指定Agent使用`channel-issue-progress`，每天北京时间22:00（UTC14:00）启动并在处理完成后维护已有Issue。它是有明确追加comment授权与writer门禁的资料回写Workflow，不能将分析类的只读权限当写入许可；默认disabled，不扩大`-dev`/executor权限。模板在`references/workflows/channel-issue-progress.yaml`。
 
 ## 谁可以有 schedule
 

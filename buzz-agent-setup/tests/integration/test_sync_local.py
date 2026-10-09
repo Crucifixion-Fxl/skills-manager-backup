@@ -1,9 +1,9 @@
 """L2-2 integration: gitlab_buzz_sync.py × local Buzz relay × local marginalia GitLab, no LLM.
 
 Skipped unless BUZZ_SYNC_L2=1. Needs the localstack up and the GitLab fixture applied:
-  python3 skills/buzz-agent-setup/tests/localstack/stack.py up --with-desk --with-role   # or already up
-  python3 skills/buzz-agent-setup/tests/localstack/stack.py fixture
-  BUZZ_SYNC_L2=1 python3 -m unittest skills/buzz-agent-setup/tests/integration/test_sync_local.py -v
+  python3 skills/agent-harness/buzz-agent-setup/tests/localstack/stack.py up --with-desk --with-role   # or already up
+  python3 skills/agent-harness/buzz-agent-setup/tests/localstack/stack.py fixture
+  BUZZ_SYNC_L2=1 python3 -m unittest skills/agent-harness/buzz-agent-setup/tests/integration/test_sync_local.py -v
 
 Each case creates uniquely titled objects in the localstack GitLab project, runs the real script in a
 subprocess with an explicitly built environment, and asserts through the raw Buzz 0.5.23 CLI (as the
@@ -34,8 +34,8 @@ from pathlib import Path
 
 ENABLED = os.environ.get("BUZZ_SYNC_L2") == "1"
 SKILL = Path(__file__).resolve().parents[2]
-REPO = SKILL.parents[1]
-SCRIPT_REL = "skills/buzz-agent-setup/scripts/gitlab_buzz_sync.py"
+REPO = SKILL.parents[2]
+SCRIPT_REL = "skills/agent-harness/buzz-agent-setup/scripts/gitlab_buzz_sync.py"
 STATE_FILE = SKILL / "tests" / "localstack" / ".state" / "state.json"
 REF_SCRIPTS = SKILL / "references" / "scripts"
 OWNER_WRAPPER = Path.home() / ".local" / "bin" / "buzz"

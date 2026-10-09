@@ -7,6 +7,8 @@ description: Use this skill when the user needs to work with the NineData platfo
 
 ## Description
 
+首次接入/变更扫描与日常认证入口见 [SaaS 接入](references/saas-access.md)；已有平台业务契约与授权门禁仍在本 Skill 维护。
+
 This skill lets an agent operate the NineData platform safely through the NineData OpenAPI instead of connecting to databases directly. It covers listing datasources, running read-only DQL and metadata checks through controlled SQL execution, and routing DML/DDL/DCL/TCL or mixed SQL batches into governed SQL Task workflows with rule review, approval, execution control, and audit logs. All execution goes through NineData authentication, permission checks, SQL rule checks, masking, throttling, and workflow approval; the agent never bypasses a platform decision.
 
 ## Capabilities
@@ -189,3 +191,11 @@ Why this is right: state-changing SQL is confirmed with the user, then submitted
 - OpenAPI authentication: `references/openapi-auth.md`
 - Safety boundary: `references/safety-boundary.md`
 - Client installation: `references/client-install.md`
+
+## AddX 认证与网页访问
+
+- 选定目标实例 `https://ninedata.addx.live`；企业 SSO 登录组织域名为 `a4x`。需要用户输入或扫码时按 [web-access](../../agent-harness/web-access/SKILL.md) 将任务独立登录页置前，私密完成正常登录，随后核验当前平台身份及所选资源权限。不要把样本身份、版本或数据源数量写入方法文档。
+- 日常原生访问优先使用已有批准的 AccessKeyId/AccessKeySecret 与官方 OpenAPI 签名。凭据需有明确来源、owner、scope和生命周期，私密注入；缺少进程变量不证明用户没有已有Key，不扫描私人配置或为了只读验收创建Key/管理Token。官方客户端保留 AK/SK 认证。
+- 网页访问并存，可用于登录、权限/身份核验、辅助取得已有授权凭据，或官方API缺能力时的读取。网页Session不是OpenAPI签名凭据；不得用Cookie代替官方签名。
+- 需要网页登录态原生fallback时，先核对当前部署的实际只读main/aux请求、认证/CSRF与副作用契约，再实现严格目标/path/DTO白名单的独立OpenCLI能力。这里不声称该fallback已实现、Session已能在远端使用或已完成native验收。
+- 关闭tab不等于登出或profile清理；已实际登出时不可假定旧Session仍有效。恢复后检测目标登录完成再继续；不输出Cookie/JWT/密码/签名或数据库连接凭据。两端验收须各自主机实际原生执行并与安全网页字段对照，租约回调本机不算远端原生。

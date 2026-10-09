@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "tool": "resourcespace",
+  "provider": "delegated",
+  "owner": "resourcespace",
+  "authContract": "references/saas-access.md",
+  "verification": "source-verified",
+  "runtimeVerification": "runtime-verified-local-poc"
+}

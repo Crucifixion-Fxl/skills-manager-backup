@@ -16,8 +16,8 @@ import unittest
 from pathlib import Path
 
 SKILL = Path(__file__).resolve().parents[1]
-REPO = SKILL.parents[1]
-ADR_DIR = REPO / "docs" / "05-adr"
+REPO = SKILL.parents[2]
+ADR_DIR = REPO / "docs" / "agent-harness" / "adr"
 ADR15_NAME = "0015-deliver-an-mr-to-one-thread-and-cross-link-the-others"
 ADR14_NAME = "0014-allow-a-human-top-level-message-as-an-origin-root"
 ADR15 = ADR_DIR / f"{ADR15_NAME}.md"
@@ -26,9 +26,9 @@ ADR_INDEX = ADR_DIR / "README.md"
 REFERENCE = SKILL / "references" / "gitlab-buzz-sync.md"
 SKILL_MD = SKILL / "SKILL.md"
 FCHAC = SKILL / "references" / "fchac-model.md"
-STORY = REPO / "docs" / "04-user-stories" / "buzz-agent-setup-gitlab-buzz-sync.md"
-PLAN = REPO / "docs" / "plans" / "2026-09-13-buzz-agent-setup-gitlab-buzz-sync-test-plan.md"
-SCENARIOS_HTML = REPO / "docs" / "testing" / "scenarios" / "tech-gitlab-buzz-bridge.html"
+STORY = REPO / "docs" / "agent-harness" / "requirements" / "buzz-agent-setup-gitlab-buzz-sync.md"
+PLAN = REPO / "docs" / "agent-harness" / "plans" / "2026-09-13-buzz-agent-setup-gitlab-buzz-sync-test-plan.md"
+SCENARIOS_HTML = REPO / "docs" / "agent-harness" / "testing" / "scenarios" / "tech-gitlab-buzz-bridge.html"
 SCENARIOS_JSON = SKILL / "tests" / "fixtures" / "gitlab_buzz_product_demo" / "scenarios.json"
 SCRIPT = SKILL / "scripts" / "gitlab_buzz_sync.py"
 

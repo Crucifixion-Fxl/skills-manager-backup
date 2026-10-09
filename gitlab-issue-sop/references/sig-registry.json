@@ -1,0 +1,131 @@
+{
+  "schema_version": 1,
+  "owner_issue": "https://gitlab.addx.ai/engineering/skills/-/issues/227",
+  "scope_mode": "url-filter-ce",
+  "boards": [
+    {
+      "project_id": 1021,
+      "key": "business-capability",
+      "display": "Business Capability",
+      "board_id": 86,
+      "url": "https://gitlab.addx.ai/engineering/skills/-/boards/86?label_name%5B%5D=sig%3A%3Abusiness-capability",
+      "scope_mode": "url-filter-ce",
+      "columns_mode": "direction-topic",
+      "directions": [
+        {
+          "direction": "能力规划",
+          "label": "topic/capability-planning"
+        }
+      ]
+    },
+    {
+      "project_id": 1021,
+      "key": "devops",
+      "display": "DevOps",
+      "board_id": 87,
+      "url": "https://gitlab.addx.ai/engineering/skills/-/boards/87?label_name%5B%5D=sig%3A%3Adevops",
+      "scope_mode": "url-filter-ce",
+      "columns_mode": "direction-topic",
+      "directions": [
+        {
+          "direction": "Agent Harness",
+          "label": "topic/agent-harness"
+        },
+        {
+          "direction": "SaaS 接入与身份安全",
+          "label": "topic/saas-access-security"
+        },
+        {
+          "direction": "GitOps",
+          "label": "topic/gitops"
+        },
+        {
+          "direction": "数据与观测",
+          "label": "topic/data-observability"
+        },
+        {
+          "direction": "研发流程",
+          "label": "topic/development-workflow"
+        }
+      ]
+    },
+    {
+      "project_id": 1021,
+      "key": "tdd-quality",
+      "display": "TDD & Quality",
+      "board_id": 88,
+      "url": "https://gitlab.addx.ai/engineering/skills/-/boards/88?label_name%5B%5D=sig%3A%3Atdd-quality",
+      "scope_mode": "url-filter-ce",
+      "columns_mode": "direction-topic",
+      "directions": [
+        {
+          "direction": "测试自动化",
+          "label": "topic/test-automation"
+        },
+        {
+          "direction": "质量门禁",
+          "label": "topic/quality-gates"
+        },
+        {
+          "direction": "可观测性的 TDD 开发",
+          "label": "topic/observability-tdd"
+        },
+        {
+          "direction": "体验质量",
+          "label": "topic/experience-quality"
+        }
+      ]
+    },
+    {
+      "project_id": 1021,
+      "key": "hardware-ai",
+      "display": "硬件研发 AI 化",
+      "board_id": 89,
+      "url": "https://gitlab.addx.ai/engineering/skills/-/boards/89?label_name%5B%5D=sig%3A%3Ahardware-ai",
+      "scope_mode": "url-filter-ce",
+      "columns_mode": "direction-topic",
+      "directions": [
+        {
+          "direction": "硬件研发资产",
+          "label": "topic/hardware-assets"
+        },
+        {
+          "direction": "硬件在环",
+          "label": "topic/hardware-in-loop"
+        },
+        {
+          "direction": "测试自动化",
+          "label": "topic/test-automation"
+        },
+        {
+          "direction": "能力规划",
+          "label": "topic/capability-planning"
+        }
+      ]
+    },
+    {
+      "project_id": 2080,
+      "key": "marketing-ai",
+      "display": "市场运营 AI 化",
+      "board_id": 90,
+      "url": "https://gitlab.addx.ai/marketing/marketing_automation/-/boards/90?label_name%5B%5D=sig%3A%3Amarketing-ai",
+      "scope_mode": "url-filter-ce",
+      "columns_mode": "direction-topic",
+      "directions": [
+        {
+          "direction": "内容生产",
+          "label": "topic/content-production"
+        },
+        {
+          "direction": "效果与洞察",
+          "label": "topic/performance-insights"
+        },
+        {
+          "direction": "页面与 VOC",
+          "label": "topic/page-voc"
+        }
+      ]
+    }
+  ],
+  "last_change_issue": "https://gitlab.addx.ai/engineering/skills/-/issues/251"
+}

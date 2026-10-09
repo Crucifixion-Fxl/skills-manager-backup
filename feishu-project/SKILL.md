@@ -5,15 +5,18 @@ description: Use when interacting with Feishu Project (飞书项目) APIs — cr
 
 # feishu-project
 
-飞书项目（Meego）操作技能，支持 Plugin Token（Python Client / HTTP API）和 MCP 两条执行路径。
+飞书项目（Meego）操作技能，支持 Plugin Token 的 Python Client、同一凭证的本地 MCP 桥接，以及飞书项目官方 OAuth MCP。
 
 ## Description
 
+首次接入/变更扫描与日常认证入口见 [SaaS 接入](references/saas-access.md)；已有平台业务契约与授权门禁仍在本 Skill 维护。
+
 | 项目 | 说明 |
 | --- | --- |
-| 执行路径 | Plugin Token（HTTP API 直调）+ MCP 双路径 |
-| Plugin 鉴权 | Plugin Token 静默鉴权，无需用户交互 |
-| MCP 鉴权 | OAuth 浏览器授权 |
+| 执行路径 | Plugin Token（Python Client 或本地 MCP）与官方 OAuth MCP |
+| Plugin 鉴权 | Plugin ID/Secret + 经授权的 `X-User-Key`，无需每轮浏览器登录 |
+| 本地 MCP 鉴权 | 复用同一 Plugin Token 和 `X-User-Key` |
+| 官方 MCP 鉴权 | OAuth 浏览器授权，须由当前运行身份明确授权 |
 | Plugin Base URL | `https://project.feishu.cn/open_api/` |
 
 **不适用：** 飞书文档/多维表格/消息等非项目管理 API（使用 lark skill）
@@ -22,17 +25,18 @@ description: Use when interacting with Feishu Project (飞书项目) APIs — cr
 
 ### Rule 1 — 路径选择
 
-本 skill 支持两条执行路径，按以下规则选择：
+先确定当前 Agent 被授权使用的运行身份，再选择执行路径。Plugin Token 不代表独立用户身份；`X-User-Key` 是实际代理用户，不能猜测、借用或用另一身份绕过拒绝。
 
 ```
 检查环境变量 FEISHU_PLUGIN_ID / FEISHU_PLUGIN_SECRET / FEISHU_USER_KEY 是否完整
-  ├─ 完整：
-  │   ├─ Python Client 支持的能力 → 优先 Plugin
-  │   └─ Python Client 不支持但 MCP 支持 → 走 MCP
+  ├─ 完整且代理用户已获授权：
+  │   ├─ 已配置本地 feishu-project-plugin MCP 且能力受支持 → 优先该 MCP
+  │   ├─ Python Client 支持的能力 → 使用 Plugin Client
+  │   └─ 两者均不支持 → 仅在官方 OAuth MCP 当前身份获授权时使用它
   └─ 不完整：
-      ├─ MCP 可用 → 走 MCP
-      └─ MCP 不可用 → 提示配置环境变量
-如果目标能力两条路径都不支持 → 明确提示不支持
+      ├─ 官方 OAuth MCP 当前身份获授权且可用 → 使用官方 MCP
+      └─ 否则 → 报告缺失凭证或权限
+如果目标能力所有获授权路径都不支持 → 明确提示不支持
 ```
 
 **能力矩阵：**
@@ -71,8 +75,12 @@ export FEISHU_PLUGIN_ID="MII_63E9xxx82xxxx"
 export FEISHU_PLUGIN_SECRET="D01B5F1xxx620D133xxxx"
 export FEISHU_USER_KEY="731189198150710xxxx"
 
-# ── 可选 ──
+# ── 使用本地 MCP 时必需：将工具固定在单一空间 ──
 export FEISHU_PROJECT_KEY="your_project_key"
+# 经 Agent 运行授权后才开启写工具；默认只读
+export FEISHU_PROJECT_MCP_ALLOW_WRITE="1"
+
+# ── 其它可选 ──
 export FEISHU_OPEN_APP_ID="cli_xxxx"        # 飞书开放平台 API 所需
 export FEISHU_OPEN_APP_SECRET="xxxx"         # 飞书开放平台 API 所需
 ```
@@ -81,7 +89,8 @@ export FEISHU_OPEN_APP_SECRET="xxxx"         # 飞书开放平台 API 所需
 - Plugin Token 有效期 2 小时，客户端自动缓存并在过期前刷新。但 **401 不会自动重试**（直接抛 `FeishuAuthError`，继承自 `FeishuApiError`），需调用方捕获后重新实例化 client 或手动调用。`FeishuTimeoutError` 单独用于 HTTP 超时（默认 30s，可在业务层重试）
 - `X-USER-KEY` 决定数据访问范围，该用户必须对目标空间有权限
 - 权限 = 插件权限 ∩ 空间安装插件 ∩ 代理用户权限
-- MCP OAuth 通过 `mcp__feishu-project-mcp__authenticate` 或 `mcp__feishu-project__authenticate` 拉起浏览器授权（两个 MCP 前缀均可用，后者额外支持 `list_todo`）
+- 本地 MCP：`scripts/mcp_server.py` 使用 stdio，在宿主 MCP 配置中以 `/usr/bin/python3` 启动；只允许 `FEISHU_PROJECT_KEY` 指定的空间，提供空间/类型/字段/模板/工作项/评论的读写工具，不提供删除、节点流转或管理权限。MCP 工具可见不等于源系统授权，须做 API 读回。
+- 官方 OAuth MCP 通过 `mcp__feishu-project-mcp__authenticate` 或 `mcp__feishu-project__authenticate` 拉起浏览器授权（两个 MCP 前缀均可用，后者额外支持 `list_todo`）；不能自动降级到其他人的 OAuth 会话。
 
 ### Rule 2 — Python Client 使用
 
@@ -95,7 +104,7 @@ export FEISHU_OPEN_APP_SECRET="xxxx"         # 飞书开放平台 API 所需
 from scripts.feishu_client import FeishuProjectClient, is_plugin_auth_available
 
 if not is_plugin_auth_available():
-    # 环境变量不完整，走 MCP 路径
+    # 环境变量不完整，报告缺口；仅使用当前身份已授权的其它路径
     ...
 
 client = FeishuProjectClient()  # 自动从环境变量读取凭证

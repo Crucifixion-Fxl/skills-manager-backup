@@ -10,7 +10,13 @@ from pathlib import Path
 from unittest.mock import patch
 
 from user_research import AudienceClient, AudienceClientConfig, Operation, SafeApiError
-from user_research.client import DEFAULT_AUDIENCE_PLATFORM_BASE_URL
+from user_research.client import (
+    DEFAULT_AUDIENCE_PLATFORM_BASE_URL,
+    MAX_BYTES,
+    MAX_REQUEST_BYTES,
+    _decode_response,
+    _encode_body,
+)
 
 KEY = "awpk_v2_" + "a" * 26 + "_" + "B" * 43
 CONTEXT = {
@@ -36,6 +42,102 @@ CONTEXT = {
 
 
 class ClientTests(unittest.TestCase):
+    def test_large_native_form_definition_and_replace_fit_bounded_transport(self) -> None:
+        client = self.client()
+        client._verified_context = {
+            **CONTEXT,
+            "allowed_actions": sorted([*CONTEXT["allowed_actions"], "forms.read"]),
+        }
+        idea_id = "idea_" + "a" * 26
+        research_id = "research_" + "b" * 26
+        form_id = "Form123"
+        native_body = {"title": "Native form", "description": "x" * 40000}
+        revision = {
+            "project_id": "kiwibit",
+            "binding_revision": CONTEXT["binding_revision"],
+            "idea_id": idea_id,
+            "research_id": research_id,
+            "form_id": form_id,
+            "form_url": "https://form.typeform.com/to/Form123",
+            "form_public": True,
+            "provider_revision": "c" * 64,
+            "affected_scope_digest": "d" * 64,
+            "affected_research": [{"idea_id": idea_id, "research_id": research_id}],
+            "definition_fingerprint": "e" * 64,
+            "body": native_body,
+            "put_body": native_body,
+            "response_count": None,
+        }
+        raw = json.dumps(revision).encode()
+        self.assertGreater(len(raw), 64 * 1024)
+        with patch.object(client._opener, "open", return_value=io.BytesIO(raw)):
+            self.assertEqual(
+                client.call(
+                    Operation("personal_research_journey_form_definition"),
+                    path={"research_id": research_id, "form_id": form_id},
+                    query={"idea_id": idea_id},
+                ),
+                revision,
+            )
+
+        replacement = {
+            "idea_id": idea_id,
+            "expected_provider_revision": "c" * 64,
+            "expected_affected_scope_digest": "d" * 64,
+            "acknowledge_published_risk": True,
+            "body": native_body,
+        }
+        self.assertGreater(len(_encode_body(replacement)), 32 * 1024)
+        with patch.object(client._opener, "open", return_value=io.BytesIO(raw)) as opened:
+            self.assertEqual(
+                client.call(
+                    Operation("personal_research_journey_form_replace"),
+                    path={"research_id": research_id, "form_id": form_id},
+                    body=replacement,
+                ),
+                revision,
+            )
+        self.assertEqual(opened.call_args.args[0].get_method(), "PUT")
+        self.assertEqual(json.loads(opened.call_args.args[0].data), replacement)
+
+    def test_native_form_transport_keeps_finite_request_and_response_limits(self) -> None:
+        self.assertLessEqual(MAX_REQUEST_BYTES, 1024 * 1024)
+        large_body = {"body": {"description": "x" * (900 * 1024)}}
+        self.assertLessEqual(len(_encode_body(large_body)), MAX_REQUEST_BYTES)
+        repeated_definition = {"body": large_body, "put_body": large_body}
+        repeated_raw = json.dumps(repeated_definition).encode()
+        self.assertGreater(len(repeated_raw), 1024 * 1024)
+        self.assertEqual(_decode_response(repeated_raw), repeated_definition)
+        with self.assertRaisesRegex(SafeApiError, "request_too_large"):
+            _encode_body({"body": "x" * MAX_REQUEST_BYTES})
+        with self.assertRaisesRegex(SafeApiError, "response_too_large"):
+            _decode_response(b"x" * (MAX_BYTES + 1))
+
+    def test_native_form_response_must_match_requested_form_id(self) -> None:
+        client = self.client()
+        client._verified_context = {
+            **CONTEXT,
+            "allowed_actions": sorted([*CONTEXT["allowed_actions"], "forms.read"]),
+        }
+        operation = Operation("personal_research_journey_form_definition")
+        path = {
+            "project_id": "kiwibit",
+            "research_id": "research_" + "b" * 26,
+            "form_id": "Form123",
+        }
+        response = {
+            "project_id": "kiwibit",
+            "binding_revision": CONTEXT["binding_revision"],
+            "research_id": path["research_id"],
+            "form_id": "OtherForm",
+        }
+        with (
+            patch.object(AudienceClient, "_call_with_read_retry", return_value=response),
+            patch("user_research.client.validate_operation_response", return_value=response),
+            self.assertRaisesRegex(SafeApiError, "invalid_response_schema"),
+        ):
+            client.call(operation, path=path, query={"idea_id": "idea_" + "a" * 26})
+
     def test_timeout_defaults_and_configurable_ceiling(self) -> None:
         config = AudienceClientConfig()
         self.assertEqual(config.timeout_seconds, 10.0)
@@ -628,9 +730,13 @@ class ClientTests(unittest.TestCase):
             with (
                 patch.object(client._opener, "open", return_value=Response(content)),
                 patch("user_research.client.os.fdopen", side_effect=failing_fdopen),
+                patch("user_research.client.os.unlink", wraps=os.unlink) as unlink,
                 self.assertRaisesRegex(SafeApiError, "output_write_failed"),
             ):
                 client.download(operation, "partial.csv", path=path, query=query)
+            self.assertEqual(unlink.call_count, 1)
+            self.assertFalse(os.path.isabs(unlink.call_args.args[0]))
+            self.assertIsInstance(unlink.call_args.kwargs.get("dir_fd"), int)
             self.assertFalse((Path(directory) / "partial.csv").exists())
             self.assertEqual(list(Path(directory).glob("*.partial")), [])
 

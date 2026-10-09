@@ -15,21 +15,38 @@ import os
 CLUSTER_ARGOCD = {
     "us-prod":              "argocd-us.addx.live",
     "eu-prod":              "argocd-eu.addx.live",
-    "cn-prod":              "argocd-cn.addx.live",
     "us-tech-service":      "argocd-us-tech-service.addx.live",
     "eu-tech-service":      "argocd-eu-tech-service.addx.live",
-    "cn-tech-service":      "argocd-cn-tech-service.addx.live",
+    "tencent-100052802231-cn-tech-service": None,  # Domain cutover is pending
     "us-data":              "argocd-us-data.addx.live",
     "eu-data":              "argocd-eu-data.addx.live",
     "cn-main":              "argocd-cn-k8s.addx.live",
     "us-staging":           "argocd-us-staging.addx.live",
     "eu-staging":           "argocd-eu-staging.addx.live",
-    "cn-staging":           "argocd-cn-staging.addx.live",
-    "cn-dev":               "argocd-cn-dev.addx.live",
+    "tencent-100052802231-cn-staging": "argocd-cn-staging.addx.live",
     "sg-devops":            "argocd-sg-devops.addx.live",
     "us-prod-gke":          "argocd-us-prod-gke.addx.live",
     "us-tech-service-gke":  "argocd-us-tech-service-gke.addx.live",
 }
+
+# Planned hostnames are display-only until their deployment is verified.
+PENDING_CLUSTER_ARGOCD = {
+    "tencent-100052802231-cn-tech-service": "argocd-cn-tech-service-tke.addx.live",
+}
+
+# Only verified current Tencent directory names are aliases. Retired AWS CN
+# names remain separate historical records and never redirect to a new cluster.
+# cn-staging / cn-tech-service were also AWS names: only exact current Tencent
+# directory IDs may link to the new account. Unqualified old input stays unlinked.
+CLUSTER_ALIASES = {
+    "tencent-100014919455-cn-main": "cn-main",
+    "tke-cn-main": "cn-main",
+}
+
+
+def canonical_cluster(cluster):
+    return CLUSTER_ALIASES.get(cluster, cluster)
+
 
 SEV_ORDER = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
 EMPTY_STATS = {"P0": 0, "P1": 0, "P2": 0, "P3": 0, "total": 0}
@@ -55,12 +72,12 @@ def fmt_age(secs):
 
 
 def app_url(cluster, app):
-    host = CLUSTER_ARGOCD.get(cluster)
+    host = CLUSTER_ARGOCD.get(canonical_cluster(cluster))
     return f"https://{host}/applications/argo-cd/{app}?view=tree" if host else None
 
 
 def cluster_url(cluster):
-    host = CLUSTER_ARGOCD.get(cluster)
+    host = CLUSTER_ARGOCD.get(canonical_cluster(cluster))
     return f"https://{host}/applications" if host else None
 
 
@@ -98,7 +115,9 @@ def load_rows(ndjson_path):
         for line in f:
             stripped = line.strip()
             if stripped:
-                rows.append(json.loads(stripped))
+                row = json.loads(stripped)
+                row["cluster"] = canonical_cluster(row.get("cluster", ""))
+                rows.append(row)
     rows.sort(key=_row_sort_key)
     return rows
 
@@ -195,11 +214,13 @@ def render_summary_row(cluster, cluster_stats, unreachable_set):
     stats = cluster_stats.get(cluster, EMPTY_STATS)
     unreach = cluster in unreachable_set
     link_html = _link(cluster_url(cluster), cluster)
+    pending_host = PENDING_CLUSTER_ARGOCD.get(canonical_cluster(cluster))
+    pending_html = f'<span class="ns-hint">待切换：{esc(pending_host)}（未核验）</span>' if pending_host else ''
     unreach_html = ' <span class="unreach-pill">unreachable</span>' if unreach else ''
     total_cell = stats["total"] or ('—' if unreach else 0)
     return (
         f'<tr>'
-        f'<td>{link_html}{unreach_html}</td>'
+        f'<td>{link_html}{unreach_html}{pending_html}</td>'
         f'<td>{stats["P0"] or ""}</td>'
         f'<td>{stats["P1"] or ""}</td>'
         f'<td>{stats["P2"] or ""}</td>'
@@ -414,6 +435,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 def render_html(rows, unreachable):
+    rows = [dict(row, cluster=canonical_cluster(row.get("cluster", ""))) for row in rows]
+    unreachable = sorted({canonical_cluster(cluster) for cluster in unreachable})
     counts, clusters_seen, cluster_stats = compute_summary(rows)
     now_utc = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     unreach_set = set(unreachable)
@@ -421,7 +444,7 @@ def render_html(rows, unreachable):
     table_html = "".join(render_table_row(r) for r in rows)
     summary_html = "".join(
         render_summary_row(c, cluster_stats, unreach_set)
-        for c in sorted(CLUSTER_ARGOCD.keys())
+        for c in sorted(set(CLUSTER_ARGOCD) | set(clusters_seen) | unreach_set)
     )
     filter_options_html = render_cluster_filter_options(clusters_seen)
     banner_html = render_unreach_banner(unreachable)
@@ -436,7 +459,7 @@ def render_html(rows, unreachable):
 <body>
 <div class="container">
   <h1>ArgoCD Fleet Scan</h1>
-  <div class="subtitle">{now_utc} · 集群: {len(clusters_seen)} 扫通 / {len(unreachable)} 不可达 · 长 Progressing 阈值: 15min</div>
+  <div class="subtitle">{now_utc} · 异常来源集群: {len(clusters_seen)} / {len(unreachable)} 不可达（无异常记录不代表已扫描） · 长 Progressing 阈值: 15min</div>
 
   {banner_html}
 

@@ -1,0 +1,298 @@
+{
+  "identity": {
+    "user": {
+      "userId": 34,
+      "name": "陈敬敏"
+    },
+    "identityStatus": 200,
+    "applicationStatus": 200,
+    "target": [
+      {
+        "id": 2370,
+        "name": "device-cloud-host",
+        "point": "device_cloud_host"
+      }
+    ]
+  },
+  "live": {
+    "checkedOn": "2026-10-06T13:37:53.089Z",
+    "runtimeVersion": "0.2.0",
+    "hashes": {
+      "skills/saas-auth/runtime/src/index.js": "ab8d277f0e838726781007c375201b70d311b16838ae059eb19ebda18cd092c0",
+      "skills/saas-auth/runtime/src/gateway.js": "a082291122ca92a6a9f126c6f49471dbdee6ad23d71a3b41f16f34b31f022caa",
+      "skills/tracking-lifecycle/cli/src/auth-adapter.js": "64fef6e4a99fba1c2a19068c233183340048136a9f38dec93707b5a4e30e3788",
+      "skills/tracking-lifecycle/cli/src/browser-transport.js": "e306948e4c513e19dd60506ad9db59abf1be1ee25c542354d164b8b9892c96e8",
+      "skills/tracking-lifecycle/cli/src/opencli-install.js": "91ba2a3e2acf3e6beceaa239ec3effcf641f0ef936bc43db3d5671eddd7bfd28"
+    },
+    "checks": [
+      {
+        "name": "ensure",
+        "state": "READY",
+        "subject": "34",
+        "applicationId": "2370"
+      },
+      {
+        "name": "context-list",
+        "state": "API_ACKNOWLEDGED",
+        "shape": "array",
+        "count": 0,
+        "resultKeys": []
+      },
+      {
+        "name": "base-schema-get-all-base-schemas",
+        "state": "API_ACKNOWLEDGED",
+        "shape": "array",
+        "count": 1,
+        "resultKeys": []
+      },
+      {
+        "name": "tracker-info-get-all-page-by-application-id",
+        "state": "API_ACKNOWLEDGED",
+        "shape": "array",
+        "count": 0,
+        "resultKeys": []
+      },
+      {
+        "name": "tracker-info-get-all-self-define",
+        "state": "API_ACKNOWLEDGED",
+        "shape": "array",
+        "count": 7,
+        "resultKeys": []
+      },
+      {
+        "name": "tracker-info-search",
+        "state": "API_ACKNOWLEDGED",
+        "shape": "array",
+        "count": 7,
+        "resultKeys": []
+      },
+      {
+        "name": "release-get-all-release",
+        "state": "API_ACKNOWLEDGED",
+        "shape": "array",
+        "count": 1,
+        "resultKeys": []
+      },
+      {
+        "name": "user-role-is-app-owner",
+        "state": "API_ACKNOWLEDGED",
+        "shape": "boolean",
+        "value": true,
+        "resultKeys": []
+      },
+      {
+        "name": "foreign-application",
+        "state": "REFUSED",
+        "code": "RESOURCE_MISMATCH",
+        "upstreamRequests": 0
+      },
+      {
+        "name": "raw-write",
+        "state": "REFUSED",
+        "code": "READ_ONLY_BRIDGE",
+        "upstreamRequests": 0
+      },
+      {
+        "name": "disconnect",
+        "state": "REVOKED"
+      },
+      {
+        "name": "request-after-disconnect",
+        "state": "REFUSED",
+        "code": "REVOKED",
+        "upstreamRequests": 0
+      }
+    ],
+    "upstream": [
+      {
+        "method": "GET",
+        "path": "/api/user/getCurrentUser",
+        "httpStatus": 200,
+        "apiCode": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/info/getAllApplication",
+        "httpStatus": 200,
+        "apiCode": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/user/getCurrentUser",
+        "httpStatus": 200,
+        "apiCode": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/info/getAllApplication",
+        "httpStatus": 200,
+        "apiCode": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/context/list",
+        "httpStatus": 200,
+        "apiCode": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/user/getCurrentUser",
+        "httpStatus": 200,
+        "apiCode": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/info/getAllApplication",
+        "httpStatus": 200,
+        "apiCode": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/baseSchema/list",
+        "httpStatus": 200,
+        "apiCode": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/user/getCurrentUser",
+        "httpStatus": 200,
+        "apiCode": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/info/getAllApplication",
+        "httpStatus": 200,
+        "apiCode": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/info/getAllPageByApplicationId",
+        "httpStatus": 200,
+        "apiCode": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/user/getCurrentUser",
+        "httpStatus": 200,
+        "apiCode": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/info/getAllApplication",
+        "httpStatus": 200,
+        "apiCode": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/info/getAllSelfDefine",
+        "httpStatus": 200,
+        "apiCode": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/user/getCurrentUser",
+        "httpStatus": 200,
+        "apiCode": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/info/getAllApplication",
+        "httpStatus": 200,
+        "apiCode": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/info/search",
+        "httpStatus": 200,
+        "apiCode": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/user/getCurrentUser",
+        "httpStatus": 200,
+        "apiCode": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/info/getAllApplication",
+        "httpStatus": 200,
+        "apiCode": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/release/getAllRelease",
+        "httpStatus": 200,
+        "apiCode": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/user/getCurrentUser",
+        "httpStatus": 200,
+        "apiCode": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/info/getAllApplication",
+        "httpStatus": 200,
+        "apiCode": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/role/isAppOwner",
+        "httpStatus": 200,
+        "apiCode": 200
+      }
+    ],
+    "credentialRemoved": true,
+    "completedOn": "2026-10-06T13:38:03.962Z"
+  },
+  "web": [
+    {
+      "page": "events",
+      "rowCount": 7,
+      "selfDefined": 7,
+      "pagination": "1–7 of 7",
+      "targetLabel": 1
+    },
+    {
+      "page": "bases",
+      "rowCount": 1,
+      "expected": 1,
+      "pagination": "1–1 of 1",
+      "empty": false,
+      "targetLabel": false,
+      "columns": "\t名称\t描述\t操作\n",
+      "preview": "基础参数管理\n当前发布单：v1.0.0 初始埋点, 版本号：1-0-0\n添加基础参数\n工单列表\n​\n​\n\t名称\t描述\t操作\n\n\t\ndevium_context\n\t\nDevice Cloud Host 标准上下文 13 字段\n\t\n编辑\n删除\n\nRows per page:\n\n5\n\n1–1 of 1"
+    },
+    {
+      "page": "contexts",
+      "rowCount": 0,
+      "expected": 0,
+      "pagination": "0–0 of 0",
+      "empty": false,
+      "targetLabel": false,
+      "columns": "\t名称\tSCHEMA 地址\t创建时间\t操作",
+      "preview": "Context管理\n添加context\n​\n​\n\t名称\tSCHEMA 地址\t创建时间\t操作\n\nRows per page:\n\n5\n\n0–0 of 0"
+    },
+    {
+      "page": "workorders",
+      "rowCount": 1,
+      "expected": 1,
+      "pagination": "1–1 of 1",
+      "empty": false,
+      "targetLabel": false,
+      "columns": "\t名称\t版本号\t创建者\t埋点校验\t状态\t\n创建时间\n校验时间\n\t操作\n",
+      "preview": "工单列表\n新建工单\n返回\n沙盒环境验证完成后, 请观察staging环境埋点解析结果, 详细流程参考左侧导航栏使用文档\n​\n​\n\t名称\t版本号\t创建者\t埋点校验\t状态\t\n创建时间\n校验时间\n\t操作\n\n\t\nv1.0.0 初始埋点\n\t\n1-0-0\n\t\n骆树文\n\t\n不通过\n\t\n待审核\n\t\n2026-05-12 08:51:00\n2026-10-06 13:38:28\n\t\n审核发布\n刷新校验\n废弃\n\nRows per page:\n\n5\n\n1–1 of 1"
+    }
+  ],
+  "cleanup": {
+    "processExit": {
+      "desktop": 0,
+      "browser": 1,
+      "vnc": 1,
+      "viewer": 0
+    },
+    "profileRemoved": true
+  },
+  "sourceDrift": []
+}

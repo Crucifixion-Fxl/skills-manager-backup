@@ -358,7 +358,7 @@ def _is_forbidden_path(
         return (
             "env-region as the FIRST path segment is forbidden (e.g. secret/staging-us/...); "
             "the first segment must be a bare env (dev/staging/pre/prod). Region is implied by "
-            "the per-region Vault instance (vault-{us,eu,cn}.builder.addx.live for staging), so "
+            "the exact target catalog/SecretStore instance (US/EU Builder, current CN staging in-cluster Vault), so "
             "putting it in the path is redundant. Middleware/DB creds use "
             "platform-resource-credential: secret/{env}/{platform}/application/{app}/{key}. "
             "(legacy secret/<app>/<env>-<region>/... with the app name first is still allowed)"

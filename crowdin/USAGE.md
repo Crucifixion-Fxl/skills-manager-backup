@@ -18,12 +18,12 @@
 
 AI 跑完会汇报变更范围,不满意按它给的 `git checkout` 命令一键还原。**全程不用记任何命令名**。
 
-前提:skill 已经装在 AI agent 的 skill 目录(本文档的 `~/A4x/AI/skills/skills/crowdin/`)。
+前提:skill 已经装在 AI agent 的 skill 目录(本文档的 `~/A4x/AI/skills/skills/development/crowdin/`)。
 
 ## 用法 2:命令行(给 CI / 资深用户 / 没有 AI agent 的场景)
 
 ```bash
-~/A4x/AI/skills/skills/crowdin/pull.sh <项目> <config 名>
+~/A4x/AI/skills/skills/development/crowdin/pull.sh <项目> <config 名>
 ```
 
 例:
@@ -129,7 +129,7 @@ grep -n crowdin /etc/hosts
 ### 5. 验证
 
 ```bash
-~/A4x/AI/skills/skills/crowdin/pull.sh flutter kb_flutter_dev probe
+~/A4x/AI/skills/skills/development/crowdin/pull.sh flutter kb_flutter_dev probe
 # 期望:✓ connectivity ok
 ```
 
@@ -185,7 +185,7 @@ A 比 B 多了:连通性预检、强制 non-interactive、假成功扫描、跑�
 
 ### Q: 如何升级 wrapper 本身?
 
-`pull.sh` 在 `~/A4x/AI/skills/skills/crowdin/`,跟着 skills 仓库走。`git pull` 即可。
+`pull.sh` 在 `~/A4x/AI/skills/skills/development/crowdin/`,跟着 skills 仓库走。`git pull` 即可。
 
 ## 红线
 

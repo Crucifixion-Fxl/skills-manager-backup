@@ -19,11 +19,12 @@ from typing import Any
 LIB_DIR = Path(__file__).resolve().parents[1] / "lib"
 sys.path.insert(0, str(LIB_DIR))
 
+from production_overlay_attestation import attest_production_overlay
 from release_drive_state import cleanup_state, promotion_state
 from release_drive_validation import (
+    remote_branch_exists,
     require_current_git_head,
     require_https_url,
-    require_no_remote_staging_branch,
     require_sha,
     require_text,
 )
@@ -47,7 +48,11 @@ def parser() -> argparse.ArgumentParser:
         default="unknown",
     )
     result.add_argument("--staging-branch", default="staging")
+    result.add_argument("--branch-promotion", action="store_true")
+    result.add_argument("--staging-pipeline-id", type=int)
+    result.add_argument("--staging-acceptance-note-id", type=int)
     result.add_argument("--staging-flow-evidence", default="")
+    result.add_argument("--staging-application-evidence", default="")
     result.add_argument("--canonical-verification-mr", type=int)
     result.add_argument("--candidate-mr", type=int)
     result.add_argument("--contract", default="")
@@ -84,6 +89,14 @@ def run_parity_check(args: argparse.Namespace) -> tuple[dict[str, Any], str]:
     ]
     if args.contract:
         command.extend(["--contract", args.contract])
+    if args.branch_promotion:
+        command.append("--branch-promotion")
+        if args.staging_pipeline_id is not None:
+            command.extend(["--staging-pipeline-id", str(args.staging_pipeline_id)])
+        if args.staging_acceptance_note_id is not None:
+            command.extend(
+                ["--staging-acceptance-note-id", str(args.staging_acceptance_note_id)]
+            )
     result = subprocess.run(
         command,
         capture_output=True,
@@ -163,21 +176,27 @@ def _validate_mode_evidence(
     args: argparse.Namespace,
     parity_report: dict[str, Any] | None,
     cleanup_report: dict[str, Any] | None,
-) -> None:
+) -> tuple[dict[str, Any] | None, str]:
     if args.mr_mode == "production-promotion":
         _validate_promotion_report(args, parity_report)
     elif args.mr_mode == "production-non-promotion":
         require_https_url(args.staging_flow_evidence, "staging_flow_evidence")
         require_text(args.not_applicable_reason, "not_applicable_reason")
-        require_no_remote_staging_branch(args.staging_branch)
+        if args.staging_branch != "staging":
+            raise PolicyError("production-non-promotion requires staging_branch=staging")
+        if remote_branch_exists(args.staging_branch):
+            return attest_production_overlay(args)
     elif args.mr_mode == "staging-writer-cleanup":
         if cleanup_report is None or cleanup_report.get("code_status") != "pass":
             raise PolicyError("attested cleanup report is required")
     elif args.mr_mode == "emergency-hotfix":
         _validate_emergency_fields(args)
+    return None, ""
 
 
 def build_state(args: argparse.Namespace) -> dict[str, object]:
+    if args.branch_promotion and args.mr_mode != "production-promotion":
+        raise PolicyError("branch_promotion requires production-promotion mode")
     staging_flow_exists = {
         "true": True,
         "false": False,
@@ -201,7 +220,9 @@ def build_state(args: argparse.Namespace) -> dict[str, object]:
         wants_promotion,
         cleanup_report is not None,
     )
-    _validate_mode_evidence(args, parity_report, cleanup_report)
+    non_promotion_report, non_promotion_sha256 = _validate_mode_evidence(
+        args, parity_report, cleanup_report
+    )
     return {
         "mr_iid": args.mr_iid,
         "branch": args.branch,
@@ -215,6 +236,15 @@ def build_state(args: argparse.Namespace) -> dict[str, object]:
             parity_report_sha256,
         ),
         "cleanup": cleanup_state(cleanup_report, cleanup_report_sha256),
+        "non_promotion": (
+            {
+                "enabled": True,
+                **non_promotion_report,
+                "attestation_sha256": non_promotion_sha256,
+            }
+            if non_promotion_report is not None
+            else {"enabled": False}
+        ),
         "emergency": {
             "approved": args.emergency_approved,
             "owner": args.emergency_owner,

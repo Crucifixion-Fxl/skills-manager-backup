@@ -979,12 +979,12 @@ class ContextRound(TmpCase):
 
 class ContextDocs(unittest.TestCase):
     SKILL = base.TESTS.parent
-    REPO = SKILL.parent.parent
+    REPO = SKILL.parents[2]
     GROUP_DOC = (SKILL / "references" / "feishu-group-sync.md").read_text(encoding="utf-8")
     MESSAGE_DOC = (SKILL / "references" / "feishu-message-sync.md").read_text(encoding="utf-8")
     DOC = (SKILL / "references" / "feishu-routing-policy.md").read_text(encoding="utf-8")
     HEADING = "## 非成员的发言（仅上下文镜像）"
-    ADR = REPO / "docs" / "05-adr" / "0016-mirror-unmapped-feishu-speakers-as-context-only.md"
+    ADR = REPO / "docs" / "agent-harness" / "adr" / "0016-mirror-unmapped-feishu-speakers-as-context-only.md"
 
     def section(self):
         start = self.DOC.find(self.HEADING)
@@ -1030,7 +1030,7 @@ class ContextDocs(unittest.TestCase):
     def test_the_adr_exists_is_indexed_and_records_the_decision(self):
         """L1-FGS-523: ADR-0016 存在、在 ADR 索引里有一行、是 Accepted，写明决定（PO、B 方案）、备选（A 让他们进频道、B、C 只靠文档评论）、和 ADR-0006
         的关系，以及 2026-09-22 修订（能 @agent）与 2026-09-23 修订（默认开启、支持图片）。"""
-        self.assertTrue(self.ADR.exists(), msg="docs/05-adr/0016-... is missing")
+        self.assertTrue(self.ADR.exists(), msg="docs/agent-harness/adr/0016-... is missing")
         text = self.ADR.read_text(encoding="utf-8")
         self.assertRegex(text, r"(?m)^status: Accepted$")
         for term in ("PO", "ADR-0006", "feishu_unmapped_senders", "[飞书·非成员]", "Option A", "Option B", "Option C", "唤醒",
@@ -1041,7 +1041,7 @@ class ContextDocs(unittest.TestCase):
                      "2026-09-23", "默认开启", "非成员图片", "10 MB", "9 张", "EXIF / ICC", "认证不等于授权",
                      "传输层", "imeta", "text content block", "ACP image content block", "harness 缺口", "`BUZZ_ACP_RESPOND_TO=anyone`", "`owner-only`"):
             self.assertIn(term, text, msg=term)
-        index = (self.REPO / "docs" / "05-adr" / "README.md").read_text(encoding="utf-8")
+        index = (self.REPO / "docs" / "agent-harness" / "adr" / "README.md").read_text(encoding="utf-8")
         row = next((item for item in index.splitlines() if item.startswith("| 0016 |")), "")
         self.assertIn("0016-mirror-unmapped-feishu-speakers-as-context-only.md", row)
         self.assertIn("Accepted", row)

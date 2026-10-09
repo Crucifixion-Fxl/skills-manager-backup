@@ -12,7 +12,7 @@ notes: |
   storageEncrypted 同样是 immutable。
   prod 必须让 managementPolicies 去掉 Delete（CR 删除时 **不** 带走 AWS
   资源），同时靠 AWS 层 deletionProtection + skipFinalSnapshot=false 兜底数据安全。
-  自 2026-06-01 起，新部署应用 **staging / tech-service**（6 集群 us/eu/cn-staging + tech-us/eu/cn；
+  自 2026-06-01 起，新部署应用 **staging / tech-service**（当前 us/eu/cn staging + tech-service；CN 腾讯云能力须独立验证；
   **按 cluster 名判别非 env**——tech-service env=prod，见 hard-rule #29）不再按本表创建 app-owned
   Aurora，也不允许 StatefulSet 自托管（#30）。终态是通过 kind:Database Composition 在 shared 实例上
   拿到 per-app database+user（凭证落 secret/{env}/aurora/application/{app}/<key>，region-less）。
@@ -52,7 +52,7 @@ immutable:
 #   - 默认起步 Graviton t4g 家族（burstable，成本低）。
 #   - 高资源占用实例改用 r8g / m8g 家族——**由用户在 cd-requirements.md 显式指定**
 #     （本表不自动升档；workflow 只按 cd-requirements 取值并校验与本表一致或有 override 理由）。
-#   - prod 起步默认 db.r8g.large（高内存 Graviton4；已验证 us-east-1 / cn-north-1 orderable）。
+#   - prod 起步默认 db.r8g.large（高内存 Graviton4；us-east-1 orderable；旧 cn-north-1 验证仅历史 AWS 能力，非当前 TKE 规格）。
 dev: &aurora_min
   clusterInstanceClass: db.t4g.medium   # Aurora 最小实例规格（Graviton burstable 起步）
   clusterInstanceReplicas: 1

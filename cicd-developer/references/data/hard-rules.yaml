@@ -69,7 +69,9 @@ rules:
     detail: |
       未注册写 secret/{env}/app/<app>/* 会被 Vault policy 返 403。
       Builder 域和 Ops 域 registry 独立：
-        Builder：apps-registry.yaml → vault-cn.builder.addx.live
+        Builder：沿目标 Application/Kustomize 找实际 apps-registry.yaml，并核验目标 SecretStore/登录实例。
+        US/EU 使用对应 Builder Vault；新 CN staging 使用集群内 Vault，不能默认旧 CN Builder 域。
+        新 CN staging 的 gitlab-vault-sync/k8s/builder/cn-staging 当前引用 ../cn，共享 cn/apps-registry；共享文件不表示同一登录实例。
         Ops US/EU/CN：k8s/ops/{cn,us,eu}/apps-registry.yaml → 对应 Ops Vault
       别用 token 绕过——先注册。
 
@@ -352,7 +354,7 @@ rules:
       harbor_url / runner_tags），所以"按部署目标集群挑 runner tag"就是在选 push 到哪个
       Harbor。这是 fleet 主流写法，也和 #28 工具镜像走 `${HARBOR_REGISTRY}/base/...` 同源。
       ⚠️ 不是严格 1:1:同一物理 Harbor 有 split-horizon DNS 别名（如 `registry-harbor-cn`
-      == `harbor-58989-cn-tech`），且有 legacy/utility runner tag（`kubernetes-sg` /
+      == `harbor-58989-cn-tech` 是已退役 AWS CN 的历史别名，不能作为当前 TKE 映射），且有 legacy/utility runner tag（`kubernetes-sg` /
       `sonar-scanner-sg` / `runner-sg-nat` 等）不在 clusters.yaml——所以自动化 tag→Harbor
       断言要先建别名/legacy-tag 模型，否则会误杀存量仓（见下）。
 
@@ -465,14 +467,16 @@ rules:
     title: 新部署 staging/tech-service 应用禁止自建数据类中间件（只能用 shared-middleware）
     enforced_by: workflow gate / human review
     detail: |
-      **范围（2026-06-05 收紧）**：shared-middleware 共享中间件已上线 **6 个集群**——
-      staging-us/eu/cn（us/eu/cn-eks-staging）+ tech-us/eu/cn（002/010/589 tech-service）。
+      **当前政策范围（2026-09-28）**：US/EU EKS staging + tech-service，以及
+      腾讯云 cn-tke-staging / cn-tke-tech-service（100052802231）。这是消费策略，
+      不表示新 TKE 已安装 AWS shared-middleware 实现。先按 shared-middleware/README.md
+      核验精确目标的 XRD/Composition/ProviderConfig/Vault 交付；未证实则 STOP + Ops Todo。
       ⚠️ **判别这 6 个集群必须按 cluster 名，不能按 `$target.env`**：tech-service 的 env-keyword
       是 `env=prod`（与真 prod 集群 `*-eks-prod` 同 env），按 env 判会把 tech-service 漏成 prod、
       误落 app-owned 分支。门禁谓词统一用——
         **shared-middleware 集群**：`$target.cluster ∈ {us-eks-staging, eu-eks-staging,
-        cn-eks-staging, us-eks-tech-service, eu-eks-tech-service, cn-eks-tech-service}`；
-        **非 shared-middleware**：其余集群（真 prod `*-eks-prod`/`*-prod-data`/TKE/dev）→ app-owned。
+        cn-tke-staging, us-eks-tech-service, eu-eks-tech-service, cn-tke-tech-service}`；
+        **非 shared-middleware**：其余集群（真 prod `*-eks-prod`/`*-prod-data`/cn-k8s（TKE prod））→ app-owned。
       在**这 6 个集群**上，新部署应用的数据需求**只能消费 shared-middleware**，
       **不允许 app-owned 自建**，也不允许在 crossplane-infra 为单 app 新增这些资源：
         - 不允许 app-owned RDS / Aurora / ElastiCache Redis / DocumentDB / MSK(Kafka) / ClickHouse；
@@ -491,9 +495,10 @@ rules:
       **prod（prod-us/eu/cn）没有 shared-middleware**：prod（或 labels.isolation=required）
       继续走 **app-owned 托管 RDS / Aurora / ElastiCache**（cost-tiering 表的 prod tier，
       multiAZ + 加密 + 删除保护），**不是**自托管 StatefulSet。各 region 独立 staging 集群：
-      staging-us→us-eks-staging、staging-eu→eu-eks-staging、staging-cn→cn-eks-staging。
+      staging-us→us-eks-staging、staging-eu→eu-eks-staging、staging-cn→cn-tke-staging。
+      prod-cn 是腾讯云 cn-k8s；不得套用 AWS RDS / Aurora / ElastiCache / IRSA 模板。
 
-      ✅ 共享 MySQL + Redis 自助 **已上线**（2026-06-03，6 集群：us/eu/cn-staging + tech-us/eu/cn）：
+      ✅ 共享 MySQL + Redis 自助 **已上线**（2026-06-03，当前 AWS US/EU staging + tech-service；CN TKE 不继承该已上线结论）：
       开发者写 `kind: Database {spec.app, spec.env, spec.engine, spec.purpose?}`(统一入口,
       go-templating 按 engine 分支)，
       app 自己写 ExternalSecret 消费,**app-ns 无静态 secret、不再 configmap 硬编码 endpoint**。对 mysql/redis/postgres 不再 STOP。
@@ -525,7 +530,7 @@ rules:
           `recipes/k8s/shared-database-claim.yaml.tmpl` 生成。Kyverno 仅 Enforce CREATE；缺 annotation 的
           存量 claim grandfather，不改名、不拦普通 UPDATE。
 
-      ✅ 共享 MSK(Kafka) SCRAM 凭据自助 **已上线**（2026-06-22/23，6 集群）：
+      ✅ 共享 MSK(Kafka) SCRAM 凭据自助 **已上线**（2026-06-22/23 历史六集群含退役 AWS CN；当前 TKE 先核验）：
         - app 在自己的 namespace 写 `platform.addx.io/v1alpha1 kind: KafkaScramCredential`
           `{spec.app, spec.env, spec.region}`；`spec.app` 可带连字符，需匹配
           ^[a-z][a-z0-9-]{1,40}$。
@@ -543,7 +548,7 @@ rules:
 
       🔴 仍 STOP 的 Readiness gate（**共享实例已部署、但 kind:Database 消费 Composition 尚未落地**）：
       **ClickHouse / DocumentDB(MongoDB)**。注：这 2 类的**共享实例本身已于
-      2026-06-04 在全 6 集群部署完成**（staging + tech-service 各有 shared ClickHouse StatefulSet /
+      2026-06-04 在历史六集群（含已退役 AWS CN）部署完成；当前 TKE 须重新核验**（staging + tech-service 各有 shared ClickHouse StatefulSet /
       shared DocumentDB），所以 Ops Todo 是"补可复用的 kind:Database 自助消费层 + 自动 per-app
       凭据交付"，**不是**"再建一个共享实例"，也不是在平台仓为当前 app 手写底层资源。**Aurora** 与
       **mariadb 引擎的 RDS** 连共享实例都还没有，同样 STOP 产 Ops Todo。遇到这些仍 STOP；不要手工
@@ -745,8 +750,9 @@ rules:
       一个 Project 可有多个成员。混合职责先拆渲染入口，再按批准的 runtime / app-data-plane
       合同绑定；平台 claim 可按现行合同留 runtime，禁止按目录名机械分类。资源身份只能
       有一个 Application 管理；存量拆分须审批 prune/finalizer、tracking 与反向交接，
-      不套用 project-only 回滚。owner 专属名称仍是目标态，不能绕过九类名称闸门；
-      同仓、同 owner 或 Project 后缀都不替代平台 IAM/ProviderConfig/准入审核。
+      不套用 project-only 回滚。runtime/raw 数据面使用共享 app-runtime/app-data-plane，
+      不按业务 owner 新建 Project；owner 专属方向已撤回，已上线例外须单独迁移纠正，
+      本文不宣称已回迁。同仓或 Project 后缀不替代平台 IAM/ProviderConfig/准入审核。
       权限准备按批准候选成员，不能要求零成员 Project 的授权为空；不得按渲染自动扩权。
       旧 Project 在清理与回滚窗口结束前保留必要权限，退役后不允许单行引用旧名恢复。
       完整指导见 permission-boundaries.yaml 的 application_partition_contract；
@@ -863,7 +869,7 @@ rules:
       - validators/check_object_bucket.py
 
   - id: 36
-    title: DEV/k8s 只存放可复用平台能力，不静态扇出单应用期望状态
+    title: DEV/k8s 默认只存放可复用平台能力，专用 RDS 请求限受控平台源
     enforced_by: check_repo_boundary.py --repo-context k8s / code-review
     validator: check_repo_boundary.py
     detail: |
@@ -877,7 +883,7 @@ rules:
         - 在任意目录提交 top-level provider-sql Database/User/Role/Grant，或写带字面业务
           `.../{platform}/application/{app}/...` / `{env}/app/{app}/...` Vault 路径的
           PushSecret / ExternalSecret；
-        - 在平台仓直接提交业务 `Database` / `KafkaScramCredential` claim；
+        - 在平台仓直接提交业务 `Database` / `KafkaScramCredential` claim，除下述唯一闭合例外；
         - 提交业务 namespace 的 SecretStore、业务 workload，或新建
           `clusters/*/cicd/eso-app-identities/<app>/` 这类逐 app 静态身份树。
 
@@ -885,6 +891,15 @@ rules:
       Composition/controller/policy 去派生 User、Grant、PushSecret、ServiceAccount、RBAC 或
       SecretStore。通用能力尚未存在时 STOP，产 Ops Todo 补能力；不要用“资源运行在平台
       namespace”作为把业务源码放进平台仓的理由。
+
+      唯一窄例外：新建专用 PostgreSQL 16、准确目标 us-eks-prod，在
+      references/app-owned-rds/README.md 的 live 激活门禁和每应用 IAM 前置全部通过后，
+      平台所有者可在 `clusters/aws-302571458622-us-prod/platform-apis/app-owned-rds/requests/<app>.yaml`
+      提交固定字段的 namespaced `platform.addx.io/v1alpha1 Database` 请求，namespace
+      必须是 crossplane-system。Crossplane v2 在 XR namespace 生成管理员输入 Secret，
+      所以该请求必须由平台 Argo CD source 独占；应用仓只消费受限账号连接。
+      `check_repo_boundary.py` 对路径、metadata、spec、版本和 SG 格式逐字段闭合校验；
+      该例外不放行其它 claim、raw RDS/SQL/ESO 实例或其它集群/引擎。
     applies_to:
       - SKILL.md Review / Scan mode
       - validators/check_repo_boundary.py

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "05b3396d-3d46-4572-bff6-564d75e632e6",
+  "path": "platform-onboarding",
+  "path_key": "platform-onboarding",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/agent-harness/platform-onboarding",
+    "branch": null
+  }
+}

@@ -50,49 +50,7 @@ Use it when users ask about alert lookup, SLA troubleshooting, firing events, or
 
 ## 凭据配置
 
-每个调用脚本会自动 source `scripts/_load_credentials.sh`，按以下优先级查找凭据，**第一处命中就停**：
-
-1. **已 export 的环境变量** — 适合临时覆盖、CI 注入
-2. **`${A4X_PASSWORD_FILE:-$HOME/.codex/password}`** — Codex 默认凭据文件；可通过 `A4X_PASSWORD_FILE` 显式覆盖
-3. **skill 根目录的 `.env`** — 希望 per-skill 隔离时使用
-
-三种方式任选其一即可。如果三处都没配，脚本会报 `Error: SLA_API_TOKEN is not set` 并退出。
-
-### 方式 A — `${A4X_PASSWORD_FILE:-$HOME/.codex/password}`（推荐本地持久化）
-
-在 `${A4X_PASSWORD_FILE:-$HOME/.codex/password}` 加一段（保持 2 空格缩进、值用双引号）：
-
-```yaml
-sla-alert-analysis:
-  sla-api-token: "<your_sla_token>"
-  superset-username: "<your_email>"
-  superset-password: "<your_password>"
-```
-
-获取凭据：
-- SLA token：找 SRE 同事颁发，或访问 `https://dapp-api.addx.live` 自助申请
-- Superset 密码：飞书 SSO 登录 `https://superset-us.addx.live/` 后，访问 `/user_info/` 重置数据库密码
-
-该文件在用户 home 下，不进仓库；不要使用或修改 `~/.claude/password`，除非用户显式指定 `A4X_PASSWORD_FILE` 指向它。
-
-### 方式 B — `.env`（非 Claude Code 用户 / portable）
-
-```bash
-cp skills/sla-alert-analysis/.env.example skills/sla-alert-analysis/.env
-# 编辑 .env 填入真实值
-```
-
-`.env` 已被 skill 仓库 `.gitignore` 排除。
-
-### 方式 C — 环境变量（临时 / CI）
-
-```bash
-export SLA_API_TOKEN=...
-export SUPERSET_USERNAME=...
-export SUPERSET_PASSWORD=...
-```
-
-env 优先级最高，可用来临时覆盖文件里的值。
+认证唯一正本：[dapp](../../dapp/SKILL.md)与[Superset](../../data/superset/SKILL.md)。日常访问交给 `web-access`；本 Skill 仅消费宿主私有注入的 `SLA_API_TOKEN`、`SUPERSET_USERNAME`、`SUPERSET_PASSWORD` 及选定实例配置，不收集密码、不读取本地 password/.env/MCP 缓存，不另写登录或 Token 申请教程。缺少凭据时按对应平台 owner 恢复，不换身份或扫描缓存。脚本仅使用已注入环境，原有密码文件和 .env 自动查找已移除。
 
 ---
 
@@ -361,11 +319,7 @@ bash <skill-path>/scripts/fetch_alerts.sh --metric "pir_invalid_rate_hourly" --c
 
 ### 前置条件
 
-需要设置 Superset 凭据环境变量。如果用户尚未配置，先询问用户名和密码，再帮助设置环境变量。
-
-获取密码的方式：
-1. 用飞书账号登录 `https://superset-us.addx.live/`
-2. 访问 `https://superset-us.addx.live/user_info/` 重置密码
+认证与凭据恢复使用 [Superset owner](../../data/superset/SKILL.md)，不要在本业务流程中询问或复制密码；已验证凭据由宿主注入后才执行查询。
 
 ### 使用方式
 

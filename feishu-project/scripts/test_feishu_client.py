@@ -1,13 +1,13 @@
 """feishu_client 离线冒烟测试（不依赖网络 / 真实凭证）
 
-运行（需先 cd 到 skills/feishu-project/scripts/ 目录，因为 `feishu-project`
+运行（需先 cd 到 skills/collaboration/feishu-project/scripts/ 目录，因为 `feishu-project`
 含连字符不是合法 Python 包名，无法从仓库根用 `-m unittest module.path` 调用）：
 
-    cd skills/feishu-project/scripts && python -m unittest test_feishu_client
+    cd skills/collaboration/feishu-project/scripts && python -m unittest test_feishu_client
 
 或直接：
 
-    cd skills/feishu-project/scripts && python test_feishu_client.py
+    cd skills/collaboration/feishu-project/scripts && python test_feishu_client.py
 """
 
 import os

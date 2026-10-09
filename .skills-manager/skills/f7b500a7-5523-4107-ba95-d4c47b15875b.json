@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "f7b500a7-5523-4107-ba95-d4c47b15875b",
+  "path": "a4x-logger-onboarding",
+  "path_key": "a4x-logger-onboarding",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/observability/a4x-logger-onboarding",
+    "branch": null
+  }
+}

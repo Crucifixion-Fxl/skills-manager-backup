@@ -1,6 +1,6 @@
 # 入群申请：把 agent 拉进频道就是申请，owner 在群里同意后自动开通
 
-本页是 [ADR-0018](../../../docs/05-adr/0018-treat-a-bot-invite-as-a-join-request-the-agent-owner-approves-in-the-channel.md) 的运行手册。脚本是 `scripts/buzz_agent_join_requests.py`，由 owner 主机上的 `systemd --user` 定时任务每 120 秒运行一次，路径里没有大模型。
+本页是 [ADR-0018](../../../../docs/agent-harness/adr/0018-treat-a-bot-invite-as-a-join-request-the-agent-owner-approves-in-the-channel.md) 的运行手册。脚本是 `scripts/buzz_agent_join_requests.py`，由 owner 主机上的 `systemd --user` 定时任务每 120 秒运行一次，路径里没有大模型。
 
 ## 适用范围
 
@@ -14,12 +14,12 @@
 2. 两分钟内，agent 在频道里发一条申请，自成一个新 Thread，写清：我是谁、owner 是谁、开通后在本群能做什么不能做什么、怎么同意、多久过期。「能做什么」来自配置里的能力清单，和该频道 Canvas「## 代码仓库」清单做比对，列出有权限和没权限的仓库（各最多 10 个，其余写「等 N 个」；Canvas 里最多取 500 个仓库）。
    - owner 已经是本群成员：这条申请 @owner（Buzz 的 @ 会经飞书 bridge 推到 owner 的飞书）。
    - owner 不在群里（或只是 guest）：申请里请管理员先把 owner 加进来；owner 进群后，agent 在同一个 Thread 补一条 @owner，只补一次。
-3. owner 在**这条申请消息上**点 ✅ 同意、❌ 不同意；或者在这个 Thread 里回复一行 `/approve JOIN-<id>` 或 `/deny JOIN-<id>`（`<id>` 在申请里写着）。
-4. 同意后，脚本改配置、在 agent 空闲时重启它，确认订阅成功后在 Thread 里回「已开通」，并列出还要人补的事（见下文）。
+3. owner 在**这条申请消息上**点 ✅ 同意、❌ 不同意；或者点该消息的“回复”，在这个话题里发送申请中单独列出的一整行命令。**不需要 @ Agent，也不要另发群消息、@Desk 或在命令前后加文字**。申请和 owner 后入群提醒都将同意、拒绝命令分别独立成行，复制时不用删标点。
+4. 同意后，脚本改配置、在 agent 没有正在处理任务时刷新频道订阅，确认订阅成功后在 Thread 里回「已开通」，并列出还要人补的事（见下文）。当前实现是在严格确认空闲后重启 harness；群内只说明「刷新频道订阅，不会打断正在进行的工作」，不向用户暴露会误解为任务中断的内部操作。
 5. owner 不同意，或者过期（默认 7 天）没有答复：agent 在 Thread 里说明，然后退群。
 6. 几种特殊情况：
    - **owner 自己拉的**：邀请本身就是 owner 签名的动作，不再等审批：agent 先在频道发一条「正在开通」，然后直接开通。
-   - **在飞书群里加的**：双向群同步用可信镜像签一条 `kind 9000` 把 agent 加进 Buzz。可信镜像只证明这条变更来自频道 owner/admin 管理的飞书桥，认不出具体是哪位飞书成员操作，所以仍须 owner 审批，不会静默开通；申请和 owner 的答复都会同步回飞书。已验证不可信镜像仍按普通成员邀请处理，agent 会说明原因和正确做法后退群；镜像目录超时、非 200、格式异常或签名资料暂缺则是“暂时无法验证”，agent 留在群里但不开通，说明原因并在下一轮重试，不能谎报成不可信。
+   - **在飞书群里加的**：双向群同步用频道 owner/admin 的 signer key 签一条 `kind 9000` 把 agent 加进 Buzz，并带 `feishu-member-op` / `feishu-member-stream` / `feishu-member-seq` 来源标记。这个签名只证明变更来自该管理员运行的飞书桥，认不出具体是哪位飞书成员操作；入群服务用来源标记把它和 owner 在 Buzz 里直接邀请区分开，所以即使事件由 owner 签名也仍须 owner 审批，不会静默开通。申请和 owner 的答复都会同步回飞书。已验证不可信镜像仍按普通成员邀请处理，agent 会说明原因和正确做法后退群；镜像目录超时、非 200、格式异常或签名资料暂缺则是“暂时无法验证”，agent 留在群里但不开通，说明原因并在下一轮重试，不能谎报成不可信。
    - **普通成员拉的**：agent 说明「只有本群管理员邀请才会转给 owner」，然后退群。open 频道里任何成员都能拉人，这是为了不让 owner 收到谁都能发起的申请。
    - **解释不了的成员身份**（找不到加人记录、agent 自助加入、加人不带 `role=bot`、最新的事件是移除）：记为 `NO_INVITE`，不猜测、不退群，但会在原群说明**无法确认邀请来源**、尚未开通，并请频道管理员移出后以 bot 身份重新邀请；同一情况只提示一次，之后出现新邀请就按新申请处理。
    - **DM**：私信 agent 时 relay 会建一个 DM 频道，它也会出现在 agent 的成员频道列表里；脚本先用 `dms list`（最多 200 个）排除，再要求候选频道的当前成员里能读到 owner/admin，才把它当作可通知的群。线上 `dms list` 可能漏掉已有私聊，而二人私聊只有 member 角色，这层证明避免把群管理提示发进私聊。`dms list` 失败时本轮整体 fail-closed，不发现新频道、不发任何未确认目标；已知群的待通知状态先持久化，下一轮能安全区分群聊和私聊后再补发，私聊永远不收群管理提示。
@@ -30,12 +30,25 @@
 
 每条业务消息的最后一行是机器可读的 `buzz-join:v1 JOIN-<id>`（后面可能跟 `notify`／`active`／`closed`）。故障与恢复消息使用带唯一 incident id 的 `buzz-join-failure:v1` 标记：同一次故障的重试会认领同一条消息，恢复后再次发生的同类故障会得到新标记，不会误认旧消息。脚本靠这些标记在崩溃后找回已经发出的消息，不会重复发。
 
+### 未审批时直接 @ Agent
+
+待审批期间，成员真实 @ Agent（Buzz 的 `p` 标签，或可信飞书镜像转来的真实 @）会在**触发消息的同一话题**收到固定提示：仍在等谁同意、不能执行业务任务、原申请的 Buzz 链接和可单独复制的审批命令。飞书卡片将固定格式的同频道原申请引用转换为该绑定的 HTTPS `/bind/open` 导航，打开原申请而非发错话题的消息；普通自定义协议链接仍中和。这是入群服务的确定性提示，不调用大模型、不修改权限、不开始或排队业务任务；开通后需要重新 @ 发起任务。提示随入群服务默认生效，不增加开关。
+
+审批命令发错话题、原申请内编号/格式不匹配、非 owner 点审批表情或回复命令，都会解释为什么没有生效及正确做法；错误话题里的命令绝不被搬运成授权。飞书普通 @ 没有审批专用的 `feishu-author` 标签也能得到帮助，但不能因此获得 owner 权限。伪造签名、非成员、不可信 bot、普通文本中的 `@名字` 不触发这条反馈；反馈不会引起 bot 回声。
+
+原申请话题内能确定的格式错误（如命令后多写说明）或编号错误，先提示格式/编号及单独可复制的正确命令，不因镜像没有给错误输入附审批身份字段而误报 owner 不符。格式、编号正确也仍需原有 owner 身份校验；此提示不授予审批权。Agent 自己的 bot 发卡片和指定 Desk 代发两条路径都保留可点击的原申请链接，Desk 代发仍不增加任何 @ 通知。
+
+同一来源事件只回复一次，回执与发送中状态一起持久化；发送失败自动重试，发送成功但保存前崩溃时，先回读相同标记、身份和话题再认领，不重复发提示。通知通常在下一次入群服务轮次送出（默认每 120 秒），飞书还需一次群同步。拒绝/过期仍按原流程先发原因再退群；退群后该 Agent 没有读群权限，不能承诺继续响应 @。
+
+若飞书同步身份资料无法读取或验证，明确提示**服务端身份校验故障、尚未开通、处理方是 Agent 维护者**，不把它说成命令格式错误或审批被拒绝。仍在有效期内的原审批会在恢复后自动重试，用户无需重复点表情或发命令。旧版已发出的笼统“本机配置或 Buzz 操作暂不可用”提示，会由一条具体故障说明补充；同一故障不每轮重复刷屏。恢复回执和最终“已开通”仍分别确认，不把恢复当作已开通。
+
 ### 审批只认 owner 本人：在 Buzz 里签名，或在飞书里经可信镜像转来
 
 - 脚本不假定 relay 已经验过签名：owner 的审批 reaction 与回复、关于 agent 的成员事件、崩溃找回时认领的消息，都在本地重算事件 id 并验签，验不过的一律不计。
 - 其他成员点 ✅ 不算，频道 admin 也不能代 owner 同意。
 - 打在别的消息上不算；撤回的 reaction 不算；早于申请或晚于过期时间的信号不算；同时有同意和不同意时，以时间最早的为准。✅ 带不带 U+FE0F 变体选择符都视为同一个。
 - 回复必须在申请的 Thread 里，首行整行等于 `/approve JOIN-<id>` 或 `/deny JOIN-<id>`；后面加字、引用或 id 不对都不算。
+- 飞书的 `DONE` 与 `CheckMark` 勾选都识别为 ✅；镜像查询兼容 agent env 的 `wss://`（以相同主机的 HTTPS `/query` 签名查询），明文 ws/http 仍只允许 loopback。
 - 申请消息被删、读不到信号时，过了期限就按过期处理（退群是安全的一侧）。
 - **飞书里的回答**（ADR-0020，配置 `accept_feishu_approvals`，缺省 `true`）：owner 在飞书里对申请打的 ✅/❌，由群同步的镜像身份在 Buzz 的申请消息上打成 ✅/❌，带 `["feishu-author", <这个人的 pubkey>]`；owner 在申请话题里回复的一整行 `/approve JOIN-<id>` / `/deny JOIN-<id>`，由镜像签成话题回复（「[飞书] 名字：…」署名），带 `feishu-author` 与 `["join", "JOIN-<id>"]`。脚本另外认这两种信号，条件是：`feishu-author` 等于 agent 的 owner；作者是本频道的**可信镜像**——频道的 bot 成员，它的 kind:30177 由它的 NIP-OA owner 签名并声明 `"feishu": {"mirror": true}`，这个 owner 是本频道的 owner 或 admin（脚本用 agent 自己的身份向 relay 查一次）；回复必须带 `join` 且等于这个申请、去掉署名后首行整行是命令；表情打在申请消息上、带 `join` 时也要等于这个申请；在期限内、本地验签通过。relay 对同一身份、同一目标、同一表情只留一个 reaction：别人先在飞书里点了 ✅，owner 再点会被合并掉，这时请 owner 用 `/approve` 回复。镜像转来的普通发言本身不算。关掉 `accept_feishu_approvals` 就只认 owner 在 Buzz Desktop 或 CLI 里自己签的。已接受的风险：跑同步的那台机器（频道 owner/admin 的）技术上能替 owner 伪造一条同意，见 ADR-0020 与 [feishu-two-way-sync.md](feishu-two-way-sync.md)「飞书里同意 agent 入群」。
 
@@ -101,6 +114,9 @@ Owner 已授权你把脱敏结论和受控链接回复到触发事件所在 Chan
 | `agents[].log_file` | 可选：该单元的追加日志文件（[runtime-setup.md](runtime-setup.md)「用持久用户单元托管 Agent 进程」里的 `StandardOutput=append:`）。单元输出到 journal 的不填 |
 | `agents[].capabilities.summary` | 一句话主业，会发进频道 |
 | `agents[].capabilities.repos` | agent 的 GitLab token 实际覆盖的仓库路径，用来和频道 Canvas 的「## 代码仓库」比对；只有这里的仓库名会写进 prompt |
+| `agents[].feishu` | agent 自己的飞书应用与独立 lark-cli profile：恰好 `{app_id, lark_config_dir, lark_data_dir}`（就是群同步配置 `agents` 里那一份），每个 agent 各自一份。用于「被拉进未绑定的飞书群」；升级审计要求每个纳管 agent 都有 |
+| `lark_cli` | 有任一 `feishu` 块时必填：lark-cli 的绝对路径（文件名必须是 `lark-cli`） |
+| `feishu_unbound_prompt` | 可选，布尔值，缺省 `true`；`false` 关掉未绑定群提示（审计会判失败） |
 
 **首次运行**：每个 agent 当时已经在的所有频道（清单内外都算）记为 `BASELINE`，不发消息、不退群，只在输出里计数；之后手工加进清单的频道也会记 `BASELINE`。某个频道从成员列表里消失满 600 秒，才删它的基线（之后再被邀请就按新申请处理）或把进行中的申请记为撤回，防止一次读不全就误判；撤回时记下原状态，频道再出现且期间没有新的成员事件就恢复原状态继续（已同意、已写进 env 的记录总是恢复并完成开通）；成员列表为空时本轮直接跳过这个 agent。
 
@@ -153,11 +169,37 @@ systemctl --user disable --now buzz-agent-join.timer
 
 群内流程失败不能静默：脚本用 agent 身份在发生问题的**原群**或申请 Thread 发一条不含路径、server answer、成员输入或 secret 的状态，明确写出**失败原因**、当前没有开通或不能响应、下一轮是否自动重试，以及联系 Agent owner 的**恢复方法**。同一种持续故障只发一次；发送结果不确定时先持久化，再用同一机器标记读回或重试，避免既丢提醒又刷屏。故障恢复后会回复恢复状态，最终仍以「已开通」为准。只有连群消息通道本身也不可用时当下无法提醒；待发送状态会保留，通道恢复后补发。一个频道出错不影响同一个 agent 的其他频道，一个 agent 出错也不影响其他 agent，本轮仍以非零退出并保留 journal 证据。
 
+## 被拉进未绑定的飞书群
+
+[ADR-0023](../../../../docs/agent-harness/adr/0023-tell-an-unbound-feishu-group-why-an-invited-agent-cannot-work-there.md)（engineering/skills#162）。有人把 agent 的 bot 拉进一个**没有绑定任何 Buzz 频道**的飞书群时，群同步看不到这个群，频道里也没有入群事件；以前 bot 就一直不说话。现在同一个 timer（每 120 秒）另外为配置了 `feishu` 块（加顶层 `lark_cli`，见上文「配置」）的 agent 做这件事，缺省开启（`feishu_unbound_prompt`），不需要 @，也不加新的常驻服务：
+
+1. 用 agent 自己的 profile（`--as bot`）核对 `appId` 等于配置的 `app_id`；首轮和之后每 24 小时读一次应用已开通的 scope：列群要 `im:chat:readonly`（或 `im:chat`），发消息要 `im:message:send_as_bot`（或 `im:message`），回读要 `im:message:readonly`（或 `im:message`）。缺哪一组就把能力记成 `scope_missing:<list|send|read>`，本轮不发、这次入群也不算失败，开通后照常补说。
+2. 分页读 bot 所在的全部群。**首轮只记基线**：升级那一刻已经在的群一律不说话。之后新出现的群算一次入群；列表偶尔漏掉一个群不算离开，离开满 10 分钟后再被拉进来算新的一次。
+3. 新群先读详情：`chat_mode` 是私聊（`p2p`）的永不发送，状态不是 `normal` 的不发送。
+4. 用 agent 自己的身份读 [ADR-0022](../../../../docs/agent-harness/adr/0022-claim-a-channel-to-group-binding-with-a-lease-in-the-mirrors-kind-30177.md) 的绑定认领（不看本机有没有这个群的配置——别的机器可能在同步）：这个群的 `chat_ref` 有有效认领 = 已绑定，什么都不说，之后沿用上面的频道审批（绑定后群同步把它加进频道，这里照常发申请、owner 同意才开通）；只有过期的认领或读不到认领 = **暂时无法确认**；没有认领 = 未绑定。
+5. 由 agent 自己的 bot 在群里说一次（不 @ 任何人）。未绑定：
+
+   > 你好，我是 {name}。我收到了进群邀请，但暂时还不能处理这个群里的任务。
+   > 原因：这个群还没有和任何 Buzz 频道绑定（没有找到有效的群同步绑定），群里的消息不会送到我这里，所以在群里 @我 不会有回复。
+   > 群管理员下一步：请 Buzz 频道的 owner 或管理员把这个群绑定到一个 Buzz 频道（buzz-agent-setup「Buzz Channel ↔ 飞书群」）。绑定后我会在那个频道里发入群申请，经我的 owner 同意后才开始工作。
+
+   暂时无法确认（括号里是「读取绑定信息失败」或「这个群的同步已超过 30 分钟没有更新」）：
+
+   > 你好，我是 {name}。我收到了进群邀请，但暂时还不能处理这个群里的任务。
+   > 原因：暂时无法确认这个群是否已经和 Buzz 频道绑定（读取绑定信息失败）。
+   > 群管理员下一步：如果这个群应该接入 Buzz，请联系负责同步的 Buzz 频道 owner 或管理员确认群同步在运行；在那之前群里 @我 可能不会有回复。如果之后确认这个群还没有绑定，我会在这里再说明一次。
+
+   话题群 / 外部群的未绑定说明把下一步换成「改用内部普通群」。
+
+**不刷屏、不丢、不重复**：每次入群最多两条（先「暂时无法确认」、之后确认未绑定时再一条；变成已绑定不说话）。发送前把 pending（结论、幂等键、首次时间）写进状态目录的 `feishu-invite-state.json`（0600，按 agent 名记），再用飞书幂等键发送，拿到 message_id 后**回读**这条消息、核对群和发送应用才算说过；结果不确定时 45 分钟内每轮（包括进程重启后）用同一个键重试，超过记 `unknown`、不再发；确定被拒 3 次记 `failed`；回读失败下一轮只回读、不重发。`unknown` / `failed`、能力缺口都让这一轮的输出 `status` 为 `error`；输出里只有计数（`feishu` 下的 `baseline`、`new`、`bound`、`told_unbound`、`told_unknown`、`pending`、`unknown`、`failed`、`skipped_p2p`、`capability`），没有 chat_id 和群名。
+
+**边界**：不自动建频道、不自动绑定、不补历史、不放宽 `respond_to`，也不跳过 owner 同意。没升级到认领版的群同步不发认领，它同步的群会被说成「未绑定」，所以**先升级**所有机器的群同步（`binding_claim` 缺省开）再开本功能，顺序见 [local-upgrade-runbook.md](local-upgrade-runbook.md)。
+
 ## 上线前核对
 
 - 每个纳管的 agent：env 里有 `BUZZ_ACP_CHANNELS`；`BUZZ_ACP_AGENT_OWNER` 等于配置里的 owner；prompt 已经加了标记块；`capabilities.repos` 和它实际持有的 token 一致；`unit` 与 `log_file` 确实是这个 agent 的（配错会重启别的 agent，或永远核对不到订阅）。
 - 平台类 agent 已设 `owner_only`，executor 已设 `nobody`。
-- 手动跑一轮：输出里每个 agent 的 `baseline` 等于它当前所在的频道数，频道里没有任何新消息。
+- 手动跑一轮：输出里每个 agent 的 `baseline` 等于它当前所在的频道数，频道里没有任何新消息；配置了 `feishu` 的 agent 的 `feishu.capability` 是 `ok`、`feishu.baseline` 等于 bot 当前所在的群数，群里没有任何新消息。
 - 真实频道验证另开 issue：admin 邀请 → 申请出现 → owner ✅ → 「已开通」；再测不同意、过期、普通成员邀请、owner 不在群、agent 忙时推迟。
 
 ## 已知限制

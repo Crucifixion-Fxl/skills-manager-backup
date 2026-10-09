@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "64e1ad7e-07ad-4ea1-bda8-efcec70fabfe",
+  "path": "tool-skill-creator",
+  "path_key": "tool-skill-creator",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/agent-harness/tool-skill-creator",
+    "branch": null
+  }
+}

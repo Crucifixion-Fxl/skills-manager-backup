@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "8a8362d3-8d4f-465f-a243-feefde731f89",
+  "path": "execution-review",
+  "path_key": "execution-review",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/agent-harness/execution-review",
+    "branch": null
+  }
+}

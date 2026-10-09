@@ -409,6 +409,8 @@ r.save()
 
 按需读取以下文件，根据告警的环境/账户信息只查找所需章节。禁止猜测端点或账户信息。
 
+CN 当前全部在腾讯云：prod = `100014919455` / `cn-main`，staging 与 tech-service = `100052802231` 的独立集群。AWS CN 已弃用；旧告警中的 AWS 账户/IP 只作历史线索。必须先通过 `cloud-accounts.md`、`k8s-contexts.md` 与实际资源确认当前归属，再选择指标端点，不能将 `cn-*` 自动合并到 prod。
+
 | 文件 | 内容 | 何时读取 |
 |------|------|---------|
 | `references/infra/prometheus.md` | Prometheus/Thanos 端点 + 选择规则 + 监控拓扑 | QUICK_ASSESS: 确定查询端点 |

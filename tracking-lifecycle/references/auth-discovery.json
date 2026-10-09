@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "tool": "tracking",
+  "owner": "tracking-lifecycle",
+  "instance": {
+    "ui": "https://us-analytics-management.theunismart.com",
+    "deployedCommit": null,
+    "environmentSelection": "Use owner region/staging contract; profile origin is current reviewed US entry"
+  },
+  "auth": {
+    "nativeCredentialPath": "TMT_TOKEN in approved environment or private verified token file; GET-only scoped project for reads, role-inheriting PAT for authorized writes",
+    "missingCredentialWorkflow": "Use web-access on original browser to complete Feishu OAuth Session, then declared project/personal issuer if authorized; no JWT/device grant guessed",
+    "identity": {
+      "session": "GET /api/user/getCurrentUser data.userId",
+      "token": "GET /api/role/current data.userId; ApiTokenAuthFilter does not populate userId on getCurrentUser"
+    },
+    "resources": "Actual project operation input and detail response bound by createTrackingAdapter; backend appId attribute alone is not universally enforced",
+    "retention": "once revoke+readback before browser cleanup; save private record with expiry, stop listeners/tunnels regardless",
+    "issuer": "auth-profile.json tokenIssuers; interactive-cookie only, never token-to-token mint"
+  },
+  "nativeRoute": {
+    "reads": "Existing REST/Project Token and CLI; source catalog76 routes",
+    "writes": "PAT REST with owner permissions; event/workorder/publish use contract and CI gates; missing backend routes stay unsupported"
+  },
+  "referenceSources": [
+    "references/platform-auth.md",
+    "references/platform-api-catalog.md",
+    "references/base-context-api.md",
+    "references/opencli-access.md",
+    "references/independent-device-host-acceptance.json"
+  ],
+  "versionPolicy": "Match backend/frontend commits to deployed versions before promoting runtime coverage; source or DOM change refreshes affected contract",
+  "verification": {
+    "source": "verified fixed backend/front source",
+    "fixture": "local browser/bridge/token lifecycle tests",
+    "runtime": "historical 7 reads on app2370 only; current token issuance/full roles/write/publish unverified"
+  }
+}

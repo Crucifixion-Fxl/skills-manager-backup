@@ -12,6 +12,8 @@ from . import asset_path
 KINDS = ("quota", "transient", "auth")
 CN_TZ = dt.timezone(dt.timedelta(hours=8))
 CN_RESET_RE = re.compile(r"(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d)\s*后可继续使用")
+TRY_AGAIN_RE = re.compile(
+    r"try again at ([A-Za-z]{3})[a-z]*\.? (\d{1,2})(?:st|nd|rd|th)?,? (\d{4}),? (\d{1,2}):(\d\d)\s*([AP]M)\b", re.I)
 RESETS_RE = re.compile(r"resets\s+(?:([A-Za-z]{3})\s+(\d{1,2}),?\s*)?(\d{1,2})(?::(\d\d))?\s*(am|pm)\s*\(([^)]+)\)", re.I)
 
 
@@ -79,6 +81,23 @@ def parse_resets(text: str, after: dt.datetime):
     return cand.astimezone(dt.timezone.utc)
 
 
+def parse_try_again(text: str, tz=None):
+    """codex 额度文案 `… try again at Oct 1st, 2026 12:13 AM.` → UTC。codex 按**主机本地时区**打印（tz=None 即本机时区）。
+    没有日期的 `Try again at 4:15 PM.` 不当作恢复时刻（返回 None，按「无恢复时刻」处理）。"""
+    m = TRY_AGAIN_RE.search(text)
+    if not m:
+        return None
+    mon, day, year, hh, mm, ap = m.groups()
+    try:
+        month = dt.datetime.strptime(mon.title(), "%b").month
+        hour = int(hh) % 12 + (12 if ap.upper() == "PM" else 0)
+        naive = dt.datetime(int(year), month, int(day), hour, int(mm))
+    except ValueError:
+        return None
+    local = naive.replace(tzinfo=tz) if tz is not None else naive.astimezone()
+    return local.astimezone(dt.timezone.utc)
+
+
 ANY = object()  # "do not scope by provider"
 
 
@@ -98,5 +117,7 @@ def classify(text: str, sigs: list[Signature], harness: str | None = None, after
             until = parse_cn_reset(text)
         elif s.reset == "resets" and after is not None:
             until = parse_resets(text, after)
+        elif s.reset == "try-again-at":
+            until = parse_try_again(text)
         return Match(id=s.id, kind=s.kind, until=until)
     return None

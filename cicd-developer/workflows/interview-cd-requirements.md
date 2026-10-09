@@ -5,6 +5,16 @@ description: 通过访谈把用户意图填进 `docs/deployment/cd-requirements.
 
 # Workflow：interview-cd-requirements
 
+## CN 迁移能力门禁
+
+当前 CN 路由见 `references/cn-tencent-migration.md`：prod 为 `cn-k8s`（100014919455），
+staging/tech-service 为 `cn-tke-staging` / `cn-tke-tech-service`（100052802231）。
+AWS CN 已退役。下文 AWS shared-middleware 的已上线证明不能覆盖新 TKE；生成 `Database` /
+`KafkaScramCredential` 前必须核验精确目标的 served API、Composition/ProviderConfig、共享实例、
+Vault writer/reader 和 per-app 凭据交付，缺任一证据则 STOP + Ops Todo。消费策略仍适用，
+不得回退到旧 AWS broker/ARN、共享 root 或 app-owned/self-hosted staging 数据库。
+AWS 托管资源 recipe 仅用于 `cloud=aws`；腾讯云请求转对应原生能力或 Ops Todo。
+
 ## 目的
 
 把用户的部署意图变成 `docs/deployment/cd-requirements.md`，作为讨论记录。这是所有下游 manifest 生成的输入；如果下游 workflow 发现文档里有未回答的问题，**必须** 停下来。
@@ -186,11 +196,12 @@ description: 通过访谈把用户意图填进 `docs/deployment/cd-requirements.
   - 列出服务需要的每个外部资源：
     rds / aurora / redis / mongodb / kafka / s3 / msk / clickhouse / external-mysql / ...
   - 对每个资源：
-    - 若任一 target 的 `$target.cluster` 是 shared-middleware 集群（6 个：`{us,eu,cn}-eks-staging` +
-      `{us,eu,cn}-eks-tech-service`；**按 cluster 名判，不用 `$target.env`**——tech-service env=prod，见 #29）
+    - 若任一 target 的 `$target.cluster` 是 shared-middleware 集群（6 个：`{us,eu}-eks-staging` +
+      `{us,eu}-eks-tech-service + cn-tke-staging + cn-tke-tech-service`；**按 cluster 名判，不用 `$target.env`**——tech-service env=prod，见 #29）
       且资源属于 `rds` / `aurora` / `redis` / `elasticache` / `documentdb` / `msk` / `kafka` /
       `clickhouse` / `mongodb`（hard-rule #29：这些集群只能消费 shared-middleware，**禁止 app-owned，
       禁止 StatefulSet+PVC 自托管 #30**）：
+      - 新 CN TKE 先核验本文 CN 能力门禁；未通过则记录 Ops Todo，不能声明下述自助已上线或承诺生成可用 claim。
       - **已上线自助 mysql / redis / postgres**：不 STOP。指引开发者用
         `recipes/k8s/shared-database-claim.yaml.tmpl` 从 canonical kebab app slug 生成
         `kind: Database`（slug annotation → lower_snake_case `spec.app`，即
@@ -204,9 +215,9 @@ description: 通过访谈把用户意图填进 `docs/deployment/cd-requirements.
         `add-kafka-topic`。
       - **尚无消费 Composition：aurora / mariadb-RDS / documentdb / clickhouse**：STOP 并路由 Ops Todo
         "Platform: 补 <kind> 的可复用 kind:Database 消费 Composition + 自动 per-app 凭据交付"（注：documentdb /
-        clickhouse 共享实例已部署 6 集群，仅消费层未落地）。记为 **Future State**。不要手搓 shared-middleware
+        clickhouse 共享实例历史部署覆盖含已退役 AWS CN 的六集群；当前 CN TKE 实例须重新核验，仅消费层未落地）。记为 **Future State**。不要手搓 shared-middleware
         路径或 legacy `staging-{region}/` 资源，也不要让单 app 自建 / StatefulSet 自托管。
-      - **非 shared-middleware 集群 target（真 prod `*-eks-prod`/`*-prod-data`/TKE/dev；tech-service 不在此列）**
+      - **非 shared-middleware 集群 target（真 prod `*-eks-prod`/`*-prod-data`/cn-k8s（TKE prod）；tech-service 不在此列）**
         continue with the rules below（app-owned 托管实例）。
     - 在 `references/cost-tiering/<kind>.yaml` 找到 → **模板化** 资源；记录各 env 的规格 + immutable 字段
     - 在 `cost-tiering/_global.yaml -> unknown_resources.exceptions` 里（例如 clickhouse）→ 也是模板化
@@ -241,7 +252,7 @@ description: 通过访谈把用户意图填进 `docs/deployment/cd-requirements.
     - 没有 Vault、ExternalSecret、Secret、secret/CI build variable、Docker ARG/ENV 或
       generated config 注入 bundle/runtime 的计划
     - 任一项未知、歧义或字面文本 `(question)` → STOP，不写需求文档
-  - 新部署应用的 **staging / tech-service**（6 集群 us/eu/cn-staging + tech-us/eu/cn）数据类中间件
+  - 新部署应用的 **staging / tech-service**（当前 us/eu/cn staging + tech-service；CN 腾讯云能力须独立验证）数据类中间件
     没有出现在 `$templated_resources[]` 的 app-owned per-env config 里，也没有以 StatefulSet+PVC
     自托管形态出现（#30）；只允许出现在 `$shared_middleware_resources[]` 或 missing-contract Ops Todo。
   - 每个未模板化资源的 Ops Todo 必须包含 `_global.yaml -> unknown_resources.required_inputs` 三项：

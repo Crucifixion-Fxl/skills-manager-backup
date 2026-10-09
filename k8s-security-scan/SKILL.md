@@ -9,7 +9,7 @@ description: 扫描应用 k8s/ 目录的安全合规性，跨仓库验证 Crossp
 
 > 本 Skill 用于 MR pipeline 阶段的"左移"安全检查。不适用于基础设施仓库（k8s、argocd-apps、crossplane-infra 本身）。
 
-> 规则源：`cicd-developer` 的 Review / Scan 模式、`references/data/hard-rules.yaml` 和 validators 是部署合规 SSOT。若本 skill 与 `cicd-developer` 冲突，以 `cicd-developer` 为准并回修本 skill。能读取 `~/.codex/skills/cicd-developer/validators/validate.sh` 时，先对待扫文件跑它；validator PASS 仍要继续做静态核查。
+> 规则源：`cicd-developer` 的 Review / Scan 模式、`references/data/hard-rules.yaml` 和 validators 是部署合规 SSOT。若本 skill 与 `cicd-developer` 冲突，以 `cicd-developer` 为准并回修本 skill。能读取 `~/.codex/skills/delivery/cicd-developer/validators/validate.sh` 时，先对待扫文件跑它；validator PASS 仍要继续做静态核查。
 
 ## 执行流程
 
@@ -19,7 +19,7 @@ description: 扫描应用 k8s/ 目录的安全合规性，跨仓库验证 Crossp
 
 1. **App 名称**：从 `k8s/base/deployment.yaml` 的 `metadata.name` 或仓库名推断
 2. **目标环境**：从 `k8s/overlays/` 子目录名确定（staging-us、prod-cn 等）
-3. **云平台**：从 overlay 名称推断（`*-cn` → AWS China，`*-us/*-eu` → AWS Global）
+3. **云平台**：从当前 `argocd-apps` 目标集群目录和 Application 的实际 source/destination 判定，不能只按 overlay 后缀推断。当前 CN 全部为腾讯云 TKE（prod=100014919455；staging / tech-service=100052802231）；US 也有 GKE。见 [CN 腾讯云环境事实与核验入口](../../infrastructure/k8s-ops/references/cn-tencent-inventory.md)
 4. **变更范围**：如有 MR diff，聚焦变更文件；否则全量扫描
 
 ### Step 2: 跨仓库验证源
@@ -39,9 +39,12 @@ git clone --depth 1 https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.addx.ai/DEV/a
 | pre-us / prod-us | `aws-302571458622-us-prod/` | 同名目录 |
 | staging-eu | `aws-390709477306-eu-staging/` | 同名目录 |
 | pre-eu / prod-eu | `aws-740315635167-eu-prod/` | 同名目录 |
-| staging-cn | `aws-801447536674-cn-staging/` | 同名目录 |
-| dev-cn | `aws-801447536674-cn-dev/` | 同名目录 |
-| pre-cn / prod-cn | `aws-741924744516-cn-prod/` | 同名目录 |
+| staging-cn | `tencent-100052802231-cn-staging/`（按真实 ProviderConfig/CRD 查找） | 同名目录 |
+| tech-service-cn | `tencent-100052802231-cn-tech-service/`（按真实 ProviderConfig/CRD 查找） | 同名目录 |
+| dev-cn | 无默认新集群映射；先确认应用实际目标 | 不回退旧 AWS CN Dev |
+| pre-cn / prod-cn | `tencent-100014919455-cn-main/`（按真实 ProviderConfig/CRD 查找） | 同名目录 |
+
+表中环境是默认路由；迁移中的旧 overlay 可被当前 Application 复用并加 patches，必须扫描最终渲染结果。crossplane-infra 不存在同名目录时不能退回旧 AWS 目录；同时沿目标 Application 查 `k8s` 的 post-install/provider 配置，不假定腾讯云与 AWS 的 ProviderConfig kind/schema 相同。
 
 ### Step 3: YAML 扫描
 
@@ -50,7 +53,7 @@ git clone --depth 1 https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.addx.ai/DEV/a
 - **Rollout / StatefulSet / Deployment** → Workload 命名、Kyverno baseline、DEP/K8S 规则；新应用 Deployment 只作为需确认项
 - **Ingress** → ING 规则
 - **ExternalSecret / PushSecret** → SEC 规则
-- **ServiceAccount** → IRSA 规则
+- **ServiceAccount** → 按云判定；AWS EKS 执行 IRSA 规则，TKE 查实际身份/凭据契约，不强塞 EKS ARN
 - **ConfigMap** → SEC-04 敏感值检测
 - **Secret** → SEC-01 硬编码检测
 - **Bucket / Instance / Cluster / Function 等 Crossplane 资源** → CRX 规则
@@ -84,9 +87,9 @@ git clone --depth 1 https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.addx.ai/DEV/a
 
 **crossplane-infra 验证**（CRX-03、IRSA-01~03）：
 
-1. 在 crossplane-infra 对应集群目录下搜索 `ClusterProviderConfig`，验证 `metadata.name` 匹配应用的 `providerConfigRef.name`
-2. 搜索 IRSA Role（`crossplane-app-{app}-irsa`），验证 `permissionsBoundary` 存在
-3. 检查 RolePolicy 的 Resource 字段是否遵循最小权限
+1. 按实际 provider API group/CRD 和 Application source 查 `ProviderConfig` / `ClusterProviderConfig`；腾讯云不能强制要求 AWS 的 ClusterProviderConfig
+2. 仅 AWS EKS：搜索 IRSA Role（`crossplane-app-{app}-irsa`），验证 `permissionsBoundary` 存在
+3. 按目标云的角色/权限模型检查最小权限；AWS 检查 RolePolicy 的 Resource，TKE 按实际 CAM/provider 配置核验
 4. 检查应用仓 overlay 是否误放 IAM / ProviderConfig / WAFv2 / NineData ProviderConfig / SecurityGroupIngressRule 等中心化资源；app-owned 数据面 CR（RDS/Aurora/ElastiCache/S3/CloudFront Distribution+OAC）允许留在应用 overlay
 
 **argocd-apps 验证**（APP-01~06）：
@@ -124,7 +127,7 @@ git clone --depth 1 https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.addx.ai/DEV/a
 
 | ID | File | Rule | Finding | Fix |
 |----|------|------|---------|-----|
-| CRX-05 | overlays/staging-cn/s3-bucket.yaml | 缺少标签 | 未设置 managed-by tag | 添加 `managed-by: crossplane` |
+| CRX-05 | overlays/prod-us/s3-bucket.yaml | 缺少标签 | 未设置 managed-by tag | 添加 `managed-by: crossplane` |
 | DEP-01 | base/deployment.yaml | 缺少 livenessProbe | 未配置存活探针 | 添加 httpGet /health 探针 |
 | APP-04 | (argocd-apps) | Image Updater 未配置 | factory-service-staging-cn 缺少 image-list 注解 | 参照模板添加注解 |
 
@@ -138,7 +141,7 @@ git clone --depth 1 https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.addx.ai/DEV/a
 
 | Check | Repo | Status | Detail |
 |-------|------|--------|--------|
-| ClusterProviderConfig exists | crossplane-infra | PASS | `factory-service` found in aws-589899215075-cn-tech-service/ |
+| ClusterProviderConfig exists | crossplane-infra | PASS | `factory-service` found in aws-302571458622-us-prod/ |
 | IRSA Role exists | crossplane-infra | PASS | `crossplane-app-factory-service-irsa` found |
 | permissionsBoundary set | crossplane-infra | PASS | CrossplaneAppBoundary attached |
 | Application registered | argocd-apps | PASS | factory-service-staging-cn found |
@@ -247,7 +250,7 @@ metadata:
   name: my-app-secret
 spec:
   secretStoreRef:
-    name: vault-builder-backend  # SEC-03: Builder 域 staging/dev 使用 vault-builder-backend；Ops 域使用 vault-backend
+    name: vault-builder-backend  # US/EU staging 示例；CN 新 staging 用 vault-backend，始终核验实际 server/auth/policy
     kind: ClusterSecretStore
   target:
     name: my-app-secret

@@ -8,7 +8,7 @@
  * helper as [REDACTED], while business fields (voucher/promo `code`,
  * `token_type`, `cmsSlug`, ...) stay readable.
  *
- * Run: node --test 'skills/engagement-touchpoint-integration/tests/*.test.mjs'
+ * Run: node --test 'skills/experimentation/engagement-touchpoint-integration/tests/*.test.mjs'
  * (Node 22+ glob form; bare directory args fail on Node 23+ with MODULE_NOT_FOUND.)
  */
 

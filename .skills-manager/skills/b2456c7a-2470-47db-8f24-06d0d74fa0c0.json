@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "b2456c7a-2470-47db-8f24-06d0d74fa0c0",
+  "path": "dagster-project-prepare",
+  "path_key": "dagster-project-prepare",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/data/dagster-project-prepare",
+    "branch": null
+  }
+}

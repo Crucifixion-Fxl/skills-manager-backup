@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "tool": "litellm",
+  "owner": "litellm",
+  "instances": [],
+  "nativeRoute": "LiteLLM service Virtual Key through Vault/ExternalSecret; management UI Casdoor SSO",
+  "loginFlow": {
+    "reuseFirst": true,
+    "steps": "先复用同环境同区域 workload 注入 LITELLM_BASE_URL/LITELLM_API_KEY；无 key 经平台运维和生产 L1 审批配置 Secret 注入。UI Casdoor 管理登录不能替代服务 Bearer，研发不获取生产值。",
+    "authorization": "Login, token creation/rotation/revocation and business writes require the current task scope; this discovery performs none."
+  },
+  "tokenMechanism": "Bearer Virtual Key；base /v1，HTTPS 或已核验 fail-closed mesh/mTLS；team/model/budget/rate restrictions 依已部署 LiteLLM。",
+  "subjectPermission": "按 owner 验收 model list/allowlisted alias 与 key team/model 权限；/models 可见不证明真实推理权限，不为了认证发送业务流量。",
+  "expiryRevoke": "经运维受控生成替换 key → 注入/验证 → 无旧 key 流量 → delete old key；expiry 由管理员 key metadata 确定。",
+  "officialRefs": [
+    "https://docs.litellm.ai/docs/proxy/user_keys",
+    "https://docs.litellm.ai/docs/proxy/virtual_keys"
+  ],
+  "sources": [
+    {
+      "kind": "owner-contract",
+      "path": "../../../development/litellm-cend-integration/SKILL.md",
+      "status": "contract-recorded"
+    }
+  ],
+  "versionPolicy": {
+    "researchCommit": null,
+    "deployedCommit": null,
+    "deploymentMatch": "unknown",
+    "refreshTriggers": [
+      "authentication contract change",
+      "deployed version change",
+      "reproducible auth failure"
+    ],
+    "rule": "Candidate source and published contracts do not establish deployed compatibility. Verify the target instance version and read-only supported capabilities before enabling an adapter."
+  },
+  "verification": {
+    "source": "owner-contract-only",
+    "fixture": "not-run-in-this-discovery",
+    "runtime": "not-attempted",
+    "scope": "Read-only documentation/repository discovery; no login, token issuance, credential inspection or business API execution."
+  },
+  "referenceBase": "owner-skill-root for SKILL.md/contractEntrypoints/referenceSources paths; contract field resolves from this JSON directory; upstream repository entrypoints stay repository-relative"
+}

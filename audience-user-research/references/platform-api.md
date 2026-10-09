@@ -15,8 +15,11 @@ credential.
 | `personal_research_journey_list` | `GET /api/platform/v3/projects/{project_id}/research` | Page Project Research bindings with `limit`/`offset`; continue until `has_more=false` |
 | `personal_research_journey_create` | `POST /api/platform/v3/projects/{project_id}/research` | Create/replay one Research |
 | `personal_research_journey_status` | `GET /api/platform/v3/projects/{project_id}/research/{research_id}/journey` | Read exact bindings, requests and receipts |
-| `personal_research_journey_form` | `POST /api/platform/v3/projects/{project_id}/research/{research_id}/journey/form` | Create a Typeform or attach a same-Project Research form; pasted Typeform display URLs are supported only for `materialized_audience`. Returns `form_edit_url` for editing; `form_url` stays the private respondent page |
-| `personal_research_journey_form_publish` | `POST /api/platform/v3/projects/{project_id}/research/{research_id}/journey/form/publish` | Publish the bound Typeform so respondents can open `form_url`. Idempotent. Does not send a campaign |
+| `personal_research_journey_form` | `POST /api/platform/v3/projects/{project_id}/research/{research_id}/journey/form` | Create a Typeform or attach a same-Project Research form; pasted Typeform display URLs are supported only for `materialized_audience`. Returns exact `form_edit_url` for editing. New forms start private; attaching preserves an existing form's public state. Read exact status for any API-provided `form_preview_url`; never infer privacy from attachment |
+| `personal_research_journey_form_publish` | `POST /api/platform/v3/projects/{project_id}/research/{research_id}/journey/form/publish` | Publish the bound Typeform so respondents can open `form_url`. Returns exact `form_preview_url` for no-submission testing when available. Idempotent. Does not send a campaign |
+| `personal_research_journey_form_definition` | `GET /api/platform/v3/projects/{project_id}/research/{research_id}/journey/form/{form_id}/definition?idea_id={idea_id}` | Read the exact bound native Typeform definition and `put_body`, `provider_revision`, `affected_scope_digest`, all `affected_research`, public state and nullable response count; requires `forms.read` |
+| `personal_research_journey_form_replace` | `PUT /api/platform/v3/projects/{project_id}/research/{research_id}/journey/form/{form_id}` | Full Typeform-native replacement, guarded by exact revision/scope and explicit published-risk acknowledgement; requires `forms.create` |
+| `personal_research_journey_form_patch` | `PATCH /api/platform/v3/projects/{project_id}/research/{research_id}/journey/form/{form_id}` | Typeform-native patch array on official supported paths, with the same revision/scope/risk guard; requires `forms.create` |
 | `personal_research_prepare_selection` | `POST /api/platform/v3/projects/{project_id}/research/{research_id}/selections` | Compile, preview and persist an immutable selection |
 | `personal_research_journey_operation` | `POST /api/platform/v3/projects/{project_id}/research/{research_id}/journey/operations` | Request `materialize` or `sync_brevo` |
 | `personal_research_journey_links` | `GET /api/platform/v3/projects/{project_id}/research/{research_id}/journey/links` | Bounded authenticated links for exact form/batch |
@@ -27,6 +30,11 @@ credential.
 | `personal_research_journey_response_rate` | `GET /api/platform/v3/projects/{project_id}/research/{research_id}/journey/response-rate` | Exact form's distinct answer count, actual send count (live Brevo sent, else `operator_sent_count`) and nullable rate |
 | `personal_research_journey_responses` | `GET /api/platform/v3/projects/{project_id}/research/{research_id}/journey/responses` | Paged response and historical profile facts |
 | `personal_research_journey_responses_csv` | `GET /api/platform/v3/projects/{project_id}/research/{research_id}/journey/responses.csv` | Host attachment with response-primary wide export |
+
+The definition, replace and patch operations return `NativeFormRevision`, which does not include `form_preview_url`.
+After a form update, read `personal_research_journey_status` for the exact Research binding to obtain an
+API-returned preview link for a currently public form. Do not infer that link from `form_url` or add it to
+the native revision response contract.
 
 The bundled OpenAPI is the field authority. Common write bodies are:
 
@@ -42,6 +50,18 @@ The bundled OpenAPI is the field authority. Common write bodies are:
   copy then substitutes the current Research invitation
   URL (`form_url#uid=...&research_id=current&batch=current`). Never copy `campaign_id`,
   List, recipients, or leftover source hrefs.
+- Native form update: `GET .../form/{form_id}/definition` requires exact `idea_id` query,
+  returns `NativeFormRevision` with `body` (provider readback), `put_body` (native PUT-ready
+  form), `provider_revision`, `affected_scope_digest`, `affected_research`, `form_public`,
+  `response_count` (nullable) and `definition_fingerprint`. Review all affected Research.
+  A full `PUT` uses `NativeFormReplace`: exact `idea_id`, `expected_provider_revision`,
+  `expected_affected_scope_digest`, `acknowledge_published_risk=true`, and complete native
+  `body` derived from `put_body`. A `PATCH` uses `NativeFormPatch` with those same four
+  guards plus a nonempty `operations` array of native Typeform patch objects; only official
+  paths are valid. The boolean is a record of the Human's target-specific confirmation,
+  not permission for an Agent to bypass that confirmation. Both writes return a fresh
+  `NativeFormRevision` for exact readback. They are not idempotent create replays; on timeout
+  or stale revision, read again and reconcile, never blindly resubmit.
 - Draft body omits `sender`; Platform injects its deployment-owned Brevo identity and fails closed when that
   configuration is absent or a supplied sender does not exactly match it.
 - Selection: exactly one of capability-valid `criteria` or the published source-table mapping, plus a stable key.
@@ -136,6 +156,23 @@ read; never invent channel names.
   materialization run, destination revision, List ID and campaign ID internally.
 - `queued` and `running` are incomplete. Only the matching successful receipt authorizes the next dependent stage.
 - A URL is display/navigation evidence only. Show it only when returned by a binding-matched response; never construct it.
+  For Typeform, keep `form_edit_url`, published `form_preview_url`, and respondent `form_url` distinct.
+  The preview's `?__dangerous-disable-submissions` parameter suppresses answer recording but can be
+  removed; it is not access control and must not be used for invitations or unpublished forms.
+  Form-definition reads and updates must use named Audience operations that the deployed host
+  actually exposes, never direct Typeform calls. Before update, bind and show exact Project,
+  `form_id`, every affected same-Project Idea/Research, public state, response count and
+  proposed diff; require a target-and-scope-specific Human confirmation, particularly for a
+  public form collecting real answers. A form shared across Projects is not updateable.
+  Pass the server-issued affected-scope digest from that fresh definition read; do not
+  generate it in the Agent.
+  Native `PUT` replaces the whole form, and omitted original field IDs can delete questions
+  and their results. Native `PATCH` supports only Typeform's published path set, not individual
+  question editing. A changed definition revision or affected-scope digest requires a fresh
+  read, full affected list, diff and confirmation;
+  never silently retry. Read the exact definition and journey back and inspect the published
+  preview before claiming the requested change is live. If the update operations are not
+  deployed, remain read-only and offer the API-returned editor link.
   After a successful materialize, that includes `audience_detail_url`. After
   Idea / Research / VOC create or read, that includes `idea_detail_url`,
   `research_detail_url`, or `voc_detail_url`. After `project_publish_report` or
@@ -269,7 +306,7 @@ alone is not evidence of new responses.
 `newer_responses` is computed at current-report read time and is not stored on
 the publication. It is true only for Research when the latest aggregate
 `response_count` is greater than the count in the bound snapshot. It is false
-when counts are missing, invalid, equal or lower, or the parent is VOC. It does
+when counts are missing, invalid, equal or lower, or the parent is VOC or Idea. It does
 not mean the Markdown was regenerated. `project_report_download` still downloads
 that stored report.
 
@@ -280,3 +317,11 @@ fingerprint. Latest questionnaire rows remain on aggregate and CSV endpoints.
 A successful publish or current-report read includes `viewer_url` when the
 Research Admin shell is configured; present that exact URL and do not assemble
 an `aw_target` link from `idea_id` / `parent_id`.
+
+For an Idea report, read the current `personal_research_journey_idea_summary`
+and compare its `source_revision_id` with the stored publication's
+`source_revision_id`. Only a mismatch means “报告数据版本已变化”; it does not by itself
+prove that new responses arrived. Keep the stored Markdown and download and do
+not automatically regenerate the report. `recovery_complete` on the Idea
+summary means each form-bound Research member has a response-rate data object;
+it is not a report freshness signal and does not guarantee a known sent count.

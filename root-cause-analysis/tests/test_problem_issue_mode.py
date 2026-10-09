@@ -1,10 +1,13 @@
 import re
+import sys
 import unittest
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-REPO_ROOT = ROOT.parents[1]
+REPO_ROOT = ROOT.parents[2]
+sys.path.insert(0, str(REPO_ROOT / "scripts"))
+from gitlab_ci_config import merged_text  # noqa: E402
 
 
 class ProblemIssueModeContractTest(unittest.TestCase):
@@ -83,15 +86,15 @@ class ProblemIssueModeContractTest(unittest.TestCase):
         self.assertIn("不写 GitLab", control)
 
     def test_ci_validates_the_existing_skill_path(self):
-        ci = (REPO_ROOT / ".gitlab-ci.yml").read_text(encoding="utf-8")
+        ci = merged_text(REPO_ROOT)
         self.assertIn("root-cause-analysis:unit:", ci)
         self.assertIn(
-            "python -m unittest discover -s skills/root-cause-analysis/tests -v", ci
+            "python -m unittest discover -s skills/observability/root-cause-analysis/tests -v", ci
         )
         self.assertIn(
-            "uv run python scripts/validate.py --skill skills/root-cause-analysis", ci
+            "uv run python scripts/validate.py --skill skills/observability/root-cause-analysis", ci
         )
-        self.assertIn('"skills/root-cause-analysis/**/*"', ci)
+        self.assertIn('"skills/observability/root-cause-analysis/**/*"', ci)
         self.assertNotIn("problem-analysis-agent:unit:", ci)
 
 

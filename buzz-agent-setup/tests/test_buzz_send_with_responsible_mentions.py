@@ -290,6 +290,44 @@ class ResponsibleSendBoundaryTest(unittest.TestCase):
                     env=self.env, runner=lambda *a, **k: None,
                 )
 
+    def test_repo_less_desk_sends_person_without_gitlab_token(self):
+        """A Desk with no project reads its owner-managed people file and verifies the Thread send."""
+        self.config["gitlab"]["projects"] = []
+        self.config_path = self.write("config.json", self.config)
+        request = {**self.request, "sources": [{"kind": "person", "username": "bob"}]}
+        env = {key: value for key, value in self.env.items() if key != "AGENT_GITLAB_TOKEN"}
+        run, calls, sent = self.runner()
+        result = self.module.execute(
+            self.config_path, self.write("person-only.json", request),
+            env=env, runner=run, sleeper=lambda _: None,
+        )
+        self.assertEqual(result["status"], "sent")
+        self.assertEqual(sent["mentions"], [BOB])
+        self.assertEqual([tuple(call[0][1:3]) for call in calls].count(("messages", "thread")), 2)
+
+    def test_gitlab_locator_requires_allowlisted_project_and_token(self):
+        """A repo-less Desk cannot use GitLab locators, and an allowed project still needs its own token."""
+        env = {key: value for key, value in self.env.items() if key != "AGENT_GITLAB_TOKEN"}
+        for projects, expected in (([], "outside the configured allowlist"), ([481], "missing GitLab token")):
+            with self.subTest(projects=projects):
+                self.config["gitlab"]["projects"] = projects
+                self.config_path = self.write("config.json", self.config)
+                run, calls, _ = self.runner()
+                with self.assertRaisesRegex(self.module.SendError, expected):
+                    self.module.execute(
+                        self.config_path, self.input_path, env=env, runner=run,
+                        sleeper=lambda _: None,
+                    )
+                self.assertNotIn(("messages", "send"), [tuple(call[0][1:3]) for call in calls])
+
+        self.config["gitlab"]["projects"] = [482]
+        self.config_path = self.write("config.json", self.config)
+        with self.assertRaisesRegex(self.module.SendError, "outside the configured allowlist"):
+            self.module.execute(
+                self.config_path, self.input_path, env=self.env,
+                runner=self.runner()[0], sleeper=lambda _: None,
+            )
+
     def send_seats(self, names, roles):
         request = {**self.request, "sources": [{"kind": "person", "username": name} for name in names]}
         run, calls, sent = self.runner(roles=roles)
@@ -413,7 +451,7 @@ class ResponsibleConfigExampleTest(unittest.TestCase):
             self.module.load_config(self.write(wrong_version))
         wrong_projects = json.loads(json.dumps(base))
         wrong_projects["gitlab"]["projects"] = [str(project) for project in base["gitlab"]["projects"]]
-        with self.assertRaisesRegex(self.module.SendError, "gitlab.projects must be a non-empty unique project list"):
+        with self.assertRaisesRegex(self.module.SendError, "gitlab.projects must be a unique list of positive project ids"):
             self.module.load_config(self.write(wrong_projects))
 
     def test_config_example_is_documented_where_operators_look(self):

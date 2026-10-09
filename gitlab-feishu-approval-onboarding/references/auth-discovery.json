@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "tool": "gitlab-approval",
+  "owner": "gitlab-feishu-approval-onboarding",
+  "instances": [
+    "https://gitlab-feishu-approval.addx.live/projects"
+  ],
+  "nativeRoute": "Feishu client native identity + current user GitLab OAuth",
+  "loginFlow": {
+    "reuseFirst": true,
+    "steps": "在本组织飞书窗口打开 /projects，复用会话或 /auth/feishu/client 原生验证；本人绑定 GitLab 时完成自身 OAuth。普通远程浏览器不具备飞书原生窗口能力时交付入口与表单草稿。",
+    "authorization": "Login, token creation/rotation/revocation and business writes require the current task scope; this discovery performs none."
+  },
+  "tokenMechanism": "服务端 session cookie；候选源码 __Host-approval-session，Secure/HttpOnly，7 天；CSRF 与一次性 state 为独立门禁。无面向 Skill 的 PAT 登录。",
+  "subjectPermission": "页面本人姓名、GitLab 绑定、项目读取与审批人 Maintainer/Owner 预检；cookie 存在不证明权限。",
+  "expiryRevoke": "候选 internal/server/server.go 注册 POST /auth/logout；session 7d。handler 实际 revoke/CSRF 与部署需确认后才调用。GET /auth/status 只返回 provider 是否配置（feishu/gitlab），不是用户身份探针。已失效时走飞书原生重新验证，不导出 Cookie/PAT。",
+  "officialRefs": [],
+  "sources": [
+    {
+      "kind": "owner-contract",
+      "path": "../SKILL.md",
+      "status": "contract-recorded"
+    },
+    {
+      "kind": "repository",
+      "repository": "https://gitlab.addx.ai/DEV/gitlab-feishu-approval",
+      "researchCommit": "1a71e49f884750400e97adb631f88d829346c403",
+      "entries": [
+        "internal/server/login.go",
+        "internal/server/gitlab_login.go",
+        "internal/authn/session.go",
+        "internal/server/web/native-login.js"
+      ],
+      "status": "source-verified"
+    }
+  ],
+  "versionPolicy": {
+    "researchCommit": "1a71e49f884750400e97adb631f88d829346c403",
+    "deployedCommit": null,
+    "deploymentMatch": "unknown",
+    "refreshTriggers": [
+      "authentication contract change",
+      "deployed version change",
+      "reproducible auth failure"
+    ],
+    "rule": "Candidate source and published contracts do not establish deployed compatibility. Verify the target instance version and read-only supported capabilities before enabling an adapter."
+  },
+  "verification": {
+    "source": "source-verified",
+    "fixture": "not-run-in-this-discovery",
+    "runtime": "not-attempted",
+    "scope": "Read-only documentation/repository discovery; no login, token issuance, credential inspection or business API execution."
+  }
+}

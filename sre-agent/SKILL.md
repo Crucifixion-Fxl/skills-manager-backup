@@ -7,6 +7,9 @@ description: >-
 argument-hint: "[start | status | stop | debug]"
 ---
 
+平台认证与接入唯一正本：[pagerduty](../../observability/pagerduty/SKILL.md)。本流程保留业务授权与执行门禁，不复制登录或 Token 申请方式。
+
+
 # sre-agent (Alert Automation)
 
 ## Description
@@ -64,6 +67,12 @@ Debug 模式与生产共享完全相同的执行模型（cron 驱动、subagent 
 
 ## Rules
 
+### Incident Issue lifecycle
+
+- 新告警组创建后，紧急可逆缓解不等待建单；在首个安全检查点、任何持久修复/RCA final/关闭声明前，按 [`gitlab-issue-sop` 生命周期契约](../../collaboration/gitlab-issue-sop/references/lifecycle-binding.md) 创建或复用 open、assigned Incident Issue，并将 `cg_id`、PagerDuty IDs 与 environment 写入 binding。
+- Investigation、approval、execution、rollback、recovery 与 pattern follow-up 均把不可变证据回执写入该 Incident Issue 或其子 Task 并回读。通知发送成功、自动修复退出码 0 或告警消失都不等于事故关闭。
+- 只有 lagging runtime/business indicators、观察窗口和 required follow-up Tasks 全部满足 final closure contract 后才允许关闭；否则保留真实状态、owner 与 next gate。
+
 ### 两层架构
 
 - `scripts/dispatcher_loop.py`（Python）处理所有确定性逻辑：poll PD、告警关联、状态管理、飞书通知、产出物检测
@@ -117,6 +126,10 @@ Debug 模式与生产共享完全相同的执行模型（cron 驱动、subagent 
 ### 环境与端点
 
 所有基础设施上下文见 `references/infra/` 目录（prometheus.md / cloud-accounts.md / k8s-contexts.md / diagnostic-skills.md），禁止猜测。
+
+**CN 路由**：AWS CN 已弃用；prod 是腾讯云 `100014919455` / `cn-main`，staging 与 tech-service 是腾讯云 `100052802231` 的两个独立集群。`cn-*` 不代表同一个账户或同一个监控端点。先核对 [当前 CN 清单](../k8s-ops/references/cn-tencent-inventory.md)、告警 cluster label 与 Application destination，再派发云资源/K8s/指标采集；旧告警记录只作历史证据。
+
+CN tech-service 的 [监控目标域名](references/infra/prometheus.md) 尚待切换。Dispatcher 环境分类不证明端点可用；采集前核验实际 API base，query helper 要求显式 `PROMETHEUS_CN_TECH_SERVICE_URL`，不自动连接新旧域名。VictoriaMetrics 查询入口与 VMAlert 告警入口分别核验。
 
 ## Examples
 

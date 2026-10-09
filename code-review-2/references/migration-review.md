@@ -135,7 +135,7 @@ reviewer 要求作者按上述模式拆，不接受一步到位。
 - ✅ 拆分 migration 必须包含正向数据迁移（把旧值 walk 到新列）
 - ✅ 文件顶部必须有 HISTORICAL NOTE：原列做什么用 → 现在分别是什么用 → 旧代码仍写到旧列怎么办
 - ✅ **作者必须证明已审计所有 prior migrations 里 UPDATE 该列的代码**：是否有遗留 UPDATE 会重新污染拆分后的列？如果有，要么改 UPDATE 用新列，要么 HISTORICAL NOTE 注释删除（参考 naturehood `release/kbtv-master` commit `12358d1` 的 020 fix）
-- ✅ 项目级 column drift 登记表（如 `server/CLAUDE.md` 的 column drift 表）必须更新
+- ✅ 项目级 column drift 登记表必须更新（新表放 `docs/architecture/server/migration-rules.md`；memory 仅留入口，既有表不自动搬迁）
 
 未做这些 → flag column-drift bug 风险。
 
@@ -191,13 +191,16 @@ reviewer 要求作者按上述模式拆，不接受一步到位。
 
 ## 项目级规范模板（推荐每个项目都建）
 
-每个 Go 项目应在 `server/CLAUDE.md` 或类似位置有：
+在已授权的规范落地场景遵循 [Memory 极简写入](../../../agent-harness/dev-infra/references/memory-writing.md)；只读 review 仅建议。
+每个 Go 项目应把以下详情放 `docs/architecture/server/migration-rules.md`，memory 不复制登记表和 checklist：
 
 1. 黄金规则段（schema-only, no business data UPDATE in migrations）
 2. 4 条铁律段（idempotent guard / no column drift / bounded scope / comment block）
 3. Column drift 登记表（被拆/重命名/改语义的列）
 4. PR checklist
 5. 大表 ALTER 警告 + 阈值
+
+`server/CLAUDE.md` 仅留一句：迁移遵循 [迁移规则](../docs/architecture/server/migration-rules.md)：schema-only、幂等 guard、禁止 column drift、限定影响范围、变更注释；大表 ALTER 遵循文档阈值。
 
 参考实现：
 - naturehood: [`server/CLAUDE.md > 数据库迁移`](https://gitlab.addx.ai/applications/naturehood/-/blob/master/server/CLAUDE.md) + [`docs/architecture/server/migration-rules.md`](https://gitlab.addx.ai/applications/naturehood/-/blob/master/docs/architecture/server/migration-rules.md)

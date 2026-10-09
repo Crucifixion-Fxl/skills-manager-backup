@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "b0c6810d-954f-4e2a-b0d3-29180303202e",
+  "path": "clean-cache",
+  "path_key": "clean-cache",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/agent-harness/clean-cache",
+    "branch": null
+  }
+}

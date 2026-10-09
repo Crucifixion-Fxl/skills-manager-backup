@@ -9,6 +9,8 @@ ADDX 固件发版平台（"固件发版平台"）操作手册。系统是一个 
 
 ## Description
 
+首次接入/变更扫描与日常认证入口见 [SaaS 接入](references/saas-access.md)；已有平台业务契约与授权门禁仍在本 Skill 维护。
+
 - 访问入口：<https://firmware-mgr.addx.live>
 - 测试环境：<https://firmware-mgr-test.addx.live>
 - API base：`https://firmware-mgr.addx.live/api/`（注意 `/api/` 是必需前缀，前端代码中端点名为相对路径）
@@ -26,13 +28,13 @@ ADDX 固件发版平台（"固件发版平台"）操作手册。系统是一个 
 - ⚠️ **token 必须在 Header 里！光放 Cookie 不行**（实测：纯 `-b "token=..."` 没有 Header 时后端返 `no auth`）。虽然浏览器登录后 token 是存在 Cookie 里（F12 Application 能看到），但前端 JS 调用前会把 Cookie 里的 token 复制到 Request Header（`s["j"]()` 函数），后端**只从 Header 读 token**。用 curl/Postman 复现常见的错误就是只放 Cookie 没放 Header
 - token 是 32 位字符（看似 MD5）。失效后会返回 `{"result": 10001, "msg": "no auth", ...}` 或 `{"result": -1, "msg": "KeyError: 'token'."}`
 
-**Token 获取顺序（强制按此顺序，不允许颠倒）**：
+**Token 获取顺序**：
 
-1. **优先读环境变量**：生产 = `$FIRMWARE_MGR_TOKEN`，测试 = `$FIRMWARE_MGR_TEST_TOKEN`。AI 必须用 `echo $FIRMWARE_MGR_TOKEN` 之类先尝试读取
-2. **环境变量为空**：让用户在对话中提供，**仅在当前会话使用，不写入任何文件**
-3. **用户无 token**：引导用户去网页 SSO 登录，**从浏览器 F12 → Application → Storage → Cookies → 选 `https://firmware-mgr.addx.live` → 找名为 `token` 的 cookie → 复制 Value**（最直接，是源头存储）。
-   - 备选：F12 → Network 面板 → 任意 `/api/*` 请求的 Request Headers 里复制 `token:` 的值（前端从 Cookie 读后设到 Header，间接但也能拿到）
-   - ⚠️ **不要用 `localStorage.getItem('token')`** —— token **不在 localStorage 也不在 vuex/state**，是后端 SSO 登录后通过 Set-Cookie 写到浏览器 Cookie 的（前端 JS `s["j"]()` 函数从 Cookie 读 token 再设到 Header）
+1. 优先使用当前任务已授权的 `FIRMWARE_MGR_TOKEN`（生产）或 `FIRMWARE_MGR_TEST_TOKEN`（测试），只检查是否存在，不执行 echo、读取真实值或要求用户粘贴到聊天。
+2. 环境没有凭据时先读取 owner 的接入 reference，选择已授权的私有凭据来源；不能遍历其他账号/会话的 Cookie 或凭据文件。
+3. 需要本人登录时使用 [web-access](../../agent-harness/web-access/SKILL.md)，在原任务浏览器按真实部署的登录方式完成认证，不预设 SSO。本机画面直接操作；远端默认 VNC，普通用户无需 F12/inspect。
+4. 平台前端从名为 token 的浏览器 Cookie 构造 `token` 请求头；纯 Cookie 请求不能代替该 Header。优先在同一已登录网页中执行已有 UI/客户端，保持凭据在浏览器内。只有经过 owner 核验的专用适配器才能把 Cookie 转为请求头，并在跨浏览器协议返回前脱敏；不导出值供聊天复制。
+5. `localStorage.getItem('token')` 不适用于这个已核验版本；部署改变后重新查源码，不猜测存储位置。
 
 **绝对禁止**：
 
@@ -282,7 +284,7 @@ curl 调用一律写 `-H "token: $FIRMWARE_MGR_TOKEN"`，不写 `-H "token: 408c
 
 1. `npx skills add vercel-labs/agent-browser --skill agent-browser --agent claude-code -y`
 2. 由用户在浏览器里完成 SSO 登录（不要代输密码）
-3. 登录后用 `page.evaluate(() => localStorage.getItem('token'))` 取 token，回到 API 模式
+3. 登录后按 Rule 1 在原浏览器继续 UI/已核验适配器操作，确认目标角色和任务资源；不读取或导出 localStorage/Cookie 值。
 4. UI 框架是 **iView**（Vue 2 / iview-admin）：菜单 class 前缀 `.ivu-menu-*`、表格 `.ivu-table-*`，与 Element / Ant Design 不同，不要照搬其他后台的选择器
 
 ## Examples
@@ -357,3 +359,7 @@ AI: 准备执行: cancel_publish_firmwares
 - `references/api-reference.md` — 全部端点清单 + 入参（从前端 JS 反推 + 实测验证）
 - 前端仓库：iview-admin 模板，菜单 i18n 文案在 `app.js` 的 `meta.title` 字段
 - 关联 Skill：[firmware-build](../firmware-build/SKILL.md) — 摄像头固件本地/远程构建流程（构建产物会被这里管理）
+
+### 登录方式与失败核验
+
+仅账号密码表单不能证明 LDAP。核对选定部署对应的 `user.py`/实际登录处理器；候选源码的 LDAP bind 不能替代部署版本和真实登录成功证据。用户报告正确账号认证失败后停止盲试，不请求密码到聊天，不自动重置密码、创建账号或修改权限。记录认证失败与部署/目录/权限待核验，和普通尚未操作的 WAITING_USER_LOGIN 区分。

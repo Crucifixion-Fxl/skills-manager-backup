@@ -17,7 +17,7 @@ Base URL: `https://emp.addx.live/worktime`
 - 所有提交前必须展示 ISO 年周及完整起止日期。仅补填时与`week-numbers`接口核对；普通提交按 GMT+8 当前周核对，该接口不返回当前周，不能因未匹配当前周而阻止正常填报。系统旧周号与 ISO 周号不能混用：2026-08-31～2026-09-06 是 ISO W36、系统第35周；2026-09-07～2026-09-13 是 ISO W37、系统第36周。
 - 例：9月7日补填8月31日～9月6日，`是否补填=true`，`填写日期=9月4日`，`补填日期=9月7日实际提交时间`；9月7日正常填写本周，则`填写日期=9月7日实际提交时间`、`补填日期`为空，属于9月7日～13日。
 - 写入由提交接口生成这三个字段，skill只发送`is_retroactive`布尔值和补填时的`retroactive_iso_week_year`、`retroactive_iso_week_number`，不能自行直写飞书日期字段。完成后强制刷新并按返回记录ID回读，核对补填标记、归属周、原始提交时间和工时；时间证据不足时标记待核验，不猜测。
-- 纠正已有记录前先核对目标周已有记录、总时长及项目和工作内容。内容不同的历史批次不能当重复数据删除，也不能自动把已有批次连续前移；保留记录，由本人确认并修改。个人修改接口当前不开放日期/补填标记变更；涉及跨周日期纠正时如实说明限制，不能推荐删除重填来掩盖原始日期。
+- 纠正已有记录前先核对目标周已有记录、总时长及项目和工作内容。内容不同的历史批次不能当重复数据删除，也不能自动把已有批次连续前移；保留记录，由本人确认并修改。归属周纠正仅在 capabilities 明确开启 personal_record_week_correction_v1 后，按 Rule 11 的本人修改预览→新确认→PATCH 协议执行；否则如实说明限制。不能直接写日期/补填标记或删除重填来掩盖原始日期。
 - 已有记录经明确授权纠正时，原来是普通提交的，原`填写日期`才是需要保留的实际提交时间；原来已是补填的，保留原`补填日期`。不能用纠正操作时间覆盖这份历史事实。
 
 ## 1. 获取用户身份
@@ -236,7 +236,7 @@ X-Worktime-Operation-Key: <opaque-csprng>
 
 ## 7. CLI 本地 OAuth 登录（推荐，自动化）
 
-**脚本入口**：`python3 ~/.claude/skills/worktime-filing/login.py` — 启本地端口、打开浏览器、自动回调写入 `.env`。
+**脚本入口**：`python3 ~/.claude/skills/collaboration/worktime-filing/login.py` — 启本地端口、打开浏览器、自动回调写入 `.env`。
 
 **后端配合路由**：`GET /auth/cli-redirect?local_port=<PORT>&state=<STATE>`
 - 参数校验：`1024 ≤ local_port ≤ 65535`；`8 ≤ len(state) ≤ 128`。
@@ -272,26 +272,32 @@ X-Worktime-Operation-Key: <opaque-csprng>
 - `提交过于频繁，请等待 X 秒后再试`
 - `项目不在你的项目成员列表中`
 
-## 10. 修改指定 ISO 周内的本人记录
+## 10. 本人记录修改与归属周纠正（v1）
+
+`GET /api/worktime/capabilities` 返回 `data.version=1`、`personal_record_edit_v1=true`、`personal_record_week_correction_v1=true`。批量补填能力单独判断，不能从编辑能力推导。
+
+`GET /api/worktime/my-records?...&force_refresh=true` 每条记录返回 `record_version` 与 `iso_week=[ISO年,ISO周]`，两者用于原记录核验。
 
 ```http
-PATCH /api/worktime/my-records/<record_id>
+POST /api/worktime/my-records/<record_id>/preview
 Content-Type: application/json
 
-{
-  "iso_year": 2026,
-  "iso_week": 36,
-  "hours": 8,
-  "work_content": "可选；不修改则省略",
-  "project_record_id": "recXXX"
-}
+{"iso_year":2026,"iso_week":41,"record_version":"<最新版本>",
+ "target_iso_year":2026,"target_iso_week":40,
+ "hours":8,"work_content":"用户明确提供的工作内容"}
 ```
 
-- `iso_year` 和 `iso_week` 必填，用来校验记录的业务归属周；不匹配返回 409，后端不会移动记录到另一周。
-- `hours`、`work_content`、`project_record_id` 至少提供一个；只能修改这三个业务字段。
-- 后端仅允许记录所有者修改，项目必须仍在本人项目成员白名单，工时步长 0.5，修改后周总工时不得超过该周上限。
-- 响应 `data.stats_synced` 表示当前周的人员统计是否已同步为精确合计；`false` 不回滚主记录，调用方必须提示需要管理员修复。
-- 成功后用同一 ISO 周范围调用 `my-records?force_refresh=true` 回读校验。
+仅发送要修改的字段；可另传本人白名单中的 `project_record_id`。响应 `data` 含 `before/after/source_week/target_week/max_hours/other_hours` 和不透明 `confirmation_token`。预览不写入记录。
+
+随后新的顶层用户消息确认结果后，用完全相同的 JSON 加上 `confirmation_token` 调用 `PATCH /api/worktime/my-records/<record_id>`。归属周纠正强制预览确认；旧客户端原周内三项业务字段的修改仍兼容。
+
+- 记录只能由本人修改；原周或版本不符、确认过期/报文变化返回 409。无权或不存在统一返回 404。
+- 目标周必须同时传显式 ISO 年和周；禁止直接修改日期字段、是否补填、填写人。
+- 原实际提交时间严格保留，不能替换为修改操作时间。目标周晚于原实际提交周或当前周、原补填记录缺少实际提交时间时拒绝纠正。
+- 目标早于原实际提交周时：填写日期=目标周周五，是否补填=true，补填日期=原实际提交时间；目标等于原实际提交周时：填写日期=原实际提交时间，是否补填=false，补填日期清空。
+- 工时为正数且步长 0.5；改工时/移动归属周按完整本人目标周台账核验；日历小时是推荐值，超过时仅提示核对实际工时，不能拒绝或缩减。无工作日目标周拒绝，跨周后不得超过每周 5 条。预览和保存分别重新核验原记录版本、目标周其他记录总工时与条数、日历推荐值；这些值变化时要求重新确认，不承诺锁定其他记录的内容或项目。
+- `data.verified=true` 才表示服务端回读一致，仍应强制刷新原周/目标周按 record_id 校验；`false` 代表已写入待核验，不盲目重发。
+- `data.stats_synced=false` 表示主记录修改成功但本周统计同步失败，需管理员修复。服务端审计保存操作者、记录、修改前后值，保留一年；不保存确认令牌。
 
 ## 11. 删除 8 天内的本人记录
 

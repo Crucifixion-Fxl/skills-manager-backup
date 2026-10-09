@@ -78,7 +78,7 @@ export WEEKLY_REPORT_REPO=git@your-gitlab.example.com:team/weekly-reports.git
 # → /tmp/weekly-report-2026-04-28.html
 
 # 2. 一行发布
-bash skills/weekly-report-publish/scripts/publish.sh /tmp/weekly-report-2026-04-28.html --week 2026-W18 --auto --approval-receipt /tmp/weekly-report-2026-04-28.approval.json
+bash skills/collaboration/weekly-report-publish/scripts/publish.sh /tmp/weekly-report-2026-04-28.html --week 2026-W18 --auto --approval-receipt /tmp/weekly-report-2026-04-28.approval.json
 
 # 输出：
 # Published: zlin 2026-W18
@@ -183,7 +183,7 @@ publish 维护下述结构，`reports/*.html` 是数据，`index.html / data.jso
 
 ## 边界
 
-- 只新增 `skills/weekly-report-publish/` 目录
+- 只新增 `skills/collaboration/weekly-report-publish/` 目录
 - 不改 `weekly-report` skill 任何文件
 - 依赖：`git` CLI、`glab` CLI、`python3` 标准库、`bash`
 - 不在 publish 里调 LLM、不做翻译/分析

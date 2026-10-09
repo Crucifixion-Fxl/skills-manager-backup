@@ -60,6 +60,19 @@ def test_claude_weekly_limit_resolves_next_reset_after_event(sigs):
     assert iso(m.until) == "2026-09-19T00:00:00Z"
 
 
+def test_codex_usage_limit_is_quota_with_reset_in_host_local_time(sigs, host_tz):
+    """Real codex wording (2026-09-26, curly apostrophe); the host prints the reset in its own time zone."""
+    host_tz("UTC")
+    m = S.classify(sample("codex-usage-limit"), sigs, harness="codex")
+    assert (m.id, m.kind, iso(m.until)) == ("codex-usage-limit", "quota", "2026-10-01T00:13:00Z")
+    host_tz("Asia/Shanghai")
+    assert iso(S.classify(sample("codex-usage-limit"), sigs, harness="codex").until) == "2026-09-30T16:13:00Z"
+
+
+def test_codex_usage_limit_signature_is_verified(sigs):
+    assert next(s for s in sigs if s.id == "codex-usage-limit").verified
+
+
 def test_auth_failure_is_its_own_kind(sigs):
     assert S.classify(sample("claude-auth"), sigs).kind == "auth"
 

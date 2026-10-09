@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "17e99c90-3b13-4d1d-b8d3-f9faa0c49bfd",
+  "path": "claude-code-permissions",
+  "path_key": "claude-code-permissions",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/agent-harness/claude-code-permissions",
+    "branch": null
+  }
+}

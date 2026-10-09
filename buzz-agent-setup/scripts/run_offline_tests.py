@@ -17,7 +17,7 @@ import tempfile
 
 
 SKILL_DIR = Path(__file__).resolve().parents[1]
-REPO_ROOT = SKILL_DIR.parents[1]
+REPO_ROOT = SKILL_DIR.parents[2]
 TEST_DIR = SKILL_DIR / "tests"
 
 

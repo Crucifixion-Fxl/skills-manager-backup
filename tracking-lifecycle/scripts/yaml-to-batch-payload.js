@@ -32,7 +32,8 @@ const path = require('path');
 // 常量
 // ---------------------------------------------------------------------------
 
-const BASE_URL = 'https://us-analytics-management.theunismart.com';
+const { reviewedHttpsEndpoint } = require('../cli/src/endpoint');
+const platformBaseUrl = () => reviewedHttpsEndpoint(process.env.TRACKING_PLATFORM_BASE_URL);
 
 const VALID_TYPES = ['PAGE', 'MODULE', 'COMPONENT', 'SELF_DEFINE'];
 const VALID_TRACKER_TYPES = ['BASE', 'CLK', 'EXP'];
@@ -323,7 +324,7 @@ function transformToApiPayload(spec, applicationId) {
 // ---------------------------------------------------------------------------
 
 async function resolveApplicationId(appName, apiKey) {
-  const url = `${BASE_URL}/api/info/getAllApplication`;
+  const url = `${platformBaseUrl()}/api/info/getAllApplication`;
   const res = await fetch(url, {
     headers: { 'Authorization': `Bearer ${apiKey}` },
   });
@@ -344,7 +345,7 @@ async function resolveApplicationId(appName, apiKey) {
 }
 
 async function executeBatchCreate(payload, apiKey) {
-  const url = `${BASE_URL}/api/info/batchCreateEvents`;
+  const url = `${platformBaseUrl()}/api/info/batchCreateEvents`;
   const res = await fetch(url, {
     method: 'POST',
     headers: {
@@ -354,6 +355,9 @@ async function executeBatchCreate(payload, apiKey) {
     body: JSON.stringify(payload),
   });
 
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status}: batch create result is uncertain; read back event and schema before retrying`);
+  }
   const body = await res.json();
   return body;
 }
@@ -386,7 +390,7 @@ async function executeApiCreate(payload, apiKey) {
   console.log(`正在调用批量创建 API (${payload.events.length} 个事件)...`);
   try {
     const result = await executeBatchCreate(payload, apiKey);
-    if (result.success || result.code === 200) {
+    if (result?.code === 200 && result?.success !== false) {
       console.log('创建成功:');
       console.log(JSON.stringify(result.data, null, 2));
     } else {

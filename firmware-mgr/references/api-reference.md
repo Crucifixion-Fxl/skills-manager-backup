@@ -284,7 +284,7 @@ id, name, platform, model, version, gitsha, md5,
 s3_bucket_name, s3_object, update_time, is_factory_released
 ```
 
-**Step 2 — 用 id 换 S3 预签名 URL**
+**Step 2 — 用 id 换下载预签名 URL**
 
 ```json
 POST /api/download_firmware
@@ -312,7 +312,7 @@ curl -o <local-name>.fw "<上一步返回的 data 字段 URL>"
 |---|------|
 | URL 有效期 | **10 分钟（600 秒）**，超时需重新调 download_firmware 拿新 URL |
 | HTTP 方法限制 | **只能 GET，不能 HEAD**（HEAD 返回 403 Forbidden）。AWS Sig V4 按方法签名 |
-| S3 区域 | `addx-firmware-cn.s3.cn-north-1.amazonaws.com.cn`（AWS 中国北区），国内访问可能需特定网络 |
+| 下载存储位置 | 上方 AWS CN S3 地址是历史实测响应，不是当前集群或存储选址。下载时以 API 此次返回的完整 URL 为准，不硬编码域名，也不因 CN 集群迁至腾讯云就改写签名 URL 为 COS 地址 |
 | 文件大小 | 实测 T23ZN-Aiw4211L 1.19.171 固件约 13.5 MB（~14M 字节） |
 | 完整性校验 | get_firmwares 返回的 `md5` 字段就是文件 MD5，下载后 `md5sum` 比对验证 |
 | 权限 | 推断：能调 get_firmwares 的 token 应该都能调 download_firmware（普通用户级） |

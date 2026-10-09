@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "8e1a1304-b8c0-43b8-98f9-2307e18f7065",
+  "path": "reportportal",
+  "path_key": "reportportal",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/quality/reportportal",
+    "branch": null
+  }
+}

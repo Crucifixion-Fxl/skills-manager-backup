@@ -15,7 +15,7 @@ description: Legacy/platform Sentry operations helper for A4x self-hosted Sentry
 
 - `sentry-onboard` Job / Vault JWT / Sentry token / DSN 写入链路排障
 - 历史 Project 或 legacy DSN path 修复
-- 明确要求的跨实例项目迁移/实例合并；按 [项目与实例迁移](../cicd-developer/references/sentry/project-migration.md) 执行
+- 明确要求的跨实例项目迁移/实例合并；按 [项目与实例迁移](../../delivery/cicd-developer/references/sentry/project-migration.md) 执行
 - 品牌 relay DSN host 校验或补救
 - 修复 `sentry-onboard` 工具本身时的 Sentry REST API 调用
 

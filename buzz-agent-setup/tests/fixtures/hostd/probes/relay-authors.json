@@ -1,0 +1,69 @@
+{
+  "failed_checks": [],
+  "observed_authors_only_pushes": false,
+  "ok": true,
+  "probe": "hostd-relay-authors",
+  "relay_image": "ghcr.io/block/buzz:0.2.1",
+  "result": {
+    "other_member": {
+      "authors_and_h": {
+        "ch1": 21,
+        "ch2": null
+      },
+      "authors_and_h_two_channels": {
+        "ch1": null,
+        "ch2": null
+      },
+      "authors_kinds": {
+        "ch1": null,
+        "ch2": null
+      },
+      "authors_only": {
+        "ch1": null,
+        "ch2": null
+      },
+      "authors_since": {
+        "ch1": null,
+        "ch2": null
+      },
+      "h_two_channels": {
+        "ch1": null,
+        "ch2": null
+      }
+    },
+    "other_member_closed": [],
+    "self": {
+      "authors_and_h": {
+        "ch1": 42,
+        "ch2": null
+      },
+      "authors_and_h_two_channels": {
+        "ch1": null,
+        "ch2": null
+      },
+      "authors_kinds": {
+        "ch1": null,
+        "ch2": null
+      },
+      "authors_only": {
+        "ch1": null,
+        "ch2": null
+      },
+      "authors_since": {
+        "ch1": null,
+        "ch2": null
+      },
+      "h_two_channels": {
+        "ch1": null,
+        "ch2": null
+      }
+    },
+    "self_closed": []
+  },
+  "teardown": [
+    "bsls-3efd2506-relay",
+    "bsls-3efd2506-redis",
+    "bsls-3efd2506-postgres",
+    "bsls-3efd2506-net"
+  ]
+}

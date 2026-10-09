@@ -1,0 +1,34 @@
+{
+  "request_id": "fixture-bi-v1",
+  "agent_id": "fixture-bi",
+  "agent_name_type": "fixture-bi / BI",
+  "business_owner": "fixture owner",
+  "business_line_issue": "fixture / https://gitlab.addx.ai/DATA/dbt/-/issues/1",
+  "background": "analyse product conversion",
+  "query_frequency": "daily",
+  "audience_destination": "product team / business Issue only",
+  "region_environment": "us-east-1/prod",
+  "data_scope": {
+    "region": "us-east-1",
+    "environment": "prod",
+    "business": "ecommerce",
+    "pii": "default",
+    "layer": "mart",
+    "resources": [
+      {
+        "database": "bi",
+        "table": "orders",
+        "columns": [
+          "order_count"
+        ],
+        "row_filter": "product = 'fixture'"
+      }
+    ]
+  },
+  "pii_reason": "no PII",
+  "validity": {
+    "start": "2026-10-06T00:00:00Z",
+    "end": "2026-11-06T00:00:00Z"
+  },
+  "account_name": "agent_fixture_bi"
+}

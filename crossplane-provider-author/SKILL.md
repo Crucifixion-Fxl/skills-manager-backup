@@ -11,7 +11,7 @@ description: 指导开发者从零写一个 Crossplane Provider 把外部系统�
 
 ## Description
 
-本 skill 采用**渐进式披露**：SKILL.md 只是一张索引 + 决策树，每个主题的代码模板、踩坑细节都按需进 [references/](references/) 文档查阅。第一次只需要扫读 SKILL.md，等真要写某个环节时再点进对应 reference。
+本 skill 采用**渐进式披露**：SKILL.md 只是一张索引 + 决策树，每个主题的代码模板、踩坑细节都按需进 [references/](references) 文档查阅。第一次只需要扫读 SKILL.md，等真要写某个环节时再点进对应 reference。
 
 ## Rules
 

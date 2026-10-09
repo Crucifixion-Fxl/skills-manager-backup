@@ -3,7 +3,7 @@
 This file is the sole executable source of truth for GitLab work-item label names, meanings,
 cardinality, placement, mutation, and migration in `gitlab-issue-sop`. Other Skills must route label
 decisions here instead of copying the taxonomy. The historical
-`docs/standards/gitlab-label-governance.md` path is a compatibility pointer only.
+`docs/collaboration/standards/gitlab-label-governance.md` path is a compatibility pointer only.
 
 ## Principles and field boundaries
 
@@ -44,16 +44,162 @@ One value after triage:
 | Label | Use | Excludes |
 |---|---|---|
 | `type::feature` | New or significantly expanded user/business capability | Fixes and routine maintenance |
+| `type::research` | Bounded feasibility, option comparison, risk validation, or pre-requirement investigation whose deliverable is evidence and a decision | Accepted capability delivery, confirmed bug fixes, routine technical upkeep |
 | `type::bug` | Confirmed behavior differs from expectation | Uncommitted new requirements |
 | `type::maintenance` | Refactor, dependency, technical debt, docs, engineering governance | User-facing capability |
 | `type::operation` | An operational, data, platform, or deployment execution that needs an audit trail | Long-lived capability development |
 
+`type::research` remains open while evidence and a decision are pending. Its exit criteria name the
+decision owner and evidence threshold, not code merge or deployment. Record the conclusion in a
+comment and link a separate `type::feature` Issue if a capability is accepted. A research label never
+implies an accepted Requirement or activates a Requirements Agent route.
+
+### Project domain module: `module::*` and `submodule::*` (project-scoped)
+
+Use these stable domain labels for both research and development Issues in the project. Each
+family is mutually exclusive: exactly one first-level module and one second-level module per
+classified Issue. Both are project-local only after the Project-label exception gate below
+is met. Do not use general `area/*` or `app/*` multi-select
+labels as mutually exclusive board columns; cross-module dependencies belong in linked Issues or
+comments. Issue type and status describe the work phase; they do not change the module.
+
+Approved `applications/sq` values for research and development:
+
+| Board label (first level) | Second-level labels | Scope |
+|---|---|---|
+| `module::ai` | `submodule::compute-ai` | AI algorithms and their SoC/DDR compute budget |
+| `module::vision` | `submodule::camera-imaging` | Camera modules, optics, imaging, panorama and calibration |
+| `module::localization` | `submodule::indoor-aoa`, `submodule::outdoor-gnss`, `submodule::wearable` | Indoor/outdoor location and positioning accessories |
+| `module::device-system` | `submodule::gimbal`, `submodule::power`, `submodule::connectivity` | Motion system, endurance, and links/accessories |
+
+Only first-level labels become Board lists. Second-level labels are filters and must map to the
+first-level value in the same row; never give one Issue a mismatched pair. The status and priority
+families remain independent. A module change updates both levels together and preserves an
+explanation in the Issue history.
+
+These values are not global module names. Other projects must define their own stable set here under
+their owning namespace before creating labels; do not automatically copy the SQ001 labels.
+
+### Capability SIG and Harness topic: `sig::*` and `topic/*`
+
+These project-local labels are enabled for the two company Harness repositories after the
+Maintainer-approved SIG migration (Issue #227). A SIG owns a capability domain whose objective is
+to complete and maintain Agent Harness for Business Loops. It is not a workflow state, business
+line, implementation repository, or a duplicate of a native assignee.
+
+- `sig::*` is mutually exclusive: exactly one responsible SIG per classified Harness Issue.
+- `topic/*` is multi-select: stable capability themes within a SIG; cross-theme Issues remain one
+  Issue. Direction boards may display that Issue in multiple topic columns; this does not
+  change workflow status or create an organization subgroup. Counts deduplicate by project ID and Issue IID.
+- Owner: the Harness repository Maintainer. Consumer: one SIG Board per capability domain, plus
+  direction columns, topic filtering and migration reconciliation. Retire only when no open Issue or Board/filter
+  references the label and the replacement mapping is preserved.
+- Scope: project labels are justified because these are Harness-specific capability domains and
+  themes; they do not classify every implementation repository in the parent Group. Existing
+  type/status/priority governance and Group placement continue independently.
+
+Approved SIG set:
+
+| Harness repository | Label | Display name / source alias |
+|---|---|---|
+| `engineering/skills` (`addx`) | `sig::business-capability` | Business Capability / 业务能力 |
+| `engineering/skills` (`addx`) | `sig::devops` | DevOps / 研发流程与平台 |
+| `engineering/skills` (`addx`) | `sig::tdd-quality` | TDD & Quality / 测试驱动与质量 |
+| `engineering/skills` (`addx`) | `sig::hardware-ai` | 硬件研发 AI 化 / 硬件开发 AI 化 |
+| `marketing/marketing_automation` (`addx-marketing`) | `sig::marketing-ai` | 市场运营 AI 化 / 市场营销 AI 化 |
+
+Approved multi-select topics for these Harness projects:
+`topic/development-workflow` (研发流程), `topic/hardware-assets` (硬件研发资产), `topic/hardware-in-loop` (硬件在环),
+`topic/test-automation` (测试自动化), `topic/quality-gates` (质量门禁), `topic/capability-planning` (能力规划),
+`topic/agent-harness` (Agent Harness), `topic/saas-access-security` (SaaS 接入与身份安全),
+`topic/gitops` (GitOps),
+`topic/data-observability` (数据与观测), `topic/observability-tdd` (可观测性的 TDD 开发),
+`topic/content-production` (内容生产), `topic/performance-insights` (效果与洞察),
+`topic/page-voc` (页面与 VOC),
+`topic/experience-quality` (体验质量).
+
+Topic refinement approved in Issue #251:
+
+- `topic/saas-access-security` combines SaaS access and identity/security: user and
+  Agent identity, login, native API/CLI access, least privilege, credentials and access audit.
+  Replace `topic/saas-access` and `topic/identity-security` with this single topic, preserving
+  other labels and decision history; the old names are retired for new classification.
+- `topic/gitops` covers declarative desired state, versioned configuration, automatic pull
+  and continuous reconciliation, including Agent-operated review, rollout, drift and recovery
+  evidence. A Git repository, CI job or Terraform reference alone does not justify this topic.
+  The DevOps Board has this column even when no current Issue is qualified; an empty column
+  does not claim an implemented capability. [OpenGitOps principles](https://opengitops.dev/).
+- `topic/observability-tdd` replaces `topic/instrumentation-metrics`: observability is
+  designed, tested and accepted with the feature, from signals/instrumentation and data
+  contracts to metrics, dashboards/alerts and positive/negative evidence. Preserve current
+  Issue-specific milestones and scope; renaming does not silently expand individual AC.
+- `topic/development-workflow` and `topic/hardware-assets` split the former
+  `topic/engineering-assets`: DevOps delivery/development workflow and hardware design
+  asset/version/traceability governance are separate consumers. #207/#245 use development
+  workflow; #208 uses hardware assets. Preserve unrelated fields and retire the mixed name
+  only after live consumers and Board columns are reconciled. New ambiguous Issues require
+  content triage, not automatic assignment based on repository or title keywords.
+- Maintainer owns these project-local topics; consumers are the DevOps/TDD direction Boards
+  and filters. Retire only after replacement mappings and all live consumers are reconciled.
+  Existing label definitions above keep the same cardinality, placement and authorization.
+
+Not every project Issue belongs to a SIG. Only classified shared Harness construction,
+adoption or ongoing capability maintenance receives `sig::*`; ordinary business/project
+execution remains in its owning project and may link a SIG Root. A documentation coordination
+Issue is not automatically a SIG construction task. Removing a SIG label preserves the Issue,
+its progress and implementation links; no replacement SIG is guessed.
+
+New SIGs or topics go through the new-label gate before creation; arbitrary source-table options
+are not automatically approved labels. The concrete Board and migration protocol is in
+[sig-workflow.md](sig-workflow.md).
+
 ### Priority: `priority::*`
 
-One value after triage. `priority::p0` is active major production/business impact;
+One value after priority triage; before that, leave this family unset and record the priority owner
+and review date in a comment. Do not silently default every new research Issue to P2.
+`priority::p0` is active major production/business impact;
 `priority::p1` is high value or risk for the nearest planning window; `priority::p2` is normal
 planned work; `priority::p3` is opportunistic. Priority is not incident severity. Only this family
 receives GitLab label priority, ordered P0 through P3.
+
+### SIG planning priority: `planning-priority::*` (Harness project exception)
+
+For the two owning Harness projects, each SIG Issue has one of
+`planning-priority::p0`, `planning-priority::p1`, `planning-priority::p2`,
+`planning-priority::p3`, or `planning-priority::unconfirmed`. These labels express
+SIG backlog ordering: P0 highest, P1 next, P2 normal, P3 opportunistic. They do not
+assert active major business impact and never replace confirmed `priority::*`.
+The migrated source table's P0/P1/P2 is explicitly shown as planning priority,
+not promoted into formal impact priority. Seven missing source values stay unconfirmed;
+suggestions in prose do not count as confirmed values. Later owner judgment may refine
+ordering with an Issue comment and readback.
+
+Consumer: SIG Board cards and filters; governance owner: owning Harness maintainers;
+Issue owner judges ordering, AI executes. Project placement keeps this Harness planning
+exception out of unrelated Group projects. Creation and P0-as-highest-planning-priority meaning are explicitly confirmed
+by the user in coordination Issue #227. Only canonical `priority::*` gets GitLab label priority;
+planning labels do not reorder unrelated labels. Retire only after all consumers move
+and original source ordering/decision history remains traceable.
+
+### SIG Size: `size::*` (Harness project exception)
+
+For the two owning Harness projects only, use exactly one of `size::s`, `size::m`,
+`size::l`, `size::xl`, `size::xxl`, or `size::unconfirmed` on each SIG Issue. These
+project labels expose the source table's overall scope/complexity estimate on Board
+cards and filters: S = single point, M = one-team loop, L = multiple modules,
+XL = cross-team platform, XXL = multiple regions or sustained long-term construction.
+Size is not remaining duration, people count, priority, or a numeric Weight conversion.
+
+Consumer: the five direction-based SIG Boards. Governance owner: owning Harness
+maintainers; decision/authorization remains with the Issue owner. The user explicitly
+requested visible Size in coordination Issue #227. GitLab 18.0 CE lacks native Weight;
+these labels preserve the distinct T-shirt estimate rather than duplicating a native
+field. Existing estimates come from the migration snapshot; missing/conflicting values
+are unconfirmed until owner judgment. AI records the source, scope, changed estimate,
+reason and owner in an Issue comment, replaces only this family, and reads it back.
+Retire only after a replacement preserves this meaning and all Board/Issue consumers
+are migrated. Future native Weight availability does not authorize automatic conversion.
+[GitLab Weight tiers](https://docs.gitlab.com/user/work_items/weight/).
 
 ### Workflow: `status::*` (Label compatibility mode only)
 
@@ -66,10 +212,22 @@ Each open work item has exactly one of:
 | `status::ready` | Scope, acceptance, and dependencies are ready |
 | `status::in-progress` | Assignee is executing the work |
 | `status::in-review` | Deliverable is under review or verification |
+| `status::on-hold` | Work is deliberately paused; record why, the decision owner, and a review date |
 
 The canonical flow is `triage -> backlog -> ready -> in-progress -> in-review -> Closed`. A factual
 rollback in workflow may move backward, but its reason must be appended as a progress comment.
-There is no `status::done`; completion is the native Closed state.
+`status::on-hold` is a side branch from any open state; when resuming, restore the factual active
+status and comment on the reason. There is no `status::done`; completion is the native Closed state.
+
+### Closed research disposition: `resolution::abandoned`
+
+Use this optional label only when the **whole research Issue** is explicitly abandoned. Append who
+made the decision, why, the evidence or changed premise, and any replacement Issue; add
+`resolution::abandoned`, remove its open `status::*`, then close it with GitLab's native Closed state.
+Dropping one hypothesis while research continues is a comment, not this label. An accepted research
+conclusion also closes natively but does not get an “accepted/done” label. This label expresses the
+reason for ending the work, not a duplicate completion state. In a namespace with a configured native
+resolution reason, use that native field instead of the label.
 
 ### Technical area: `area/*`
 
@@ -153,6 +311,13 @@ A new Project label requires all of the following:
 3. A concrete query, board, notification, or automation consumes it.
 4. Native fields, hierarchy, checklist, Milestone, and canonical labels cannot express it.
 5. It has a maintenance owner and retirement condition.
+
+For `applications/sq`, the owner is the project Maintainer; consumers include the module Board and
+research/development Issues. Review the set when domain boundaries change, and retire a value
+only after no open Issue or board list uses it. Create `type::research` at the lowest common
+ancestor Group for projects consuming that work type; create SQ `module::*` and
+`submodule::*` values only in `applications/sq`. Check inherited and project labels before creation; the GitLab Issue API can
+silently create a missing name as a Project label when used via `add_labels`.
 
 Any canonical family change must update this file first and receive the owning Group's review before
 the label is created. Consumers link here; they do not copy definitions.

@@ -1,5 +1,7 @@
 # 配置模板参考
 
+> **CN 当前路由**：AWS CN 已弃用。prod = `100014919455` / `cn-main`；staging 与 tech-service = `100052802231`。本文 Kafka/Vector 模板仅适用于已验证的存量管道；新 CN staging 是 FluentBit→ES 直写，必须改走 [专用流程](cn-staging-direct-es.md)。新 tech-service 先查实际 OUTPUT，不能套用 prod 管道。
+
 本文档包含 FluentBit 和 Vector 的配置模板，供接入新应用时使用。
 
 ## 目录
@@ -144,9 +146,9 @@ EU 已知值：
 @INCLUDE output-kafka-{app}-prod.conf
 ```
 
-### CN: 内联配置
+### CN prod 存量 Kafka 管道：内联配置
 
-CN 不使用 @INCLUDE，直接在 `fluent-bit.conf` 中追加。Kafka Broker 固定为 `10.0.5.12:9092`。
+此存量模式不使用 @INCLUDE，直接在 `fluent-bit.conf` 中追加；历史 Kafka Broker 为 `10.0.5.12:9092`，执行前须核实。新 CN staging OUTPUT 是 ES，不使用这套模板。
 
 INPUT 模板同上。OUTPUT 模板：
 
@@ -315,7 +317,7 @@ bulk.index = "addx-{region}-{env}-{app}-%Y.%m.%d"
 
 ## Vector 配置模板 - CN
 
-CN 的 Vector 运行在独立主机 `cn-public-log-vector-01` (49.232.30.205)。
+本节描述 CN prod 账户的存量管道，其历史 Vector 运行在独立主机 `cn-public-log-vector-01` (49.232.30.205)。
 
 ### 配置文件结构
 
@@ -342,7 +344,7 @@ CN 的 Vector 运行在独立主机 `cn-public-log-vector-01` (49.232.30.205)。
 ssh -i ~/.ssh_addx/id_rsa root@49.232.30.205
 ```
 
-**修改前必须先执行本机备份（SKILL.md Step 2 中的备份步骤），确保备份完成后才能继续。** 这是因为 CN 配置不在 git 中，没有版本历史可回退。
+**修改前必须先执行本机备份（SKILL.md Step 2 中的备份步骤），确保备份完成后才能继续。** 这是因为该存量主机 TOML 可能不在 Git 中。新 CN staging 的 Git 托管配置不使用这套主机修改流程。
 
 ### Source: 添加 Topic
 
@@ -464,7 +466,9 @@ ssh -i ~/.ssh_addx/id_rsa root@49.232.30.205 "systemctl restart vector && system
 - 使用 eu-prod 同一套 log kafka / vector / ES
 - 3 个 broker 的网络必须先从 tech-service 集群连通性验证（见 preflight-checklist Q5）
 
-### CN (tencent-100014919455-cn-main)
+### CN prod 存量管道 (tencent-100014919455-cn-main)
+
+以下为存量管道历史记录，修改前按目标资源重新核验；staging/tech-service 的新账户不使用此表。
 
 | 参数 | 值 |
 |------|-----|
@@ -478,7 +482,7 @@ ssh -i ~/.ssh_addx/id_rsa root@49.232.30.205 "systemctl restart vector && system
 | ES Endpoint | `http://10.0.5.20:9200` |
 | ES Index 格式 | backend: `k8s-{env}-cn-{app}-%Y.%m.%d`<br>AI: `a4x-algorithm-cn-{env}-{app}[-k8s]-%Y.%m.%d`<br>KISS: `addx-cn-{env}-kiss-%Y.%m.%d`（详见"CN ES index 按服务类型分叉"） |
 | 额外环境 | `test` |
-| tccli profile | `tencent-100014919455-cn-main` |
+| tccli profile | 按 `tencent-cloud-cli` 枚举本机已有 profile 并核验 UIN `100014919455`；目录名不保证是 profile 名 |
 
 ---
 
@@ -569,7 +573,7 @@ bulk.index = "addx-eu-staging-naturehood-api-%Y.%m.%d"
 
 ---
 
-## 完整示例：CN 接入（占位 / 未经本 skill 二期验证）
+## 完整示例：CN prod 存量 Kafka 管道接入（占位 / 未经本 skill 二期验证）
 
 > 本小节使用占位 `{app}` / `{container}` / `{env}`，未在 2026-04-13 session 中验证过。使用时请先用 preflight Q1-Q6 做一轮，特别是 Q2 的 container 名验证。
 

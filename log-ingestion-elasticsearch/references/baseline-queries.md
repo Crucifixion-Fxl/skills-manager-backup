@@ -1,5 +1,7 @@
 # Step 2.5: Baseline 捕获
 
+> **CN 当前路由**：AWS CN 已弃用。prod = `100014919455` / `cn-main`；staging 与 tech-service = `100052802231`。本文 Kafka/Vector 模板仅适用于已验证的存量管道；新 CN staging 是 FluentBit→ES 直写，必须改走 [专用流程](cn-staging-direct-es.md)。新 tech-service 先查实际 OUTPUT，不能套用 prod 管道。
+
 变更前必须捕获基线指标到 `${A4X_RESOURCE_CHANGES_DIR:-$HOME/Project/A4x/resource_changes}/<YYYY-MM-DD>/<change-slug>/baseline/`。没有 baseline 就没法对比是否误伤现有 topic/消费者。
 
 ## 通用前置：起 Prometheus port-forward
@@ -27,7 +29,7 @@ port-forward **会间歇掉线**，下面每组查询前最好先用 `curl http:
 |---|---|---|
 | EU | `eu-prod-public-kafka-metrics` | 3 exporter 端口 19309/29309/39309 对应 1a/1b/1c 独立集群 |
 | US | _未经本 skill 验证_，使用下面的候选扫描命令自查 | — |
-| CN | _未经本 skill 验证_ | CKafka，exporter 可能不在同一 Prometheus 下 |
+| CN prod 存量 Kafka 管道 | _未经本 skill 验证_ | CKafka，exporter 可能不在同一 Prometheus 下；新 CN staging 不适用 Kafka 指标 |
 
 ### 候选扫描命令
 

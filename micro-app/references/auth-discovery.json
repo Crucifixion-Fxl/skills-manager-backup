@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "tool": "micro-app",
+  "owner": "micro-app",
+  "instances": [
+    "https://micro-app-platform-us.addx.live"
+  ],
+  "nativeRoute": "Micro App Platform native login / versioned packages/sdk",
+  "loginFlow": {
+    "reuseFirst": true,
+    "steps": "内嵌应用复用主应用 api/getUserInfo；独立可信 Web 先核实部署的授权码桥/OIDC、redirect 注册和 SDK；后台/MCP 用已部署专用 PAT 或服务身份支持，不复制浏览器 JWT。",
+    "authorization": "Login, token creation/rotation/revocation and business writes require the current task scope; this discovery performs none."
+  },
+  "tokenMechanism": "平台用户 JWT、PAT、短时服务 JWT、SpiceDB secret 各自独立；Secret 只由后端注入链路提供。",
+  "subjectPermission": "所选 SDK 认证可信上下文；/auth/me 的部署 context path 必须与 SDK resolved URL 一致；permission metadata 和允许/拒绝探针分别验收。",
+  "expiryRevoke": "依据已部署的 authentication/PAT OpenAPI；未证明上线的 capabilities/create/rotate/revoke 路由不得按候选源码直接使用。",
+  "officialRefs": [],
+  "sources": [
+    {
+      "kind": "owner-contract",
+      "path": "../../micro-app-auth-integration/SKILL.md",
+      "status": "contract-recorded"
+    },
+    {
+      "kind": "repository",
+      "repository": "https://gitlab.addx.ai/WEB/micro_app_platform",
+      "researchCommit": "f0b8bc1798ba9e235eae88c946c2b10e3be5da42",
+      "entries": [
+        "docs/api/authentication.openapi.json",
+        "docs/api/personal-access-tokens.openapi.json",
+        "docs/api/internal-authz.openapi.json",
+        "packages/sdk"
+      ],
+      "status": "source-verified"
+    }
+  ],
+  "versionPolicy": {
+    "researchCommit": "f0b8bc1798ba9e235eae88c946c2b10e3be5da42",
+    "deployedCommit": null,
+    "deploymentMatch": "unknown",
+    "refreshTriggers": [
+      "authentication contract change",
+      "deployed version change",
+      "reproducible auth failure"
+    ],
+    "rule": "Candidate source and published contracts do not establish deployed compatibility. Verify the target instance version and read-only supported capabilities before enabling an adapter."
+  },
+  "verification": {
+    "source": "source-verified",
+    "fixture": "not-run-in-this-discovery",
+    "runtime": "not-attempted",
+    "scope": "Read-only documentation/repository discovery; no login, token issuance, credential inspection or business API execution."
+  },
+  "referenceBase": "owner-skill-root for SKILL.md/contractEntrypoints/referenceSources paths; contract field resolves from this JSON directory; upstream repository entrypoints stay repository-relative"
+}

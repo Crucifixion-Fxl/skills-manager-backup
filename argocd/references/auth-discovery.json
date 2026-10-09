@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "tool": "argocd",
+  "owner": "argocd",
+  "instance": {
+    "selection": "Use target/environment mapping in owner SKILL; never enumerate unrelated profiles or silently fall back.",
+    "contract": "SKILL.md",
+    "currentVersion": "unknown; historical values are not runtime evidence",
+    "addressEvidence": "Owner SKILL.md environment tables are the address SSOT; credential variables and exceptions in auth.nativeCredentialPath are selected-instance constraints."
+  },
+  "auth": {
+    "nativeCredentialPath": "ARGOCD_SERVER + ARGOCD_AUTH_TOKEN or selected official argocd context; Bearer.",
+    "missingCredentialWorkflow": "Target UI uses LOG IN VIA CASDOOR, Feishu login; argocd login --sso only after server/callback verification. CN tech-service target is pending-cutover; do not try legacy or AWS CN.",
+    "subjectAndResourcePermissionVerification": "argocd account get-user-info and argocd account can-i get applications <project>/<app>; explicit cluster/server plus project/app RBAC.",
+    "issuanceConsumptionRevocation": "Authorized local accounts with apiKey capability may use argocd account generate-token; delete token by ID via account delete-token. SSO session JWT is separate; never assume SSO subject may generate local API key.",
+    "credentialHandling": "Private injection only; never print/store secrets in repository, command arguments, chat or receipts. Discovery itself performs no login/token creation."
+  },
+  "nativeRoute": {
+    "business": "Owner SKILL + version-matched official CLI/API documentation",
+    "loginRecovery": "web-access for human web interaction; official CLI only where explicitly documented",
+    "refresh": "platform-onboarding only for concrete auth/version/interface drift",
+    "runtimeProvider": "delegated",
+    "adapterStatus": "delegated contract only; no new runnable provider or full API mirror implemented"
+  },
+  "referenceSources": [
+    {
+      "kind": "owner-contract",
+      "path": "SKILL.md"
+    },
+    {
+      "kind": "primary-official",
+      "url": "https://argo-cd.readthedocs.io/en/stable/user-guide/commands/argocd_account/",
+      "checkedOn": "2026-10-07",
+      "use": "authentication discovery; match actual deployed version before business calls",
+      "status": "retrieved",
+      "limitation": "Official documentation does not prove instance compatibility."
+    }
+  ],
+  "versionPolicy": {
+    "probe": "argocd version against selected server or GET /api/version; choose matching release docs and instance Swagger /swagger/index.html.",
+    "compatibility": "Unknown deployment version requires non-mutating capability evidence before business usage; do not promote latest upstream docs to deployed compatibility."
+  },
+  "verification": {
+    "source": "source-verified",
+    "fixture": "not-run: reference-only changes",
+    "runtime": "pending",
+    "sourceCandidate": "8d736bd81ab8500e51cf6be3d71d1ffa70937cae",
+    "scope": "Owner repository contract and primary documentation research only. No credential inspection, login, token issuance/revocation or online business calls.",
+    "pendingReasons": [
+      "Target deployment version, selected subject and exact resource permissions have not been runtime verified.",
+      "Token/login workflow needs independently authorized selected-instance validation; no runnable unified provider is claimed."
+    ]
+  }
+}

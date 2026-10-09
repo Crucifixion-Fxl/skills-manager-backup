@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "2c587a5b-79aa-4d2a-94c3-adf525af69db",
+  "path": "test-failure-triage",
+  "path_key": "test-failure-triage",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/quality/test-failure-triage",
+    "branch": null
+  }
+}

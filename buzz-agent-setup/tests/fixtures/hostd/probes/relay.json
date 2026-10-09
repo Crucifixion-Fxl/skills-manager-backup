@@ -1,0 +1,103 @@
+{
+  "P0-10": {
+    "custom_tag_preserved": true,
+    "kind9_reply_findable_by_e_filter": true,
+    "outsider_can_read_private_channel": false,
+    "receipt_publish": {
+      "kind30078_d_tag": {
+        "accepted": true,
+        "reason": ""
+      },
+      "kind30078_no_h": {
+        "accepted": true,
+        "reason": ""
+      },
+      "kind7_reaction_tag": {
+        "accepted": true,
+        "reason": ""
+      },
+      "kind9_custom_tag": {
+        "accepted": true,
+        "reason": ""
+      },
+      "unknown_kind_31990": {
+        "accepted": false,
+        "reason": "restricted: unknown event kind"
+      },
+      "unknown_kind_4242": {
+        "accepted": false,
+        "reason": "restricted: unknown event kind"
+      }
+    },
+    "receipt_read": {
+      "kind30078_d_tag": {
+        "desk_member": true,
+        "desk_member_by_custom_tag_filter": true,
+        "outsider_nonmember": true,
+        "outsider_nonmember_by_custom_tag_filter": true
+      },
+      "kind30078_no_h": {
+        "desk_member": true,
+        "desk_member_by_custom_tag_filter": true,
+        "outsider_nonmember": true,
+        "outsider_nonmember_by_custom_tag_filter": true
+      },
+      "kind7_reaction_tag": {
+        "desk_member": true,
+        "desk_member_by_custom_tag_filter": true,
+        "outsider_nonmember": false,
+        "outsider_nonmember_by_custom_tag_filter": false
+      },
+      "kind9_custom_tag": {
+        "desk_member": true,
+        "desk_member_by_custom_tag_filter": true,
+        "outsider_nonmember": false,
+        "outsider_nonmember_by_custom_tag_filter": false
+      }
+    }
+  },
+  "P0-12": {
+    "nip42_auth": true,
+    "push_latency": [
+      {
+        "by_author_ms": null,
+        "by_h_ms": 21
+      },
+      {
+        "by_author_ms": null,
+        "by_h_ms": 21
+      },
+      {
+        "by_author_ms": null,
+        "by_h_ms": 22
+      },
+      {
+        "by_author_ms": null,
+        "by_h_ms": 21
+      },
+      {
+        "by_author_ms": null,
+        "by_h_ms": 20
+      }
+    ]
+  },
+  "P0-13": {
+    "cli_channel_ops": true,
+    "relay_ready_s": 5.4,
+    "ws_url_is_loopback": true
+  },
+  "cli": "buzz 0.5.23",
+  "failed_checks": [],
+  "finished_at": 1791118251,
+  "ok": true,
+  "probe": "hostd-relay",
+  "relay_digest": "sha256:4e31b7c7abb7d00b6f513dc559e58d2b980416f1dc400aa01bcf762cf2989cfc",
+  "relay_image": "ghcr.io/block/buzz:0.2.1",
+  "started_at": 1791118212,
+  "teardown": [
+    "bsls-3efd2506-relay",
+    "bsls-3efd2506-redis",
+    "bsls-3efd2506-postgres",
+    "bsls-3efd2506-net"
+  ]
+}

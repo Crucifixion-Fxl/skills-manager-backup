@@ -17,7 +17,7 @@ description: Use when designing observability, experiment metrics, monitoring au
 - AB 实验启动前 → `:design` 入口聚焦 AB 四层指标
 
 **不在范围：**
-- 埋点工具本身的配置（委派 `tracker-manager`、`sentry-onboarding`）
+- 埋点工具本身的配置（委派 `tracking-lifecycle`、`sentry-onboarding`）
 - Dashboard / 告警平台的具体操作（委派 `grafana`、`sla-metric`、`superset`、`growthbook`、`prometheus`）
 - issue 管理（委派 `gitlab-issue-sop`）、MR 创建（委派 `gitlab-mr`）
 - AI metric review job 实现 → 见 `scripts/metrics-review.gitlab-ci.yml`
@@ -46,7 +46,7 @@ description: Use when designing observability, experiment metrics, monitoring au
 | 配 GrowthBook metric | — | — | `growthbook` |
 | 配 Superset chart / dashboard | — | — | `superset` |
 | 创 Sentry project | — | — | `sentry-onboarding` |
-| 注册埋点 schema | — | — | `tracker-manager` |
+| 注册埋点 schema | — | — | `tracking-lifecycle` |
 | 本地契约落地（scrape/alert/dashboard verify.sh） | — | — | `prom-grafana-dev` |
 | metric config diff review（CI-sync 路径：YAML parity + 口径 SQL；Skill-driven 路径：docs 设计意图一致性）| — | — | `code-review`（以本 skill 第 6 节 + [metrics-config-as-code.md](references/metrics-config-as-code.md) D4 / D4' 为规范）|
 

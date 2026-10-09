@@ -97,7 +97,7 @@ Brevo List：<返回且 binding 已验证的 provider List URL>
 宿主配置不能替代服务端授权。
 
 原生宿主通过已安装操作的 schema 提供精确请求结构。
-完整 Skill 安装（例如 `skills/audience-sync`）或完整仓库 clone 另含
+完整 Skill 安装（例如 `skills/experimentation/audience-sync`）或完整仓库 clone 另含
 `contracts/project-control-plane.openapi.json` 和 `contracts/project-operation-registry.json`。
 这些路径相对于当前 `SKILL.md` 所在的 Skill 根目录，无需另行 Git clone；
 不要求仅有语义指引包的宿主去打开不存在的文件。

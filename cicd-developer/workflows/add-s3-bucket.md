@@ -5,6 +5,16 @@ description: 给现有服务加 AWS S3 Bucket（含 PublicAccessBlock + SSE + Ve
 
 # Workflow：add-s3-bucket
 
+## Application 与渲染入口前置
+
+raw 数据面分支先执行 [资源职责拆分合同](../references/application-resource-split.md)：
+登记 `$target.infra_source_path` 和 `$target.runtime_source_path`，分别绑定共享
+`app-data-plane` / `app-runtime`。infra 的 kustomization 不得被 runtime root 引用；
+每次生成后独立构建两份 render，核对唯一资源管理者。缺少准确合同先交付 Ops Todo，
+不能把混合 Application 整体迁入数据面或新建 owner Project。已批准的高层 claim 分支保持原合同。
+以下原有 app overlay 路径仅用于 runtime 消费文件，raw 与生产链使用明确的 infra 路径；
+跨 Application 的依赖以实际生产/消费 Ready 证据验收，不靠资源 sync-wave 推断。
+
 ## 目的
 
 通过 Crossplane GitOps 给现有服务建 S3 Bucket。前置：app 已经有 IRSA Role（没有先跑 `add-irsa-role.md`），本 workflow 给 IRSA Role 挂 S3 权限。
@@ -16,14 +26,18 @@ description: 给现有服务加 AWS S3 Bucket（含 PublicAccessBlock + SSE + Ve
 
 ## 进入条件
 
-- 应用已有 `k8s/base/` + overlay
+- self-owned raw 分支已有准确的 `$target.runtime_source_path` 和 `$target.infra_source_path`
+  合同；标准或获批自定义 Kustomize 入口均按实际路径读写，不要求一定存在 `k8s/base/`。
+  高层 ObjectBucket claim 使用其已批准产品流程，不因本 raw workflow 改换入口。
 - 应用已有 IRSA Role（`crossplane-infra/<cluster_dir>/{$app}-irsa.yaml` 已存在）
 - cd-requirements.md 列了 S3 需求
 - crossplane-infra MR 可同时声明 per-app ProviderConfig / IAM RolePolicy；这些 IAM / ProviderConfig YAML 不放进应用仓库
-- app-owned S3 Bucket / BucketPolicy / PublicAccessBlock / SSE / Versioning / Lifecycle 放应用仓库 overlay，不放 crossplane-infra；crossplane-infra 只放管理这些 bucket 所需的权限
+- app-owned S3 Bucket / BucketPolicy / PublicAccessBlock / SSE / Versioning / Lifecycle 放应用仓库准确 infra 入口，不放 runtime 或 crossplane-infra；crossplane-infra 只放管理这些 bucket 所需的权限
 - 如果需求是"本 app 访问另一个 app 已拥有的 bucket"，**不要** 为 consumer 另建
   bucket：转为 existing-bucket access 模式，consumer 侧走 `add-irsa-role.md`，
-  owner 侧只在 bucket owner 应用仓库 overlay 补 BucketPolicy。
+  owner 侧只在 bucket 唯一管理者已登记的 source path 补 BucketPolicy。existing-bucket
+  access 不给 consumer 虚构 infra 入口；分别核 owner 的资源入口与 consumer 的 runtime/IRSA。
+  若 owner 仍是历史混合入口，保留它并另行评审 ownership 拆分，不在访问授权中迁移 bucket。
 
 ## Step 1. 解析需求
 
@@ -56,7 +70,7 @@ description: 给现有服务加 AWS S3 Bucket（含 PublicAccessBlock + SSE + Ve
 
 [action]
   - 选择一个 bucket owner，bucket CR / BucketPolicy / PublicAccessBlock / SSE /
-    Versioning / Lifecycle 都留在 owner 应用仓库 overlay。
+    Versioning / Lifecycle 都留在 owner 已登记的准确 repo/revision/source path。
   - consumer 所在账号写自己的 IRSA Role + RolePolicy（`add-irsa-role.md`）。
   - owner 侧用 `recipes/crossplane/s3-bucket-policy-read.yaml.tmpl` 追加
     BucketPolicy，Principal 是 consumer IRSA role ARN，不是 account root / `*`。
@@ -66,7 +80,8 @@ description: 给现有服务加 AWS S3 Bucket（含 PublicAccessBlock + SSE + Ve
 
 [validate]
   - 没有在 consumer 应用仓库或 crossplane-infra 新建 bucket CR
-  - BucketPolicy 与 bucket owner overlay 同目录，`providerConfigRef.name` 是 owner app
+  - BucketPolicy 由 bucket 的同一个 owner source kustomization 登记并渲染，
+    `providerConfigRef.name` 是 owner app；对该准确入口验证不重复、不遗漏，不新增 consumer bucket
   - BucketPolicy Principal 是具名 role ARN；PublicAccessBlock 不为此关闭
 
 [output]
@@ -84,8 +99,8 @@ description: 给现有服务加 AWS S3 Bucket（含 PublicAccessBlock + SSE + Ve
     - prod env → 跑 `_global.yaml -> prod_self_check`，任何 "no" STOP
     - 查 `clusters.yaml -> clusters[<target.cluster>]` 取 `cloud`、`region`、`aws_region`、`account_id`、`partition`
       - `region` 是业务短码（us / eu / cn / sg），只用于 env keyword / 文档
-      - `aws_region` 是 AWS API region（us-east-1 / eu-central-1 / cn-northwest-1），必须用于 S3 `forProvider.region`
-      - **`cloud != aws`** → STOP 产 Ops Todo "GCP / TKE 集群没有 AWS S3 + Crossplane 通道；用户场景需要对象存储应转换成 GCS / 腾讯云 COS，由运维评估或本 workflow 跳过该 target"。**继续往下处理其他 aws target，不要给非 aws target 强行写 AWS S3 manifest**
+      - `aws_region` 是 AWS API region（us-east-1 / eu-central-1 / ap-southeast-1），必须用于 S3 `forProvider.region`
+      - **`cloud != aws`** → STOP 产 Ops Todo "当前 workflow 不覆盖非 AWS 对象存储；TKE 访问腾讯云 COS 转 workflows/add-tencent-cos.md；GCP 需求转 GCS 流程或由运维评估"。**继续往下处理其他 aws target，不要给非 aws target 强行写 AWS S3 manifest**
       - `cloud == aws` 但 `partition` 字段不存在 → 数据错乱，STOP 让用户先修 clusters.yaml
 
 [validate]
@@ -133,8 +148,8 @@ description: 给现有服务加 AWS S3 Bucket（含 PublicAccessBlock + SSE + Ve
   - `{{versioning_status}}` 由 Step 2 取到的 cost-tiering `versioning` 映射：`false → Suspended`、
     `true/Enabled → Enabled`、prod `business-decision` 走 `_global.yaml -> prod_self_check` 后决定（默认 `Suspended`）
   - Bucket `managementPolicies` 保持模板默认的 `["Observe", "Create", "Update", "LateInitialize"]`，所有环境都不允许 `Delete` / `*`
-  - 写到应用仓库 `k8s/overlays/{$target.env_keyword}/s3-bucket.yaml`；如同一 overlay 有多个 bucket，用 `s3-{$purpose}-bucket.yaml`
-  - 加入应用仓库 overlay `kustomization.yaml` 的 `resources`
+  - 写到应用仓库 `{$target.infra_source_path}/s3-bucket.yaml`；如同一 overlay 有多个 bucket，用 `s3-{$purpose}-bucket.yaml`
+  - 只加入 `{$target.infra_source_path}/kustomization.yaml` 的 `resources`，不加入 runtime root。
   - 一个 yaml 含 5 doc（Bucket + PublicAccessBlock + SSE + Versioning + Lifecycle）
 
 [validate]
@@ -144,7 +159,7 @@ description: 给现有服务加 AWS S3 Bucket（含 PublicAccessBlock + SSE + Ve
   - BucketLifecycleConfiguration 写 `expectedBucketOwner: "$target.account_id"`，账号 ID 必须是字符串，避免前导 0 丢失和 provider adopt diff
 
 [output]
-  - k8s/overlays/{$target.env_keyword}/s3-bucket.yaml（或 `s3-{$purpose}-bucket.yaml`）
+  - {$target.infra_source_path}/s3-bucket.yaml（或 `s3-{$purpose}-bucket.yaml`）
 
 ## Step 4. 给 IRSA Role 挂 S3 权限（每集群一次）
 
@@ -191,22 +206,28 @@ description: 给现有服务加 AWS S3 Bucket（含 PublicAccessBlock + SSE + Ve
 [action]
   - 选其一：
     - **ConfigMap**（推荐，bucket name 非敏感）：
-      1. 写 `k8s/overlays/{$target.env_keyword}/configmap.yaml`（用 `recipes/k8s/configmap.yaml.tmpl`），data 段加 `BUCKET_NAME_{$PURPOSE_UPPER}: $target.bucket_name` + `AWS_REGION: $target.aws_region`
-      2. 加到 overlay kustomization.yaml 的 resources 列
-      3. **检查 `k8s/base/rollout.yaml` 是否已有 `envFrom: configMapRef: name: {$app}-config`**：
-         - 没有 → 加上（一次性 base 编辑，所有 overlay 继承）
-         - 已有 → 跳过
-    - **环境变量 patches**：在 overlay kustomization.yaml 加 patch 直接 set Rollout container env
+      1. 写 `{$target.runtime_source_path}/configmap.yaml`（用 `recipes/k8s/configmap.yaml.tmpl`），data 段加 `BUCKET_NAME_{$PURPOSE_UPPER}: $target.bucket_name` + `AWS_REGION: $target.aws_region`
+      2. 只加到 `{$target.runtime_source_path}/kustomization.yaml` 的 resources，infra 不引用此 ConfigMap
+      3. 从准确 runtime render 找到本 target 的 Rollout 和应用主容器，核对已有
+         `envFrom.configMapRef.name: {$app}-config`；已继承正确引用则不重复添加。
+         缺少引用时只在 `{$target.runtime_source_path}/kustomization.yaml` 登记的 patch
+         给该容器安全追加，保留其它 env/envFrom/容器；不修改共享 base 使无关 target 继承新引用。
+    - **环境变量 patches**：在 `{$target.runtime_source_path}/kustomization.yaml` 登记
+      针对该 Rollout/主容器的 patch，追加准确的 `BUCKET_NAME_{$PURPOSE_UPPER}` 与 `AWS_REGION`；
+      不整体替换 env 数组或其它容器。已有同名变量/ConfigMap 数据与请求冲突时先确认用途，不覆盖。
 
 [validate-after-action]
-  - `kustomize build k8s/overlays/{$target.env_keyword}/` 渲染出的 Rollout pod env 含 `BUCKET_NAME_*`
-  - 如不含 → 90% 是 base 缺 envFrom 引用，去修
+  - `kustomize build "{$target.runtime_source_path}"` 成功后按实际分支验收：
+    - ConfigMap：最终 render 中该 ConfigMap 的 data 含准确的 `BUCKET_NAME_{$PURPOSE_UPPER}`
+      和 `AWS_REGION`，目标 Rollout 主容器有指向它的无 prefix、非 optional envFrom 引用；
+      核对 envFrom 顺序及同名显式 env，不能被其它值覆盖。Kustomize 不会把 envFrom 展开成 env 字面值。
+    - env patch：目标 Rollout 主容器的 env 含上述两个准确的字面值。
 
 [validate]
-  - `kustomize build` 渲染出的 Rollout pod env 含 `BUCKET_NAME_*`
+  - 对所选分支完成上述 runtime render 检查，未请求 S3 的其它 target/容器保持不变。
 
 [output]
-  - k8s/overlays/{$target.env_keyword}/configmap.yaml 更新
+  - 当前 runtime 入口下的 ConfigMap/消费引用或 env patch，以及相应 kustomization 更新
 
 ## Step 6. validator + 文档 + summary
 
@@ -214,7 +235,11 @@ description: 给现有服务加 AWS S3 Bucket（含 PublicAccessBlock + SSE + Ve
   - Step 5 完成
 
 [action]
-  - `bash "$skill_root/validators/validate.sh" k8s/` 全过；应用仓库跑 `kustomize build k8s/overlays/{$target.env_keyword}/`，crossplane-infra 跑对应校验
+  - self-owned raw target 执行 [两份 render 的执行与验收](../references/application-resource-split.md#两份-render-的执行与验收)，
+    分别验证 runtime/infra 最终 render；确认 bucket 及四项附属 CR 只在 infra，业务配置/消费引用只在 runtime。
+    每个改动的 crossplane-infra 集群目录运行原 validator；仓库级扫描仅补充，不能替代 render。
+  - existing-bucket access 只对实际修改的 owner source 与 consumer runtime/IRSA 执行对应验证，
+    核对单一 bucket owner，不为满足两份 render 示例另建 consumer infra Application
   - cd-requirements.md "Object Storage" 段填 bucket 名 + 用途 + 月度成本估
   - cicd.md append S3 接入说明
   - 如需要 CloudFront 暴露 bucket → 下一步 chain `workflows/add-cloudfront.md`；只有 DNS / ACM / signed URL key material 进入 Ops Todo

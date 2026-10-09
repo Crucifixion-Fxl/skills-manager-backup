@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "7e0e6b22-8ca8-4979-88c9-e00162dd9ee2",
+  "path": "embed-ci-setup",
+  "path_key": "embed-ci-setup",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/hardware/embed-ci-setup",
+    "branch": null
+  }
+}

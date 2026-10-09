@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "a2de881e-5cea-41ce-9a0d-7b0d5e5de534",
+  "path": "worktime-filing",
+  "path_key": "worktime-filing",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/collaboration/worktime-filing",
+    "branch": null
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "65752f1e-4d0f-4d33-b61f-8825c869b702",
+  "path": "feishu-auth",
+  "path_key": "feishu-auth",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/development/feishu-auth",
+    "branch": null
+  }
+}

@@ -1,15 +1,17 @@
 ---
 name: log-ingestion-elasticsearch
-description: 引导将新应用接入 FluentBit→Kafka→Vector→ES 日志收集体系。含前置调研 hard-stop、baseline 捕获、分阶段 apply + 健康门禁、10 跳端到端证据链验证。当运维人员说"接入日志收集"、"配置日志"、"新应用日志"、"把 XX 的日志接上"、"onboard logging"、"日志接入"，或需要将任何新服务加入现有日志管道时使用此 Skill。即使用户只提到某个新应用需要看日志、查日志，也应考虑触发。
+description: 引导将新应用接入 FluentBit 日志收集体系：存量 Kafka→Vector→ES，以及新腾讯云 CN staging 的 FluentBit→ES 直写。含前置调研 hard-stop、baseline 捕获、分阶段 apply + 健康门禁、10 跳端到端证据链验证。当运维人员说"接入日志收集"、"配置日志"、"新应用日志"、"把 XX 的日志接上"、"onboard logging"、"日志接入"，或需要将任何新服务加入现有日志管道时使用此 Skill。即使用户只提到某个新应用需要看日志、查日志，也应考虑触发。
 ---
 
 # 日志收集接入
 
-将新部署的应用容器日志接入现有 `FluentBit → Kafka → Vector → Elasticsearch` 管道，让运维能在 ES 中按服务维度检索日志。
+将新部署的应用容器日志接入已核实的 FluentBit 管道，让运维能在 ES 中按服务维度检索日志。存量管道是 `FluentBit → Kafka → Vector → Elasticsearch`；新腾讯云 CN staging 使用 `FluentBit → Elasticsearch` 直写。
 
 ## 描述
 
-本 skill 把新应用接入既有日志收集管道。覆盖 US / EU / CN 三个地区，适配 K8s ConfigMap（US/EU）与主机 TOML（CN）两种配置托管模式。
+本 skill 把新应用接入既有日志收集管道。覆盖 US / EU / CN 三个地区，先按真实集群和 FluentBit OUTPUT 选择直写 ES 或 Kafka/Vector 路径。
+
+**CN 入口必须先分流（2026-09-28）**：AWS CN 已弃用；prod = `tencent-100014919455-cn-main`，staging = `tencent-100052802231-cn-staging`，tech-service = `tencent-100052802231-cn-tech-service`，见 [CN 清单](../../infrastructure/k8s-ops/references/cn-tencent-inventory.md)。新 staging 已有 Git 声明 `logging/fluent-bit.yaml` 直写集群内 ES，**先读 [新 CN staging 直写 ES 流程](references/cn-staging-direct-es.md)，不执行下面的 Kafka/Vector 步骤**。新 tech-service 的日志管道需从实际 Application/OUTPUT 发现，不能默认复用 prod 的 CKafka、Vector 或旧 AWS OpenSearch。
 
 **适用场景**：运维人员说"接入日志收集"、"配置日志"、"新应用日志"、"把 XX 的日志接上"、"onboard logging"、"日志接入"，或需要将新服务加入现有日志管道的任何场景。
 
@@ -19,14 +21,14 @@ description: 引导将新应用接入 FluentBit→Kafka→Vector→ES 日志收�
 
 ## 规则
 
-这些规则每一条都对应真实付过代价的故障场景，按顺序贯穿执行，不得裁剪。
+以下编号规则与 Step 1–8 适用于已确认的 Kafka/Vector 管道；新 CN staging 采用专门的直写 ES 流程与对应证据链。前置定位、baseline、健康验证、备份和 GitOps 归属原则适用于两者。
 
 1. **前置调研 7 问未全答清不得动配置**。改错集群、误填 container 名、忽略"空壳"集群、Vector transform 模板选错是最常见的静默失败源头。清单见 [references/preflight-checklist.md](references/preflight-checklist.md)。
 2. **`{app}` 和 `{container}` 要分别确认**。业务名（ArgoCD app / 服务名）和 K8s container 真实名经常不相等。FB Path glob 用 `{container}`；topic / ES index / FB Tag / ConfigMap 数据键用 `{app}`。
 3. **任何 apply 前必须先采 baseline**。没有 baseline 就无法区分"变更后某 topic rate 下降"是本次变更导致的还是本来就这样；"lag 涨了"是真故障还是 rebalance 瞬间。6 项 baseline 见 Step 3。
 4. **分阶段 apply，每阶段过 4 Gate**。3 AZ 必须灰度滚动（1 AZ → 其他 2 → Vector），每 Stage 过 G1-G4（rollout / pod 健康 / 无 topic rate 下降 / 无持续 lag）才进下一个。Stage D 30 分钟观察期不能省。
 5. **"pod Running"不算 done，必须走完 10 跳证据链**。应用容器 → 文件匹配 → FB 同节点 → Kafka output → 实际 offset 增长 → Vector 订阅 → Vector 不落后 → ES 索引 → ES 文档 → 样本字段展开正确。任一跳缺证据回到排障，不得"提前宣布胜利"。
-6. **CN 所有配置均未纳入 git，修改前必须先备份**。Vector 是主机 TOML（`/etc/vector/`），FluentBit 仓库配置可能落后于集群实际；以 kubectl 导出的实际配置为准。
+6. **存量 CN prod 主机 Vector 配置须先备份**。主机 TOML（`/etc/vector/`）可能未纳入 Git；FluentBit 必须同时核对 Git 管理归属和实际配置。新 CN staging 的 FluentBit/ES 已有 `k8s/clusters/tencent-100052802231-cn-staging/` 下的声明，不适用“CN 都不走 Git”的旧假设。
 7. **不碰 Helm 共享基础**。eu-prod 存在 "Helm release + git zone DS 共存" 拓扑——Helm release 的 ConfigMap / SA / CR / CRB / Service 作为共享基础保留，改动 git zone DS 时不得误删 Helm release 资源。
 8. **空壳集群需要专门接管流程**。看见 FB pods Running 不等于管道在工作——tech-service 类集群可能只是 Helm 装的"空壳"，OUTPUT 只往 stdout 写。判别方式和接管模板见 Step 4。
 9. **每次修改 ConfigMap 后必须 rollout restart** 对应的 DaemonSet / Deployment 才能生效，不存在"ConfigMap 热加载"。
@@ -47,11 +49,15 @@ description: 引导将新应用接入 FluentBit→Kafka→Vector→ES 日志收�
 |------|-----------|---------------|--------|-------------|
 | US | K8s ConfigMap × 3 AZ | Git (DEV/k8s) | K8s ConfigMap | Git (DEV/k8s) |
 | EU | K8s ConfigMap × 3 AZ | Git (DEV/k8s) | K8s ConfigMap | Git (DEV/k8s) |
-| CN | K8s ConfigMap × 1 | Git (DEV/k8s)，可能落后 | 主机 TOML | 直接在主机上管理 |
+| CN prod 存量 Kafka 管道 | K8s ConfigMap × 1（现场核对） | 核对 Git 与运行态 | 主机 TOML（现场核对） | 修改前备份 |
+| 新 CN staging | `fluent-bit-config` → 集群内 ES | `k8s/clusters/tencent-100052802231-cn-staging/logging/fluent-bit.yaml` | 无 Vector | 走直写 ES 流程 |
+| 新 CN tech-service | 从实际集群发现 | 核对 Application source | 待核实 | 不套用其他 CN 集群配置 |
 
 环境：staging / pre / prod（CN 额外支持 test）。
 
-### CN 特殊基础设施
+### CN prod 存量 Kafka/Vector 基础设施（历史线索，执行前重新核实）
+
+以下记录仅描述 `100014919455` 的存量管道；不代表新账户 staging/tech-service 的网络、采集或索引配置。
 
 - Vector：独立 CVM `cn-public-log-vector-01`（公网 `49.232.30.205` / 内网 `10.0.64.16`），systemd 服务
 - 配置目录 `/etc/vector/`，按 `a4x_cn_{env}_{type}.toml` 组织
@@ -64,7 +70,7 @@ description: 引导将新应用接入 FluentBit→Kafka→Vector→ES 日志收�
 
 ### Step 0: 前置调研（hard-stop）
 
-必须在任何配置修改之前通过 6 个问题的验证。**任一问题答不上就 STOP**——不得"先写 MR 再说"、不得猜值、不得绕过。
+必须在任何配置修改之前通过 7 个问题的验证；新 CN staging 按专用流程替换 Kafka/Vector 专属问题。**任一问题答不上就 STOP**——不得"先写 MR 再说"、不得猜值、不得绕过。
 
 完整命令清单与决策表见 [references/preflight-checklist.md](references/preflight-checklist.md)。
 
@@ -124,7 +130,7 @@ US/EU 文件路径（基础路径 `~/Project/A4x/k8s/clusters/`）：
 | EU tech-service | `aws-010840394398-eu-tech-service/fluent-bit/fluent-bit-configmap-eu-central-1{a,b,c}.yaml` | `aws-740315635167-eu-prod/vector/configmap/vector-config.yaml` |
 | EU prod | `aws-740315635167-eu-prod/fluent-bit/fluent-bit-configmap-eu-central-1{a,b,c}.yaml` | （同上） |
 
-**CN 文件路径**：
+**CN prod 存量 Kafka 管道文件路径**（新 staging 按专用流程）：
 - FluentBit: 集群实际 ConfigMap（仓库可能不是最新）
 - Vector: 主机 `/etc/vector/`（需 SSH 到 `49.232.30.205` 读取）
 
@@ -150,7 +156,7 @@ US/EU 文件路径（基础路径 `~/Project/A4x/k8s/clusters/`）：
 | B5 | 新 topic 先验检查（防重名） | 命令输出 |
 | B6 | 新增 DS 前节点资源 headroom | `nodes-resource-before.txt` |
 
-**CN 额外**：修改前强制备份当前 ConfigMap 和主机 TOML：
+**CN prod 存量 Kafka 管道额外**：核实 context、ConfigMap 与主机身份后，修改前备份 ConfigMap 和主机 TOML；下面仅为 prod 示例：
 
 ```bash
 BACKUP_DIR=${A4X_RESOURCE_CHANGES_DIR:-$HOME/Project/A4x/resource_changes}/cn-log-config-backups/$(date +%Y%m%d-%H%M%S)
@@ -186,9 +192,9 @@ Path glob 3 段结构（用 `{container}` 不是 `{app}` 做匹配、约束 name
 
 Apply 新 DS 后手动 `kubectl delete ds fluent-bit -n logging` 删除 Helm 原 DS（保留 SA/CR/CRB/CM/Service）。注意 Terraform 反弹风险见 preflight Q6 决策表。
 
-**CN（单文件内联模式）**——fluent-bit.conf 不用 @INCLUDE，INPUT/OUTPUT 直接写在 fluent-bit.conf 中。每环境在对应区域末尾追加 INPUT 和 OUTPUT 块。
+**CN prod 存量 Kafka 管道（单文件内联模式）**——fluent-bit.conf 不用 @INCLUDE，INPUT/OUTPUT 直接写在 fluent-bit.conf 中。每环境在对应区域末尾追加 INPUT 和 OUTPUT 块。
 
-> CN git 仓库配置可能不是最新。以 Step 3 备份的实际配置为准修改。改完既 push 到 git 仓库（保持同步）也 kubectl apply。
+> 先对比 Git 与 Step 3 的运行态备份。由 ArgoCD 管理的资源通过源仓 MR 和同步交付，不能用直接 apply 与控制器争抢；只有已确认未纳管的存量主机配置走受控手工修改。
 
 ### Step 5: 修改 Vector
 
@@ -202,7 +208,7 @@ Vector 配置模板见 [references/config-templates.md](references/config-templa
 2. **Transform**：按 Q7 选定的模板 A/B/C，在 `transforms-{env}.toml` 追加对应 remap 块
 3. **Sink**：`sinks-{env}.toml` 追加 Elasticsearch sink 块
 
-**CN（主机 TOML 文件）**——按服务类型分文件：
+**CN prod 存量 Kafka 管道（主机 TOML 文件）**——按服务类型分文件：
 
 | 文件 | 覆盖范围 |
 |------|---------|
@@ -211,7 +217,7 @@ Vector 配置模板见 [references/config-templates.md](references/config-templa
 
 通过 SSH 修改（跳板机 `152.136.37.192` 或直连 `49.232.30.205`）。每环境在对应文件中追加 sources topic / transform / sink 三块。改完 `systemctl restart vector`。
 
-### Step 6: 提交 MR（US/EU 部分）
+### Step 6: 提交 MR（所有 Git 托管配置，包括新 CN staging）
 
 ```bash
 git add -A
@@ -220,7 +226,7 @@ git commit -m "feat: onboard {app} logging for {regions}"
 
 用 `gitlab-mr` skill 创建 MR 到 DEV/k8s 仓库的 **master** 分支。等 MR 合并后再进 Step 7。
 
-> CN 改动不走 MR（配置未进 git 管理），直接走 Step 7 apply + 证据链。
+> 只有已核实未纳入 Git 的 CN prod 主机 TOML 修改可以走备份 + 受控执行；Git 已托管的 CN 配置必须走 MR。新 staging 继续按专用流程验证直写 ES，不进入下方 Kafka/Vector apply。
 
 ### Step 7: 分阶段 apply + 健康门禁
 
@@ -249,7 +255,7 @@ Gate 判据和命令见 [references/verification-runbook.md §1](references/veri
 
 **Stage D 30 分钟观察期不能省**——rollout 期间的空白让 5m 窗口拖尾最长 5 分钟，30 分钟留足多轮观察让 drift 暴露或恢复。
 
-**CN 单 stage**：CN 只有 1 个 FluentBit ConfigMap，无 AZ 灰度概念。Stage A = Stage B，直接走一轮 G1-G4。
+**CN prod 存量单 ConfigMap 管道**：现场确认只有 1 个 FluentBit ConfigMap 时，Stage A = Stage B，执行一轮对应 G1-G4；不要将此拓扑假设扩展到全部 CN 集群。
 
 apply 前**必须**按 `ops-guardrails` 的资源变更审批要求出变更审批表，等用户批准后执行。具体命令模板见 [references/config-templates.md §4](references/config-templates.md)。
 

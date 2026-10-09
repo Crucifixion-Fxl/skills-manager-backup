@@ -51,7 +51,7 @@ Canvas 最先写「## 代码仓库」清单，再写 FCHAC 模型规定的四张
 单仓先建立目标 Agent 的 0600 env，并保留唯一空占位 `#GITLAB_TOKEN=`。管理员明确授权精确参数后运行：
 
 ```bash
-python3 skills/buzz-agent-setup/scripts/provision_gitlab_agent_token.py \
+python3 skills/agent-harness/buzz-agent-setup/scripts/provision_gitlab_agent_token.py \
   --host gitlab.addx.ai \
   --project <group/project> \
   --agent-name <agent-name> \
@@ -155,6 +155,7 @@ BUZZ_PRIVATE_KEY=nsec1...
 BUZZ_AUTH_TAG='["auth","<owner_pub>","","<sig>"]'
 BUZZ_ACP_BINARY=<readlink -f 后的绝对 buzz-acp 路径>
 BUZZ_ACP_BINARY_SHA256=<该文件的 64 位 sha256>
+BUZZ_ACP_RECOVERY_REVISION=<当前 release 的 40 位 SHA>
 BUZZ_ACP_AGENT_COMMAND=<absolute-path>/acp-media-proxy/<sha256>/claude-agent-acp
 BUZZ_ACP_MEDIA_ADAPTER_COMMAND=<absolute-path>/node_modules/.bin/claude-agent-acp
 BUZZ_ACP_MEDIA_BUZZ_CLI=<absolute-path>/buzz
@@ -169,6 +170,8 @@ BUZZ_ACP_AGENT_OWNER=<owner_pub>
 ```
 
 `BUZZ_ACP_BINARY`／`BUZZ_ACP_BINARY_SHA256` 固定最终启动的 `buzz-acp` ELF，不从 `PATH` 猜版本；升级前先对 canonical regular executable 执行 `file`（必须是 ELF）和 `sha256sum`，把路径和摘要一起原子写进 0600 env，再让审计器用 launcher 的同一 fd 复核并执行。二者缺一、摘要不匹配或脚本/shebang 入口都会拒绝启动，避免另有未固定的解释器链。
+
+`BUZZ_ACP_RECOVERY_REVISION` 是 canonical `run-agent.py` 的必填键：Agent 重启后的自动续接对所有 Agent 默认开启，缺失或不是 40 位 hex 时 launcher 拒绝启动该 Agent。它必须等于本次 release，并和支持恢复的原生 `buzz-acp`、`buzz-agent-recovery.service`／`.timer` 在同一次升级里一起迁移；控制器由 `install_agent_recovery.py` 安装，步骤、验证与回滚见 [local-upgrade-runbook.md](local-upgrade-runbook.md)「7. 自动恢复」。launcher 把 native journal 固定写在 `~/.local/state/buzz-recovery/<name>/runtime`（0700），`BUZZ_ACP_RECOVERY_DIR` 可省略，写了也只能是这个路径。
 
 图片代理默认启用，且 shim basename 必须与真实 adapter 相同；安装、能力协商、限制、L4 和回滚见 [acp-media-proxy.md](acp-media-proxy.md)。显式恢复 stock text-only 行为时，把 `BUZZ_ACP_AGENT_COMMAND` 改回 `BUZZ_ACP_MEDIA_ADAPTER_COMMAND` 的值，删除两个代理用的 `BUZZ_ACP_MEDIA_ADAPTER_COMMAND`／`BUZZ_ACP_MEDIA_BUZZ_CLI` 键，并写入 `BUZZ_ACP_MEDIA_MODE=stock_text_only`。没有这个显式标记，缺图片代理是升级失败，不会以 N/A 混过去。
 
@@ -186,7 +189,7 @@ BUZZ_ACP_AGENT_OWNER=<owner_pub>
   - prompt 必须写「每个 turn 先读**触发事件所在 Channel 的 Canvas**，不读别的 Channel」，回复只回原 Thread（即**触发事件的 Channel** 里的那个 Thread），不向其它 Channel 发消息，跨 Channel 只交换中央仓 Issue 链接。
   - 责任人 helper 配置（`BUZZ_RESPONSIBLE_CONFIG`）的 `channels` 里给**每个新拉进的** Channel 追加其 UUID，否则该 Channel 的责任人通知全部 fail closed。
 - prompt 里的 `buzz messages send` 模板必须带 `--reply-to <THREAD_ROOT>`（取法与例外见 [SKILL.md](../SKILL.md) 第 3 步）；只回原 Thread 的要求要落到这个参数上，光写文字模型会漏。
-- **平台 Desk 只签中央仓的 Planner token**，不签任何业务仓 token（见 [agent-credentials.md](agent-credentials.md)）。注意 helper 启动时**必须**读到一个非空的 `GITLAB_TOKEN`（即使只发 `canvas_alias`，缺失就直接 `missing GitLab token environment variable`），所以平台 Desk 要先签好中央仓 token 才能 @ 人；中央仓通常是 public，Issue 只放证据链接。
+- **平台 Desk 只签中央仓的 Planner token**，不签任何业务仓 token（见 [agent-credentials.md](agent-credentials.md)）；该 token 用于中央仓 Issue 操作。责任人 helper 只用 `person` locator 时从 owner 管理的 `people_file` 解析真人，不需要 GitLab token；使用 GitLab locator 时，项目必须在 allowlist 中且该 Desk 有自己的有效 token。不得为本机任务创建中央仓或其它项目的 Issue，也不得借用 owner token。
 - 加一个业务 Channel = 三步：owner `add-member --role bot` → 在责任人 helper 配置的 `channels` 追加该 Channel 的 UUID → 在该 Channel 的 Canvas 追加「平台 Agent」一节（pubkey、怎么找它、`-dev` 转交格式）。harness（desktop-v0.5.23）收到入群通知就动态订阅新频道，不用重启：以日志里的 `membership notification: subscribing to new channel`（带该 Channel UUID）核对；没出现再查它在该频道的角色是不是 `bot`、30177 与 `respond_to` 是否一致。这行日志是从源码读出来的，本机日志里还没实际出现过；它和启动时的 `subscribed to channel` 是两种写法，所以不重启时，上面「启动日志核对」数到的条数会比实际订阅少。
 
 用 Agent 自己身份注册档案并 join，再由 owner 设 bot role：
@@ -202,7 +205,7 @@ Harness 必须用官方 `@agentclientprotocol/claude-agent-acp`；Codex 用 `@ag
 
 ### GitLab 同步不在 Agent runtime 里运行
 
-按 [ADR-0008](../../../docs/05-adr/0008-run-gitlab-sync-from-owner-systemd-timer.md)，GitLab → Buzz 同步由 owner 的 `systemd --user` timer 直接运行 `gitlab_buzz_sync_timer.py`，同步、路由与摘要路径里没有 LLM。因此 Desk 和其它角色 Agent 一样使用普通 buzz-acp、普通 `claude-agent-acp`／`codex-acp` 与上面的 env；不需要为同步配置 heartbeat、专用 buzz-acp 构建、只读 Agent 模式、专用 Codex home 或 exec 规则，也不需要为此采集 runtime receipt。
+按 [ADR-0008](../../../../docs/agent-harness/adr/0008-run-gitlab-sync-from-owner-systemd-timer.md)，GitLab → Buzz 同步由 owner 的 `systemd --user` timer 直接运行 `gitlab_buzz_sync_timer.py`，同步、路由与摘要路径里没有 LLM。因此 Desk 和其它角色 Agent 一样使用普通 buzz-acp、普通 `claude-agent-acp`／`codex-acp` 与上面的 env；不需要为同步配置 heartbeat、专用 buzz-acp 构建、只读 Agent 模式、专用 Codex home 或 exec 规则，也不需要为此采集 runtime receipt。
 
 - Desk prompt 只追加 [普通 Desk 片段](gitlab-buzz-sync.desk-prompt.md)：解释同步由 timer 完成，不运行 runner／publisher；Channel 消息（包括「@Desk gitlab sync」）不能触发同步。
 - timer 与 Desk 同一 Unix UID、读同一份 Desk 0600 env（Desk 私钥、`BUZZ_AUTH_TAG`、Desk GitLab token、`BUZZ_DESK_RUNNER_MANIFEST`）；需要多仓 Agent 时，owner launcher 额外白名单 `BUZZ_GITLAB_PROJECT_TOKEN_MAP`，如放量写 canary 再固定 `BUZZ_GITLAB_PROJECT_TOKEN_L4_RECEIPT`、`BUZZ_GITLAB_PROJECT_TOKEN_L4_HEAD_SHA`、`BUZZ_GITLAB_PROJECT_TOKEN_PROVISIONING_RECEIPT`，且只从 owner 固定 env 注入，不能由消息、Issue、Canvas 或模型设置。白名单 launcher 丢弃其它已导出变量、secret 只留在进程环境不进 argv；unit/plist、launcher、启停与回滚见 Linux [systemd](systemd/README.md) 或 macOS [launchd](launchd/README.md)。
@@ -373,7 +376,7 @@ request 中的 `content`、Channel、Thread 与 sources 都是数据文件内容
 | `state_dir` | 字符串 | 绝对、已规范化路径（无 `..`、无 symlink）；目录不存在时 helper 会以 0700 创建，已存在必须归本用户且 0700 |
 | `gitlab.base_url` | 字符串 | 精确 origin，无路径／query／凭据；`https`，`http` 仅限 loopback |
 | `gitlab.token_env` | 字符串 | 环境变量**名**（不是 token 值）：大写字母开头、只含大写字母／数字／下划线，不以 `BUZZ_` 开头；值从 Agent 的 0600 env 读取 |
-| `gitlab.projects` | 整数数组 | **`projects` 是整数 project id 列表**，非空、无重复；写成字符串（如 `["2048"]`）会被拒绝（`gitlab.projects must be a non-empty unique project list`） |
+| `gitlab.projects` | 整数数组 | **`projects` 是整数 project id 列表**，无重复；只用 `person` locator 的无仓 Desk 填 `[]`，此时 GitLab locator 必然拒绝。非空时项目必须在列表中，且读取 GitLab 对象前必须有该 Agent 自己的有效 token；写成字符串（如 `["2048"]`）会被拒绝 |
 
 `gitlab.token_env` 仍是 GitLab→Buzz 同步配置的单项目 token 入口；它不允许被模型动态替换。多仓 Agent 的项目级访问另由 0600 `project token map` 绑定 `project_id`／`project_path`／`token_env`，并只经 `gitlab_project_token.py` 解析，不能把 `gitlab.projects` 列表当成 token 权限范围。
 | `channels` | 字符串数组 | 允许发送的小写 Channel UUID，非空、无重复 |
@@ -410,7 +413,7 @@ Claude Agent 可用本 Skill 自带的只读解析器生成不含 secret 的 rec
 
 ```bash
 export CLAUDE_CONFIG_DIR="$HOME/.claude-buzz"   # claude-glm 的 agent 换成 "$HOME/.claude-glm"
-python3 skills/buzz-agent-setup/scripts/resolve_plugin_install.py \
+python3 skills/agent-harness/buzz-agent-setup/scripts/resolve_plugin_install.py \
   --registry "$CLAUDE_CONFIG_DIR/plugins/installed_plugins.json" \
   --plugin-id addx@addx \
   --require-skill buzz-agent-setup \
@@ -434,6 +437,11 @@ receipt 里的 `git_commit_sha` 要等于你要的 `origin/main` 提交。
 
 Workflow 负责主动唤醒，不做权限决策：
 
+**新建业务 Channel 的每日默认项**：[频道讨论 → 已有 Issue](channel-issue-workflow.md)。每天北京时间22:00启动，汇总前24小时全部实质讨论（含AI原创进展），完成后追加到可信Canvas仓库内对应已有Issue。加载`channel-issue-progress`，生成disabled schedule并验收完整读取、固定tick、目标权限、持久账本/单writer与读回；未匹配/多义保留待处理。默认准备不等于现网启用，既有频道补装另行确认。
+
+**新建业务 Channel 的默认配置项**：[妙记 → 已有 Issue](minutes-issue-workflow.md)。由人会后在已绑定群发妙记直链或含妙记链接的 Issue，原生 `message_posted` 候选筛选唤醒本频道已注册 `-desk`/指定 agent，加载 `meeting-issue-notes`。先生成 disabled 模板并验收身份、可信 Canvas repo 交集、读取权限、持久去重/单 writer 与回读；前提不足记 pending，不宣称启用。不邀请 bot 参会、不订阅日程，后续状态触发开发独立配置。
+
+
 - `schedule`：没人 @ 也该产出，例如 Desk 进展分析、Bug 模式分析、BI 复盘、SRE／investigator 巡检，以及 `-dev` 只读分析（周 pipeline 健康、月度架构坏味道）。平台 Desk 在职能 Channel 里还有一个只读的平台反馈周报，且必须排在各业务 Channel 的 pipeline 分析与转交之后（顺序与转交协议见 [scheduled-workflows.md](scheduled-workflows.md)）。目录见 [scheduled-workflows.md](scheduled-workflows.md)。cron 的星期字段按 relay 约定写：1=周日，周一=2，周一到周五=2-6，名字写法未验证（见 [scheduled-workflows.md](scheduled-workflows.md)「cron 的星期字段」）。
 - 普通非 GitLab 外部事件可按来源使用 webhook／轮询唤醒角色 Agent 或 investigator。GitLab 变更同步见 [gitlab-buzz-sync.md](gitlab-buzz-sync.md)：不用 Workflow，也不唤醒 Desk；owner 的 systemd --user timer 运行 `gitlab_buzz_sync_timer.py`，同一轮依次运行确定性 sync 与 Canvas route gate，Thread 内指派不创建路由 Workflow。
 - 无：Feature、QA 和所有 executor；executor 只接同 Thread 已获批 ACT。`-dev` 禁止实现／写仓 schedule。
@@ -452,7 +460,7 @@ Workflow 负责主动唤醒，不做权限决策：
 
 ### 旧 Desk Issue poller（已取代）
 
-> **已取代**：本小节描述旧 `issue_thread_router.py`：Desk 当 router、public-only 受众门禁、独立 service identity／签名 sidecar 门禁。它不再是现行做法，原文只保留作参考，新频道不要按它配置。现行做法见 [gitlab-buzz-sync.md](gitlab-buzz-sync.md) 与 [ADR-0004](../../../docs/05-adr/0004-run-gitlab-sync-as-desk-owned-agent-step.md)；ADR-0001 的独立服务拓扑保留为可追溯历史。
+> **已取代**：本小节描述旧 `issue_thread_router.py`：Desk 当 router、public-only 受众门禁、独立 service identity／签名 sidecar 门禁。它不再是现行做法，原文只保留作参考，新频道不要按它配置。现行做法见 [gitlab-buzz-sync.md](gitlab-buzz-sync.md) 与 [ADR-0004](../../../../docs/agent-harness/adr/0004-run-gitlab-sync-as-desk-owned-agent-step.md)；ADR-0001 的独立服务拓扑保留为可追溯历史。
 
 - **Issue 自动化的首个 canonical 实现不是 GitLab webhook，也没有 router Agent：Buzz relay scheduler 按 Channel 的 schedule 唤醒 Desk，Desk 与 polling component 跑在同一 Agent worker turn；针对当前 GitLab 18.0，从已核验身份的 GitLab 响应取 `Date - 1s` 上界，按 `created_at ASC` 拉稳定的 `state=all` Issue universe，本地筛 `updated_at`，再以首次显式初始化且 pin 回 Git 配置的 `deployment_baseline.max_iid` 区分 new、以 durable waterline 与 digest 去重。new 或路由事实／内容／policy 真正变化时才写 GitLab snapshot checkpoint；checkpoint 内嵌最小 routing policy 及 digest，action Note 固定同一 policy digest。历史 checkpoint 用自身 policy 验证；已完成 action 按 change id 使用匹配 checkpoint 的 policy 验证，无 checkpoint 的 crash-window action 只在 digest 仍等于当前 policy 时恢复。routes／Agent pubkey 变化保留非法跳步记忆；同 target 换 pubkey 会触发重新指派。任何旧 policy 的 pending outbox 都在轮询与 stdout replay 前 fail closed，必须先完成、迁移或取消；`status_order` 变化必须显式迁移。GitLab Note 推进的 `updated_at` 单独变化只吸收到 worker 本地 state，不再写 checkpoint／action，避免自触发循环。state 丢失时只有携带同一 Git baseline 并从 binding/action/checkpoint Notes＋Buzz roots/receipts 完整对账，才能原子重建；缺 pin 或恢复未完整即 fail closed，模糊 checkpoint-less 历史也必须拒绝。当前只允许 id／URL 回读一致且 `visibility=public` 的 GitLab project；Issue 的 `confidential` 必须是显式布尔 `false`，state 必须是精确 `opened|closed`；private／internal project 或字段缺失／null／畸形都在任何 Buzz／action Note write 前 fail closed，snapshot checkpoint Note 适用同一门禁。** Webhook 只保留为未来可替换 source adapter。
 - Desk worker 的持久化协议还要保存 `last_checkpoint_change_id`；action Note 固定 `source_snapshot + previous_change_id + policy_digest`。source ID 保留 `updated_at` 以区分真实 A→B→A，业务 fingerprint 只在同一 predecessor 下吸收 Desk Note 造成的时间漂移。每个候选处理前执行 `GET project → GET Issue → GET project` fresh audience gate，刷新时间越过 scan boundary 就 defer；输出 Desk action 前再门禁，并把 raw title／description／labels 只放进 `untrusted_issue` JSON 数据帧，不放进 Buzz 协议消息或 machine Notes。root／lifecycle／receipt marker 只接受 LF 物理第一行逐字相等，不 trim、不做 substring。处理前先稳定读取完整 GitLab Note 集合，并把 action 严格接到前后 checkpoint；这样服务端 action 已写但本地 append 失败、checkpoint 已写但最终 local save 失败，以及 policy epoch 后的下一业务 update 都能幂等恢复。
@@ -463,7 +471,7 @@ Workflow 负责主动唤醒，不做权限决策：
 
 配置只有在最终状态跑完验证套件才算完成。每个正向能力都要有“配错会失败”的负向断言：
 
-> **已取代（一行）**：下表最后一行「Desk Issue poller」属于旧 `issue_thread_router.py`，只保留作参考。现行 GitLab 同步的验证见 [gitlab-buzz-sync.md](gitlab-buzz-sync.md) 与测试方案 `docs/plans/2026-09-13-buzz-agent-setup-gitlab-buzz-sync-test-plan.md`。其余行仍然有效。
+> **已取代（一行）**：下表最后一行「Desk Issue poller」属于旧 `issue_thread_router.py`，只保留作参考。现行 GitLab 同步的验证见 [gitlab-buzz-sync.md](gitlab-buzz-sync.md) 与测试方案 `docs/agent-harness/plans/2026-09-13-buzz-agent-setup-gitlab-buzz-sync-test-plan.md`。其余行仍然有效。
 
 | 配置 | 正向 | 必须的负向 |
 |---|---|---|
@@ -486,7 +494,7 @@ FCHAC setup 的真实 E2E 只接 GitLab 与 Buzz。其他 SaaS 使用 mock contr
 
 ```bash
 python3 references/scripts/nostrkit.py
-python3 skills/buzz-agent-setup/scripts/run_offline_tests.py
+python3 skills/agent-harness/buzz-agent-setup/scripts/run_offline_tests.py
 ```
 
 普通临时写探针按创建者 ownership 清理；负向探针优先无副作用接口。**已登记为 retained 的长期 FCHAC Project／Channel 永不删除或归档，其下的 Thread、Issue、MR、comment 与其他 evidence 默认保留。** 只有人明确给出 exact child 标识并要求清理时，才可清理该子对象；不得把“探针自清理”扩大成删除 retained 父对象或批量 evidence。运行中任一步改变最终配置后，整套验证要重跑，不能沿用中间态 PASS。

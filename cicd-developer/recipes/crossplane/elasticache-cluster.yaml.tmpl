@@ -31,7 +31,7 @@ spec:
   managementPolicies: {{management_policies}}
   forProvider:
     engine: valkey                      # 默认 Valkey（非 Redis OSS）；CRD engine 字段接受 redis|valkey
-    engineVersion: "9.1"                # 已验证 us/cn 可用；family valkey9
+    engineVersion: "9.1"                # AWS family valkey9；旧 AWS CN 版本记录不代表当前 TKE 能力
     nodeType: {{node_type}}
     numCacheNodes: {{num_nodes}}        # Cluster kind 通常 = 1
     port: 6379

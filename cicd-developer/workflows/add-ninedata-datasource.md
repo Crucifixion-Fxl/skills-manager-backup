@@ -5,6 +5,26 @@ description: 把现有 RDS / Aurora 注册到 ninedata.addx.live（自建 NineDa
 
 # Workflow：add-ninedata-datasource
 
+## CN 迁移能力门禁
+
+当前 CN 路由见 `references/cn-tencent-migration.md`：prod 为 `cn-k8s`（100014919455），
+staging/tech-service 为 `cn-tke-staging` / `cn-tke-tech-service`（100052802231）。
+AWS CN 已退役。下文 AWS shared-middleware 的已上线证明不能覆盖新 TKE；生成 `Database` /
+`KafkaScramCredential` 前必须核验精确目标的 served API、Composition/ProviderConfig、共享实例、
+Vault writer/reader 和 per-app 凭据交付，缺任一证据则 STOP + Ops Todo。消费策略仍适用，
+不得回退到旧 AWS broker/ARN、共享 root 或 app-owned/self-hosted staging 数据库。
+AWS 托管资源 recipe 仅用于 `cloud=aws`；腾讯云请求转对应原生能力或 Ops Todo。
+
+## Application 与渲染入口前置
+
+raw 数据面分支先执行 [资源职责拆分合同](../references/application-resource-split.md)：
+登记 `$target.infra_source_path` 和 `$target.runtime_source_path`，分别绑定共享
+`app-data-plane` / `app-runtime`。infra 的 kustomization 不得被 runtime root 引用；
+每次生成后独立构建两份 render，核对唯一资源管理者。缺少准确合同先交付 Ops Todo，
+不能把混合 Application 整体迁入数据面或新建 owner Project。已批准的高层 claim 分支保持原合同。
+以下原有 app overlay 路径仅用于 runtime 消费文件，raw 与生产链使用明确的 infra 路径；
+跨 Application 的依赖以实际生产/消费 Ready 证据验收，不靠资源 sync-wave 推断。
+
 ## 目的
 
 通过声明一个 Crossplane DataSource CR，把 RDS / Aurora 注册到 NineData WebUI：
@@ -29,9 +49,9 @@ description: 把现有 RDS / Aurora 注册到 ninedata.addx.live（自建 NineDa
 
 ## 进入条件
 
-1. **集群必须是海外**——cn-tech-service / cn-prod / cn-dev / cn-staging 四个 CN EKS 集群没装 provider-ninedata（NineData 无 CN license）。如果 target 是 CN → **STOP** 产 ops-todo "等运维补 CN NineData license + 部署 provider"
+1. **本 workflow 仅覆盖海外 AWS 数据源**——当前 CN 均为腾讯云，不能从旧 AWS CN 的安装记录推断新 TKE 的 provider/license。如果 target 是 CN → **STOP** 产 ops-todo "等运维补 CN NineData license + 部署 provider"
 2. **新部署 staging / tech-service shared-middleware 禁止自动注册** —— 如果 `$target.cluster` 是
-   shared-middleware 集群（6 个：`{us,eu,cn}-eks-staging` + `{us,eu,cn}-eks-tech-service`；按 cluster 名判非 env，tech-service env=prod）
+   shared-middleware 集群（当前 US/EU EKS staging/tech-service + CN TKE staging/tech-service；按 cluster 名判非 env，tech-service env=prod）
    也不要为来自 `references/shared-middleware/README.md` 公共 contract 的 RDS/Aurora 注册 NineData；仅当检测到 cd-requirements.md 或已有 ExternalSecret 明确该 DB 是 app-owned（而非来自公共 contract）时，才继续；此时 Vault 路径应为新规范的 per-app region-less 格式 `secret/{env}/{platform}/application/{app}/{key}`（如 RDS 则为 `secret/{env}/rds/application/{app}/database`）。
    本 workflow **STOP**。不要把公共 RDS 注册成单 app NineData datasource，也不要去找
    `secret/staging/rds/application/<app>/database` 这类 app-owned 路径。只有 legacy
@@ -49,8 +69,8 @@ description: 把现有 RDS / Aurora 注册到 ninedata.addx.live（自建 NineDa
   - `workflows/add-rds.md` 或 `add-aurora.md` 已跑完
   - 用户已告知 `$target_env_keyword`
   - 先确定 `$db_kind` 和 `$raw_conn_secret`：
-      - 跑的是 `add-rds.md` / 应用仓 `k8s/overlays/<env>/rds-instance.yaml`（或 legacy `crossplane-infra/<cluster_dir>/{$app}-rds.yaml`）存在 → `$db_kind=rds`
-      - 跑的是 `add-aurora.md` / 应用仓 `k8s/overlays/<env>/aurora.yaml`（或 legacy `crossplane-infra/<cluster_dir>/{$app}-aurora.yaml`）存在 → `$db_kind=aurora`
+      - 跑的是 `add-rds.md` / 应用仓已核验 infra source 下的 `rds-instance.yaml`（或 legacy `crossplane-infra/<cluster_dir>/{$app}-rds.yaml`）存在 → `$db_kind=rds`
+      - 跑的是 `add-aurora.md` / 应用仓已核验 infra source 下的 `aurora.yaml`（或 legacy `crossplane-infra/<cluster_dir>/{$app}-aurora.yaml`）存在 → `$db_kind=aurora`
       - `$db_kind=rds` → `$raw_conn_secret={$app}-rds-conn`
       - `$db_kind=aurora` → `$raw_conn_secret={$app}-aurora-conn`
   - `$target.vault_connection_path` 可由数据库类型解析：
@@ -63,14 +83,14 @@ description: 把现有 RDS / Aurora 注册到 ninedata.addx.live（自建 NineDa
 
 [action]
   - 按下文 Step 2 的同一套 `env-keywords.yaml` / `clusters.yaml` 解析，先拿到 `$namespace`、`$env`、`$target.vault_css`
-  - 如果 `$target.cluster` 是 shared-middleware 集群（6 个：`{us,eu,cn}-eks-staging` +
-    `{us,eu,cn}-eks-tech-service`；**按 cluster 名判，不用 `$env`**——tech-service env=prod）
+  - 如果 `$target.cluster` 是 shared-middleware 集群（6 个：`{us,eu}-eks-staging` +
+    `{us,eu}-eks-tech-service + cn-tke-staging + cn-tke-tech-service`；**按 cluster 名判，不用 `$env`**——tech-service env=prod）
     且 cd-requirements.md / 现有 ExternalSecret 显示 DB 来自共享中间件（新 per-app 路径
     `secret/{env}/{platform}/application/{app}/...`，或 legacy `staging-<region>/shared-middleware/...`）：
       - **STOP**，输出 "new shared-middleware DB does not auto-register
         NineData datasource; define platform shared datasource policy first"
       - 例外只允许 legacy app-owned DB / 迁移场景，并必须能在应用仓
-        `k8s/overlays/<env>/rds-instance.yaml` / `aurora.yaml`（或 legacy
+        已核验 infra source 的 `rds-instance.yaml` / `aurora.yaml`（或 legacy
         `crossplane-infra/<cluster_dir>/{$app}-rds.yaml` / `{$app}-aurora.yaml`）找到
         app-owned DB 证据
   - 运维执行（开发者无 kubectl）：
@@ -93,7 +113,7 @@ description: 把现有 RDS / Aurora 注册到 ninedata.addx.live（自建 NineDa
   - 如果是 Aurora，或 RDS 原始 Secret 只有 `endpoint` / `port` / `username` / `password`：
       - 设 `$db_conn_secret={$app}-ninedata-conn`
       - 用 `recipes/crossplane/ninedata-conn-external-secret.yaml.tmpl` 写：
-        `k8s/overlays/{$target_env_keyword}/infra/ninedata-conn-external-secret.yaml`
+        `{$target.infra_source_path}/ninedata-conn-external-secret.yaml`
       - 填槽：
         `{{db_conn_secret}}=$db_conn_secret`、`{{namespace}}=$namespace`、
         `{{cluster_secret_store}}=$target.vault_css`、`{{refresh_interval}}=1h`、
@@ -171,22 +191,29 @@ description: 把现有 RDS / Aurora 注册到 ninedata.addx.live（自建 NineDa
     `managementPolicies:` 块；该块里的列表必须是
     `[Observe, Create, Update, LateInitialize]`，排除 Delete 防误删 NineData 数据。
     staging/dev 的 slot 必须留空（默认全权 `*`）。**不要**在渲染后手工删除该段。
-  - 写到 `k8s/overlays/{$target_env_keyword}/infra/ninedata-datasource.yaml`
-  - 加到 `k8s/overlays/{$target_env_keyword}/kustomization.yaml` 的 resources 列表
-  - 如果 Step 1 写了 `infra/ninedata-conn-external-secret.yaml`，也必须一起加到同一个 resources 列表
+  - 写到 `{$target.infra_source_path}/ninedata-datasource.yaml`
+  - 只加到 `{$target.infra_source_path}/kustomization.yaml` 的 resources 列表
+  - 如果 Step 1 写了 `{$target.infra_source_path}/ninedata-conn-external-secret.yaml`，也必须一起加到同一个 resources 列表
 
 [validate]
   - 文件存在
   - 如有 normalization ExternalSecret，文件也存在
   - YAML 可解析
-  - `kustomize build k8s/overlays/{$target_env_keyword}/` 成功
+  - 执行 [两份 render 的执行与验收](../references/application-resource-split.md#两份-render-的执行与验收)，
+    独立构建并验证 runtime/infra，逐资源核对唯一管理者和无遗漏。
+  - infra 最终 render 恰有本次 DataSource；如 Step 1 需要 normalization ExternalSecret，
+    它也在 infra render，其 target Secret 与 DataSource 的连接引用、namespace 一致，
+    映射的 keys 为 host/port/username/password。它服务于 infra DataSource，不能为了补
+    runtime 校验迁入 runtime。直接引用 raw Secret 的分支保留 Step 1 的 schema 证据。
+  - runtime render 保持原资源和业务消费配置，不因 NineData 注册新增业务 consumer；
+    runtime 与 infra 清单中不得重复出现本 DataSource 或 normalization ExternalSecret。
   - manifest 含正确字段：
       - `cloudProfile.env: AWS` / `instanceType: Aurora` / `cloudInstanceType: URL` / `accessAlias: aws-overseas`
       - `regionId: ninedata-cn-hangzhou`
       - **没有** `deletionPolicy` 字段（CRD 不接受）
 
 [output]
-  - k8s/overlays/{$target_env_keyword}/infra/ninedata-datasource.yaml
+  - {$target.infra_source_path}/ninedata-datasource.yaml
 
 ## Step 5. 验证部署
 

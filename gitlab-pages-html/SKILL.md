@@ -130,7 +130,7 @@ pages:
 ### MR pipeline 大坑：实例注入 ci:init，stages 必须含 test
 
 实例会向 **merge_request_event pipeline** 注入 `ci:init`（stage `test`）+ `global:credentials-scan` / `global:repo-boundary-lint`（均 stage `.pre`）+ `global:code-review`（stage `.post`，仅目标分支 protected 时）。
-注入清单以 `addx:api-synthetic-monitoring` 的 [`references/ci-templates-contract.md`](../api-synthetic-monitoring/references/ci-templates-contract.md) 为准。
+注入清单以 `addx:api-synthetic-monitoring` 的 [`references/ci-templates-contract.md`](../../observability/api-synthetic-monitoring/references/ci-templates-contract.md) 为准。
 （本仓 `engineering/skills` 在 `repo-boundary-lint` 的黑名单里、在 `code-review` 的 warn-only 档。）
 仓库 `stages` 里**没有 `test`** 时，MR pipeline **创建即 failed**：零 job、`yaml_errors: null`、CI Lint 显示 valid——只有 GraphQL
 `pipeline(iid:"..."){ errorMessages { nodes { content } } }` 能看到真实报错（`chosen stage test does not exist`）。
@@ -197,3 +197,7 @@ pages:
   未合并的 `docs/*` 分支占用的真实案例。新接入的标准方案中 `docs-pages` 专用于 protected publisher，不复制该历史命名。
 - 历史非标准案例：`design-system/design-system.pages.addx.ai` 曾使用独立薄项目、只读 token 全量组装；仅供理解 namespace 根路径，不作为当前同项目 protected publisher 的实施模板。
 - 配套：`gitlab-ci`、`gitlab-mr`、`harbor`
+
+### 本仓库 Skill Hub 的已确认发布约定
+
+engineering/skills 已有 `docs/skill-hub` 发布分支；用户要求保留该分支，统一 Docs 正本并以 `docs/index.html` 为首页。此既有分支优先于上面的默认新建 `docs` 流程。本站有 Markdown 构建与分类索引生成，使用必要的 `public/` 构建输出；不直接发布未构建的整个 Docs 树，也不将生成输出提交作第二份正文。具体流程见[文档发布规范](../../../docs/collaboration/standards/documentation-publishing.md)。

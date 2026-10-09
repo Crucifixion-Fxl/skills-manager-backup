@@ -10,7 +10,7 @@ description: sentry-onboard Job 失败 / Pod SENTRY_DSN 为空 / cn-prod 504 tim
 按 `workflows/add-sentry.md` 配好 4 个 manifest 后，发现：
 - sentry-onboard Job 失败（ImagePullBackOff / vault 报错 / sentry API 报错）
 - Job 成功但 Pod `SENTRY_DSN` env 为空 / Pod 启动 `CreateContainerConfigError`
-- AWS CN 集群 Pod 启动后调 sentry 504/timeout
+- 历史 AWS CN 集群 Pod 调 sentry 504/timeout（仅存量调查，禁止新部署）
 - Sentry UI 看不到新 project
 
 ## 诊断 + 修复对照表
@@ -28,12 +28,12 @@ description: sentry-onboard Job 失败 / Pod SENTRY_DSN 为空 / cn-prod 504 tim
 | Job logs `slug collision or pre-existing project` | Sentry 已有同 slug project 但 Vault 无 DSN 记录 | 先核验同应用和现有团队；不同应用撞名则停止，不改 APP 或删除项目绕过。共享项目首次接入由已授权 operator 按迁移流程核验首个 active key、ingest 和 staging Vault 归属，用 CAS 初始化 DSN 专用路径，再重跑幂等流程；保留防自动认领保护 |
 | Job logs `external deletion detected` | Sentry project 被手工删了但 Vault 还有 DSN 记录 | 停止自动写入，核验删除原因与备份后按批准的恢复/迁移流程处理；不能清 Vault 重跑来绕过保护或制造新 project ID |
 | Job 成功但 Pod `SENTRY_DSN` env 为空 | **首先** 查 schema 错配（最常见），再查 workload 引用的 Secret 名是否是 `<app>-sentry-dsn` | 看 ConfigMap.VAULT_PATH_SCHEMA vs ExternalSecret.remoteRef.key 是否对齐：<br>schema=platform → key 应 `{env}/sentry/application/{app}/project`<br>schema=legacy → key 应 `{env}/app/{app}/sentry-dsn`<br>两端不一致 = Job 写新路径 ES 拉旧路径 → ES 报 "secret not found" 或拉空 |
-| ExternalSecret READY=False / `ClusterSecretStore ... not found` / `SecretSyncedError` | `secretStoreRef.name` 选错，读的 Vault 跟 sentry-onboard Job 写入的 Vault 不是同一个 | 查 `references/sentry/README.md` 的 `SENTRY_DSN_CSS`；不要按通用 `clusters.yaml -> vault_css` 或 store 名字猜 Vault 域。cn-dev cutover 后普通 app CSS `vault-builder-backend` 指向 builder Vault，若 Job 仍写 ops Vault 必须先提供同实例 DSN CSS |
+| ExternalSecret READY=False / `ClusterSecretStore ... not found` / `SecretSyncedError` | `secretStoreRef.name` 选错，读的 Vault 跟 sentry-onboard Job 写入的 Vault 不是同一个 | 查 `references/sentry/README.md` 的 `SENTRY_DSN_CSS`；不要按通用 `clusters.yaml -> vault_css` 或 store 名字猜 Vault 域。已退役 AWS cn-dev 的历史 cutover 后普通 app CSS `vault-builder-backend` 指向 builder Vault，若 Job 仍写 ops Vault 必须先提供同实例 DSN CSS |
 | Pod 启动 CreateContainerConfigError | Secret 还没生成，或 Job/ES 链路失败 | 先看 ArgoCD hook 结果；若 Job 仍可见再看是否 `Complete`、ES 是否 `Ready=True`、`<app>-sentry-dsn` Secret 是否有 `dsn` key；正常同 sync 短暂抖动应在 2 分钟内恢复 |
 | `kubectl annotate externalsecret <app>-sentry-dsn force-sync` 想强制刷 | ES 没及时 refresh | 加 annotation `force-sync=$(date +%s) --overwrite`（运维执行）；或等 refreshInterval=1m 自然到 |
 | `dig sentry-us.addx.live` Pod 内返回公网 IP | 集群 CoreDNS 没配 rewrite | 运维补 references/sentry/README.md 第 4 项的 CoreDNS rewrite 规则 |
 | C 端应用 cn 区 prod 想接，Job fail 报 brand | 当前 cn-prod 无品牌 relay 域名 | backend / admin 不受影响；mobile-app / web-frontend 暂时只能 us / eu 区 prod。等运维建 `glitch-cn.{brand}.{tld}` ingress |
-| **AWS CN EKS target Pod 502/504/timeout** 访问 sentry-cn | 没加 NAT 出口 NodePool 调度 | 在 Job 的 `nodeSelector` 加：<br>589 cn-tech-service: `node-group: nat-egress` + toleration `dedicated=nat-egress`<br>741 cn-prod: `node-group: sentry-egress` + toleration `dedicated=sentry-egress`<br>801 cn-staging: `node-group: nat-outbound` + toleration `dedicated=nat-outbound`<br>801 cn-dev: `node-group: nat-outbound` + toleration `dedicated=nat-outbound`<br>US/EU/TKE 集群不需要 |
+| **已退役 AWS CN 历史 Pod 502/504/timeout** 访问 sentry-cn | 历史故障：缺少 NAT 出口 NodePool 调度 | 只核对旧记录，不应用到当前 TKE；当时 Job 使用：<br>589 cn-tech-service: `node-group: nat-egress` + toleration `dedicated=nat-egress`<br>741 cn-prod: `node-group: sentry-egress` + toleration `dedicated=sentry-egress`<br>801 cn-staging: `node-group: nat-outbound` + toleration `dedicated=nat-outbound`<br>801 cn-dev: `node-group: nat-outbound` + toleration `dedicated=nat-outbound`<br>US/EU/TKE 集群不需要 |
 | Sentry DSN 域名跟预期不符（C 端 prod 看到 `sentry-us.addx.live`）| Sentry `APP_TYPE` 写错 | 客户端可见的 C 端应用必须用 `mobile-app` / `web-frontend`，prod env 触发域名改写成 `glitch-{region}.{brand}.{tld}`；服务端 backend / 内部 admin **不改写** |
 
 ## 为什么不走 <替代方案>

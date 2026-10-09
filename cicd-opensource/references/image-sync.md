@@ -10,12 +10,20 @@
 海外/SG/GKE/staging jobs 并行
   SG / US×3 / EU×3 / us-staging / eu-staging / GKE×2 — 直接从源仓库拉取
   ↓
-CN relay + TKE jobs
-  SG → 旧 CN Harbor → CN EKS×4（cn-tech/cn-prod/cn-dev/cn-staging）
-  SG → TKE Harbor
+CN Tencent jobs / replication（按当前 DEV/base-images pipeline 与 Harbor 复制规则核验）
+  prod: 100014919455 → harbor-cn.addx.live
+  staging: 100052802231 → harbor-02231-cn-staging-pub.addx.live（SG/外部同步入口）
+  tech-service 目标（待切换）: 100052802231 → harbor-02231-cn-tech-service-pub.addx.live（SG/外部入口）
+  旧 AWS CN / 旧腾讯账号 job 不是当前目标证明
 ```
 
 所有镜像统一推到各集群 Harbor 的 `base/` 项目下，路径格式：`<harbor>/base/<name>:<tag>`。
+
+CN staging 的内网域名 `harbor-02231-cn-staging.addx.live` 和外部域名 `harbor-02231-cn-staging-pub.addx.live` 指向同一 registry，不是两个同步目标。SG 扇出使用 `-pub` 入口；目标集群部署镜像默认使用内网入口，例如 `harbor-02231-cn-staging.addx.live/base/nginx:1.25-alpine`。DNS 与 token realm 规则见 [Harbor 双入口合同](../../harbor/SKILL.md)，按本次客户端所在网络验证 registry 和 token 服务均可达。
+
+旧 `harbor-cn-staging.addx.live` 是同一实例的兼容入口，保留兼容（当前 runner `HARBOR_REGISTRY` 与 Image Updater 仍使用它）。AWS `harbor-80144-cn-staging` / `harbor-80144-cn-dev` 已退役，不再作为扇出目标。切换前核验实际 runner `HARBOR_REGISTRY`、同步目的端及精确 hostname 凭据；内网 pull secret 必须有内网域名的 auth key，由平台同步机制补齐并验证后再采用。技能默认值不自动迁移现存镜像或 Secret，也不证明当前 pipeline 已更新；历史 runner 快照和新部署回执见 [CN 迁移证据](../../cicd-developer/references/cn-tencent-migration.md)。
+
+CN tech-service 的外部同步目标为 `harbor-02231-cn-tech-service-pub.addx.live`，集群镜像目标为 `harbor-02231-cn-tech-service.addx.live`。这是同一实例双入口的目标命名，尚未切换；不得声称当前 base-images job、Harbor replication、token realm、PrivateDNS 或 pull secret 已使用这些入口。先按 [Harbor tech-service 目标说明](../../harbor/SKILL.md) 核验并完成迁移，不能把私网域名直接填到 SG 公网同步端。
 
 ## images.yaml 格式
 
@@ -91,10 +99,10 @@ git commit -m "feat: add <app-name> images for deployment"
 
 MR 合并到 `main` 后，Pipeline 自动触发：
 1. **海外/SG/GKE/staging sync jobs**（~2-5 分钟）：SG、US/EU prod/tech/data、US/EU staging、GKE 并行从源拉取
-2. **sync-cn-relay + sync-tke**（~5-10 分钟）：SG 中转到 CN legacy Harbor 和 TKE Harbor
-3. **sync-cn**（~3-5 分钟）：CN EKS 内部同步到 cn-tech、cn-prod、cn-dev、cn-staging
+2. **CN Tencent 同步/复制链路**：按精确账号、registry 核验 pipeline target 与实际复制执行；不能因旧 sync-cn / sync-tke job 成功而认定新账号 staging/tech-service 已收到镜像
+3. 在本次目标 Harbor 读取 `base/<name>:<tag>` manifest/digest，确认架构；未分发到目标时 STOP 并补对应同步链路
 
-总耗时约 10-15 分钟。具体 target/job 名称以 `DEV/base-images/.gitlab-ci.yml` 为准；不要维护手写集群数量。
+同步耗时以本次执行为准。具体 target/job 名称以 `DEV/base-images/.gitlab-ci.yml` 为准；不要维护手写集群数量。
 
 ### Step 4: 验证同步
 

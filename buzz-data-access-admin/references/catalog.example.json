@@ -1,0 +1,27 @@
+{
+  "account_id": "769494896000",
+  "partition": "aws",
+  "region": "us-east-1",
+  "role_path": "/employee_role/",
+  "terraform_project": "DEV/IaC",
+  "resources": [
+    {
+      "region": "us-east-1",
+      "environment": "prod",
+      "business": "ecommerce",
+      "pii": "default",
+      "layer": "mart",
+      "resources": [
+        {
+          "database": "bi",
+          "table": "orders",
+          "columns": [
+            "order_count"
+          ],
+          "row_filter": "product = 'fixture'"
+        }
+      ]
+    }
+  ],
+  "executor_open_id": "ou_6d7b771147382dd4baaee27ebba8487f"
+}

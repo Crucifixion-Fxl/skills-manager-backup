@@ -115,6 +115,11 @@ build_intents:
     workflow_file: workflows/add-s3-bucket.md
     internal_calls: []
 
+  - intent: TKE Pod Identity 接入腾讯云 COS
+    keywords: [add cos, tencent cos, 腾讯云 cos, tke pod identity, tke oidc, tke cam role, tke 访问 cos]
+    workflow_file: workflows/add-tencent-cos.md
+    internal_calls: []
+
   - intent: 加 CloudFront / CDN
     keywords: [add cloudfront, create cdn, cloudfront distribution, cdn for s3, signed url]
     workflow_file: workflows/add-cloudfront.md

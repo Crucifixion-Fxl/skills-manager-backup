@@ -1,6 +1,7 @@
 import os
 import hashlib
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -9,14 +10,16 @@ from pathlib import Path
 SCRIPT_DIR = Path(__file__).resolve().parents[1]
 SCRIPT = SCRIPT_DIR / "create_mr_note.sh"
 RUNTIME_ATTESTATION = SCRIPT_DIR / "runtime_attestation.sh"
-CI_PATH = SCRIPT_DIR.parents[2] / ".gitlab-ci.yml"
+REPO_ROOT = SCRIPT_DIR.parents[3]
+sys.path.insert(0, str(REPO_ROOT / "scripts"))
+from gitlab_ci_config import merged_text  # noqa: E402
 API_URL = "https://" + ".".join(("gitlab", "addx", "ai")) + "/api/v4"
 REVIEWED_HEAD = "a" * 40
 
 
 class CreateMrNoteRuntimeTest(unittest.TestCase):
     def test_ci_installs_fixed_runtime_dependencies(self):
-        ci = CI_PATH.read_text()
+        ci = merged_text(REPO_ROOT)
         self.assertIn("apt-get install -y -qq curl nodejs", ci)
 
     def test_runtime_tools_are_absolute_and_curlrc_is_disabled(self):

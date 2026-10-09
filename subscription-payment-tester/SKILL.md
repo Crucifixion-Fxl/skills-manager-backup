@@ -146,7 +146,7 @@ subscription-payment-tester run-all --scenario "新购订阅"
 - 空值校验
 - Server Notification处理
 
-详见：[applepay-tester/SKILL.md](applepay-tester/SKILL.md)
+详见：[applepay-tester/SKILL.md](../applepay-tester/SKILL.md)
 
 ### googlepay-tester
 
@@ -182,4 +182,4 @@ test:payment:
 
 - [Stripe测试指南](stripe-tester/SKILL.md)
 - [Airwallex测试指南](airwallex-tester/SKILL.md)
-- [Apple Pay测试指南](applepay-tester/SKILL.md)
+- [Apple Pay测试指南](../applepay-tester/SKILL.md)

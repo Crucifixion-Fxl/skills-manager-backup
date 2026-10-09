@@ -179,7 +179,7 @@
 
 | 项 | 值 |
 |----|----|
-| 容器编排 | Kubernetes（EKS / TKE / GKE 多云）|
+| 容器编排 | Kubernetes（EKS / TKE / GKE 多云；CN 当前全部 TKE：prod `100014919455`，staging / tech-service `100052802231`，AWS CN 已退役）|
 | GitOps | ArgoCD |
 | CI/CD | Jenkins + GitLab CI |
 | IaC | Terraform |
@@ -190,7 +190,7 @@
 | APM | Sentry + Bugsnag |
 | 跨平台权限 | Casdoor（飞书 SSO）|
 | 密钥管理 | HashiCorp Vault |
-| 子 skill | `argocd` `argocd-deploy` `jenkins` `gitlab-ci` `k8s-ops` `vault-kv-manager` `aws-cli` `gcp-cli` `prometheus` `grafana` `log-ingestion-elasticsearch` `sentry-onboarding` |
+| 子 skill | `argocd` `argocd-deploy` `jenkins` `gitlab-ci` `k8s-ops` `vault-kv-manager` `aws-cli` `tencent-cloud-cli` `gcp-cli` `prometheus` `grafana` `log-ingestion-elasticsearch` `sentry-onboarding` |
 
 ---
 

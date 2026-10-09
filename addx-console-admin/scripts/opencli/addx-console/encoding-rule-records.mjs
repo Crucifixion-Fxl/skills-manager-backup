@@ -1,0 +1,5 @@
+import {ArgumentError,CommandExecutionError} from '@jackwener/opencli/errors';import {boundedPage,pageRows} from './expansion-records.mjs';
+function bad(){throw new CommandExecutionError('Console encoding rule metadata contract or selected status changed');}
+function text(v){if(v===null||v===undefined)return null;if(typeof v!=='string'||v.length>8192)bad();return v;}
+export function encodingRuleQuery(args){const b=boundedPage(args),status=String(args.status);if(!['all','0','1'].includes(status))throw new ArgumentError('status must be all, 0 (disabled) or 1 (enabled)');return{...b,status,path:'/code-rules/info/list?pageIndex='+b.pageIndex+'&pageSize='+b.pageSize+(status==='all'?'':'&status='+status)};}
+export function encodingRuleRows(data,q){return pageRows(data,q.pageSize,'encoding-rules').map(v=>{if(!v||!Number.isSafeInteger(v.id)||v.id<1)bad();const s=v.status===null||v.status===undefined?null:v.status;if(s!==null&&s!==0&&s!==1)bad();if(q.status!=='all'&&s!==Number(q.status))bad();return{id:v.id,name:text(v.name),status:s,statusLabel:s===null?null:s===0?'禁用':'启用',createdAt:text(v.createTime),updatedAt:text(v.updateTime),total:data.total};});}

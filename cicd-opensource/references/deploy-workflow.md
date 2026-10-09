@@ -2,6 +2,14 @@
 
 从零部署一个开源项目到 K8s 集群的 5 步详细流程。
 
+## Step 0: 解析并验证精确目标
+
+先按 `cicd-developer/references/data/{clusters,env-keywords}.yaml` 解析目标并运行
+`check_deployment_target.py`。当前 CN prod=100014919455；staging/tech-service=100052802231，
+AWS CN 不再接受 Build。新 tech-service 的业务部署准入尚 blocked；目录存在不代表允许部署。
+核验精确 Application/AppProject、Harbor 分发、Vault CSS 与云厂商 recipe；不可沿用旧 AWS ARN、
+ALB 或 builder Vault 配置。存量按 Application 追踪，不按新 keyword 静默迁移。
+
 ## Step 1: 镜像同步
 
 在 `DEV/base-images` 仓库的 `images.yaml` 中添加所需镜像，提交 MR 并合并。详见 [image-sync.md](image-sync.md)。
@@ -109,7 +117,7 @@
 | 类型 | 部署方式 | 示例 |
 |------|----------|------|
 | **无状态工具** | Rollout + ConfigMap | Grafana（数据在外部 DB）、n8n（外接 Postgres）、Metabase |
-| **有状态但可用托管服务** | Rollout + Crossplane RDS/Redis | 应用本身无状态，数据库用 Crossplane 创建 |
+| **有状态但可用托管服务** | Rollout + 对应云托管资源/共享实例 | AWS 才使用 RDS/ElastiCache；TKE 需腾讯原生合同 |
 | **必须本地有状态** | StatefulSet + PVC | Redis（缓存场景）、RabbitMQ、Elasticsearch |
 
-> **优先使用托管服务：** 如果开源项目需要数据库，优先通过 Crossplane 创建 RDS/ElastiCache，而不是在 K8s 中自己部署数据库。参考 cicd-developer skill 的 references/crossplane/README.md。
+> **数据库先过共享策略和云边界：** staging/tech-service 只消费平台共享实例；当前 CN TKE 能力未验证时 STOP + Ops Todo，不能转为 app-owned 或自托管数据库。AWS prod 可用对应 RDS/ElastiCache workflow，TKE prod 用腾讯原生合同。参考 cicd-developer 的 `references/shared-middleware/README.md`。

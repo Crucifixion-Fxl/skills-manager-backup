@@ -46,14 +46,14 @@ rules:
       Crossplane / Platform Admin 代签发给 app 的平台资源凭据：RDS / Aurora /
       Redis / MongoDB(DocumentDB) / Kafka(MSK) / ScyllaDB / ClickHouse / Qdrant / Nacos / Elasticsearch /
       Sentry DSN / OIDC client secret / 公网外部 MySQL / Feishu / Payload CMS /
-      GrowthBook / AWS IAM key。人员访问仅由 vault-policies 的平台管理员/超级管理员策略授权；
+      GrowthBook / AWS IAM key / Linode Object Storage key。人员访问仅由 vault-policies 的平台管理员/超级管理员策略授权；
       GitLab 应用 Maintainer+/Developer+ 不因项目身份获得该路径读写，ESO 使用独立机器策略。
       共享中间件（dev/staging 默认多 app 共用一个实例）在该实例上为每个 app 签发
       **独立的 per-app database/user 或连接凭据**，凭据同样落这里——**没有**单独的 shared-middleware
       Vault 命名空间。申请流程见 workflows/add-rds.md / add-redis.md（kind: Database）和
       references/shared-middleware/README.md（KafkaScramCredential）。
     output_template: "secret/{env}/{platform}/application/{app}/{key}"
-    regex: "^secret/(dev|staging|pre|prod)/(aws|oci|auth|rds|aurora|redis|mongodb|kafka|scylla|nacos|elasticsearch|clickhouse|mysql|qdrant|sentry|feishu|payload|growthbook|zitadel)/application/[a-z0-9_-]+/.+$"
+    regex: "^secret/(dev|staging|pre|prod)/(aws|oci|linode|auth|rds|aurora|redis|mongodb|kafka|scylla|nacos|elasticsearch|clickhouse|mysql|qdrant|sentry|feishu|payload|growthbook|zitadel)/application/[a-z0-9_-]+/.+$"
     legacy: false
     notes: |
       <platform> 必须取自 vault-paths/platforms.yaml 的 platforms{} 枚举；workflow 不
@@ -65,8 +65,8 @@ rules:
       下划线路径，否则 SecretSyncedError。手动种的外部凭据（非 Composition）仍可用连字符。
       KafkaScramCredential 的 `spec.app` 允许连字符（^[a-z][a-z0-9-]{1,40}$），因此 Kafka path
       通常保留 app 原名，如 `secret/staging/kafka/application/vip-service/sasl`。
-      ⚠️ 首段是**裸 env**（dev/staging/pre/prod），**绝不带 region**。staging 三区各连
-      各自的 builder Vault 实例（vault-{us,eu,cn}.builder.addx.live），region 由实例隐含，
+      ⚠️ 首段是**裸 env**（dev/staging/pre/prod），**绝不带 region**。实例由精确目标
+      catalog/SecretStore 决定：US/EU staging 用对应 Builder Vault，新 CN staging 用集群内 Vault；地域由目标实例合同体现，
       写进路径冗余且违规（见 forbidden_patterns 的 env-region-first-segment）。
       共享中间件组件映射：共享 RDS MySQL→platform=rds；ElastiCache/Redis→redis；
       DocumentDB→mongodb；MSK→kafka；ScyllaDB→scylla；ClickHouse→clickhouse；Qdrant→qdrant。
@@ -137,6 +137,8 @@ rules:
 # 校对样本：resolver 跑一遍这张表的 input 必须能复现 output 字段。
 # =============================================================================
 examples:
+  - { env: staging, kind: linode, app: collect-gateway, key: credentials, output: "secret/staging/linode/application/collect-gateway/credentials" }
+  - { env: prod, kind: linode, app: addx-rerun-hub, key: credentials, output: "secret/prod/linode/application/addx-rerun-hub/credentials" }
   - { env: prod, kind: oci, app: naturehood, key: species-correction-video-copy, output: "secret/prod/oci/application/naturehood/species-correction-video-copy" }
   - { env: staging, kind: oci, app: naturehood, key: species-correction-video-copy, output: "secret/staging/oci/application/naturehood/species-correction-video-copy" }
   - { env: staging, kind: aws,    app: payment-service,    key: credentials,    output: "secret/staging/aws/application/payment-service/credentials" }
@@ -164,8 +166,8 @@ forbidden_patterns:
 
   - pattern: "secret/<env>-<region>/* （env-region 作首段，如 secret/staging-us/...、secret/prod-eu/...）"
     reason: |
-      首段必须是裸 env（dev/staging/pre/prod）。region 由 per-region Vault 实例
-      （vault-{us,eu,cn}.builder.addx.live for staging）隐含，写进路径冗余且违规。
+      首段必须是裸 env（dev/staging/pre/prod）。region 由精确目标 catalog/SecretStore 的实例合同体现；
+      US/EU staging 用对应 Builder Vault，新 CN staging 用集群内 Vault，不能按地区拼旧域名。region 写进路径冗余且违规。
       共享中间件凭据走 platform-resource-credential 的 per-app 路径
       （secret/{env}/{platform}/application/{app}/{key}），**没有**独立的
       shared-middleware Vault 命名空间。已存在的

@@ -5,12 +5,12 @@ selection, preview, materialization and exact-run membership sync.
 
 Start with [SKILL.md](SKILL.md). Use the host's named operations when available.
 The Skill root is the directory containing this `SKILL.md`. A complete installed
-`skills/audience-sync` directory or full repository clone supports the bundled
+`skills/experimentation/audience-sync` directory or full repository clone supports the bundled
 adapter with Python 3.9+, without runtime package installation or a separate Git
 clone. Keep `scripts/`, `src/` and `contracts/` together under that Skill root:
 
 ```bash
-python3 /absolute/path/to/skills/audience-sync/scripts/api.py summarize_project_keys
+python3 /absolute/path/to/skills/experimentation/audience-sync/scripts/api.py summarize_project_keys
 ```
 
 The host securely injects key(s). The adapter defaults to

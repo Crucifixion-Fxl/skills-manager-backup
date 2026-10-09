@@ -2,8 +2,9 @@
 """Validate DB resource details that are easy to get subtly wrong.
 
 The check is intentionally narrow: RDS/Aurora password and connection chain
-resources must keep the expected ArgoCD sync-wave ordering; DocumentDB member
-instances must avoid AWS-rejected fields; ArgoCD drift ignores that are needed
+resources must keep the expected ArgoCD sync-wave ordering; generated master
+password Secrets must survive ExternalSecret deletion and reject rewrites;
+DocumentDB member instances must avoid AWS-rejected fields; ArgoCD drift ignores that are needed
 for DB/stateful resources must actually be respected during sync; and stateful
 data stores (RDS/Aurora/DocumentDB/ElastiCache) must be orphan-safe so a CR
 deletion or ArgoCD prune (e.g. when a manifest is moved between namespaces or
@@ -295,6 +296,56 @@ def required_wave(doc: dict[str, Any]) -> str | None:
     if kind == "ExternalSecret" and external_secret_reads_db_application(doc):
         return "1"
     return None
+
+
+def check_generated_password_secret_lifecycle(
+    path: Path, doc: dict[str, Any]
+) -> tuple[int, list[str]]:
+    if (
+        doc.get("kind") != "ExternalSecret"
+        or not name_of(doc).endswith(("-rds-password", "-aurora-password"))
+    ):
+        return 0, []
+
+    name = name_of(doc)
+    source = spec(doc)
+    target = source.get("target")
+    target = target if isinstance(target, dict) else {}
+    required = {
+        "apiVersion": (doc.get("apiVersion"), "external-secrets.io/v1"),
+        "spec.refreshPolicy": (source.get("refreshPolicy"), "CreatedOnce"),
+        "spec.target.name": (target.get("name"), name),
+        "spec.target.creationPolicy": (target.get("creationPolicy"), "Orphan"),
+        "spec.target.deletionPolicy": (target.get("deletionPolicy"), "Retain"),
+        "spec.target.immutable": (target.get("immutable"), True),
+    }
+    failures = [
+        f"FAIL: {path}: ExternalSecret/{name_of(doc)} must set {field}={expected!r}"
+        for field, (actual, expected) in required.items()
+        if actual != expected or (expected is True and actual is not True)
+    ]
+    unexpected_target_fields = set(target) - {
+        "name", "creationPolicy", "deletionPolicy", "immutable"
+    }
+    if unexpected_target_fields:
+        failures.append(
+            f"FAIL: {path}: ExternalSecret/{name} must not set extra target "
+            f"fields {sorted(unexpected_target_fields)}; they may remove data.password"
+        )
+    expected_generator_ref = {
+        "apiVersion": "generators.external-secrets.io/v1alpha1",
+        "kind": "Password",
+        "name": f"{name}-gen",
+    }
+    if (
+        source.get("dataFrom") != [{"sourceRef": {"generatorRef": expected_generator_ref}}]
+        or source.get("data")
+    ):
+        failures.append(
+            f"FAIL: {path}: ExternalSecret/{name} must read only Password "
+            f"generatorRef {expected_generator_ref['name']!r} without rewrite"
+        )
+    return 1, failures
 
 
 def is_docdb_rds_cluster_instance(doc: dict[str, Any]) -> bool:
@@ -841,6 +892,12 @@ def check_doc(path: Path, doc: Any) -> tuple[int, list[str]]:
                 f"FAIL: {path}: {doc.get('kind')}/{name_of(doc)} "
                 f"must set argocd.argoproj.io/sync-wave={wave!r}"
             )
+
+    password_checked, password_failures = check_generated_password_secret_lifecycle(
+        path, doc
+    )
+    checked += password_checked
+    failures.extend(password_failures)
 
     docdb_checked, docdb_failures = check_docdb_cluster_instance(path, doc)
     checked += docdb_checked

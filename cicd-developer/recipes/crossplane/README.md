@@ -1,7 +1,8 @@
 # recipes/crossplane/
 
-同一 owning 仓库可以有多个独立渲染的 Application，按权限职责分别绑定批准的 runtime
-或数据面 Project；一个 Application 只绑定一个 Project，每个资源只有一个管理者。
+同一 owning 仓库按职责拆为独立渲染的 Application，runtime 使用共享 `app-runtime`，
+获批 raw 资源使用共享 `app-data-plane`；不按业务 owner 新建 Project。每个 Application
+只绑定一个 Project，每个资源只有一个管理者，不将混合 Application 整体迁入数据面。
 批准的平台 claim 可以留 runtime，A1 密码链与 DB CR 的依赖不能仅按 kind 机械拆散。
 存量拆分先审批 ownership 交接、prune/finalizer 保护与回滚；IAM/ProviderConfig/WAF
 仍在平台入口，owner 名称不替代云权限约束。完整指导见
@@ -24,15 +25,24 @@
 ## RDS/Aurora 密码链路
 
 RDS 和 Aurora 使用 ESO Password Generator → ExternalSecret → PushSecret 的 A1 链路，且与 DB CR
-放在同一应用 overlay，由 sync-wave 保证顺序。分别使用其专用密码 recipe；不得复制 RDS 模板后手改
-名称或 Vault 路径。
+放在同一独立 infra overlay/Application 内，由其 sync-wave 保证内部顺序。runtime 的
+连接消费 ExternalSecret/workload 留在 runtime render；跨 Application 须验证生产链 Ready、
+Vault 交付与消费 Secret，不能用资源 wave 推断依赖已就绪。完整规则见
+[资源职责拆分](../../references/application-resource-split.md)。不得复制 RDS 模板后手改名称或 Vault 路径。
 
 红线：
 
 1. 不要手工删除生成的密码 Secret。
 2. 不要改 generator spec。
-3. **禁删 generator 型 ExternalSecret 再重建**；`deletionPolicy: Retain` 不保证重建不会覆盖
-   现有 Secret，可能造成 K8s、Vault 和 AWS 密码漂移。
+3. **禁删 generator 型 ExternalSecret 再重建**。密码链使用 `refreshPolicy: CreatedOnce`、
+   `creationPolicy: Orphan`、`target.immutable: true`、`deletionPolicy: Retain`。
+   不得给 `dataFrom` 加 `rewrite` 或给 target 加 `template`，两者可能移除下游依赖的
+   `data.password`。
+   `Retain` 仅管远端数据删除，不阻止 `Owner` 的 ownerReference 触发 Kubernetes GC；重建也
+   可能造成 K8s、Vault 和 AWS 密码漂移。存量链路改配置前先核对 live Secret 的
+   `ownerReferences`，并验证 K8s/Vault 密码与数据库认证。`CreatedOnce` 可能跳过存量
+   Secret 的 reconcile，使旧 ownerReference 与可变属性继续存在；按 `add-rds` Step 10
+   的受控迁移门禁回读并处理，不能把模板变更视为存量修复已完成。
 4. namespace prune 前先按 workflow 备份所需 Vault 值；紧急 rotate 走运维带外流程。
 
 ## 资源特有合同

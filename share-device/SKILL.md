@@ -16,7 +16,7 @@ description: 把 VicoHome / KiwiBit / VicoNature 设备从 admin 账号分享给
 
 不适用：给真用户分享（协议要求 sharer 主动调 `/device/requireshare`，必须有目标账号密码，仅适用测试账号家族）。
 
-本 skill 与 [create-pir](../create-pir/) 是姊妹关系：
+本 skill 与 [create-pir](../create-pir) 是姊妹关系：
 
 | 需求 | 用哪个 skill |
 |---|---|

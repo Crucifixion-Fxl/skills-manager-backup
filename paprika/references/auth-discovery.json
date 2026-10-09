@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "tool": "paprika",
+  "owner": "paprika",
+  "instance": {
+    "selection": "Use target/environment mapping in owner SKILL; never enumerate unrelated profiles or silently fall back.",
+    "contract": "SKILL.md",
+    "currentVersion": "unknown; historical values are not runtime evidence",
+    "addressEvidence": "Owner SKILL.md environment tables are the address SSOT; credential variables and exceptions in auth.nativeCredentialPath are selected-instance constraints."
+  },
+  "auth": {
+    "nativeCredentialPath": "PAPRIKA_API_KEY uses Authorization Key; PAPRIKA_USER/PASSWD obtains console Bearer; PAPRIKA_PROJECT_ID scopes workload. Protected XDG cache paprika/token outside repo.",
+    "missingCredentialWorkflow": "User opens paprika.art console Developer API keys/projects; explicit token creation authorization required. Existing scripts handle console login and refresh privately; open key only shown once.",
+    "subjectAndResourcePermissionVerification": "GET /v1/auth/me for console subject/roles and read project/key metadata; require project:manage/apikey:manage/generation:create/billing:manage only for intended operation. API Key subject mapping from console metadata.",
+    "issuanceConsumptionRevocation": "POST /v1/auth/login and /v1/auth/refresh existing contract; API key creation and POST /v1/console/api-keys/{keyId}/revoke are writes. Console token revocation not established.",
+    "credentialHandling": "Private injection only; never print/store secrets in repository, command arguments, chat or receipts. Discovery itself performs no login/token creation."
+  },
+  "nativeRoute": {
+    "business": "Owner SKILL + version-matched official CLI/API documentation",
+    "loginRecovery": "web-access for human web interaction; official CLI only where explicitly documented",
+    "refresh": "platform-onboarding only for concrete auth/version/interface drift",
+    "runtimeProvider": "delegated",
+    "adapterStatus": "delegated contract only; no new runnable provider or full API mirror implemented"
+  },
+  "referenceSources": [
+    {
+      "kind": "owner-contract",
+      "path": "SKILL.md"
+    },
+    {
+      "kind": "owner-contract",
+      "path": "references/api.md"
+    },
+    {
+      "kind": "primary-official",
+      "url": "https://paprika.art",
+      "checkedOn": "2026-10-07",
+      "use": "authentication discovery; match actual deployed version before business calls",
+      "status": "pending-public-reference",
+      "limitation": "No public auth documentation independently established; local api.md is source evidence."
+    }
+  ],
+  "versionPolicy": {
+    "probe": "API base https://api.paprika.art from runtime-config.js; deployed build/source version unavailable. Local api.md is contract, not proof of current server compatibility.",
+    "compatibility": "Unknown deployment version requires non-mutating capability evidence before business usage; do not promote latest upstream docs to deployed compatibility."
+  },
+  "verification": {
+    "source": "source-verified",
+    "fixture": "not-run: reference-only changes",
+    "runtime": "pending",
+    "sourceCandidate": "8d736bd81ab8500e51cf6be3d71d1ffa70937cae",
+    "scope": "Owner repository contract and primary documentation research only. No credential inspection, login, token issuance/revocation or online business calls.",
+    "pendingReasons": [
+      "Target deployment version, selected subject and exact resource permissions have not been runtime verified.",
+      "Token/login workflow needs independently authorized selected-instance validation; no runnable unified provider is claimed.",
+      "No independently retrieved public official auth reference; existing frontend-derived api.md lacks current deployment commit/build evidence."
+    ]
+  }
+}

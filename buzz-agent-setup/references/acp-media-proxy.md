@@ -24,10 +24,10 @@ stock `buzz-acp` 会把 NIP-92 `imeta` 完整放进 prompt 的 `Tags:` 文本，
 PLUGIN_ROOT=<resolve_plugin_install.py 回执里的 install_path>
 REAL_ADAPTER=<原 BUZZ_ACP_AGENT_COMMAND 的绝对路径>
 ADAPTER_NAME=$(basename "$REAL_ADAPTER")
-PROXY_SHA=$(sha256sum "$PLUGIN_ROOT/skills/buzz-agent-setup/scripts/buzz_acp_media_proxy.py" | awk '{print $1}')
+PROXY_SHA=$(sha256sum "$PLUGIN_ROOT/skills/agent-harness/buzz-agent-setup/scripts/buzz_acp_media_proxy.py" | awk '{print $1}')
 PROXY_DIR="$HOME/.local/share/buzz-agent-setup/acp-media-proxy/$PROXY_SHA"
 install -d -m 700 "$PROXY_DIR"
-install -m 0555 "$PLUGIN_ROOT/skills/buzz-agent-setup/scripts/buzz_acp_media_proxy.py" "$PROXY_DIR/$ADAPTER_NAME"
+install -m 0555 "$PLUGIN_ROOT/skills/agent-harness/buzz-agent-setup/scripts/buzz_acp_media_proxy.py" "$PROXY_DIR/$ADAPTER_NAME"
 ```
 
 每个 Agent 的 0600 env 把原 command 移到代理的显式下游配置；默认启用：
@@ -47,7 +47,7 @@ BUZZ_ACP_AGENT_COMMAND=<PROXY_DIR>/<与原 adapter 相同的 basename>
 L1：
 
 ```bash
-python3 -m unittest skills/buzz-agent-setup/tests/test_buzz_acp_media_proxy.py -v
+python3 -m unittest skills/agent-harness/buzz-agent-setup/tests/test_buzz_acp_media_proxy.py -v
 ```
 
 L3：重启后核对进程树包含同名 proxy 与真实 adapter；日志必须出现 adapter online，且不出现启动循环。用带 imeta 的合成 ACP prompt 验证代理追加 `type=image`、含 `data/mimeType`、不含 `uri`。

@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "tool": "apollo-permission",
+  "provider": "delegated",
+  "owner": "apollo-permission",
+  "authContract": "SKILL.md",
+  "verification": "source-verified",
+  "runtimeVerification": "pending"
+}

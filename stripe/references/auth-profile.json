@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "tool": "stripe",
+  "provider": "delegated",
+  "owner": "stripe",
+  "authContract": "references/saas-access.md",
+  "verification": "source-verified",
+  "runtimeVerification": "pending",
+  "authDiscovery": "references/auth-discovery.json"
+}

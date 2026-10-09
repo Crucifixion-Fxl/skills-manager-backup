@@ -124,4 +124,4 @@ Agent：直接编辑 issue 描述把这条痛点追加进去
 
 ## References
 
-- 企业 skill `gitlab-issue-sop`（本仓 `skills/gitlab-issue-sop`）— 进展评论 SOP、label/milestone 治理、API 速查
+- 企业 skill `gitlab-issue-sop`（本仓 `skills/collaboration/gitlab-issue-sop`）— 进展评论 SOP、label/milestone 治理、API 速查

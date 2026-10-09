@@ -32,8 +32,10 @@ from .operations import (
     Operation,
 )
 
-MAX_BYTES = 64 * 1024
-MAX_REQUEST_BYTES = 32 * 1024
+# A native definition is returned twice (raw body and PUT-ready body). Keep
+# responses bounded while allowing the server's 1 MiB request envelope.
+MAX_BYTES = 4 * 1024 * 1024
+MAX_REQUEST_BYTES = 1024 * 1024
 MAX_ATTACHMENT_BYTES = 16 * 1024 * 1024
 DEFAULT_TIMEOUT_SECONDS = 10.0
 DEFAULT_ATTACHMENT_TIMEOUT_SECONDS = 120.0
@@ -336,7 +338,7 @@ class AudienceClient:
                 raise SafeApiError("output_write_failed") from None
         finally:
             try:
-                os.unlink(os.path.join(self._config.attachment_dir, temporary))
+                os.unlink(temporary, dir_fd=dir_fd)
             except OSError:
                 pass
         return {
@@ -400,6 +402,7 @@ class AudienceClient:
         for identifier in (
             "idea_id",
             "research_id",
+            "form_id",
             "source_materialization_run_id",
             "operation",
         ):

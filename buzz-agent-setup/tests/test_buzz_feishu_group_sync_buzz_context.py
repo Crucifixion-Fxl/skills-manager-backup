@@ -134,6 +134,14 @@ class BuzzContextRouting(unittest.TestCase):
         out = self.route(event(eid(5), OUTSIDER_PK, "hello"), unmapped_senders="context", names={})
         self.assertEqual(out.text, f"{OUTSIDER_PK[:12]}（Buzz·非成员）：hello")
 
+    def test_workflow_author_uses_scheduled_task_label_without_nonmember_suffix(self):
+        ev = event(eid(27), OUTSIDER_PK, "提醒", tags=[("buzz:workflow", "true")])
+        out = self.route(ev, unmapped_senders="context", names={})
+        self.assertEqual(out.text, "定时任务（Buzz）：提醒")
+        self.assertNotIn("非成员", out.text)
+        named = self.route(ev, unmapped_senders="context", names={OUTSIDER_PK: "Mallory"})
+        self.assertEqual(named.text, out.text)
+
     def test_a_mention_of_the_channels_own_agent_still_wakes_it(self):
         """L1-FGS-614: 正文 @ 到频道自己的、当下有飞书 bot 的 agent：生成真的 `<at user_id=…>`（能唤醒），跟成员发言一致。"""
         ev = event(eid(6), OUTSIDER_PK, "@helper-agent 看下", tags=[("p", AGENT_PK)])
@@ -201,6 +209,14 @@ class BuzzContextCard(unittest.TestCase):
         self.assertNotIn("subtitle", card["header"])
         self.assertIn('"content": "Mallory（非成员） · #naturehood"', json.dumps(card["body"]["elements"][0], ensure_ascii=False))
         self.assertTrue(card["config"]["summary"]["content"].startswith("Mallory（非成员） · #naturehood："))
+
+    def test_workflow_card_uses_scheduled_task_label_without_nonmember_suffix(self):
+        ev = event(eid(28), OUTSIDER_PK, "提醒", tags=[("buzz:workflow", "true")])
+        out = self.route(ev, unmapped_senders="context", names={})
+        card = self.card(out)
+        self.assertEqual(out.text, "定时任务（Buzz）：提醒")
+        self.assertTrue(card["config"]["summary"]["content"].startswith("定时任务 · #naturehood："))
+        self.assertNotIn("非成员", out.card)
 
     def test_only_the_agent_mention_survives_in_the_card(self):
         """L1-FGS-619: 卡片里的 @ 行只留下频道自己的 agent（真的 <at id=…>，能唤醒）；@ 到人类成员的目标完全不出现在
@@ -305,17 +321,38 @@ class RoundBuzzUnmappedSenders(TmpCase):
                          (0, None, 2))
         self.assertFalse(FGS.needs_attention(report))
 
+    def test_context_author_uses_buzz_profile_name_even_when_not_a_channel_member(self):
+        """A nonmember's Buzz display name is read before the message is rendered."""
+        w = self.world()
+        env = self.start(w, buzz_unmapped_senders="context")
+        w.display[OUTSIDER_PK] = "Buzz Outsider"
+        w.events = [self.root(3, OUTSIDER_PK, "你好", created_at=T0 + 100)]
+        report = self.go(env, w)
+        self.assertEqual([s["text"] for s in self.sent(w)], ["Buzz Outsider（Buzz·非成员）：你好"])
+        self.assertEqual(report["to_feishu"], 1)
+        self.assertFalse(FGS.needs_attention(report))
+
+    def test_workflow_round_uses_scheduled_task_label_without_a_profile(self):
+        w = self.world()
+        env = self.start(w, buzz_unmapped_senders="context")
+        w.events = [self.root(4, OUTSIDER_PK, "提醒", created_at=T0 + 100,
+                              tags=[("buzz:workflow", "true")])]
+        report = self.go(env, w)
+        self.assertEqual([s["text"] for s in self.sent(w)], ["定时任务（Buzz）：提醒"])
+        self.assertEqual(report["to_feishu"], 1)
+        self.assertFalse(FGS.needs_attention(report))
+
 
 # ================================ docs ================================
 
 
 class BuzzContextDocs(unittest.TestCase):
     SKILL = base.TESTS.parent
-    REPO = SKILL.parent.parent
+    REPO = SKILL.parents[2]
     GROUP_DOC = (SKILL / "references" / "feishu-group-sync.md").read_text(encoding="utf-8")
     DOC = (SKILL / "references" / "feishu-routing-policy.md").read_text(encoding="utf-8")
     HEADING = "## 非成员/非 agent 的 Buzz 消息（仅上下文镜像）"
-    ADR = REPO / "docs" / "05-adr" / "0017-mirror-unmapped-buzz-authors-as-context-only.md"
+    ADR = REPO / "docs" / "agent-harness" / "adr" / "0017-mirror-unmapped-buzz-authors-as-context-only.md"
 
     def section(self):
         start = self.DOC.find(self.HEADING)
@@ -344,7 +381,7 @@ class BuzzContextDocs(unittest.TestCase):
 
     def test_the_adr_exists_is_indexed_and_records_the_decision(self):
         """L1-FGS-642: ADR-0017 存在，是 Accepted，写明决定、备选、与 ADR-0016 的关系。"""
-        self.assertTrue(self.ADR.exists(), msg="docs/05-adr/0017-... is missing")
+        self.assertTrue(self.ADR.exists(), msg="docs/agent-harness/adr/0017-... is missing")
         text = self.ADR.read_text(encoding="utf-8")
         self.assertRegex(text, r"(?m)^status: Accepted$")
         for term in ("PO", "ADR-0016", "buzz_unmapped_senders", "Option A", "Option B", "Option C", "唤醒",

@@ -1,23 +1,27 @@
 ---
 name: gitlab-issue-sop
-description: GitLab issue 管理 SOP — 遵循组织级 GitLab Label 治理规范，覆盖五状态工作流、issue 模板、指定 assignee（并按 feishu-channel-rules 飞书通知被指派人）、linked items、批量操作、board 配置、**创建前跨仓查重（dedupe）**，以及从 review 文档批量导入 issue + 修复后自动验证的闭环。**触发时机五类**：(A) AI/人工开发过程中遇到当前不能/不想立即解决的问题（副发现想暂缓、需要他人帮助、依赖外部系统、方案需决策、审计 gap）；(B) 非开发人员（PM/运营/客服/QA）的需求或反馈（feature request、bug 报告、运营请求、流程改进建议）；(C) 从 review/architect 文档批量导入问题 + 修复后自动读取文件验证是否真解决（触发词："导入 review 问题"、"批量创建 issue"、"这个问题修好了吗"、"验证修复"、"issue 进度"、"还有多少问题"、"sync issues"）；(D) 提 issue 前先做查重（触发词："提 issue 前查重"、"检查重复 issue"、"有没有类似 issue"、"合并还是新提"、"dedupe"）；(E) AI 对话中的需求变化（新增 scope、AC、约束、Skill gap 或 review 轮次），把已确认的需求变化追加回 canonical Issue。**关键：提 issue 必带 assignee**（漂浮 issue = 无主 issue）；**创建前必查重**（重复 issue 分散信息、增加 triage 成本）。也用于 issue board、批量改 label/优先级、关联 issue 和 MR、更新 issue 进展。GitLab CE 适配（不依赖 Premium 的 blocks/is_blocked_by）。
+description: GitLab issue 管理 SOP — AI create/update/close 必带当前 agent 环境、session ID、恢复检查点与回读回执；创建前查重、指定 assignee、标签治理、进展评论、看板和关联。AI 即将改该 Issue 时先写会话认领（harness、session id、恢复指针），该 Issue 分支的 push、MR 与 session 清理都回写 Issue。适用于开发发现、PM/运营/QA 反馈、review 文档导入、AI 对话中已确认的需求变化，也适用于从飞书群聊、文档 revision、会议纪要/妙记提取证据，创建或更新预研 Issue（含鉴权、自动查找会议、权限复查和完整来源链接）。GitLab CE 适配。
 ---
 
 # gitlab-issue-sop
 
-GitLab issue 管理的标准操作流程 (SOP)，覆盖**创建 / 状态 / 关联 / 进展 / 批量 / board** 全生命周期，并把 **issue 作为所有变更的统一入口**。
+GitLab issue 管理的标准操作流程 (SOP)，覆盖**创建 / 状态 / 关联 / 进展 / 批量 / board** 全生命周期，并把 **issue 作为项目变更的统一入口**。
 
 ## Description
 
 **为什么需要这个 SOP：** issue 是团队协作的 SSOT，如果 label 混乱、状态缺失、进展丢失在 Slack 里，跟踪就变成考古；本 skill 沉淀一套可批量执行、跨项目复用的 issue 管理方法。
 
-**变更入口规则：** 所有变更必须先创建 issue，再开始工作。这里的变更包括需求、bug、SOP、文档、配置和方案设计，不允许先做再补 issue。
+**变更入口规则：** GitLab 项目内的需求、bug、SOP、文档、配置和方案设计变更先创建或复用该项目的 issue，再开始工作，不允许先做再补 issue。**纯本机任务不属于项目 Issue**：本机 Agent 安装／升级、凭据与配置、service／timer、release pin、审计缺口及运行态验收，要在发起任务的同一 session 完成并回读；不得为未完成的本机步骤新建或借用项目 Issue。若本机任务暴露出需要改仓库代码的通用缺陷，可以交付代码 MR，但仍须在同一 session 把本机迁移与验收做完。
 
 **适用场景：** GitLab CE（社区版）。Premium 的 `blocks` / `is_blocked_by` linked item type 本 skill 不依赖，阻塞关系通过 `flag/blocked` + issue 描述里的依赖段表达。
 
 **Label 规则的唯一 SSOT：** [references/label-system.md](references/label-system.md)。Label
 名称、语义、基数、放置层级、缺失处理和安全更新都由本 Skill 维护；其他 Skill 只能引用，
 不得复制 taxonomy。
+
+**生命周期绑定 SSOT：** 需求、方案、测试、实现、MR、发布、事故和关闭统一遵循
+[Issue Lifecycle Binding Contract](references/lifecycle-binding.md)。其他 Skill 只引用该契约并声明
+自己的进入/退出证据，不复制整套规则。
 
 **不在范围：**
 - 写代码或执行 issue 跟踪的业务逻辑（那是 issue 的内容而不是管理）
@@ -26,7 +30,7 @@ GitLab issue 管理的标准操作流程 (SOP)，覆盖**创建 / 状态 / 关�
 
 ## 核心使用场景
 
-issue 是团队协作的 SSOT，触发场景分五类（A–E）。
+issue 是团队协作的 SSOT，触发场景分七类（A–G）。
 
 ### 场景 A：开发过程中的"问题外移"（最常见）
 
@@ -43,6 +47,8 @@ AI 辅助开发或人工开发过程中，遇到当前不能/不想立即解决�
 ### 场景 B：非开发人员的需求/反馈
 
 PM、运营、客服、设计、QA 等**任何角色**遇到需求或问题时都可以提 issue：
+
+Device Cloud Host 推广使用反馈另按 [上位机反馈规范](references/device-cloud-host-feedback.md) 保留用户原声、区分诊断判断、查重并决定由本人或开发代提；具体类别写正文，标签仍以组织级 SSOT 为准。
 
 | 场景 | 提交者 | issue 性质 |
 |------|--------|-----------|
@@ -76,6 +82,24 @@ PM、运营、客服、设计、QA 等**任何角色**遇到需求或问题时�
 当开发、设计或 review 已经绑定 canonical Issue，而用户在与 AI 的对话中确认了新的 scope、验收标准、约束、交付物或 Skill gap 时，这不是只存在于 session 里的补充信息，必须按下方 [AI 对话中的需求变化](#ai-对话中的需求变化) 追加 requirement revision comment。
 
 讨论中的候选想法、对既有 AC 的同义解释、未被确认的建议不构成需求变化，不应制造 revision 噪音。
+
+### 场景 F：从飞书群聊、文档和会议更新 Issue
+
+用户给出群、文档、妙记或会议线索时，先用 `feishu-issue-context-sync` 确认来源群、成员身份、权限和增量水位，再按 [飞书证据采集与写回](references/feishu-evidence-intake.md) 执行。先补齐目标 GitLab 项目/Issue、来源、时间窗和身份等关键输入；用批准的用户身份读取群消息、线程、完整文档与可读 revision，并**主动扫描关联的已结束会议、日历关联纪要和妙记**。按来源深链区分事实、讨论和待验证方案，查重后创建预研 Issue 或向现有 Issue 追加证据 comment。资源级无权时进入申请/提醒/限时复查流程，不把缺失内容写成会议结论。
+
+预研的产出是验证结果与取舍决策；未被接受的候选方案不自动成为 `type::feature`。需要按模块分栏的 Board 时，使用 [Label SSOT](references/label-system.md) 中经治理的一级 `module::*` 项目标签建列、二级 `submodule::*` 筛选；预研与开发 Issue 共用模块分类，详见 [Board Setup](references/board-setup.md)。会议或文档明确阶段目标时，按来源建立阶段 Milestone 并将当前阶段的预研 Issue 关联；模糊日期保留待确认，不能套用 APP 提审日。
+
+### 场景 G：SIG 的 Agent Harness 建设与推广
+
+SIG 的目标是完善并持续维护 Agent Harness，让 AI 能在 Business Loop 中执行、评估与反馈。
+专项正本为 owning Harness 仓库的 Issue，入口为每 SIG 一个 Issue Board；Marketing 的
+专属规则、素材与敏感上下文归 `addx-marketing`，其余能力归 `addx`。实现项目 Issue
+作为关联 Work Item 保留，不能把实现完成直接当作 Harness 的推广与验收完成。
+
+开始前读取 [SIG workflow](references/sig-workflow.md) 和 [Label SSOT](references/label-system.md)。
+支持表格迁移、目标仓查重、单选 SIG 与多选主题、Board 创建/范围验收、所有当前文档
+入口更新，以及在用户授权后向已核验 SIG 群发布。GitLab Free/CE 的 SIG 筛选必须保留在
+分享 URL 中；不得声称它是服务端持久的 Board scope。
 
 ### 指定 assignee 的原则
 
@@ -113,6 +137,8 @@ API 用法：创建/更新 issue 时传 `assignee_id`（数字）或 `assignee_i
 - 任何角色都可提 issue，不只是开发
 - 提 issue 必带 assignee（漂浮 issue = 无主 issue = 没人管）
 - AI session 结束后人类（或下一个 AI session）能接得住
+- AI 对已绑定 Issue 做第一次会改变仓库的动作之前，先追加本会话的认领 comment；看到别的会话 status=active 且人没有明确接手或继续，就停止
+- 该 Issue 分支的每次 push、MR 创建或更新、session 清理都追加进展 comment；未合并或未验收的工作不算完成
 - AI 对话中已确认的需求变化必须回写 canonical Issue，不能只留在 transcript、commit 或报告中
 
 ## Issue 类型
@@ -181,25 +207,30 @@ API 用法：创建/更新 issue 时传 `assignee_id`（数字）或 `assignee_i
 
 Bug 类 issue 不要求完整用户故事格式。
 
+### 4. 预研类 issue
+
+适用场景：可行性、选型、风险或一期范围尚未定，需要在限定范围内取得证据并形成决策。用 [预研模板](references/issue-template.md#预研-issue-模板) 记录原始问题、待验证假设、验证方式、决策人和退出条件；会议观点及供应商说法保留来源和不确定性。结论通过 comment 追加，后续获批的交付需求另建或链接 `type::feature` Issue。
+
 ### 类型选择原则
 
 - 如果 issue 的核心是在定义“要给谁提供什么能力”，按**需求类**处理，并默认使用 `$requirements-analysis-agent`；不得直接用 `$story-craftsman` 绕过 exact-hash PO Gate
 - 如果 issue 的核心是在修系统、改工程、降风险，按**技术优化类**处理
 - 如果 issue 的核心是在修错误行为，按**Bug 类**处理
+- 如果核心交付物是可验证的调研结论或方案取舍，而产品能力尚未确定，按**预研类**处理；不要为触发需求路由而贴 `type::feature`
 
 ## 标准执行顺序
 
 所有需求或变更默认按以下顺序推进：
 
 0. **创建 issue 前先查重**：跑 `scripts/issue_dedupe.py`，跨当前仓库、团队相关仓和集中 issue 项目池（默认覆盖 `SWCLIEN/g0-ios`、`SWCLIEN/g0-android`、`CLOUD/iot-service-old`、`CLOUD/iot-service-unified` 和 `issues/software` 下的软件 issue 项目）搜相似候选。详见下方 [创建前查重 (Dedupe)](#创建前查重-dedupe) 一节。若返回高分 open 候选，优先补充已有 issue 或建关联 issue；若返回 `insufficient data`（所有目标仓查询失败），先修复 CLI/权限再提，不要直接新建。
-1. 根据草稿事实识别 issue 类型（需求 / 技术优化 / bug），但不把猜测写成结论
+1. 根据草稿事实识别 issue 类型（需求 / 技术优化 / bug / 预研），但不把猜测写成结论
 2. 创建 issue
    - 需求类：创建 raw-intake Issue，保真记录本次 Requirements Attempt 的 canonical description/source 输入
-   - 技术优化 / bug：按对应轻量模板写清事实
-3. 需求类进入 Requirements Analysis；非 Buzz managed 流程可显式调用 `$requirements-analysis-agent`，Buzz managed 流程只能由已验真的 adapter route 转交；PO 未接受精确 Artifact hash 前不得进入方案或实现
-4. Coordinator 请求独立 PO 核验 exact Artifact ID/hash Gate evidence 后作 ACCEPT/REJECT；Gate 决策追加到不可变 ledger，不编辑原 comment 或 canonical description。GitLab 写入只在另行授权且对应运行契约允许时执行；Buzz managed 的 comment/readback 顺序见专用入口边界。任何业务来源变化必须创建新 Requirements Attempt 并重新 Gate
+   - 技术优化 / bug / 预研：按对应轻量模板写清事实或待验证问题
+3. 已分类为功能需求的 Issue 进入 Requirements Analysis；预研 Issue 保持调研追踪，直到有独立、已确认的功能需求。非 Buzz managed 流程可显式调用 `$requirements-analysis-agent`，Buzz managed 流程只能由已验真的 adapter route 转交；PO 未接受精确 Artifact hash 前不得进入方案或实现
+4. **仅功能需求**：Coordinator 请求独立 PO 核验 exact Artifact ID/hash Gate evidence 后作 ACCEPT/REJECT；Gate 决策追加到不可变 ledger，不编辑原 comment 或 canonical description。GitLab 写入只在当前请求已授权且对应运行契约允许时执行；Buzz managed 的 comment/readback 顺序见专用入口边界。任何业务来源变化必须创建新 Requirements Attempt 并重新 Gate
 5. 在 issue 内通过追加 comment 收敛依赖、决策和后续产物；AI 对话产生已确认的需求变化时，立即追加 requirement revision，历史证据不可覆盖
-6. 如需要，产出方案文档并提交 commit
+6. 如需要，产出方案文档并提交 commit；预研 Issue 可以在证据与决策完成后结束，不预设开发分支、MR 或部署。以下 7–11 只在该 Issue 确实进入交付实施时执行
 7. 在 issue comment 中回链方案文档，请人 review
 8. 人工完成方案批注和确认
 9. 从该 issue 执行 `Create branch`
@@ -229,7 +260,7 @@ EOF
 python3 <skill-dir>/scripts/issue_dedupe.py --title "<草稿标题>" --body-file .issue-dedupe/proposed.md --state all
 ```
 
-脚本只读，按 0-1 相似度给候选 + 一条 `Recommendation`（`merge/update existing` / `reopen/comment` / `new issue` / **`insufficient data`** 等）。任何 GitLab 写操作（创建 / 评论 / reopen / close / label / assign）**必须先询问用户确认**。
+脚本只读，按 0-1 相似度给候选 + 一条 `Recommendation`（`merge/update existing` / `reopen/comment` / `new issue` / **`insufficient data`** 等）。任何 GitLab 写操作（创建 / 评论 / reopen / close / label / assign）先核对当前会话的授权范围；已经获得明确或任务中包含的写授权时直接执行并回读，尚无授权时才询问用户。
 
 完整参数、输出表、扩展默认仓、词典维护、性能特性见 [`references/dedupe.md`](references/dedupe.md)。
 
@@ -254,7 +285,7 @@ Label 模型属于本 Skill。创建、更新或迁移任何 work item 前，完
 ## Milestone 使用规则
 
 Milestone 模型不属于本 skill。创建或更新 issue 前，先读组织级
-[GitLab Milestone 治理规范](../../docs/standards/gitlab-milestone-governance.md)。执行时使用以下最小规则：
+[GitLab Milestone 治理规范](../../../docs/collaboration/standards/gitlab-milestone-governance.md)。执行时使用以下最小规则：
 
 | 场景 | 规则 |
 |---|---|
@@ -262,8 +293,8 @@ Milestone 模型不属于本 skill。创建或更新 issue 前，先读组织级
 | `status::ready` 及以后的 issue | **必须有 milestone**。没有 = 排期缺口，应在巡检/汇报里单列 |
 | `status::triage` / `backlog` | 可以没有 milestone |
 | 单条 issue 的 `due_date` | 只在该 issue 比所属版本更早需要完成时才设。**两处都设会产生哪个为准的歧义** |
-| Milestone 名称 | **＝版本号本身**，并与冻结分支同名：`milestone KB2.25` ⇄ `release/KB2.25` ⇄ issue 挂 `KB2.25`。三者同名，自动化才能从任一端反查另两端 |
-| `due_date` | **必填**。缺了它，「这条需求发没发」的证据链整条断——发布判定的四条证据之一就是「所属 milestone 的提审日已过」 |
+| APP 发版 Milestone 名称 | **＝版本号本身**，并与冻结分支同名：`milestone KB2.25` ⇄ `release/KB2.25` ⇄ issue 挂 `KB2.25`。三者同名，自动化才能从任一端反查另两端 |
+| APP 发版 `due_date` | **必填**，表示提审日；缺了它会造成 APP 发布证据缺口。预研/硬件阶段 Milestone 则按可靠来源记录阶段目标日；原文仅有模糊时间时先不填精确日期，标注待确认 |
 
 **APP 版本的 `due_date` 是「提审日」，不是「上线日」，也不是「开发完成日」。**
 开发真正的 deadline 是 `due_date − 2 个工作日`（提测截止，代码必须已合入 staging），
@@ -322,7 +353,7 @@ stateDiagram-v2
 
 ### `type::feature` 额外加一段「必备物」
 
-**只对 `type::feature` 生效**，其它三类不要求：
+**只对 `type::feature` 生效**，其他类型不要求：
 
 ```markdown
 ## 必备物
@@ -384,6 +415,8 @@ accepted Requirements/派生 US 的最低要求：
 ### Buzz managed intake 边界
 
 Buzz live 路径不得由本地 session 直接调用 Requirements Analysis Agent 或自行声称路由成功。Issue 分类遵循 type-first：只有 live scoped label `type::feature`（或 adapter 明确支持的 legacy label）可成为 requirement；类型尚未确定时保持 `status::triage`，由 adapter 按 unclassified route 处理，不得猜测标签或手工激活 Agent。
+
+`type::research` 只表示预研追踪，不能冒充 `type::feature` 或 Requirements Agent 的 accepted route。将预研结论转成已确认的产品需求时，创建/关联独立的功能 Issue，并按其真实类型进入 Gate；不要靠改标签抹掉原预研证据。
 
 只有 adapter 对同一 live opened revision 完成读回并持有 `issue-intake:v3` accepted claim，且完整 route tuple 为 `routing_contract_version=issue-routing:v1`、`issue_type=requirement`、`issue_type_source=scoped-label|legacy-label`、`analysis_route=requirements`、`target_agent=Requirements Analysis Agent`、`target_agent_status=available`、`routing_noop_reason=not-applicable`，同时 capability pin 全部通过，才允许 managed handoff。本地/manual Skill 调用不能替代这些证据。
 
@@ -614,7 +647,7 @@ TDD / evaluator 规则时，每个 inner-loop round 必须创建一个且仅一�
 - **单主 issue**：放契约/规则的 **owner 仓**（谁定契约谁持有）；各仓**只开 MR 不开 issue**，MR description 必须回链主 issue（`Relates to #<主issue>`）。例外：某仓改造量大到需要独立指派/长期跟踪，才升级为该仓 **sub-issue** 并与主 issue 互链。
 - **时间对齐用发布窗口**：主 issue 正文记录**目标发布窗口（时间）**，不挂业务仓 milestone；优先用 **group milestone** 对齐各仓迭代节奏。
 - **版本对齐记三要素**：主 issue 的跨仓任务 checklist 每项记「仓 / MR / 该仓 milestone」三要素，从主 issue 可直接反查每个仓落在哪个版本。
-- 查重照常：跨仓需求建主 issue 前仍先跑 [创建前查重 (Dedupe)](#创建前查重-dedupe)。（#61 X-1 / G-3，详见 docs/architecture/skill-artifact-delivery-implementation.html §10）
+- 查重照常：跨仓需求建主 issue 前仍先跑 [创建前查重 (Dedupe)](#创建前查重-dedupe)。（#61 X-1 / G-3，详见 docs/development/architecture/skill-artifact-delivery-implementation.html §10）
 
 ## Review SLA 与升级机制
 
@@ -627,11 +660,39 @@ review 请求（方案 MR / 方案文档回链）发出后按工作日计时升�
 | > 7 个工作日 | 建议更换 reviewer（回链证据给 issue owner） | 需人工确认后执行 |
 
 - 升级动作一律**追加 comment 留痕**（时间点 + 已等待天数 + 下一步），不改原始描述。
-- AI 只自动执行 ping 级；周会升级与换 reviewer 必须先征得人（issue owner / tech lead）确认。（#61 G-5，详见 docs/architecture/skill-artifact-delivery-implementation.html §10）
+- AI 只自动执行 ping 级；周会升级与换 reviewer 必须先征得人（issue owner / tech lead）确认。（#61 G-5，详见 docs/development/architecture/skill-artifact-delivery-implementation.html §10）
+
+## AI 会话认领
+
+Assignee 是人，不能说明哪个 AI 会话正在做。对已绑定 Issue 做第一次会改变仓库的动作之前（改文件、push、开 MR，或把状态推向 in-progress），如果本会话还没有未被取代的 `status: active` 认领，先追加一条 comment。看到别的会话最新认领仍是 `status: active`，且人没有明确说接手或继续，就停止。
+
+认领是追加 comment，不改 description，也不改历史认领。同一会话只保留一条 active；之后的状态变化走进展 comment。换会话接手时新写一条，在新 note 里写 `supersedes: <上一条 note id>`，不改旧 note。读者以时间上最新的认领或清理状态为准。
+
+标题用 `AI 接手 (YYYY-MM-DD)`。字段：
+
+- agent：当前 agent 名
+- harness：运行时实际值，只允许 `grok`、`claude`、`codex`、`glm`、`other`；读不到就写 `other`，不编造
+- session id：运行时实际暴露的 id。Grok buzz-acp 读 `GROK_SESSION_ID`；其他 harness 只用它们真实暴露的 id，不编造环境变量名。没有则写 `unknown`
+- 恢复指针：有 Buzz 话题时写 channel UUID 和 thread root，否则写 worktree 路径。不写 token、密钥或账号
+- branch：已有则写分支名，否则写 `尚未创建`
+- intent：一句话
+- status: active
+
+用户级 memory 保存两条：这条常驻规则，以及当前认领指针（项目、Issue、harness、session id、status）。memory 不是锁，别人看得见的锁是 Issue comment。Claude 写用户全局规则或 type 为 user 的 auto memory，不写进单个仓库的项目记忆。Grok 写 global topic，不写 workspace topic。Codex 写用户级 memory，不写仓库任务组。
+
+该 Issue 分支的每次 push 都追加 branch、短 SHA、harness、session id，即使还没有 MR。已经有 MR 时，不另写一条空 note，按 [gitlab-mr issue-sync](../../delivery/gitlab-mr/reference/issue-sync.md) 刷新提交回执，并带上 harness 和 session id。MR 的创建、更新、合并和 session 收尾仍以那份流程为准，本 skill 不复制 marker。
+
+认领与进展还须包含 [统一环境与恢复字段](references/agent-session-context.md#统一字段)；此处是最小认领信息，不能代替 create/update/close 操作回执。
+
+session 清理追加一条进展 comment，把本会话标成 `status: released` 或 `status: paused`，并写清剩余项。这条比同一会话更早的 active 认领更新，不编辑旧 note。未合并或未验收的工作不算完成。如果清理会删 worktree，先写 comment。本地每次 commit 不加 comment。模板在 [progress-comments.md](references/progress-comments.md)。
 
 ## 进展评论 SOP
 
 **永远新增 comment，不要改原始描述。** 原始描述是 issue 的不可变事实（背景/范围/验收），进展走 comment 保留时间线。
+
+**AI 写操作必须携带当前会话与恢复信息。** 创建 Issue 时把创建者环境快照放入 description 的独立附录；update（含 comment、label、assignee、milestone、关联与 reopen）和 close 都追加带当前环境的操作回执。覆盖直接 API、glab、批量脚本和由 Agent 发起的自动化路径；复用已有进展/MR 回执，不重复发空评论。统一字段、认领、回读与断电恢复步骤以 [Agent 环境与中断恢复契约](references/agent-session-context.md) 为准。
+
+AI 开工前先认领；换 session 或环境时追加新记录。session 清理前回写完成项、候选 SHA、验证证据、未完成项与 owner；没有达到关闭条件就保留 Issue 打开。session ID 取实际运行时值，未知写 `unknown`，不能猜测；环境字段禁止包含凭据。
 
 ```markdown
 ## 进展更新 (YYYY-MM-DD)
@@ -726,6 +787,9 @@ Issue 是需求的 canonical source，AI session 不是。只要当前工作已�
 8. **方案提交后必须 comment 回链** — 方案 commit 和设计文档链接必须回到 issue，供人 review
 9. **开发分支必须从 issue `Create branch` 创建** — 不允许手工绕过，否则 commit 和 merge 关联会失真
 10. **AI 对话中的已确认需求变化必须追加回 canonical Issue** — 用 requirement revision comment 保留 delta，不覆盖原始 intake；无写授权时保留待写回草案并明确告知
+11. **AI 开工前先认领，push / MR / session 清理都回写 Issue** — 追加 comment，不改 description，也不改历史认领。别的会话 status=active 时停止，除非人明确接手或继续。用户级 memory 不能代替 Issue 上的锁
+
+12. **AI 的 create/update/close 必带当前环境和 session ID** — 按 [恢复契约](references/agent-session-context.md) 留存操作回执并回读；中断后先核对远端状态与回执，再决定是否重试
 
 ## Board 配置
 
@@ -790,8 +854,11 @@ Agent: 直接编辑 issue 描述把 "## 进展" 加进去
 
 ## References
 
+- [agent-session-context.md](references/agent-session-context.md) — AI create/update/close 的环境字段、操作回执、会话认领与断电恢复
+
+- [Issue Lifecycle Binding Contract](references/lifecycle-binding.md) — Root Issue、repo-local Work Item、MR 非关闭型关联、阶段回执与最终关闭条件
 - [Label Governance executable SSOT](references/label-system.md) — 本 Skill 维护的跨 Skill label 规则唯一来源
-- [GitLab Milestone 治理规范](../../docs/standards/gitlab-milestone-governance.md) — 版本语义、APP 发版日历、可自动化消费的风险判据
+- [GitLab Milestone 治理规范](../../../docs/collaboration/standards/gitlab-milestone-governance.md) — 版本语义、APP 发版日历、可自动化消费的风险判据
 - [status-workflow.md](references/status-workflow.md) — 状态流转规则 + 反模式
 - [issue-template.md](references/issue-template.md) — 标准 issue 模板 + 完整示例
 - [batch-operations.md](references/batch-operations.md) — glab 批量操作 + 陷阱规避
@@ -800,3 +867,4 @@ Agent: 直接编辑 issue 描述把 "## 进展" 加进去
 - [progress-comments.md](references/progress-comments.md) — 进展评论模板
 - [api-reference.md](references/api-reference.md) — GitLab API endpoint 速查
 - [review-doc-workflow.md](references/review-doc-workflow.md) — 场景 C：review 文档批量导入 + 修复验证闭环（5 子命令 import/verify/status/fix/sync）
+- [feishu-evidence-intake.md](references/feishu-evidence-intake.md) — 场景 F：群聊、文档历史、会议/妙记证据采集，权限申请与限时复查，预研 Issue 写回

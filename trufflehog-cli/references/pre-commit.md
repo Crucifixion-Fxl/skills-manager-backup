@@ -25,7 +25,7 @@ repos:
     hooks:
       - id: trufflehog-verified
         name: trufflehog verified scan
-        entry: ./skills/trufflehog-cli/scripts/pre-commit-trufflehog.sh
+        entry: ./skills/security/trufflehog-cli/scripts/pre-commit-trufflehog.sh
         language: system
         pass_filenames: false
 ```

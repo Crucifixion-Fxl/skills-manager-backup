@@ -39,6 +39,10 @@ description: 公司软件开发全貌指南 — 新人 / 跨部门同事 / AI ag
 
 ## Rules
 
+**大文件存储 / LFS / Nexus**属于问题 6 的仓库治理分支：
+读取 [gitlab-mr 的大文件与制品检查](../../delivery/gitlab-mr/reference/large-file-storage.md)，提交/更新 MR 时由 `gitlab-mr` 执行。
+规则保留在 skill，不写项目 memory；咨询无需启动整套研发流程。
+
 > 探索流程（路由型）— Agent 强制行为规范
 
 新人提任意问题，agent 走这个流程：

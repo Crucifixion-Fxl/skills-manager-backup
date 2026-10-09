@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "tool": "n8n",
+  "owner": "n8n",
+  "status": "source-reviewed-runtime-pending",
+  "contract": "saas-access.md",
+  "credentialEnv": "N8N_API_KEY",
+  "notes": "官方public API使用用户在 Settings → n8n API 创建的API key，header `X-N8N-API-KEY`，通过宿主注入`N8N_API_KEY`。Enterprise scope和SSO取决于实际edition；部署values只证明UI开启和editor URL，不证明Enterprise、SSO或API已启用，不能套用Casdoor。Key申请/权限和撤销由本人在Settings管理；非Enterprise key能力也需按版本核验，不宣称scope受限。",
+  "runtimeCallsPerformed": false
+}

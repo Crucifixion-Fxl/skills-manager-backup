@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "tool": "typeform",
+  "owner": "typeform",
+  "repo": "https://gitlab.addx.ai/engineering/skills",
+  "researchCommit": "bac8d3ee819650381b8a613a6e8526c153d7b244",
+  "routeEntries": [
+    "skills/user-research/survey-research-workflow/scripts/typeform_api.js",
+    "skills/user-research/survey-research-workflow/references/typeform-execution-contract.md",
+    "skills/audience-user-research/SKILL.md"
+  ],
+  "verification": "source-verified",
+  "deploymentConsistency": "pending",
+  "officialReferences": [
+    "https://www.typeform.com/developers/get-started/personal-access-token/",
+    "https://www.typeform.com/developers/get-started/hands-on/",
+    "https://www.typeform.com/developers/create/",
+    "https://www.typeform.com/developers/responses/",
+    "https://www.typeform.com/developers/webhooks/",
+    "https://www.typeform.com/developers/mcp/"
+  ],
+  "needsResearch": [
+    "Runtime identity, resource permissions and credential lifecycle",
+    "Actual service/installed MCP version, account region and source/runtime consistency"
+  ],
+  "apiDiscovery": {
+    "method": "direct优先官方MCP，当前canonical文档为https://api.typeform.com/mcp的Streamable HTTP+OAuth；旧pr_1748 beta PAT文档不作为现行MCP契约。MCP可包含发布、contacts、automation与response analytics副作用，先读当前tools/scopes与实际account_id。现有PAT REST执行器继续按官方Create/Responses/Webhooks路由；获权GET /me可核对direct subject，但读取已有form还须form/workspace归属。创建/发布/改删表单、测试提交、答卷删除及webhook/分发均保留研究业务独立gate，不为权限验证造新form。",
+    "coverage": "Source and public entrypoints located; runtime pending"
+  }
+}

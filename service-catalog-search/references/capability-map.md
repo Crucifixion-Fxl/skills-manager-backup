@@ -1,7 +1,7 @@
 # 能力映射 —— 自然语言 / 关键词 → `API` 名 / `metadata.tags`
 
 > 这是 `find-capability` 把「我要做 X」映射到目录里 `API` 实体（=「能力」）的本地知识。
-> **SSOT 是全局 `engineering/skills` 的 `docs/architecture/domain-model.md`（能力清单）和 `docs/architecture/backend-service-architecture.md`（5 层 / 调用规则）** —— 这里是它的「自然语言 → 规范名」索引，二者要对齐。
+> **SSOT 是全局 `engineering/skills` 的 `docs/quality/architecture/domain-model.md`（能力清单）和 `docs/development/architecture/backend-service-architecture.md`（5 层 / 调用规则）** —— 这里是它的「自然语言 → 规范名」索引，二者要对齐。
 
 查不到时：① 看这表确认关键词 ② `catalog-query.sh list-capabilities` 浏览目录里实际有哪些 `API` ③ 翻全局 domain-model。
 

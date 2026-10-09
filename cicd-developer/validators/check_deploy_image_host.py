@@ -15,8 +15,8 @@ live fleet newNames contain a variable).
 
 NOT implemented here (deliberately): the broader "CI push Harbor == deploy pull Harbor"
 cross-check that resolves each build job's runner tag through clusters.yaml. The fleet's
-split-horizon Harbor DNS aliases (e.g. registry-harbor-cn == harbor-58989-cn-tech --
-same physical registry, different DNS) and legacy / utility runner tags (kubernetes-sg,
+historical split-horizon Harbor DNS aliases (including retired AWS CN aliases;
+never infer an alias for current Tencent targets) and legacy / utility runner tags (kubernetes-sg,
 sonar-scanner-sg, runner-sg-nat, ...) are not yet modelled; a naive tag->harbor gate
 hard-fails dozens of currently-deployed repos. That cross-check stays human review until
 the Harbor-alias + runner-tag model is curated (see hard-rules #25). The

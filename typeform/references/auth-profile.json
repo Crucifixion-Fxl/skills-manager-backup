@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "tool": "typeform",
+  "owner": "typeform",
+  "provider": "delegated",
+  "origin": "https://api.typeform.com",
+  "authContract": "saas-access.md",
+  "verification": "source-verified",
+  "runtimeVerification": "pending",
+  "deploymentVersion": "unknown"
+}

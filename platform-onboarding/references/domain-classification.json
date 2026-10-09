@@ -1,0 +1,8 @@
+{
+  "sourceDomains": [
+    "gitlab.addx.ai",
+    "github.com",
+    "gitlab.com"
+  ],
+  "scope": "Source repository host classification only; never an authentication allowlist or network target"
+}

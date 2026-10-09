@@ -1,0 +1,57 @@
+{
+  "sent_as_agent_card": true,
+  "hostd-test-desk": {
+    "ok": true,
+    "msg_type": "interactive",
+    "sender_app_match": true,
+    "event_id_recoverable": false,
+    "body_len": 216
+  },
+  "hostd-test-a": {
+    "ok": true,
+    "msg_type": "interactive",
+    "sender_app_match": true,
+    "event_id_recoverable": false,
+    "body_len": 216
+  },
+  "text_readback_keys": [
+    "body",
+    "chat_id",
+    "create_time",
+    "deleted",
+    "message_id",
+    "message_position",
+    "msg_type",
+    "sender",
+    "update_time",
+    "updated"
+  ],
+  "text_has_uuid_field": false,
+  "found_by_scanning_recent_history": false,
+  "P0-15b_variants": {
+    "card_v1_note_link": {
+      "sent": true,
+      "readback_by_other_bot": true,
+      "event_id_recoverable": true,
+      "upgrade_placeholder": false
+    },
+    "card_v1_action_url": {
+      "sent": true,
+      "readback_by_other_bot": true,
+      "event_id_recoverable": false,
+      "upgrade_placeholder": false
+    },
+    "card_v2_button_url": {
+      "sent": true,
+      "readback_by_other_bot": true,
+      "event_id_recoverable": false,
+      "upgrade_placeholder": true
+    },
+    "post_link": {
+      "sent": true,
+      "readback_by_other_bot": true,
+      "event_id_recoverable": true,
+      "upgrade_placeholder": false
+    }
+  }
+}

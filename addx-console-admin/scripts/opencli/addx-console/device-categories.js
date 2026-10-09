@@ -1,0 +1,4 @@
+import {cli,Strategy} from '@jackwener/opencli/registry';
+import {identity,request} from './native.mjs';
+import {boundedPage,pageRows,projectRecord} from './expansion-records.mjs';
+cli({site:'addx-console',name:"device-categories",access:'read',description:'Read a bounded page; selected public specification fields only',strategy:Strategy.LOCAL,browser:false,args:[{name:'page',type:'int',default:1,help:'Positive page number'},{name:'limit',type:'int',default:10,help:'Page size, 1 to 20'}],columns:["id", "name", "code", "components", "releaseStatus", "updatedAt", "total"],func:async(args)=>{const body=boundedPage(args);await identity();const data=await request("/device/category/list",'POST',body);return pageRows(data,body.pageSize,"device-categories").map(x=>({...projectRecord(x,{"name": "categoryName", "code": "categoryCode", "components": "componentName", "releaseStatus": "releaseStatusStr", "updatedAt": "lastModifyTime"}),total:data.total}));}});

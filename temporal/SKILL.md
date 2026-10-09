@@ -9,6 +9,8 @@ description: 通过 Temporal CLI 管理定时任务（CronSchedule）。当用�
 
 ## Description
 
+首次接入/变更扫描与日常认证入口见 [SaaS 接入](references/saas-access.md)；已有平台业务契约与授权门禁仍在本 Skill 维护。
+
 适用场景：创建定时巡检、定时报告、管理已有定时任务（查询/暂停/恢复/删除）。
 
 | 变量 | 说明 | 必需 |

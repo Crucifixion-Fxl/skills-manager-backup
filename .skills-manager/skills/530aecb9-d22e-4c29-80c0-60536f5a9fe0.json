@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "530aecb9-d22e-4c29-80c0-60536f5a9fe0",
+  "path": "collect-sdk-integration",
+  "path_key": "collect-sdk-integration",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/data/collect-sdk-integration",
+    "branch": null
+  }
+}

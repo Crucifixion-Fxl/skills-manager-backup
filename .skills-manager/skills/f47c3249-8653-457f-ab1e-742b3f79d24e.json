@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "f47c3249-8653-457f-ab1e-742b3f79d24e",
+  "path": "requirements-analysis-agent",
+  "path_key": "requirements-analysis-agent",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/development/requirements-analysis-agent",
+    "branch": null
+  }
+}

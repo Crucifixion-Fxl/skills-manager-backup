@@ -185,7 +185,7 @@
 - 新 ADR 是否是 `.md`、front matter 和标准模板章节是否齐全，并已同步 `adrs/README.md`；历史提升 ADR 和索引漂移的 MR 严重级别按 `code-review` 判定。
 - HTML 架构页是否只摘要并链接 ADR，没有复制决策正文。
 - 既有 HTML ADR 是否保留路径和历史；没有无批准批量迁移，也没有新增 HTML ADR。
-- 运行 `git diff --check`；如果是 skill 变更，运行 `python3 scripts/validate.py --skill skills/architect`。
+- 运行 `git diff --check`；如果是 skill 变更，运行 `python3 scripts/validate.py --skill skills/development/architect`。
 
 ## 10. 示例对比
 

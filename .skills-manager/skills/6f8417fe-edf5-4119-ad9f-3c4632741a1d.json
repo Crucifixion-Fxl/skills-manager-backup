@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "skill_id": "6f8417fe-edf5-4119-ad9f-3c4632741a1d",
+  "path": "buzz",
+  "path_key": "buzz",
+  "enabled": true,
+  "tags": [
+    "addx"
+  ],
+  "source": {
+    "type": "git",
+    "ref": "https://gitlab.addx.ai/engineering/skills",
+    "subpath": "skills/collaboration/buzz",
+    "branch": null
+  }
+}

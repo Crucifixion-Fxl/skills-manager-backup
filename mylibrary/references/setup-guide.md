@@ -93,25 +93,14 @@ git branch -M main && git push -u origin main      # 推 main → CI 发 Pages
 库的「AI 友好」靠**两个给 AI 用的 Markdown**：① `build.py` 自动派生的 `md/` 镜像——AI **读你的知识内容**；② 仓库根的 `AGENTS.md`——AI **在你库里干活时遵守的规则**（怎么写、什么不能改）。`md/` 自动来；`AGENTS.md` 要你建（**别照抄样板库的项目专属规则**，它含 GS001 治理）。在仓库根放下面这份骨架：
 
 ```markdown
-# AGENTS.md — <你的库> agent 指南
-
-本仓是「类 library」知识库：HTML 单源，`build.py` 自动派生 `md/` 镜像 + `index.html`。
-
-## 铁律
-- **只改源 HTML**；`md/` 与 `index.html` 是机器派生区，**永不手改**（改了下次 build 覆盖、CI 判不同步）。
-- 提交即构建：已装 pre-commit 钩子，`git commit` 自动重建派生区；也可手跑 `python3 templates/build.py`。
-- 事实以源码/实测为准，设计文档只当线索；拿不准标「存疑」别臆测。
-
-## 文档怎么写
-- 一篇一主题：正文按主题/方案/测试方法组织 + 一个 `# 附录`；进度/MR/证据/出处/版本进附录并被正文超链引用。
-- 命名：文档名 4~8 字；同级标题风格统一、≤4 字为佳；版本号/专有名词放正文不进名/标题。
-- 新建文档复制 `templates/knowledge.html`，按其 head 注释填；复制后改 css/js 相对路径、面包屑、替换占位与示例链接。
-- 互链用相对路径、保持双向（A 引 B，则 B 的「相关文档」补 A）。
-- index 分类由 `build.py` 的 `INDEX_CATEGORY_RULES` 关键词决定，新主题去那里补关键词。
-
-## 重点文档保护（可选）
-- 把少数定稿权威文档列为「重点文档」，未明确点名不改、只修有证据的明显错误。清单按本库实际填。
+# 仓库约定
+- 只改源 HTML；`md/`、`index.html` 不手改，提交自动构建或运行 `python3 templates/build.py`。
+- 事实以源码/实测为准，未知标存疑；新文档复制 `templates/knowledge.html`，遵循 [写作约定](README.md#写作约定)。
+- 分类维护 `build.py` 的 `INDEX_CATEGORY_RULES`；互链用双向相对路径。
+- 重点文档按本库清单保护：未点名不改，仅修有证据的明显错误。
 ```
+
+遵循 [Memory 极简写入](../../../agent-harness/dev-infra/references/memory-writing.md)。初始化时将下列写作详情增量放入库内 `README.md` 的「写作约定」，已有同等约定则复用并调整上方链接：一篇一主题；正文按主题/方案/测试组织，进度/MR/证据/出处/版本放附录并从正文链接；文档名4–8字，同级标题统一且≤4字为佳，版本号/专有名词放正文；复制模板后调整 css/js 相对路径、面包屑、占位和示例链接。重点文档清单保留在库内权威文档并引用，不照抄样板库。
 
 再放一行 `CLAUDE.md`（让 Claude 与 Codex/Cursor 等读同一套规则）：
 

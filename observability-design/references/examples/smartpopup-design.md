@@ -170,7 +170,7 @@ Sentry 4 个错误事件（链路②）：
 - `priority::p0` / `priority::p1`
 - `status::ready`（设计完成可开工）
 
-实施阶段通过 issue checklist 跟踪，不使用 lifecycle label。完整规则见 [GitLab Label 治理规范](../../../../docs/standards/gitlab-label-governance.md)。
+实施阶段通过 issue checklist 跟踪，不使用 lifecycle label。完整规则见 [GitLab Label 治理规范](../../../../../docs/collaboration/standards/gitlab-label-governance.md)。
 
 产出：8 个 GitLab issue iid + URL 列表，回填到设计文档和 launch-checklist §5。
 

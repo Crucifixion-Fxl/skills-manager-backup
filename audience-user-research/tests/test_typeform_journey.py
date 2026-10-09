@@ -192,7 +192,7 @@ class ResearchTransportTests(unittest.TestCase):
     def test_all_fifteen_fixed_operations_are_packaged(self):
         specs = generate_operation_specs()
         research = {name for name in specs if name.startswith("personal_research_")}
-        self.assertEqual(len(research), 18)
+        self.assertEqual(len(research), 21)
         self.assertIn("personal_research_query_capabilities", research)
         self.assertIn("personal_research_prepare_selection", research)
         self.assertIn("personal_research_journey_form_publish", research)
