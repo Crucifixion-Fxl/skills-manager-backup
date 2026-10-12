@@ -1,6 +1,6 @@
 ---
 name: qatools
-description: Use when QA or developers need to create internal test accounts, create or manage test VIP or subscription state, replay payment lifecycle events, adjust test VIP expiry, or exercise Free License test scenarios.
+description: Use when QA or developers need to create internal test accounts, create or manage test VIP or subscription state, replay payment lifecycle events, adjust test VIP expiry, exercise Free License test scenarios, or create/mark/mint a login token for a user-center (Golf/neopace) test account.
 ---
 
 # qatools
@@ -21,6 +21,7 @@ required for that operation.
 | `mock-vip-lifecycle` | Replay `create/renew/switch/cancel/expire/refund` without real payment |
 | `set-vip-endtime` | Move one known VIP record to an exact expiry time |
 | `free-license-lifecycle` | Query, create, refresh, revoke, reset, and clean up controlled `1002/1005/1006` scenarios |
+| `uc-test-account` | Create, list, mark, or mint a login token for a user-center (Golf/`neopace`) test account |
 
 Operations 1–5 are staging-only unless an authorized qa-tools contributor
 explicitly requests the local override. Free License is a separate operation
@@ -51,6 +52,10 @@ Read the linked reference completely when its condition applies:
 - For `free-license-lifecycle`, read
   [free-license.md](references/free-license.md). It defines environment isolation,
   readiness, fixture rules, mutation ownership, the status Oracle, and cleanup.
+- For `uc-test-account`, read
+  [uc-test-account.md](references/uc-test-account.md). It defines the
+  user-center (Golf/`neopace`) register/mark/list/mint-token endpoints, the
+  `internal=true` precondition for minting a token, and tenant scope rules.
 - Read [api-reference.md](references/api-reference.md) only when exact endpoint
   fields, response envelopes, error codes, or local iot-service debugging facts
   are needed.
@@ -68,10 +73,13 @@ instead of the referenced source.
 | Replay a lifecycle event | `mock-vip-lifecycle` |
 | Set one existing VIP to an exact time | `set-vip-endtime` |
 | Exercise Free License or `1002/1005/1006` | `free-license-lifecycle` |
+| Golf app / user-center / `neopace` test account | `uc-test-account` |
 
 Do not run `register-and-vip` for an existing `userId`; that creates another
 account. Do not translate Free License requests into product, Stripe, or ordinary
-VIP operations.
+VIP operations. Do not route a Golf/user-center request into Operations 1–3;
+the UC and iot-service `userId` spaces are not interchangeable (see
+[uc-test-account.md](references/uc-test-account.md)).
 
 ## Shared execution contract
 
