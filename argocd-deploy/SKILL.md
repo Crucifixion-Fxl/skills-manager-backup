@@ -301,11 +301,11 @@ git -C ~/Project/A4x/argocd-apps ls-tree -d --name-only origin/main \
 | GKE | GCP | vault-us-new.addx.live | 外部/专用网络路径 | `harbor-a4xt-us-tech.addx.live` / `harbor-a4xp-us-prod.addx.live` |
 | CN prod TKE / 100014919455 | N/A | vault-cn.addx.live | vault-cn-internal.addx.live | `harbor-cn.addx.live` |
 | CN staging TKE / 100052802231 | N/A | 以本集群配置为准 | `http://vault-active.vault.svc:8200` | `harbor-02231-cn-staging.addx.live`（内网） |
-| CN tech-service TKE / 100052802231 | N/A | vault-cn.addx.live（Ops） | ESO Git 声明使用外部地址 | `harbor-02231-cn-tech-service.addx.live`（内网目标，待切换） |
+| CN tech-service TKE / 100052802231 | N/A | vault-cn.addx.live（Ops） | ESO 已核验使用外部地址 | `harbor-02231-cn-tech-service.addx.live`（2026-10-19 已核验内网入口） |
 
 CN 最新环境全部在腾讯云，账号、目录、ArgoCD 入口及证据见 [CN 腾讯云环境事实与核验入口](../../infrastructure/k8s-ops/references/cn-tencent-inventory.md)。AWS CN 已弃用，不能复制旧 AWS CN 目录或按 `arn:aws-cn:` 配置新目标。
 
-CN tech-service 的目标域名均为 `pending-cutover`，执行前按上述清单核验 live 入口，不能把技能更新当作 DNS/Ingress/认证已部署。Builder 目标入口为 `https://vault-cn.builder.addx.live`，新 TKE 的部署与认证待核验；它不替换当前 Ops `vault-backend` 的 `vault-cn.addx.live`。
+CN tech-service 平台入口已于 2026-10-19 核验，目录为 allowed / verified，证据和逐能力限制见 [准入回执](../cicd-developer/references/cn-tech-service-admission-2026-10-19.md)。执行前仍核对当前集群身份、入口及具体应用权限。Builder 入口 `https://vault-cn.builder.addx.live` 的 health 检查通过且目标集群有对应 Ingress，登录/回调、Store、身份及消费权限仍须独立核验；它不替换 Ops `vault-backend` 的 `vault-cn.addx.live`。
 
 > **Builder / Ops 域分离：** dev / staging / sandbox 的凭据必须与生产域隔离。US/EU staging 继续按其 Builder Vault 配置核验；CN 新 staging 当前使用本集群 `vault-active.vault.svc:8200`，Store 名为 `vault-backend`，不可套旧 CN EKS 的 `vault-builder-backend` 或旧 VPC peering 规则。Store 名称不证明权限域，核对 server、auth、role/policy 后才能操作。禁止在生产 Vault 为 Builder 集群授予 `secret/data/*` 的全量读。
 
@@ -544,7 +544,7 @@ kubectl --context <KUBE_CONTEXT> get providers.pkg.crossplane.io
 
 从 `argocd-apps origin/main` 的当前目标集群目录检查 `crossplane-post-install.yaml` 及其 source；历史目录不计作当前 fleet。是否需要具体 provider 资源以实际 source 内容为准，不再用“仅 AWS 才创建 Application”推断。
 
-**当前 CN TKE：** operator/provider 镜像及 pull secret 按本集群 Harbor values / post-install 声明核验；新 staging 默认使用内网 `harbor-02231-cn-staging.addx.live`。新 tech-service 的内网目标是 `harbor-02231-cn-tech-service.addx.live`，外部/SG 同步目标是 `harbor-02231-cn-tech-service-pub.addx.live`，均为 `pending-cutover`，核实切换后才能使用，不能照抄旧 AWS CN provider 镜像。
+**当前 CN TKE：** operator/provider 镜像及 pull secret 按本集群 Harbor values / post-install 声明核验；新 staging 默认使用内网 `harbor-02231-cn-staging.addx.live`。tech-service 的内网入口 `harbor-02231-cn-tech-service.addx.live` 和外部/SG 入口 `harbor-02231-cn-tech-service-pub.addx.live` 已核验；具体 provider 镜像、分发与精确 hostname 凭据仍逐项验收，不能照抄旧 AWS CN provider 镜像。
 staging 的受限公网入口为 `harbor-02231-cn-staging-pub.addx.live`，用于获准的外部访问；
 采用内网镜像前核验精确域名的 pull-secret auth key，以及 token realm 的 VPC 内解析。
 两入口与兼容项规则见 [Harbor 实例与访问说明](../harbor/SKILL.md)。

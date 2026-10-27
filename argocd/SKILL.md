@@ -36,12 +36,15 @@ Argo CD GitOps 持续部署平台，管理 Kubernetes 应用的声明式部署�
 | eu-staging | `aws-390709477306-eu-staging/` | `https://argocd-eu-staging.addx.live` | `arn:aws:eks:eu-central-1:390709477306:cluster/eu-eks-staging` |
 | cn-main（prod，TKE） | `tencent-100014919455-cn-main/` | `https://argocd-cn-k8s.addx.live` | `tke-cn-k8s` |
 | cn-staging (TKE) | `tencent-100052802231-cn-staging/` | `https://argocd-cn-staging.addx.live` | 本机核验后设 `CN_STAGING_CONTEXT` |
-| cn-tech-service (TKE) | `tencent-100052802231-cn-tech-service/` | `https://argocd-cn-tech-service-tke.addx.live`（目标，待切换） | 本机核验后设 `CN_TECH_CONTEXT` |
+| cn-tech-service (TKE) | `tencent-100052802231-cn-tech-service/` | `https://argocd-cn-tech-service-tke.addx.live` / `https://argocd-cn-tech-service.addx.live`（同一实例双入口） | 本机核验后设 `CN_TECH_CONTEXT` |
 
-CN tech-service 的新 ArgoCD 地址与 Casdoor `https://casdoor-cn-tech-service-tke.addx.live`
-均为 `pending-cutover`。登录/API 调用前，按 [目标与旧 Git 声明映射](../../infrastructure/k8s-ops/references/cn-tencent-inventory.md#cn-tech-service-目标域名待切换)
-核验 live 目标集群、Ingress/DNS/TLS、ArgoCD URL、Casdoor OIDC issuer 与回调；未完成就暂停，
-不自动尝试旧地址或 AWS CN。此处 Casdoor issuer 不替代 Vault 的 Kubernetes JWT issuer。
+用户于 2026-10-19 确认：上述两个 CN tech-service 域名指向同一个 ArgoCD，均属于
+`cn-tke-tech-service`（`100052802231 / ap-beijing / cls-o0gwzdpz`）；旧
+`cn-eks-tech-service` 已下线。域名是否带 `-tke` 不区分新旧集群，不代表仍有两个实例或待切换。
+当前配置的 primary URL 为带 `-tke` 域名，无 `-tke` 域名为 additionalUrls；这是同一实例的
+入口配置差异。实际 Casdoor issuer 为 `https://casdoor-cn-tech-service.addx.live`，不能按
+ArgoCD 域名后缀推算。执行前按 [已核验入口与边界](../../infrastructure/k8s-ops/references/cn-tencent-inventory.md#cn-tech-service-入口已核验2026-10-19)
+核对 live 集群身份、入口和 OIDC 配置；Casdoor issuer 不替代 Vault 的 Kubernetes JWT issuer。
 
 CN 的 context 名称是本地别名；核验账号、集群 ID 和 API server 后使用。不得把旧 `cn-eks-*`、AWS ARN 或同名旧 context 作为回退。
 

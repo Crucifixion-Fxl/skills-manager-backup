@@ -9,6 +9,8 @@ description: Use when designing a new feature or system, making architecture dec
 
 架构师 Skill — 通过苏格拉底式追问驱动设计决策，产出完整的技术文档体系。
 
+**持久写入前的机读检查**：先完整读取 `gitlab-issue-sop/references/lifecycle-binding.md`，再用该 Skill 的 `scripts/check_artifact_binding.py --issue <URL> --repository <namespace/project>` 实时 GET 核验关联 Issue 的 open/assignee（Issue 可跨项目；不能把 helper 失败当通过）。失败先停止依赖该绑定的设计文件写入；后补 Issue 不追溯消除先写后建的偏差。该只读检查不授予写入或发布权限，返回成功后仍遵守既有 Gate；分发包没有 helper 时按同一 reference 做实时 API 核验并保留等价 receipt，不把缺脚本当通过。
+
 架构师的产物就是文档体系。写统一 HTML 文档站的过程就是在做系统分解，写 `domain-model.html` 的过程就是在统一领域语言，写 Markdown ADR 的过程就是在固化决策推理。文档不是设计的副产品，文档就是设计本身。
 
 ## 核心原则
@@ -22,7 +24,7 @@ description: Use when designing a new feature or system, making architecture dec
 7. **方案先行**：文档可以描述目标态（设计超前于代码是正常节奏）；但代码已实现的功能必须有对应文档
 8. **代码一级目录留 CLAUDE.md + AGENTS.md 软链**：仓里只两层 CLAUDE.md——**仓根** + **代码一级子目录**（`server/` / `admin/` / `moments/` / `app/` 等，1 个目录 = 1 个 System）。每次架构变更（拆 System、本目录 skill 选型变更、新增 hard boundary、关键 ADR 推翻）同步更新，**不允许漂移**。详细规约 + 模板 + 反模式（不在 docs/ 树写 / 不在 Component 级写 / 极薄 ≤20 行 / 只两节）见 [§ 代码一级目录 CLAUDE.md 模板](#代码一级目录-claudemd-模板)。
 9. **需求驱动设计必须有 accepted Requirements**：对新功能、需求变更或 bug-derived requirement，进入架构 Step 2 前必须读取由 `requirements-analysis-agent` 生成、PO 对精确 `artifact_id + artifact_hash` ACCEPT 的 REQUIREMENTS Artifact。缺失、hash 不匹配、`ATTEMPT_NEEDS_INPUT` 或 Gate pending/rejected 时停止；architect 不得自行补写需求并绕过门禁。豁免只限**只读现状解释或通用技术教育**，且不得形成项目特定目标态、ADR、实现计划或任何持久化设计产物，也不得写入项目 docs/；项目特定设计即使被称为“咨询”也必须经过 Gate。
-10. **设计必须绑定 Issue**：项目特定目标态、ADR、实现计划或持久化设计产物开始前，按 [`gitlab-issue-sop` 生命周期契约](../../collaboration/gitlab-issue-sop/references/lifecycle-binding.md) 实时验证 Root Issue 与当前仓 Work Item；缺失、关闭、无 assignee 或仓库/关系不匹配时停止。设计 accepted 后把固定版本链接、digest、reviewer、未决项与 next gate 幂等写回 Work Item 并回读。
+10. **设计必须绑定 Issue**：项目特定目标态、ADR、实现计划或持久化设计产物开始前，按 [`gitlab-issue-sop` 生命周期契约](../../collaboration/gitlab-issue-sop/references/lifecycle-binding.md) 实时验证关联 Issue（可跨项目）；缺失、关闭或无 assignee 时停止。设计 accepted 后把固定版本链接、digest、reviewer、未决项与 next gate 幂等写回关联 Issue 并回读。
 
 ---
 

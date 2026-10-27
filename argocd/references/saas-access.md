@@ -10,7 +10,7 @@ ARGOCD_SERVER + ARGOCD_AUTH_TOKEN or selected official argocd context; Bearer.
 
 ## 缺凭据与登录恢复
 
-Target UI uses LOG IN VIA CASDOOR, Feishu login; argocd login --sso only after server/callback verification. CN tech-service target is pending-cutover; do not try legacy or AWS CN.
+Target UI uses LOG IN VIA CASDOOR, Feishu login; argocd login --sso only after server/callback verification. CN tech-service endpoints argocd-cn-tech-service-tke.addx.live (primary) and argocd-cn-tech-service.addx.live (additionalUrls) belong to the same verified TKE instance (2026-10-19); see ../cicd-developer/references/cn-tech-service-admission-2026-10-19.md relative to the owner skill. Endpoint probes do not verify interactive SSO or resource permissions; check the selected subject and target resource separately. Do not fall back to legacy or AWS CN.
 
 人工网页登录使用 [web-access](../../../agent-harness/web-access/SKILL.md)。网页 Session、平台 Token、CLI credential 是不同能力；不因为某个入口已登录就宣称另外两种可用。创建/撤销凭据必须另有明确授权。
 

@@ -23,6 +23,8 @@ description: customer-care 项目差评拦截能力的 data-driven 四步闭环�
 
 本 skill 不重新实现 API——每一步都委托现成的原子 skill（`datahub-schema-search` / `superset` / `marketing-cms` / `growthbook` / `gitlab-mr` / `tracking-lifecycle`）。它的价值在于**把 4 步用数据工件串起来，并在每一步拦住常见 shortcut**（跳过频次、越过 scene 定义、无视上轮教训等）。
 
+**承接出口**：用户 dismiss 拦截弹窗后，由**消息中心**接力持续可见（红点 / 黄条 / 待解决列表），其架构与配置链是独立 skill [`development/message-center`](../../development/message-center/SKILL.md) 的领域；Step ③ 配规则涉及 `message_center` 字段族时先读它。
+
 ---
 
 ## 被调用时先做什么

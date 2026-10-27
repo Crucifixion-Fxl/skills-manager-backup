@@ -17,7 +17,7 @@ CLUSTER_ARGOCD = {
     "eu-prod":              "argocd-eu.addx.live",
     "us-tech-service":      "argocd-us-tech-service.addx.live",
     "eu-tech-service":      "argocd-eu-tech-service.addx.live",
-    "tencent-100052802231-cn-tech-service": None,  # Domain cutover is pending
+    "tencent-100052802231-cn-tech-service": "argocd-cn-tech-service-tke.addx.live",
     "us-data":              "argocd-us-data.addx.live",
     "eu-data":              "argocd-eu-data.addx.live",
     "cn-main":              "argocd-cn-k8s.addx.live",
@@ -30,9 +30,7 @@ CLUSTER_ARGOCD = {
 }
 
 # Planned hostnames are display-only until their deployment is verified.
-PENDING_CLUSTER_ARGOCD = {
-    "tencent-100052802231-cn-tech-service": "argocd-cn-tech-service-tke.addx.live",
-}
+PENDING_CLUSTER_ARGOCD = {}
 
 # Only verified current Tencent directory names are aliases. Retired AWS CN
 # names remain separate historical records and never redirect to a new cluster.

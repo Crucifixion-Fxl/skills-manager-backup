@@ -10,7 +10,7 @@
   },
   "auth": {
     "nativeCredentialPath": "ARGOCD_SERVER + ARGOCD_AUTH_TOKEN or selected official argocd context; Bearer.",
-    "missingCredentialWorkflow": "Target UI uses LOG IN VIA CASDOOR, Feishu login; argocd login --sso only after server/callback verification. CN tech-service target is pending-cutover; do not try legacy or AWS CN.",
+    "missingCredentialWorkflow": "Target UI uses LOG IN VIA CASDOOR, Feishu login; argocd login --sso only after server/callback verification. CN tech-service endpoints argocd-cn-tech-service-tke.addx.live (primary) and argocd-cn-tech-service.addx.live (additionalUrls) belong to the same verified TKE instance (2026-10-19); see ../cicd-developer/references/cn-tech-service-admission-2026-10-19.md relative to the owner skill. Endpoint probes do not verify interactive SSO or resource permissions; check the selected subject and target resource separately. Do not fall back to legacy or AWS CN.",
     "subjectAndResourcePermissionVerification": "argocd account get-user-info and argocd account can-i get applications <project>/<app>; explicit cluster/server plus project/app RBAC.",
     "issuanceConsumptionRevocation": "Authorized local accounts with apiKey capability may use argocd account generate-token; delete token by ID via account delete-token. SSO session JWT is separate; never assume SSO subject may generate local API key.",
     "credentialHandling": "Private injection only; never print/store secrets in repository, command arguments, chat or receipts. Discovery itself performs no login/token creation."

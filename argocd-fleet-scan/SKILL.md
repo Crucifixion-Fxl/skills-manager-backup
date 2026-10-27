@@ -168,13 +168,13 @@ CN 已全部迁至腾讯云：prod=100014919455（cn-main），staging / tech-se
 | {us,eu}-tech-service | `argocd-{us,eu}-tech-service.addx.live` | 同上 |
 | {us,eu}-data | `argocd-{us,eu}-data.addx.live` | 同上 |
 | cn-main（prod，TKE） | `argocd-cn-k8s.addx.live` | 同上 |
-| tencent-100052802231-cn-tech-service | **目标，待切换**：`argocd-cn-tech-service-tke.addx.live` | 报告仅显示待切换目标；不生成 App/集群链接 |
+| tencent-100052802231-cn-tech-service | `argocd-cn-tech-service-tke.addx.live`（2026-10-19 已核验） | 同上；无 `-tke` 域名为同一实例的兼容入口 |
 | {us,eu}-staging | `argocd-{us,eu}-staging.addx.live` | 同上 |
 | tencent-100052802231-cn-staging | `argocd-cn-staging.addx.live` | 同上 |
 | sg-devops | `argocd-sg-devops.addx.live` | 同上 |
 | us-prod-gke / us-tech-service-gke | `argocd-us-prod-gke.addx.live` / `argocd-us-tech-service-gke.addx.live` | 同上 |
 
-可点击入口写在 `generate_report.py` 的 `CLUSTER_ARGOCD` 字典里。tech-service 入口暂为 `None`，`PENDING_CLUSTER_ARGOCD` 只供展示待切换目标，不用于连接或生成链接；扫描仍通过已核验的 K8s context，结果与统计正常保留。域名切换及访问验证完成后再更新映射和测试；旧声明与新目标见 [CN 域名切换清单](../k8s-ops/references/cn-tencent-inventory.md#cn-tech-service-目标域名待切换)。
+可点击入口写在 `generate_report.py` 的 `CLUSTER_ARGOCD` 字典里。精确腾讯 tech-service 目录已启用已核验的 primary URL，可生成 App/集群链接；两域名属于同一实例，不新增集群或重复统计。`PENDING_CLUSTER_ARGOCD` 目前为空，仅供未来尚未核验的入口展示，不能用于连接或生成链接。扫描仍通过已核验的 K8s context；报告链接不代表本轮扫描成功，unreachable 继续单独显示。证据见 [CN 入口与边界](../k8s-ops/references/cn-tencent-inventory.md#cn-tech-service-入口已核验2026-10-19)。
 
 cn-main 的无歧义旧 TKE 别名经 `CLUSTER_ALIASES` 归一化；新账号 staging / tech-service 扫描记录必须保存完整腾讯云目录 ID。旧 AWS CN / cn-dev，以及无账号证据的 `cn-staging` / `cn-tech-service` 短名归档保留统计但不提供链接，避免跳到新账号。新集群上线时同步表格、映射及验证。
 

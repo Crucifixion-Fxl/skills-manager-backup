@@ -37,14 +37,16 @@ class CNInventoryReportTest(unittest.TestCase):
         self.assertNotIn('https://argocd-cn.addx.live', output)
         self.assertNotIn('https://argocd-cn-tech-service.addx.live', output)
 
-    def test_pending_tech_service_stays_visible_without_current_link(self):
+    def test_verified_tech_service_has_current_links_and_keeps_anomaly_counts(self):
         cluster = 'tencent-100052802231-cn-tech-service'
-        self.assertIsNone(report.app_url(cluster, 'example'))
-        self.assertIsNone(report.cluster_url(cluster))
+        base = 'https://argocd-cn-tech-service-tke.addx.live/applications'
+        self.assertEqual(report.app_url(cluster, 'example'), base + '/argo-cd/example?view=tree')
+        self.assertEqual(report.cluster_url(cluster), base)
         output = self.render_input([self.record(cluster)])
         self.assertIn(f'data-cluster="{cluster}"', output)
-        self.assertIn('待切换：argocd-cn-tech-service-tke.addx.live', output)
-        self.assertNotIn('href="https://argocd-cn-tech-service-tke.addx.live', output)
+        self.assertIn(f'href="{base}"', output)
+        self.assertIn(f'href="{base}/argo-cd/example?view=tree"', output)
+        self.assertNotIn('待切换：', output)
         self.assertNotIn('argocd-cn-tech-service-2231-tke.addx.live', output)
         counts, clusters, stats = report.compute_summary([self.record(cluster)])
         self.assertEqual(clusters, [cluster])
@@ -80,10 +82,12 @@ class CNInventoryReportTest(unittest.TestCase):
                 self.assertNotIn('/applications/argo-cd/archived-short-app?view=tree', output)
 
     def test_unreachable_new_account_alias_is_not_reported_healthy(self):
-        output = self.render_input([], ['tencent-100052802231-cn-staging'])
-        self.assertIn('tencent-100052802231-cn-staging <span class="unreach-pill">unreachable', output.replace('</a>', ''))
-        self.assertNotIn('0 扫通', output)
-        self.assertNotIn('cn-dev', output)
+        for cluster in ['tencent-100052802231-cn-staging', 'tencent-100052802231-cn-tech-service']:
+            with self.subTest(cluster=cluster):
+                output = self.render_input([], [cluster])
+                self.assertIn(f'{cluster} <span class="unreach-pill">unreachable', output.replace('</a>', ''))
+                self.assertNotIn('0 扫通', output)
+                self.assertNotIn('cn-dev', output)
 
 
 if __name__ == '__main__':
