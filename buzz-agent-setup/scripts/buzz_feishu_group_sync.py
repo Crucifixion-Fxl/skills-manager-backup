@@ -3032,7 +3032,8 @@ def prune_state(state: State) -> None:
     for key in sorted(state.claim_takeovers, key=state.claim_takeovers.__getitem__)[:max(len(state.claim_takeovers) - 200, 0)]:
         del state.claim_takeovers[key]
     newest_note = max(state.member_notes.values(), default=0)
-    state.member_notes = {k: t for k, t in state.member_notes.items() if newest_note - t <= MEMBER_NOTE_TTL}
+    state.member_notes = {k: t for k, t in state.member_notes.items()
+                          if k.startswith("unresolved-private:") or newest_note - t <= MEMBER_NOTE_TTL}
 
 
 def load_state(state_dir: Path) -> State:
@@ -3538,6 +3539,35 @@ class LarkCli:
                                   "--idempotency-key", key])
         return self._message_id(data, "send")
 
+    def send_private(self, union_id: str, text: str, key: str, sender_app: str) -> str:
+        """A Desk DM to a current group member, addressed by provider-scoped union_id.
+
+        Never borrow the owner's application-scoped open_id. Read back with the same
+        bot; an unknown result is not retried or turned into a public group notice.
+        """
+        if not UNION_ID_RE.fullmatch(union_id) or not APP_ID_RE.fullmatch(sender_app):
+            raise GroupSyncError("private member notice identity is invalid")
+        data = self.call("private member notice", ["api", "POST", "/open-apis/im/v1/messages",
+                         "--params", json.dumps({"receive_id_type": "union_id"}),
+                         "--data", json.dumps({"receive_id": union_id, "msg_type": "text",
+                                                "content": json.dumps({"text": text}), "uuid": key}),
+                         "--as", "bot"])
+        message_id = self._message_id(data, "private member notice")
+        answer = self.call("private member notice readback", ["api", "GET",
+                           f"/open-apis/im/v1/messages/{message_id}", "--as", "bot"])
+        items = answer.get("items")
+        try:
+            row = items[0] if isinstance(items, list) and len(items) == 1 else {}
+            matched = (row.get("message_id") == message_id and row.get("chat_type") == "p2p"
+                       and row.get("sender", {}).get("id") == sender_app
+                       and row.get("msg_type") == "text"
+                       and json.loads(row.get("body", {}).get("content", "{}")) == {"text": text})
+        except (TypeError, ValueError, AttributeError):
+            matched = False
+        if not matched:
+            raise CliError("private member notice readback", -1, "unconfirmed", definite=False)
+        return message_id
+
     def reply(self, message_id: str, text: str, key: str) -> str:
         data = self.call("reply", ["im", "+messages-reply", "--as", "bot", "--message-id", message_id, "--text", text,
                                    "--reply-in-thread", "--idempotency-key", key])
@@ -3979,9 +4009,10 @@ def _new_report() -> dict[str, Any]:
             # The agent directory (ADR-0019) is a convenience: a failed lookup or a contested claim is counted, never alarmed on.
             "directory_agents": 0, "directory_failed": 0, "directory_conflicts": 0,
             # Two-way members (ADR-0020): what the group changed in the channel. A refusal, a protected member and a person
-            # nobody can place are told in the group once and counted here; a failed write is a member_failure like any other.
+            # nobody can place are counted here; unresolved humans are privately notified, never announced in the group.
             "members_to_buzz": 0, "members_removed_from_buzz": 0, "members_refused": 0, "members_protected": 0,
-            "members_unresolved": 0, "people_cache_failed": 0, "member_events_blocked": {},
+            "members_unresolved": 0, "member_notices_private_sent": 0,
+            "member_notices_private_unconfirmed": 0, "people_cache_failed": 0, "member_events_blocked": {},
             # A newly joined agent introduces itself once. Directory-only agents are honestly relayed by the Desk bot.
             "agent_intros_sent": 0, "agent_intros_relayed": 0, "agent_intro_failures": 0, "agent_intro_unknown": 0,
             "agent_intro_stopped": 0,
@@ -4585,6 +4616,35 @@ class Round:
         except CliError:
             self.report["errors"] += 1
 
+    def _note_unresolved_member_private(self, key: str, who: str) -> None:
+        """One private attempt per retained notice; failure never speaks in the group."""
+        note = f"unresolved-private:{key}"
+        if note in self.state.member_notes:
+            return
+        if sum(k.startswith("unresolved-private:") for k in self.state.member_notes) >= PEOPLE_KEEP:
+            self.report["member_notices_private_unconfirmed"] += 1
+            return  # bounded retained attempts: never evict UNKNOWN and resend
+        self.state.member_notes[note] = self.now_ts
+        self.persist()  # reserve before the effect, including crash/unknown outcomes
+        if not self.union_mode:
+            # Email mode only has the owner's app-specific open_id; do not reuse it
+            # under Desk or search a similarly named user as a substitute.
+            self.report["member_notices_private_unconfirmed"] += 1
+            return
+        channel = self.cfg["channel_id"]
+        text = (f"你好，{who}。你所在飞书群对应的 Buzz 频道尚未识别到你的账号。"
+                f"如尚未绑定，可在 {self.cfg['people_api']['base_url']}/bind/ 完成绑定。\n"
+                f"Buzz 桌面频道 deep link：buzz://channel/{channel}\n"
+                "绑定与频道成员权限分开；若暂时无法访问频道，请联系频道管理员。")
+        token = "member-dm-" + hashlib.sha256(
+            f"{channel}\0{self.cfg['chat_id']}\0{self.desk_app_id}\0{key}".encode()).hexdigest()[:40]
+        try:
+            self.proxy_client().send_private(_key_member_id(key), text, token, self.desk_app_id)
+        except GroupSyncError:
+            self.report["member_notices_private_unconfirmed"] += 1
+        else:
+            self.report["member_notices_private_sent"] += 1
+
     def _membership_failure_reasons(self) -> list[str]:
         """Safe, actionable membership failures for the shared status message; never include server answers or identities."""
         report = self.report
@@ -4847,7 +4907,7 @@ class Round:
         removed = [key for key in state.feishu_seen if key not in keys] if listing.complete else []
         gone = [pk for pk in state.buzz_seen if pk not in buzz_now and pk not in self.other_mirrors]
         fresh = buzz_now - set(state.buzz_seen)
-        for note in [n for n in state.member_notes if n.startswith("unresolved:") and n[len("unresolved:"):] not in keys]:
+        for note in [n for n in state.member_notes if listing.complete and n.startswith("unresolved:") and n.split(":", 1)[1] not in keys]:
             del state.member_notes[note]
         adds: list[tuple[str, str, str]] = []
         if not listing.complete:
@@ -4862,9 +4922,7 @@ class Round:
                     # Not written down: once he can be placed (he binds, another channel here sees him) he joins the channel.
                     report["members_unresolved"] += 1
                     who = names.get(key) or "有人"
-                    self._note_group(f"unresolved:{key}", (
-                        f"{who} 还不是 Buzz 频道成员：认不出 TA 的 Buzz 账号（可能还没绑定）。请先在 "
-                        f"{cfg['people_api']['base_url']}/bind/ 绑定，再请频道管理员在 Buzz 里把 TA 加进频道。"))
+                    self._note_unresolved_member_private(key, who)
                 elif not self.agent_lookup_failed:
                     state.feishu_seen[key] = ""  # a bot that is nobody's published agent: left alone, not looked up again
                 continue  # (a failed lookup writes nothing: the bot is asked about again next round)

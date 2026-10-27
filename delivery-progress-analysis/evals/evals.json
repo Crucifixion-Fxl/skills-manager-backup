@@ -37,6 +37,10 @@
           "check": "关键结论旁使用具体 Issue、note、MR、Pipeline 深链接；跨项目 MR 保留项目身份，不只写裸 !iid。"
         },
         {
+          "name": "clickable_issue_ids",
+          "check": "所有可见的 Issue ID（包括摘要、风险、待办、表格、未排期和索引）都是指向对应精确 Issue URL 的 Markdown 链接，不允许裸 Issue ID。"
+        },
+        {
           "name": "concise_information_dense",
           "check": "摘要不超过 12 行，最多 3 个关键变化和 3 个动作；每个展开项最多 4 行，避免重复方法说明。"
         },
@@ -64,6 +68,10 @@
         {
           "name": "no_repository_name_guess",
           "check": "不从仓库名、标题或惯例猜测项目类型、节假日或状态含义。"
+        },
+        {
+          "name": "clickable_issue_ids",
+          "check": "所有可见的 Issue ID 都是指向对应精确 Issue URL 的 Markdown 链接；没有精确 URL 时不显示 ID 并披露 Issue 链接缺失。"
         }
       ]
     },
@@ -85,6 +93,10 @@
         {
           "name": "normal_items_omitted",
           "check": "正常事项用数量概括，不为了填满模板展开。"
+        },
+        {
+          "name": "clickable_issue_ids",
+          "check": "如果报告显示任何 Issue ID，每次显示都必须是指向对应精确 Issue URL 的 Markdown 链接，不允许裸 ID。"
         }
       ]
     },
@@ -110,6 +122,10 @@
         {
           "name": "review_and_tdd_non_gate",
           "check": "报告 blocking review thread 的实际影响；TDD L3 只作为上下文，不自行升级为门禁。"
+        },
+        {
+          "name": "clickable_issue_ids",
+          "check": "Bug #244 及其他所有可见 Issue ID 都是指向对应精确 Issue URL 的 Markdown 链接，不允许裸 ID。"
         }
       ]
     },
@@ -135,6 +151,10 @@
         {
           "name": "no_unauthorized_calendar_change",
           "check": "普通 Channel 消息不修改 Milestone、提测截止或状态语义。"
+        },
+        {
+          "name": "clickable_issue_ids",
+          "check": "Issue #198 及所有其他可见 Issue ID 都是指向对应精确 Issue URL 的 Markdown 链接，包括背景声明和冲突说明。"
         }
       ]
     },
@@ -163,6 +183,10 @@
         {
           "name": "people_mapping_is_not_workflow_configuration",
           "check": "动态责任人来自 GitLab assignee，例外 alias 来自 owner 管理的 Canvas；Workflow 不保存人员名单或 pubkey。"
+        },
+        {
+          "name": "clickable_issue_ids",
+          "check": "通知摘要、责任人表格和正文中的 Issue #198、Issue #159 等每个可见 ID 都是指向对应精确 Issue URL 的 Markdown 链接。"
         }
       ]
     },
@@ -195,6 +219,10 @@
         {
           "name": "no_milestone_still_progress",
           "check": "给出 (B,T] 时区基线与最多三项能力变化，缺日历仅停止时间风险；正常推进不通知。"
+        },
+        {
+          "name": "clickable_issue_ids",
+          "check": "#301、#302、#303、#304、#305 以及报告中其他所有可见 Issue ID 都是指向对应精确 Issue URL 的 Markdown 链接。"
         }
       ]
     },
@@ -215,6 +243,90 @@
         {
           "name": "coverage_not_no_progress",
           "check": "明确基线缺失与可重建范围，不以无快照宣称无变化或停止全部进展分析。"
+        },
+        {
+          "name": "clickable_issue_ids",
+          "check": "#301、#302、#308 以及报告中其他所有可见 Issue ID 都是指向对应精确 Issue URL 的 Markdown 链接。"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "mode": "offline_fixture",
+      "prompt": "只用Naturehood冻结夹具，为业务负责人写一分钟可读的交付摘要；读者不熟悉MR和CI。不得访问线上或发送消息。",
+      "setup": "使用夹具内需求标题、回归comment和逐组件事实；未提供昨日基线或业务效果数据。",
+      "files": [
+        "evals/fixtures/naturehood-vn140.md"
+      ],
+      "expected_output": "先交代老用户转化目标与支付/归因验收背景，再解释服务端推进、双端仍未完整交付对用户流程验收的影响；工程编号作为证据链接。明确基线缺失、组合包未验收、转化效果未验证。",
+      "assertions": [
+        {
+          "name": "business_context_before_engineering_inventory",
+          "check": "前段先说明业务目标/用户场景、实际变化及意义，不以Issue/MR编号、0/1和pipeline状态列表开篇；工程术语首次出现有日常解释。"
+        },
+        {
+          "name": "business_claims_remain_source_bound",
+          "check": "业务背景可追溯夹具需求与comment；不编造转化率、收入、规模或已上线事实，不将聊天声明或单组件合并写成用户已可使用。"
+        },
+        {
+          "name": "action_links_to_delivery_gap",
+          "check": "下一步写责任人和要补齐的双端/支付归因验收，未提供具体期限则待确认；保留最终release候选和组合包证据边界。"
+        },
+        {
+          "name": "clickable_issue_ids",
+          "check": "业务摘要、行动和证据索引中每个可见 Issue ID 都是指向对应精确 Issue URL 的 Markdown 链接。"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "mode": "offline_fixture",
+      "prompt": "业务背景无法取得，使用冻结的技术事实继续写可读进展，不访问其它数据、不发送消息。",
+      "setup": "仅提供本夹具，禁止凭项目名或技术对象推断用户群和业务收益。",
+      "files": [
+        "evals/fixtures/business-context-missing.md"
+      ],
+      "expected_output": "明确业务背景待补充，仍说明已核实的集成推进和未验收边界；不编造客户、收入、转化目标或昨天状态。",
+      "assertions": [
+        {
+          "name": "missing_context_is_named",
+          "check": "明确业务目标与用户场景缺少来源，不从项目名猜测，不把解释缺口写成业务已受益。"
+        },
+        {
+          "name": "verified_progress_is_still_readable",
+          "check": "用日常语言解释代码已合入但实际使用验收未执行，给证据链接，不因缺背景停止全部分析。"
+        },
+        {
+          "name": "no_extra_disclosure_or_write",
+          "check": "不索取越权数据，不写Issue、不通知无授权受众，披露同口径基线与范围。"
+        },
+        {
+          "name": "clickable_issue_ids",
+          "check": "所有可见 Issue ID 都是指向对应精确 Issue URL 的 Markdown 链接；无精确 URL 时不显示 ID 并披露 Issue 链接缺失。"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "mode": "offline_fixture",
+      "prompt": "使用跨项目 Issue 冻结夹具生成简短交付索引，不访问网络。",
+      "setup": "Only the attached fixture is authoritative. Two projects share IID 42; a third Issue lacks web_url.",
+      "files": [
+        "evals/fixtures/cross-project-issue-links.md"
+      ],
+      "expected_output": "两个 #42 分别链接到各自项目的精确 Issue URL；缺少 web_url 的 Offline recovery 不显示 #77，并在覆盖缺口披露 Issue 链接缺失。",
+      "assertions": [
+        {
+          "name": "cross_project_same_iid_uses_exact_urls",
+          "check": "跨项目同号 Issue #42 出现两次时，分别链接到 group-a/project-a 和 group-b/project-b 夹具给出的精确 web_url，不合并对象也不错链。"
+        },
+        {
+          "name": "missing_url_omits_id",
+          "check": "Offline recovery 使用能力名称，不显示 #77，不猜测 URL，并在覆盖缺口写明 Issue 链接缺失。"
+        },
+        {
+          "name": "clickable_issue_ids",
+          "check": "报告中所有可见 Issue ID 都是指向对应精确 Issue URL 的 Markdown 链接，不允许裸 ID、项目首页链接或错 Issue URL。"
         }
       ]
     }
@@ -222,7 +334,7 @@
   "contract": {
     "version": 1,
     "id_start": 1,
-    "case_count": 8,
+    "case_count": 11,
     "canonical_inputs": true,
     "require_assertions": true,
     "hide_tool_tokens": true

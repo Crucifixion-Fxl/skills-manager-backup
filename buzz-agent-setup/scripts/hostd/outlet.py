@@ -18,7 +18,7 @@ try:
     from .delivery_mapping import DeliveryMapping, message_card, _one
     from .safety import read_owned
     from .async_io import thread_call
-    from . import reaction_inbox, outlet_pending, outlet_work
+    from . import reaction_inbox, reaction_supersession, outlet_pending, outlet_work
     from .relay_history import signed_history
 except ImportError:
     from bot_clients import BotLarkCli, failure, _trusted_relay
@@ -26,6 +26,7 @@ except ImportError:
     from safety import read_owned
     from async_io import thread_call
     import reaction_inbox
+    import reaction_supersession
     import outlet_pending
     import outlet_work
     from relay_history import signed_history
@@ -209,6 +210,8 @@ class AgentOutlet:
         target = refs[0][1]
         if event['kind'] == 7:
             return self._original(target) is not None
+        if reaction_supersession.superseded(self.store, self.binding_id, self.channel, self.agent, self.app, event):
+            return True  # Exact prior no-effect settlement; never grants a write.
         old = self.store.delivery_by_source(self.binding_id, target, 'r2f', agent_id=self.agent)
         receipt = self.store.outlet_receipt(old['id']) if old else None
         return bool(receipt and receipt['sender_app_id'] == self.app)
@@ -414,6 +417,8 @@ class AgentOutlet:
         self.round.persist()
 
     def _reaction(self, event, now, ancestors=frozenset()):
+        if reaction_supersession.superseded(self.store, self.binding_id, self.channel, self.agent, self.app, event):
+            return None
         deleting = event['kind'] == 5
         refs = [t[1] for t in event['tags'] if t[:1] == ['e'] and len(t) >= 2]
         if len(refs) != 1 or not gs.HEX64_RE.fullmatch(refs[0]):
@@ -597,7 +602,8 @@ class AgentOutlet:
         for event in ordered:
             if not self._valid_envelope(event):
                 raise failure('未决事件签名或作者无法确认','保留原记录，不推进游标')
-            if self._acked_text_replay(event) or self._acked_reaction_replay(event,local_only=True):
+            if (self._acked_text_replay(event) or self._acked_reaction_replay(event,local_only=True)
+                    or reaction_supersession.superseded(self.store,self.binding_id,self.channel,self.agent,self.app,event)):
                 settled(event);continue
             direction='e2f' if event['kind']==40003 else 'b2f' if event['kind']==9 else 'r2f'
             prior=self.store.delivery_by_source(self.binding_id,event['id'],direction,agent_id=self.agent)
@@ -620,6 +626,30 @@ class AgentOutlet:
             choice=outlet_work.choose(self.store,self.binding_id,self.channel,self.agent,ordered,now=now)
             if choice is None:break
             row,turn=choice;event=by_id[row['source_id']]
+            # Only the selected work unit may coalesce: no unbounded pre-pass,
+            # no larger slice, and no delay to the preferred human-body lane.
+            if event['kind']==7:
+                withdrawals=[other for other in candidates if other['kind']==5
+                    and _one(other['tags'],'e')==event['id']
+                    and reaction_supersession.eligible(self.store,self.binding_id,self.channel,self.agent,
+                        event,other,self.round.cfg.get('reaction_map'))]
+                if withdrawals:
+                    self.verify()
+                    if not self.has_local_grant():
+                        raise failure('agent 接入授权尚未完成','保留原消息，等待已批准接入的运行核验完成')
+                    original=self._original(_one(event['tags'],'e'))
+                    withdrawal=withdrawals[0]
+                    with self.store.transaction():
+                        if reaction_supersession.settle(self.store,self.binding_id,self.channel,self.agent,self.app,
+                                event,withdrawal,original,reaction_map=self.round.cfg.get('reaction_map'),now=now):
+                            # Consuming a no-effect unit still advances shared
+                            # aging, atomically with the pair and queue cleanup.
+                            self.store.conn.execute('INSERT INTO outlet_work_turn VALUES(?,?,?) ON CONFLICT(binding_id,agent_id) DO UPDATE SET fresh_turns=excluded.fresh_turns',
+                                (self.binding_id,self.agent,turn))
+                            settled(event);settled(withdrawal)
+                            attempted+=1
+                            self.attempted_work=True
+                            continue
             outlet_work.start(self.store,self.binding_id,self.agent,row,turn,now=now)
             attempted+=1  # Scope/root failures consume the same unit as ACKs.
             self.attempted_work=True

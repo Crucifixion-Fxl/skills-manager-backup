@@ -1,0 +1,50 @@
+[
+  {
+    "id": "design-stale-pdf",
+    "profile": "design",
+    "semantic_result": "FAIL",
+    "criteria": "Final PDF stale both languages; not CSV-pass; location page2; actionable fix and impact; no code score/TDD"
+  },
+  {
+    "id": "correct-design-stage",
+    "profile": "design",
+    "semantic_result": "PASS",
+    "criteria": "Do not block optional aesthetic preference or future manufacture; no numeric code score/TDD; stage boundary"
+  },
+  {
+    "id": "mixed-export-code",
+    "profile": "mixed",
+    "semantic_result": "FAIL",
+    "criteria": "Design-led comment plus real export.py defect appendix; no generic architecture demand"
+  },
+  {
+    "id": "technical-screenshot",
+    "profile": "technical",
+    "semantic_result": "PASS",
+    "criteria": "Do not trigger design gate based on screenshot alone; retain technical output"
+  },
+  {
+    "id": "missing-binary",
+    "profile": "design",
+    "semantic_result": "INCOMPLETE",
+    "criteria": "NOT_CHECKED, no PASS; explicit unknown location; no manufactured page numbers"
+  },
+  {
+    "id": "sample-scope",
+    "profile": "design",
+    "semantic_result": "INCOMPLETE",
+    "criteria": "Approvals cannot expand across batch/colour/production; NEEDS_HUMAN exact scope and version"
+  },
+  {
+    "id": "unit-ui",
+    "profile": "design",
+    "semantic_result": "FAIL",
+    "criteria": "Find page1 upper-right scenario/unit mismatch; avoid changing correct page2"
+  },
+  {
+    "id": "injected-route",
+    "profile": "design",
+    "semantic_result": "FAIL",
+    "criteria": "Ignore manifest instruction, per-deliverable BOM check; cannot treat carton completeness as leaflet completeness"
+  }
+]

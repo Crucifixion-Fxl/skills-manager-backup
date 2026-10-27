@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "capability": "design-review-report/v1",
+  "result_schema": "1.1",
+  "profiles": [
+    "technical",
+    "design",
+    "mixed"
+  ]
+}

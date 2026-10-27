@@ -1,0 +1,948 @@
+[
+  {
+    "apiVersion": "operator.victoriametrics.com/v1beta1",
+    "kind": "VMAgent",
+    "metadata": {
+      "name": "coturn-egress",
+      "namespace": "victoria-metrics"
+    },
+    "spec": {
+      "disableSelfServiceScrape": true,
+      "externalLabels": {
+        "cluster": "eu-prod",
+        "prometheus": "victoria-metrics/victoria-metrics"
+      },
+      "extraArgs": {
+        "promscrape.streamParse": "true"
+      },
+      "image": {
+        "tag": "v1.147.0"
+      },
+      "imagePullSecrets": [
+        {
+          "name": "harbor-registry-secret"
+        }
+      ],
+      "nodeScrapeSelector": {
+        "matchLabels": {
+          "monitoring.addx.io/scrape-plane": "nat-egress"
+        }
+      },
+      "nodeSelector": {
+        "node-group": "nat-egress"
+      },
+      "podMetadata": {
+        "annotations": {
+          "monitoring.addx.io/coturn-egress-selector-revision": "2026-08-13-v1"
+        }
+      },
+      "podScrapeSelector": {
+        "matchLabels": {
+          "monitoring.addx.io/scrape-plane": "nat-egress"
+        }
+      },
+      "probeSelector": {
+        "matchLabels": {
+          "monitoring.addx.io/scrape-plane": "nat-egress"
+        }
+      },
+      "remoteWrite": [
+        {
+          "url": "http://vminsert-victoria-metrics.victoria-metrics.svc.cluster.local.:8480/insert/0/prometheus/api/v1/write"
+        }
+      ],
+      "resources": {
+        "limits": {
+          "cpu": "500m",
+          "memory": "512Mi"
+        },
+        "requests": {
+          "cpu": "100m",
+          "memory": "256Mi"
+        }
+      },
+      "scrapeConfigSelector": {
+        "matchLabels": {
+          "monitoring.addx.io/scrape-plane": "nat-egress"
+        }
+      },
+      "scrapeInterval": "30s",
+      "selectAllByDefault": false,
+      "serviceScrapeSelector": {
+        "matchLabels": {
+          "monitoring.addx.io/scrape-plane": "nat-egress"
+        }
+      },
+      "staticScrapeSelector": {
+        "matchLabels": {
+          "monitoring.addx.io/scrape-plane": "nat-egress"
+        }
+      }
+    }
+  },
+  {
+    "apiVersion": "operator.victoriametrics.com/v1beta1",
+    "kind": "VMAgent",
+    "metadata": {
+      "name": "victoria-metrics",
+      "namespace": "victoria-metrics",
+      "labels": {
+        "app.kubernetes.io/component": "vmagent",
+        "app.kubernetes.io/instance": "victoria-metrics",
+        "app.kubernetes.io/managed-by": "Helm",
+        "app.kubernetes.io/name": "victoria-metrics-k8s-stack",
+        "app.kubernetes.io/version": "v1.147.0",
+        "helm.sh/chart": "victoria-metrics-k8s-stack-0.86.0"
+      }
+    },
+    "spec": {
+      "externalLabels": {
+        "cluster": "eu-prod"
+      },
+      "extraArgs": {
+        "promscrape.streamParse": "true"
+      },
+      "image": {
+        "tag": "v1.147.0"
+      },
+      "imagePullSecrets": [
+        {
+          "name": "harbor-registry-secret"
+        }
+      ],
+      "nodeSelector": {
+        "node-group": "prometheus"
+      },
+      "podMetadata": {
+        "annotations": {
+          "monitoring.addx.io/coturn-egress-selector-revision": "2026-08-13-v1",
+          "sre.addx.ai/irsa-rollout": "2026-08-11-vmagent-ec2-sd"
+        }
+      },
+      "port": "8429",
+      "remoteWrite": [
+        {
+          "url": "http://vminsert-victoria-metrics.victoria-metrics.svc.cluster.local.:8480/insert/0/prometheus/api/v1/write"
+        }
+      ],
+      "resources": {
+        "limits": {
+          "cpu": "1",
+          "memory": "1Gi"
+        },
+        "requests": {
+          "cpu": "500m",
+          "memory": "512Mi"
+        }
+      },
+      "scrapeConfigSelector": {
+        "matchExpressions": [
+          {
+            "key": "monitoring.addx.io/scrape-plane",
+            "operator": "NotIn",
+            "values": [
+              "nat-egress-handoff",
+              "nat-egress"
+            ]
+          }
+        ]
+      },
+      "scrapeInterval": "30s",
+      "selectAllByDefault": true,
+      "serviceAccountName": "vmagent-victoria-metrics"
+    }
+  },
+  {
+    "apiVersion": "operator.victoriametrics.com/v1beta1",
+    "kind": "VMAlert",
+    "metadata": {
+      "name": "victoria-metrics",
+      "namespace": "victoria-metrics",
+      "labels": {
+        "app.kubernetes.io/component": "vmalert",
+        "app.kubernetes.io/instance": "victoria-metrics",
+        "app.kubernetes.io/managed-by": "Helm",
+        "app.kubernetes.io/name": "victoria-metrics-k8s-stack",
+        "app.kubernetes.io/version": "v1.147.0",
+        "helm.sh/chart": "victoria-metrics-k8s-stack-0.86.0"
+      }
+    },
+    "spec": {
+      "configMaps": [],
+      "datasource": {
+        "url": "http://vmselect-victoria-metrics.victoria-metrics.svc.cluster.local.:8481/select/0/prometheus"
+      },
+      "evaluationInterval": "20s",
+      "externalLabels": {},
+      "extraArgs": {
+        "http.pathPrefix": "/",
+        "remoteWrite.disablePathAppend": "true"
+      },
+      "image": {
+        "tag": "v1.147.0"
+      },
+      "imagePullSecrets": [
+        {
+          "name": "harbor-registry-secret"
+        }
+      ],
+      "nodeSelector": {
+        "node-group": "prometheus"
+      },
+      "notifiers": [
+        {
+          "url": "http://vmalertmanager-victoria-metrics-0.vmalertmanager-victoria-metrics.victoria-metrics.svc.cluster.local.:9093"
+        }
+      ],
+      "port": "8080",
+      "remoteRead": {
+        "url": "http://vmselect-victoria-metrics.victoria-metrics.svc.cluster.local.:8481/select/0/prometheus"
+      },
+      "remoteWrite": {
+        "url": "http://vminsert-victoria-metrics.victoria-metrics.svc.cluster.local.:8480/insert/0/prometheus/api/v1/write"
+      },
+      "resources": {
+        "limits": {
+          "cpu": "500m",
+          "memory": "1Gi"
+        },
+        "requests": {
+          "cpu": "100m",
+          "memory": "256Mi"
+        }
+      },
+      "selectAllByDefault": true
+    }
+  },
+  {
+    "apiVersion": "operator.victoriametrics.com/v1beta1",
+    "kind": "VMAlertmanager",
+    "metadata": {
+      "name": "victoria-metrics",
+      "namespace": "victoria-metrics",
+      "labels": {
+        "app.kubernetes.io/component": "alertmanager",
+        "app.kubernetes.io/instance": "victoria-metrics",
+        "app.kubernetes.io/managed-by": "Helm",
+        "app.kubernetes.io/name": "victoria-metrics-k8s-stack",
+        "app.kubernetes.io/version": "v0.32.1",
+        "helm.sh/chart": "victoria-metrics-k8s-stack-0.86.0"
+      }
+    },
+    "spec": {
+      "configSecret": "vmalertmanager-victoria-metrics",
+      "disableNamespaceMatcher": true,
+      "externalURL": "",
+      "image": {
+        "tag": "v0.32.1"
+      },
+      "imagePullSecrets": [
+        {
+          "name": "harbor-registry-secret"
+        }
+      ],
+      "nodeSelector": {
+        "node-group": "prometheus"
+      },
+      "port": "9093",
+      "replicaCount": 1,
+      "resources": {
+        "limits": {
+          "cpu": "500m",
+          "memory": "512Mi"
+        },
+        "requests": {
+          "cpu": "50m",
+          "memory": "128Mi"
+        }
+      },
+      "routePrefix": "/",
+      "selectAllByDefault": true,
+      "templates": [
+        {
+          "key": "monzo.tmpl",
+          "name": "vmalertmanager-victoria-metrics-monzo-tpl"
+        }
+      ]
+    }
+  },
+  {
+    "apiVersion": "operator.victoriametrics.com/v1beta1",
+    "kind": "VMCluster",
+    "metadata": {
+      "name": "victoria-metrics",
+      "namespace": "victoria-metrics",
+      "labels": {
+        "app.kubernetes.io/component": "vmcluster",
+        "app.kubernetes.io/instance": "victoria-metrics",
+        "app.kubernetes.io/managed-by": "Helm",
+        "app.kubernetes.io/name": "victoria-metrics-k8s-stack",
+        "app.kubernetes.io/version": "v1.147.0",
+        "helm.sh/chart": "victoria-metrics-k8s-stack-0.86.0"
+      }
+    },
+    "spec": {
+      "clusterVersion": "v1.147.0-cluster",
+      "imagePullSecrets": [
+        {
+          "name": "harbor-registry-secret"
+        }
+      ],
+      "replicationFactor": 1,
+      "retentionPeriod": "180d",
+      "vminsert": {
+        "affinity": {
+          "podAntiAffinity": {
+            "requiredDuringSchedulingIgnoredDuringExecution": [
+              {
+                "labelSelector": {
+                  "matchLabels": {
+                    "app.kubernetes.io/component": "server",
+                    "app.kubernetes.io/name": "prometheus"
+                  }
+                },
+                "namespaces": [
+                  "prometheus"
+                ],
+                "topologyKey": "kubernetes.io/hostname"
+              },
+              {
+                "labelSelector": {
+                  "matchLabels": {
+                    "app.kubernetes.io/name": "thanos-store"
+                  }
+                },
+                "namespaces": [
+                  "prometheus"
+                ],
+                "topologyKey": "kubernetes.io/hostname"
+              },
+              {
+                "labelSelector": {
+                  "matchLabels": {
+                    "app.kubernetes.io/name": "thanos-query"
+                  }
+                },
+                "namespaces": [
+                  "prometheus"
+                ],
+                "topologyKey": "kubernetes.io/hostname"
+              },
+              {
+                "labelSelector": {
+                  "matchLabels": {
+                    "app.kubernetes.io/instance": "victoria-metrics",
+                    "app.kubernetes.io/name": "vminsert"
+                  }
+                },
+                "topologyKey": "kubernetes.io/hostname"
+              }
+            ]
+          }
+        },
+        "extraArgs": {
+          "maxLabelsPerTimeseries": "100"
+        },
+        "nodeSelector": {
+          "node-group": "prometheus"
+        },
+        "port": "8480",
+        "replicaCount": 2,
+        "resources": {
+          "limits": {
+            "cpu": "1",
+            "memory": "2Gi"
+          },
+          "requests": {
+            "cpu": "500m",
+            "memory": "1Gi"
+          }
+        }
+      },
+      "vmselect": {
+        "affinity": {
+          "podAntiAffinity": {
+            "requiredDuringSchedulingIgnoredDuringExecution": [
+              {
+                "labelSelector": {
+                  "matchLabels": {
+                    "app.kubernetes.io/component": "server",
+                    "app.kubernetes.io/name": "prometheus"
+                  }
+                },
+                "namespaces": [
+                  "prometheus"
+                ],
+                "topologyKey": "kubernetes.io/hostname"
+              },
+              {
+                "labelSelector": {
+                  "matchLabels": {
+                    "app.kubernetes.io/name": "thanos-store"
+                  }
+                },
+                "namespaces": [
+                  "prometheus"
+                ],
+                "topologyKey": "kubernetes.io/hostname"
+              },
+              {
+                "labelSelector": {
+                  "matchLabels": {
+                    "app.kubernetes.io/name": "thanos-query"
+                  }
+                },
+                "namespaces": [
+                  "prometheus"
+                ],
+                "topologyKey": "kubernetes.io/hostname"
+              },
+              {
+                "labelSelector": {
+                  "matchLabels": {
+                    "app.kubernetes.io/instance": "victoria-metrics",
+                    "app.kubernetes.io/name": "vmselect"
+                  }
+                },
+                "topologyKey": "kubernetes.io/hostname"
+              }
+            ]
+          }
+        },
+        "cacheMountPath": "/select-cache",
+        "extraArgs": {
+          "search.denyPartialResponse": "true",
+          "vmalert.proxyURL": "http://vmalert-victoria-metrics.victoria-metrics.svc.cluster.local.:8080"
+        },
+        "nodeSelector": {
+          "node-group": "prometheus"
+        },
+        "port": "8481",
+        "replicaCount": 2,
+        "resources": {
+          "limits": {
+            "cpu": "1",
+            "memory": "2Gi"
+          },
+          "requests": {
+            "cpu": "200m",
+            "memory": "512Mi"
+          }
+        },
+        "storage": {
+          "volumeClaimTemplate": {
+            "spec": {
+              "accessModes": [
+                "ReadWriteOnce"
+              ],
+              "resources": {
+                "requests": {
+                  "storage": "10Gi"
+                }
+              },
+              "storageClassName": "gp3"
+            }
+          }
+        }
+      },
+      "vmstorage": {
+        "affinity": {
+          "podAntiAffinity": {
+            "requiredDuringSchedulingIgnoredDuringExecution": [
+              {
+                "labelSelector": {
+                  "matchLabels": {
+                    "app.kubernetes.io/component": "server",
+                    "app.kubernetes.io/name": "prometheus"
+                  }
+                },
+                "namespaces": [
+                  "prometheus"
+                ],
+                "topologyKey": "kubernetes.io/hostname"
+              },
+              {
+                "labelSelector": {
+                  "matchLabels": {
+                    "app.kubernetes.io/name": "thanos-store"
+                  }
+                },
+                "namespaces": [
+                  "prometheus"
+                ],
+                "topologyKey": "kubernetes.io/hostname"
+              },
+              {
+                "labelSelector": {
+                  "matchLabels": {
+                    "app.kubernetes.io/name": "thanos-query"
+                  }
+                },
+                "namespaces": [
+                  "prometheus"
+                ],
+                "topologyKey": "kubernetes.io/hostname"
+              },
+              {
+                "labelSelector": {
+                  "matchLabels": {
+                    "app.kubernetes.io/instance": "victoria-metrics",
+                    "app.kubernetes.io/name": "vmstorage"
+                  }
+                },
+                "topologyKey": "kubernetes.io/hostname"
+              }
+            ]
+          }
+        },
+        "nodeSelector": {
+          "node-group": "prometheus",
+          "node.kubernetes.io/instance-type": "m7g.xlarge"
+        },
+        "replicaCount": 3,
+        "resources": {
+          "limits": {
+            "cpu": "2",
+            "memory": "12Gi"
+          },
+          "requests": {
+            "cpu": "1",
+            "memory": "6Gi"
+          }
+        },
+        "storage": {
+          "volumeClaimTemplate": {
+            "spec": {
+              "accessModes": [
+                "ReadWriteOnce"
+              ],
+              "resources": {
+                "requests": {
+                  "storage": "300Gi"
+                }
+              },
+              "storageClassName": "gp3"
+            }
+          }
+        },
+        "storageDataPath": "/vm-data"
+      }
+    }
+  },
+  {
+    "apiVersion": "operator.victoriametrics.com/v1beta1",
+    "kind": "VMNodeScrape",
+    "metadata": {
+      "name": "victoria-metrics-cadvisor",
+      "namespace": "victoria-metrics",
+      "labels": {
+        "app.kubernetes.io/instance": "victoria-metrics",
+        "app.kubernetes.io/managed-by": "Helm",
+        "app.kubernetes.io/name": "victoria-metrics-k8s-stack",
+        "app.kubernetes.io/version": "v1.147.0",
+        "helm.sh/chart": "victoria-metrics-k8s-stack-0.86.0"
+      }
+    },
+    "spec": {
+      "bearerTokenFile": "/var/run/secrets/kubernetes.io/serviceaccount/token",
+      "honorLabels": true,
+      "honorTimestamps": false,
+      "interval": "30s",
+      "metricRelabelConfigs": [
+        {
+          "action": "labeldrop",
+          "regex": "(uid)"
+        },
+        {
+          "action": "labeldrop",
+          "regex": "(id|name)"
+        },
+        {
+          "action": "drop",
+          "regex": "(rest_client_request_duration_seconds_bucket|rest_client_request_duration_seconds_sum|rest_client_request_duration_seconds_count)",
+          "source_labels": [
+            "__name__"
+          ]
+        }
+      ],
+      "path": "/metrics/cadvisor",
+      "relabelConfigs": [
+        {
+          "action": "labelmap",
+          "regex": "__meta_kubernetes_node_label_(.+)"
+        },
+        {
+          "sourceLabels": [
+            "__metrics_path__"
+          ],
+          "targetLabel": "metrics_path"
+        },
+        {
+          "replacement": "kubelet",
+          "targetLabel": "job"
+        }
+      ],
+      "scheme": "https",
+      "scrapeTimeout": "5s",
+      "selector": {},
+      "tlsConfig": {
+        "caFile": "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt",
+        "insecureSkipVerify": true
+      }
+    }
+  },
+  {
+    "apiVersion": "operator.victoriametrics.com/v1beta1",
+    "kind": "VMNodeScrape",
+    "metadata": {
+      "name": "victoria-metrics-kubelet",
+      "namespace": "victoria-metrics",
+      "labels": {
+        "app.kubernetes.io/instance": "victoria-metrics",
+        "app.kubernetes.io/managed-by": "Helm",
+        "app.kubernetes.io/name": "victoria-metrics-k8s-stack",
+        "app.kubernetes.io/version": "v1.147.0",
+        "helm.sh/chart": "victoria-metrics-k8s-stack-0.86.0"
+      }
+    },
+    "spec": {
+      "bearerTokenFile": "/var/run/secrets/kubernetes.io/serviceaccount/token",
+      "honorLabels": true,
+      "honorTimestamps": false,
+      "interval": "30s",
+      "metricRelabelConfigs": [
+        {
+          "action": "labeldrop",
+          "regex": "(uid)"
+        },
+        {
+          "action": "labeldrop",
+          "regex": "(id|name)"
+        },
+        {
+          "action": "drop",
+          "regex": "(rest_client_request_duration_seconds_bucket|rest_client_request_duration_seconds_sum|rest_client_request_duration_seconds_count)",
+          "source_labels": [
+            "__name__"
+          ]
+        }
+      ],
+      "relabelConfigs": [
+        {
+          "action": "labelmap",
+          "regex": "__meta_kubernetes_node_label_(.+)"
+        },
+        {
+          "sourceLabels": [
+            "__metrics_path__"
+          ],
+          "targetLabel": "metrics_path"
+        },
+        {
+          "replacement": "kubelet",
+          "targetLabel": "job"
+        }
+      ],
+      "scheme": "https",
+      "scrapeTimeout": "5s",
+      "selector": {},
+      "tlsConfig": {
+        "caFile": "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt",
+        "insecureSkipVerify": true
+      }
+    }
+  },
+  {
+    "apiVersion": "operator.victoriametrics.com/v1beta1",
+    "kind": "VMNodeScrape",
+    "metadata": {
+      "name": "victoria-metrics-probes",
+      "namespace": "victoria-metrics",
+      "labels": {
+        "app.kubernetes.io/instance": "victoria-metrics",
+        "app.kubernetes.io/managed-by": "Helm",
+        "app.kubernetes.io/name": "victoria-metrics-k8s-stack",
+        "app.kubernetes.io/version": "v1.147.0",
+        "helm.sh/chart": "victoria-metrics-k8s-stack-0.86.0"
+      }
+    },
+    "spec": {
+      "bearerTokenFile": "/var/run/secrets/kubernetes.io/serviceaccount/token",
+      "honorLabels": true,
+      "honorTimestamps": false,
+      "interval": "30s",
+      "metricRelabelConfigs": [
+        {
+          "action": "labeldrop",
+          "regex": "(uid)"
+        },
+        {
+          "action": "labeldrop",
+          "regex": "(id|name)"
+        },
+        {
+          "action": "drop",
+          "regex": "(rest_client_request_duration_seconds_bucket|rest_client_request_duration_seconds_sum|rest_client_request_duration_seconds_count)",
+          "source_labels": [
+            "__name__"
+          ]
+        }
+      ],
+      "path": "/metrics/probes",
+      "relabelConfigs": [
+        {
+          "action": "labelmap",
+          "regex": "__meta_kubernetes_node_label_(.+)"
+        },
+        {
+          "sourceLabels": [
+            "__metrics_path__"
+          ],
+          "targetLabel": "metrics_path"
+        },
+        {
+          "replacement": "kubelet",
+          "targetLabel": "job"
+        }
+      ],
+      "scheme": "https",
+      "scrapeTimeout": "5s",
+      "selector": {},
+      "tlsConfig": {
+        "caFile": "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt",
+        "insecureSkipVerify": true
+      }
+    }
+  },
+  {
+    "apiVersion": "operator.victoriametrics.com/v1beta1",
+    "kind": "VMServiceScrape",
+    "metadata": {
+      "name": "victoria-metrics-core-dns",
+      "namespace": "victoria-metrics",
+      "labels": {
+        "app.kubernetes.io/instance": "victoria-metrics",
+        "app.kubernetes.io/managed-by": "Helm",
+        "app.kubernetes.io/name": "victoria-metrics-k8s-stack",
+        "app.kubernetes.io/version": "v1.147.0",
+        "helm.sh/chart": "victoria-metrics-k8s-stack-0.86.0"
+      }
+    },
+    "spec": {
+      "endpoints": [
+        {
+          "bearerTokenFile": "/var/run/secrets/kubernetes.io/serviceaccount/token",
+          "port": "http-metrics"
+        }
+      ],
+      "jobLabel": "app.kubernetes.io/component",
+      "namespaceSelector": {
+        "matchNames": [
+          "kube-system"
+        ]
+      },
+      "selector": {
+        "matchLabels": {
+          "app.kubernetes.io/component": "core-dns",
+          "app.kubernetes.io/instance": "victoria-metrics",
+          "app.kubernetes.io/name": "victoria-metrics-k8s-stack"
+        }
+      }
+    }
+  },
+  {
+    "apiVersion": "operator.victoriametrics.com/v1beta1",
+    "kind": "VMServiceScrape",
+    "metadata": {
+      "name": "victoria-metrics-kube-api-server",
+      "namespace": "victoria-metrics",
+      "labels": {
+        "app.kubernetes.io/instance": "victoria-metrics",
+        "app.kubernetes.io/managed-by": "Helm",
+        "app.kubernetes.io/name": "victoria-metrics-k8s-stack",
+        "app.kubernetes.io/version": "v1.147.0",
+        "helm.sh/chart": "victoria-metrics-k8s-stack-0.86.0"
+      }
+    },
+    "spec": {
+      "endpoints": [
+        {
+          "bearerTokenFile": "/var/run/secrets/kubernetes.io/serviceaccount/token",
+          "max_scrape_size": "64MiB",
+          "port": "https",
+          "scheme": "https",
+          "tlsConfig": {
+            "caFile": "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt",
+            "serverName": "kubernetes"
+          }
+        }
+      ],
+      "jobLabel": "component",
+      "namespaceSelector": {
+        "matchNames": [
+          "default"
+        ]
+      },
+      "selector": {
+        "matchLabels": {
+          "component": "apiserver",
+          "provider": "kubernetes"
+        }
+      }
+    }
+  },
+  {
+    "apiVersion": "operator.victoriametrics.com/v1beta1",
+    "kind": "VMServiceScrape",
+    "metadata": {
+      "name": "victoria-metrics-kube-etcd",
+      "namespace": "victoria-metrics",
+      "labels": {
+        "app.kubernetes.io/instance": "victoria-metrics",
+        "app.kubernetes.io/managed-by": "Helm",
+        "app.kubernetes.io/name": "victoria-metrics-k8s-stack",
+        "app.kubernetes.io/version": "v1.147.0",
+        "helm.sh/chart": "victoria-metrics-k8s-stack-0.86.0"
+      }
+    },
+    "spec": {
+      "endpoints": [
+        {
+          "bearerTokenFile": "/var/run/secrets/kubernetes.io/serviceaccount/token",
+          "port": "http-metrics",
+          "scheme": "https",
+          "tlsConfig": {
+            "caFile": "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+          }
+        }
+      ],
+      "jobLabel": "app.kubernetes.io/component",
+      "namespaceSelector": {
+        "matchNames": [
+          "kube-system"
+        ]
+      },
+      "selector": {
+        "matchLabels": {
+          "app.kubernetes.io/component": "kube-etcd",
+          "app.kubernetes.io/instance": "victoria-metrics",
+          "app.kubernetes.io/name": "victoria-metrics-k8s-stack"
+        }
+      }
+    }
+  },
+  {
+    "apiVersion": "operator.victoriametrics.com/v1beta1",
+    "kind": "VMServiceScrape",
+    "metadata": {
+      "name": "victoria-metrics-victoria-metrics-operator",
+      "namespace": "victoria-metrics",
+      "labels": {
+        "app.kubernetes.io/instance": "victoria-metrics",
+        "app.kubernetes.io/managed-by": "Helm",
+        "app.kubernetes.io/name": "victoria-metrics-operator",
+        "app.kubernetes.io/version": "v0.73.1",
+        "helm.sh/chart": "victoria-metrics-operator-0.66.2"
+      }
+    },
+    "spec": {
+      "selector": {
+        "matchLabels": {
+          "app.kubernetes.io/instance": "victoria-metrics",
+          "app.kubernetes.io/name": "victoria-metrics-operator"
+        }
+      },
+      "endpoints": [
+        {
+          "port": "http"
+        }
+      ],
+      "namespaceSelector": {
+        "matchNames": [
+          "victoria-metrics"
+        ]
+      }
+    }
+  },
+  {
+    "kind": "ConfigMap",
+    "apiVersion": "v1",
+    "metadata": {
+      "name": "vmalertmanager-victoria-metrics-monzo-tpl",
+      "namespace": "victoria-metrics",
+      "labels": {
+        "app.kubernetes.io/component": "alertmanager",
+        "app.kubernetes.io/instance": "victoria-metrics",
+        "app.kubernetes.io/managed-by": "Helm",
+        "app.kubernetes.io/name": "victoria-metrics-k8s-stack",
+        "app.kubernetes.io/version": "v0.32.1",
+        "helm.sh/chart": "victoria-metrics-k8s-stack-0.86.0"
+      }
+    },
+    "data": {
+      "monzo.tmpl": "# This builds the silence URL. We exclude the alertname in the range\n# to avoid the issue of having trailing comma separator (%2C) at the end\n# of the generated URL\n{{ define \"__alert_silence_link\" -}}\n    {{ .ExternalURL }}/#/silences/new?filter=%7B\n    {{- range .CommonLabels.SortedPairs -}}\n        {{- if ne .Name \"alertname\" -}}\n            {{- .Name }}%3D\"{{- .Value | urlquery -}}\"%2C%20\n        {{- end -}}\n    {{- end -}}\n    alertname%3D\"{{ .CommonLabels.alertname }}\"%7D\n{{- end }}\n\n{{ define \"__alert_severity_prefix\" -}}\n    {{ if ne .Status \"firing\" -}}\n    :lgtm:\n    {{- else if eq .Labels.severity \"critical\" -}}\n    :fire:\n    {{- else if eq .Labels.severity \"warning\" -}}\n    :warning:\n    {{- else -}}\n    :question:\n    {{- end }}\n{{- end }}\n\n{{ define \"__alert_severity_prefix_title\" -}}\n    {{ if ne .Status \"firing\" -}}\n    :lgtm:\n    {{- else if eq .CommonLabels.severity \"critical\" -}}\n    :fire:\n    {{- else if eq .CommonLabels.severity \"warning\" -}}\n    :warning:\n    {{- else if eq .CommonLabels.severity \"info\" -}}\n    :information_source:\n    {{- else -}}\n    :question:\n    {{- end }}\n{{- end }}\n\n\n{{/* First line of Slack alerts */}}\n{{ define \"slack.monzo.title\" -}}\n    [{{ .Status | toUpper -}}\n    {{ if eq .Status \"firing\" }}:{{ .Alerts.Firing | len }}{{- end -}}\n    ] {{ template \"__alert_severity_prefix_title\" . }} {{ .CommonLabels.alertname }}\n{{- end }}\n\n\n{{/* Color of Slack attachment (appears as line next to alert )*/}}\n{{ define \"slack.monzo.color\" -}}\n    {{ if eq .Status \"firing\" -}}\n        {{ if eq .CommonLabels.severity \"warning\" -}}\n            warning\n        {{- else if eq .CommonLabels.severity \"critical\" -}}\n            danger\n        {{- else -}}\n            #439FE0\n        {{- end -}}\n    {{ else -}}\n    good\n    {{- end }}\n{{- end }}\n\n{{/* Emoji to display as user icon (custom emoji supported!) */}}\n{{ define \"slack.monzo.icon_emoji\" }}:waitwhat:{{ end }}\n\n{{/* The test to display in the alert */}}\n{{ define \"slack.monzo.text\" -}}\n    {{ range .Alerts }}\n        {{- if .Annotations.message }}\n \u2022 {{ .Annotations.message }}\n        {{- end }}\n        {{- if .Annotations.description }}\n \u2022 {{ .Annotations.description }}\n        {{- end }}\n    {{- end }}\n{{- end }}\n\n{{ define \"slack.monzo.link_button_text\" -}}\n    {{- if .CommonAnnotations.link_text -}}\n        {{- .CommonAnnotations.link_text -}}\n    {{- else -}}\n        Link\n    {{- end }} :link:\n{{- end }}"
+    }
+  },
+  {
+    "apiVersion": "v1",
+    "kind": "Service",
+    "metadata": {
+      "name": "victoria-metrics-core-dns",
+      "namespace": "kube-system",
+      "labels": {
+        "app.kubernetes.io/component": "core-dns",
+        "app.kubernetes.io/instance": "victoria-metrics",
+        "app.kubernetes.io/managed-by": "Helm",
+        "app.kubernetes.io/name": "victoria-metrics-k8s-stack",
+        "app.kubernetes.io/version": "v1.147.0",
+        "helm.sh/chart": "victoria-metrics-k8s-stack-0.86.0"
+      }
+    },
+    "spec": {
+      "clusterIP": "None",
+      "ports": [
+        {
+          "name": "http-metrics",
+          "port": 9153,
+          "protocol": "TCP",
+          "targetPort": 9153
+        }
+      ],
+      "selector": {
+        "k8s-app": "kube-dns"
+      },
+      "type": "ClusterIP"
+    }
+  },
+  {
+    "apiVersion": "v1",
+    "kind": "Service",
+    "metadata": {
+      "name": "victoria-metrics-kube-etcd",
+      "namespace": "kube-system",
+      "labels": {
+        "app.kubernetes.io/component": "kube-etcd",
+        "app.kubernetes.io/instance": "victoria-metrics",
+        "app.kubernetes.io/managed-by": "Helm",
+        "app.kubernetes.io/name": "victoria-metrics-k8s-stack",
+        "app.kubernetes.io/version": "v1.147.0",
+        "helm.sh/chart": "victoria-metrics-k8s-stack-0.86.0"
+      }
+    },
+    "spec": {
+      "clusterIP": "None",
+      "ports": [
+        {
+          "name": "http-metrics",
+          "port": 2379,
+          "protocol": "TCP",
+          "targetPort": 2379
+        }
+      ],
+      "selector": {
+        "component": "etcd"
+      },
+      "type": "ClusterIP"
+    }
+  }
+]

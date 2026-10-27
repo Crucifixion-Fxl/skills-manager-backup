@@ -29,16 +29,16 @@ US DATA 入口无需认证；其他目标按实际访问配置使用本地已授
 
 `prometheus-us-data.addx.live` 是 **DATA 团队的 US 区域 Prometheus 实例**，主要监控数据基础设施。其他区域/团队按 [监控端点与目标选择](../../infrastructure/sre-agent/references/infra/prometheus.md) 选择已核验的直接查询入口或 Grafana 数据源；下方 Job、Target 和指标数量仅描述 US DATA 实例的记录，不代表 CN 集群。
 
-### CN tech-service 目标（待切换）
+### CN tech-service 已核验入口（2026-10-19）
 
-腾讯云 `100052802231` / `cn-tech-service` 的统一命名已确认，部署切换尚待核验，完整状态见 [CN 域名切换清单](../../infrastructure/k8s-ops/references/cn-tencent-inventory.md#cn-tech-service-目标域名待切换)。
+腾讯云 `100052802231` / `cn-tech-service` 的 VM 查询与 VMAlert 健康检查已于 2026-10-19 通过 TLS / HTTP 200 核验，见 [准入回执](../../delivery/cicd-developer/references/cn-tech-service-admission-2026-10-19.md)及 [CN 入口与边界](../../infrastructure/k8s-ops/references/cn-tencent-inventory.md#cn-tech-service-入口已核验2026-10-19)。这是回执时点的入口证据，不证明全部指标采集或告警通知已验收。
 
-| 用途 | 目标入口（待切换） | 使用边界 |
+| 用途 | 已核验入口 | 使用边界 |
 |------|-------------------|----------|
 | VictoriaMetrics 指标查询 | `https://victoria-metrics-cn-tech-service-tke.addx.live/select/0/prometheus` | VMCluster API base 保留租户路径，再追加 `/api/v1/query` 或 `/api/v1/query_range`；先核验实际租户、Ingress/Service、认证与采集范围 |
 | VMAlert 告警评估 | `https://vm-alert-cn-tech-service-tke.addx.live` | 评估规则并向 Alertmanager 发送告警；不是 PromQL 查询 base，不能设置为 `PROMETHEUS_URL` |
 
-不能因目标命名已确认就开始查询。先定位并核验实际入口（或 port-forward），再设置 `PROMETHEUS_URL`。使用 [performance query helper](../../quality/performance-preflight/references/query-helpers.py) 时，则必须显式设置 `PROMETHEUS_CN_TECH_SERVICE_URL`；未配置时不发请求，不回退旧域名、新目标或 prod。规则与通知排查按 [VM 告警链路](../../delivery/cicd-developer/references/victoriametrics/alerting.md) 核对实际 evaluator、规则选择器与通知路由。
+查询前核对当前目标、调用方访问权限、租户及采集范围，再设置 `PROMETHEUS_URL`；可使用已核验入口或 port-forward。使用 [performance query helper](../../quality/performance-preflight/references/query-helpers.py) 时，仍必须显式设置 `PROMETHEUS_CN_TECH_SERVICE_URL`；未配置时不发请求，不自动回退其他域名或 prod。规则与通知排查按 [VM 告警链路](../../delivery/cicd-developer/references/victoriametrics/alerting.md) 核对实际 evaluator、规则选择器与通知路由。
 
 ### Scrape 目标（11 个 Job，271 个 Target）
 

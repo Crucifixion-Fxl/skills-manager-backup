@@ -1,6 +1,6 @@
 ---
 name: ops-guardrails
-description: 运维 AI 在执行有风险的基础设施动作前的预检 checklist。当 AI 准备做这些事时强制触发：申请公网 DNS 解析、改 Ingress/SG/NodePool、push 到 master、跨仓库 glab、kubectl apply 到非 GitOps 路径、写 ExternalSecret/Rollout/AnalysisTemplate/TKE Ingress、把新 Application 部署到已有 namespace、给用户断言根因或写设计方案。
+description: 运维 AI 在执行有风险的基础设施动作前的预检 checklist。当 AI 准备做这些事时强制触发：接手开发者的运维协作 Issue 或据此拆实施任务/补建基础设施、申请公网 DNS 解析、改 Ingress/SG/NodePool、push 到 master、跨仓库 glab、kubectl apply 到非 GitOps 路径、写 ExternalSecret/Rollout/AnalysisTemplate/TKE Ingress、把新 Application 部署到已有 namespace、给用户断言根因或写设计方案。
 ---
 
 **写入 memory 时**：遵循 [极简写入规约](../../agent-harness/dev-infra/references/memory-writing.md)：只增量写长期约束与入口，默认≤5条/≤10行/约≤200字，语义去重；保留既有授权边界和安全门禁，详情留文档。此规约不新增写入授权。
@@ -21,6 +21,7 @@ A4x 运维 AI 的"动作前必检"清单。**不是教学文档**，是 AI 在�
 
 | 触发动作 / 关键词 | 走哪一节 |
 |---|---|
+| 接手开发者运维协作 Issue、准备照其方案拆实施任务或补建组件/依赖 | §0 接单前提审查 |
 | 加 DNS、添加解析、`scheme: internet-facing`、改 Ingress annotations、新建公网 ALB/CLB | §1 网络与公网暴露 |
 | `PubliclyAccessible: true`、`0.0.0.0/0` 入站规则、给 RDS/ES/Redis/中间件 UI 开公网 | §1 网络与公网暴露 |
 | 跨区域访问 RDS / 第三方 API、新 workload 需要稳定出口 IP、加 SG 白名单、新建 NodePool、动 NAT 路由、**把 Pod/workload 迁到私有子网池（nat-egress/cicd-system/crossplane-providers）或改 DRC/nodeSelector 让它落私有节点** | §2 出站与 NAT |
@@ -32,7 +33,13 @@ A4x 运维 AI 的"动作前必检"清单。**不是教学文档**，是 AI 在�
 | 在任一 CN TKE 集群写或改 Ingress | §8 TKE Ingress |
 | 准备给用户讲根因 / 写设计方案 / 说"违反约束"或"Skill 教错了" | §9 推断与决策纪律 |
 
-只读动作（`get`/`describe`/`list`/读 YAML/查 Argo CD UI/查 git log）**不触发**本 skill。
+单独的只读动作（`get`/`describe`/`list`/读 YAML/查 Argo CD UI/查 git log）不触发变更 checklist；接手协作需求仍执行 §0，调查本身可保持只读。
+
+### §0 接单前提审查
+
+开发者的 Issue 是需求来源，其中的实现建议不自动成为已批准方案。拆实施任务、写方案或补建任何组件/依赖前，先使用 [ops-collaboration-request 的接单评估规则](../../collaboration/ops-collaboration-request/references/ops-intake.md)：还原目标、验收和真实约束，核验相关现有能力，并留下简短的方案取舍与证据。旧单同样适用。
+
+未找到提交者指定产品不等于没有可用能力；查询失败/无权限不等于能力不存在。不要为了走通其方案递归补建基础设施。已有有效技术决策需核验并保留；只有证据支持的缺口才进入新建提案，仍遵循原有授权和下方安全门禁。
 
 ### §1 网络与公网暴露
 

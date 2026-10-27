@@ -3653,6 +3653,7 @@ class IdentityContract(TmpCase):
             "thread_root_unavailable", "thread_root_failed", "thread_roots_deferred", "cards_sent", "cards_fallback_text",
             "relayed_agents", "directory_agents", "directory_failed", "directory_conflicts",
             "members_to_buzz", "members_removed_from_buzz", "members_refused", "members_protected", "members_unresolved",
+            "member_notices_private_sent", "member_notices_private_unconfirmed",
             "people_cache_failed", "member_events_blocked", "reactions_to_buzz", "reactions_withdrawn_in_buzz",
             "approvals_to_buzz", "agent_intros_sent", "agent_intros_relayed", "agent_intro_failures",
             "agent_intro_unknown", "agent_intro_stopped",

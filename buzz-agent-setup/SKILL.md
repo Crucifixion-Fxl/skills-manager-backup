@@ -7,7 +7,7 @@ description: 按 FCHAC 方法在自建 Buzz（Nostr 协作平台）设计并配�
 
 ## Description
 
-平台登录与认证 SSOT：[buzz](../../collaboration/buzz/SKILL.md)。本 Skill 保留业务流程与门禁，登录/Token事实只在平台 owner 维护；日常访问调用 `web-access`。
+平台登录与认证 SSOT：[buzz](../../collaboration/buzz/SKILL.md)。本 Skill 保留业务流程与门禁，登录/Token事实只在平台 owner 维护；日常访问调用 `web-access`。 创建 agent 的飞书应用需要网页登录时，先根据上下文确认用户在本机还是远程（未知才询问），统一使用 `web-access` 的浏览器接管与 once/save 流程；不默认启动旧登录或扫码脚本。
 
 **Full-Context Human × Agent Collaboration（FCHAC）**：Everything as Code in Git, or Data in SaaS；Buzz orchestrates Human × Agent collaboration with full context。
 
@@ -21,6 +21,7 @@ Git／SaaS 是事实域，Buzz 是编排域。Channel 管受众与上下文；Ag
 |---|---|
 | 三类 Channel、Agent M:N、命名／职责、逐 Agent Skill→平台 scope、DEV-ASSESSMENT、Desk、**平台 Desk（跨 Channel 接单，如 `gitsecops-desk`）**、Canvas、四层配置与指标 | [fchac-model.md](references/fchac-model.md) |
 | 创建 Channel、铸身份、配 harness／Workflow、Onboarding 与验证 | [runtime-setup.md](references/runtime-setup.md) |
+| **已明确授权的隔离安装／更新单个 native Skill**：按目标 Skill 的依赖声明和调用方已评审的固定版本 profile 构建、校验有界资源闭包；缺少任务所需条件或未声明的传递依赖时停止。具体业务条件与发布配置由各自 owner 维护 | [native-skill-closure.md](references/native-skill-closure.md) |
 | **建频道默认项：每天北京时间22:00启动，汇总24小时人类与AI讨论并回写Canvas repo的已有Issue**；完整线程、覆盖与来源、歧义、去重/补偿及启用门禁 | [channel-issue-workflow.md](references/channel-issue-workflow.md)；方法 [channel-issue-progress](../../collaboration/channel-issue-progress/SKILL.md) |
 | **建频道默认项：会后发妙记或含妙记的 Issue 链接 → 注册 Desk/指定 Agent 整理并维护已有 Issue**；来源说话人/时间/位置、版本增量、防重与防同步回流；不邀请 bot 参会、不自动开发 | [minutes-issue-workflow.md](references/minutes-issue-workflow.md)；方法 [meeting-issue-notes](../../collaboration/meeting-issue-notes/SKILL.md) |
 | **不改 Buzz 源码让 Agent 真正看到 imeta 图片**：ACP adapter 同名 stdio proxy、stock `buzz media get` Blossom 鉴权、默认启用、安装／升级／回滚与 L4 | [acp-media-proxy.md](references/acp-media-proxy.md) |
@@ -36,6 +37,7 @@ Git／SaaS 是事实域，Buzz 是编排域。Channel 管受众与上下文；Ag
 | **已取代**（保留作参考，清理阶段删除）：Desk 当 router 的 `issue_thread_router.py`，含 outbox／action／checkpoint、public-only 与 service identity 门禁 | [issue-thread-routing.md](references/issue-thread-routing.md) |
 | 普通 GitLab 事件流／摘要播报（已并入全量变更同步，旧 notifier 待退役） | [gitlab-integration.md](references/gitlab-integration.md) |
 | **Buzz Channel ↔ 飞书群（本地 CLI 路线）**：setup 采访（新建群还是关联已有群、是否移出多余成员、哪些 agent 进群）、两种绑定的权限预检、agent 的 PersonalAgent 与隔离 lark-cli profile、`buzz_feishu_group_sync.py` 的成员对账与消息双向同步（人的身份按 `identity` 认：`union_id` 默认，前置是 bridge 已部署 union_id 回填与新响应字段；或 `email`；不用 bridge 应用的 open_id）、agent 的 Buzz reaction（👀 💬 等）同步成飞书表情、Buzz → 飞书默认发成卡片（`message_format`，飞书拒绝卡片内容时回退成文字）、图片双向同步（Buzz 的 imeta 附件 → 飞书图片消息，卡片之后作为随后的独立消息；飞书里人发的图片去掉元数据后作为附件发到 Buzz）、**非成员的发言默认以上下文镜像（`feishu_unmapped_senders`：署名 `[飞书·非成员]`，图片走成员同一路径，真实 @agent 产生 p tag 并唤醒它、不能 @ 到人；显式 `"skip"` 才关闭）**、**反方向对称：非成员/非 agent 的 Buzz 作者可选仅上下文镜像进飞书（`buzz_unmapped_senders`，同一条 @ 规则）**、**配置完每个群都要给群里发一条使用说明（什么场景 @ 谁，Setup 第 5 步）**、**别人 owner 的 agent：缺省由本频道 Desk bot 代发（`buzz_unmanaged_agents`），owner 把它的飞书 app_id 公开在 kind:30177 后别的群也能拉它的 bot、@ 到它（ADR-0019，`buzz_agent_feishu_app.py`）**、**成员与表情双向同步：在飞书群里拉人 / 拉 agent / 移人频道跟着变，飞书里也能同意 agent 入群；新进群 Agent 用公开 kind:0 about + 30177 respond_to 做一次人话自我介绍，不泄漏 instruction，失败可见并重试（ADR-0020，缺省开启，上线先用 `--mirror` 声明镜像）**、**跨机绑定认领：镜像 30177 里租约认领，同一频道或同一群被两台机器同步时后来者整轮停下并提示，`round --take-over` 立即接管，bind／create-chat 预检拒绝（ADR-0022，`binding_claim` 缺省开启）** | 入口与配置 [feishu-group-sync.md](references/feishu-group-sync.md)；消息细节 [feishu-message-sync.md](references/feishu-message-sync.md)；路由策略 [feishu-routing-policy.md](references/feishu-routing-policy.md)；双向部分 [feishu-two-way-sync.md](references/feishu-two-way-sync.md) |
+| **飞书绑定群的 Buzz Channel 标签页**：新绑定默认交付 HTTPS 入口，存量群按授权补齐；核验频道、消息锚点与当前身份，先查重、写后读回，未知写结果只读对账；这是 Agent 执行步骤，非 hostd 已自动维护能力 | [feishu-channel-tab.md](references/feishu-channel-tab.md) |
 | **把 agent 拉进新频道（邀请即申请）**：频道 admin 邀请设了 `BUZZ_ACP_CHANNELS` 的业务角色 agent 就是申请；owner 的定时任务（无大模型）以 agent 身份在群里发申请、说明能做什么，owner 在同一个 Thread 点 ✅ 或回 `/approve JOIN-<id>` 后改 env 清单／责任人配置／prompt 频道表，并在 agent 空闲时重启、核对订阅；平台类 agent 设 `owner_only`、executor 设 `nobody`；**agent 被拉进未绑定 Buzz 频道的飞书群时，同一个 timer 以 ADR-0022 认领为准，由 agent 自己的 bot 说明一次原因和下一步（核实不了就说暂时无法确认）** | [agent-channel-join.md](references/agent-channel-join.md)；决策 [ADR-0018](../../../docs/agent-harness/adr/0018-treat-a-bot-invite-as-a-join-request-the-agent-owner-approves-in-the-channel.md)、[ADR-0023](../../../docs/agent-harness/adr/0023-tell-an-unbound-feishu-group-why-an-invited-agent-cannot-work-there.md) |
 | **退役 Agent 的完整清理清单**（停进程、移出 Channel、吊销 GitLab token、kind 5 删 kind:30177、本机残留、工作目录、Canvas／prompt／route 里的引用）、agent 的持久 systemd 用户单元、手工 `glab api` 的 host 坑 | [runtime-setup.md](references/runtime-setup.md)（「9. 退役 Agent」「用持久用户单元托管 Agent 进程」「手工 `glab api` 要显式指定 host」） |
 
@@ -58,7 +60,7 @@ Git／SaaS 是事实域，Buzz 是编排域。Channel 管受众与上下文；Ag
 
 ## Rules
 
-1. **一个 Agent 身份一套独立平台账号／scope。** 不用人的账号，不让多个 Agent 共用 token；每个平台独立签发、撤销、审计最小 scope。请求 Agent 不能自行申请、批准或签发自己的 token；新发、续期和扩 scope 都要由平台管理员亲自授权，或以 `ACT-CREDENTIAL` 批准后由匹配 executor 提交 `act_id`、隔离 broker 执行。**唯一例外**：个人 Channel 的 todo 同步要读取并（经可信作者确认后）标记完成本人的 GitLab todo；GitLab todo 只属于用户本人，bot 拿不到，标记完成又只有 `api` 这一档 scope；本人的 `api` PAT 仅限无 LLM 的 owner timer 脚本、代码端点白名单，由本人亲自签发，见 [ADR-0013](../../../docs/agent-harness/adr/0013-run-personal-todo-sync-with-the-owners-pat.md)。这个例外不扩展到任何 Agent。
+1. **一个 Agent 身份一套独立平台账号／scope。** 不用人的账号，不让多个 Agent 共用 token；每个平台独立签发、撤销、审计最小 scope。请求 Agent 可以准备并通过已授权入口提交最小权限申请，但不能自行批准或签发自己的 token；新发、续期和扩 scope 都要由平台管理员亲自授权，或以 `ACT-CREDENTIAL` 批准后由匹配 executor 提交 `act_id`、隔离 broker 执行。**唯一例外**：个人 Channel 的 todo 同步要读取并（经可信作者确认后）标记完成本人的 GitLab todo；GitLab todo 只属于用户本人，bot 拿不到，标记完成又只有 `api` 这一档 scope；本人的 `api` PAT 仅限无 LLM 的 owner timer 脚本、代码端点白名单，由本人亲自签发，见 [ADR-0013](../../../docs/agent-harness/adr/0013-run-personal-todo-sync-with-the-owners-pat.md)。这个例外不扩展到任何 Agent。
 2. **Skill／token／SaaS 事件连接 Agent，不连接 Channel。** 一个 Agent 可以加入多个 Channel；Channel 隔离对话可见性，不隔离进程 env。
 3. **所有注册 Agent 都能维护 Issue SSOT。** `-desk`、所有角色／investigator 和所有 executor 都加载 `gitlab-issue-sop`，使用各自独立 GitLab 身份；GitLab 18.0 的基线是项目级 Planner（access level 15）+ `api`，用于创建／评论／更新／关闭／重开 Issue。已有 Reporter／Developer 身份可覆盖此基线，但不能共享 token。确定性 Agent Step、route-writer 与 ACT broker **不是 Agent**，不继承该权限，也不得另获一套 Issue 权限；Desk-owned sync 只使用 Desk 已有权限。Issue 写入仍遵守查重、assignee、label 治理和用户确认，不能借此执行 merge、push 或部署。完整 Issue 生命周期是这项通用基线有意授权的能力；`-bi` 的常规产物仍只是已有 Issue 的 BI 证据评论，其它 Issue 操作仍显式走通用 `gitlab-issue-sop`。证据评论只含脱敏聚合结论和受控链接，并以精确首行 marker `<!-- data-review-evidence-index:v1 -->` 维护。
 4. **BI Issue 证据评论采用目标驱动自动回流，并有独立行为预算和单 writer 前提。** 该评论不要求逐次人工批准：直接人类任务或 schedule 都可以触发分析；可信 Bridge／仓库适配器先验证签名、binding 回读或受保护默认分支合入状态并签发回执。GitLab closes／related、Issue 正文与评论、canonical key、标题相似和 Channel 文本都只能产生候选，不能单独授权写入。Canvas 中的项目必须与 owner prompt 固定的 `allowed_project` 完全一致，且目标项目必须属于证据源配置的 `allowed_destination_project_ids`；零个目标不写，恰好一个目标写回，多个候选不写。候选回执先经过 `data-review-analysis` 自带的确定性分类器；它校验 kind、项目／目的地 allowlist 和零／一／多目标，但不验签或证明 Git ref，因此不能把模型提交的可信标签当作 production 授权。直接 token 只在 `BUZZ_ACP_AGENTS=1`、唯一活动进程、每次运行检查单 writer／稳定扫描且 owner 持续检查日志的 Naturehood 实验中启用；这不是 production-ready。无人值守生产保持写回禁用，直到不向 LLM 暴露 token 的确定性 writer／broker 从原始来源完成 project／destination allowlist、provenance 校验、project＋IID＋marker 锁、结构化内容出口、upsert 和 readback，并通过进程级竞态测试。notes 固定 `order_by=created_at&sort=asc`，每页 100、最多 20 页／2000 条、总耗时 30 秒；每个 pass 按 note ID 去重并核对 `X-Total`，连续两次完整扫描的 note ID 集合与 marker 候选必须一致，集合漂移或任何下一页未读、429、超时、失败都 fail closed。完整受控扫描后把扫描结果交给 Skill 的可执行 upsert 判定，按“当前 writer author＋精确首行 marker”执行零条创建、恰好一条更新、多条／不可编辑／内容不变分别 conflict／no-op，写后回读；不得编辑／删除他人评论或删除自己的评论。Project Access Token bot 按 profile 设置可见性：Planner／Reporter 由实例管理员标为 external 并实测 Internal 项目列表为空、显式 membership 只有目标项目；会提 MR 的 Developer 保持 non-external，但仍要求显式 membership 只有目标项目，否则不注入 token。
@@ -130,7 +132,7 @@ AI 无法自行得知、必须问人的输入，一次问齐，给出默认建�
 - 是否需要 GitLab → Buzz 同步，以及起始时间 `since`。
 - 需要哪些 SaaS：Sentry、Superset、GrowthBook、DataHub、Dagster 等，各自用于哪个 Agent。需要 Superset/Lake Formation 的 Agent 接着读 [data-access.md](references/data-access.md)，收集业务背景、数据范围和有效期并以 Creator 本人提单。
 - 是否为某个人建**个人 Channel**（本人待办入口＋个人助手）：走 [personal-channel.md](references/personal-channel.md) 自己的采访，不混进业务 Channel 的清单。
-- 新建业务 Channel 默认准备“妙记 → 已有 Issue”Workflow：会后由人发链接，目标默认已注册 `-desk` 或用户选定的其它 agent。沿用已批准仓库/动作范围，缺原消息核验、转写权限或持久幂等 writer 则保留 disabled/draft 并记录恢复条件；按 [接入与验收](references/minutes-issue-workflow.md) 执行，不能把默认模板当作生产授权。
+- 新建业务 Channel 默认准备“妙记 → 已有 Issue”Workflow：会后由人发链接，目标默认已注册 `-desk` 或用户选定的其它 agent。沿用已批准仓库/动作范围，缺基础来源读取/评论权限或固定项目范围则保留 disabled/draft 并记录恢复条件；按 [接入与验收](references/minutes-issue-workflow.md) 执行，不能把默认模板当作生产授权。
 - 定时分析的站立受众 GitLab 用户名（必须已在 `people_file`）：Channel admin、产品经理（pm）、核心研发（core_eng）。写入 Canvas `buzz-workflow-audience:v1` 并复制进各 schedule yaml。
 
 仓库清单按下面模板写进 Canvas。它只列仓库，不加 Agent 权限列——每个 Agent 的档位按 [agent-credentials.md](references/agent-credentials.md) 的角色最小档决定，多仓库时可在清单下用一句话写明哪些 Agent 持有只读 token；GitLab token 按「清单 × 角色最小档」申请，一个 Agent 一套自己的身份：主项目（中央 Issue 仓）使用 `GITLAB_TOKEN`，需要读其它业务仓的角色按仓持有 `GITLAB_<REPO>_READ_TOKEN`；需要受控多仓库访问时使用 owner 固定的项目映射，为每个项目写入独立命名变量（见 [agent-credentials.md](references/agent-credentials.md)「多仓库」）。增删仓库或调整权限时以这张表为准：先改表，再申请或收回 token。
@@ -214,7 +216,7 @@ Agent 可被 @ 必须同时满足：
 
 Workflow 负责主动唤醒，并可携带本轮／本类调度的 Workflow 专属参数：
 
-- 新建业务 Channel 默认准备 [妙记 → 已有 Issue](references/minutes-issue-workflow.md)：会后人发妙记或容器 Issue 链接，以 `message_posted` 候选筛选唤醒已注册 `-desk`/指定 agent；专用 `meeting-issue-notes` 处理来源、增量与防重。默认 disabled，接入验收与既有授权齐备后才启用。
+- 新建业务 Channel 默认准备 [妙记 → 已有 Issue](references/minutes-issue-workflow.md)：会后人发妙记或容器 Issue 链接，以 `message_posted` 候选筛选唤醒已注册 `-desk`/指定 agent；专用 `meeting-issue-notes` 处理来源、增量与防重。模板默认 disabled；确认既有身份、读取/评论权限、固定项目与查重/回读规则后启用，不把持久 ledger、独立 writer 或专项完整 L4 当作普通 Issue 评论前提。
 
 - 没人 @ 也该产出时用 schedule，例如 Desk 进展分析、BI 复盘、investigator 巡检，以及 `-dev` 的只读分析（周 pipeline 健康、月度架构坏味道）。目录与站立受众见 [scheduled-workflows.md](references/scheduled-workflows.md)。
 - 普通非 GitLab 外部事件可按来源使用 webhook／轮询唤醒角色 Agent。GitLab 同步的 canonical 实现是 [gitlab-buzz-sync.md](references/gitlab-buzz-sync.md)：owner 的主机调度器（Linux `systemd --user`，macOS `launchd`）直接运行确定性脚本（ADR-0004 的 **Desk-owned Agent Step** 契约，以 Desk 身份发布），不唤醒 Desk、不经过 LLM；公开 Buzz Workflow schedule 已退役。

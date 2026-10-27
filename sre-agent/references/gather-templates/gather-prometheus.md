@@ -18,14 +18,14 @@
 ### 端点选择
 
 从 `references/infra/prometheus.md` 选择端点：
-- `us-prod-*` → thanos-prod-us.addx.live
+- `us-prod-*` / `prod-us-*` → US prod VictoriaMetrics 集群；API base 为 `https://victoria-metrics-us-prod.addx.live/select/0/prometheus`
 - `us-staging-*` → thanos-us.addx.live
 - `eu-prod-*` → thanos-prod-eu.addx.live
 - CN prod (`cn-main` / `cn-prod` / `prod-cn`) → 同集群已确认的 Prometheus/Thanos 或 VictoriaMetrics；二者迁移共存，先验证目标 job 与时间范围
 - 已核验资源在新 CN staging → `tencent-100052802231-cn-staging` 的 VictoriaMetrics 单机，先确认 Service 再 port-forward
-- CN tech-service → VictoriaMetrics 集群；目标 API base 为 `https://victoria-metrics-cn-tech-service-tke.addx.live/select/0/prometheus`（**待切换**）。先核验实际 Ingress/Service、租户、认证和采集覆盖，再显式选择已验证入口；使用 query helper 时必须设置 `PROMETHEUS_CN_TECH_SERVICE_URL`，缺失时不发请求
+- CN tech-service → VictoriaMetrics 集群；API base 为 `https://victoria-metrics-cn-tech-service-tke.addx.live/select/0/prometheus`，2026-10-19 查询已通过 TLS / HTTP 200 核验，见 [准入回执](../../../../delivery/cicd-developer/references/cn-tech-service-admission-2026-10-19.md)。仍须核验当前 Ingress/Service、租户、调用方权限和采集覆盖，再显式选择入口；使用 query helper 时必须设置 `PROMETHEUS_CN_TECH_SERVICE_URL`，缺失时不发请求
 `cn-staging-*` / `staging-cn-*` job 或 Dispatcher 的逻辑环境不能证明新集群归属；cn-main 仍声明部分 staging job。必须先核对 scrape 配置、资源归属和时间范围，再明确选择 cn-main 或新 staging 的数据源，不自动回退到任一端点。
-完整映射及 VMAlert 目标见 [监控端点](../infra/prometheus.md)。VMAlert 用于规则评估与告警链路排查，不可用作指标查询 base；本采集任务不自动访问待切换目标。
+完整映射及 VMAlert 入口见 [监控端点](../infra/prometheus.md)。VMAlert 用于规则评估与告警链路排查，不可用作指标查询 base；本采集任务不根据逻辑环境自动访问域名，也不把健康检查当作告警通知验收。
 
 ### 采集任务
 

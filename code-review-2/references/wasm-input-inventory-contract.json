@@ -1,0 +1,5 @@
+{
+  "schema_version": 1,
+  "capability": "wasm-input-inventory/v1",
+  "artifact": "inventory-evidence"
+}

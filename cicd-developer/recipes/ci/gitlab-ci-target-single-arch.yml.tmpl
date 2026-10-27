@@ -24,7 +24,10 @@
 #     so ArgoCD Image Updater can select it. Env separation lives in IMAGE_PATH
 #     (`cicd/<env>-<region>/<app>`), not in the tag string.
 #
-# Rollout 也不写 `nodeSelector.kubernetes.io/arch`（集群本就单 arch，写了多余）。
+# Rollout overlay 必须使用 references/nodepool-placement.md 的完整目标池 placement。
+# `kubernetes.io/arch: amd64` 可保留为兼容性约束，不能替代已核验的池身份/网络。
+# EKS Pod placement 绑定池/架构/容量/已提供的网络约束；NodeClass 仅做供给及运行核验。
+# TKE/GKE 使用目标原生池合同；不从此构建 snippet 推导 EKS 标签或调度权限。
 # Application annotation `app.platforms` uses `linux/amd64`
 # （完成 CI/artifact 证据后，按 new-service.md Step 11 的 Application 填槽写入）。
 

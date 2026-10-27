@@ -123,6 +123,10 @@ description: 给现有服务接 Sentry（自助流程）。开发者声明 4 个
     - `cloud == tencent && cluster.name == cn-k8s`（仅 TKE cn-main / 100014919455）→ ConfigMap 用 `recipes/sentry/onboard-config-tke.yaml.tmpl`，Job 用 `onboard-job-tke.yaml.tmpl`（TKE 变体已**预设**了固定 VAULT_ADDR / `jwt-tke-cn-main` mount / image base/ 前缀 / projected token / nodeSelector / imagePullSecrets）
     - 其他 `cloud == tencent` 或 `cloud == gcp` → 尚无经过目标验证的自助 recipe；STOP 产 Ops Todo，不能套用 cn-main 固定值
 
+  - Job 的预设 arch 不是完整 placement。生成前按 [应用 NodePool 接入](../references/nodepool-placement.md)
+    核验准确目标池与 NAT，并采用该 reference 的目标 placement 变体补齐 PodSpec；
+    TKE 保留 amd64 且使用原生池标识，不复制 EKS 标签，也不改变上面的 recipe 支持范围。
+
   - 用对应 ConfigMap recipe，填槽（EKS）：
       `{{app}}=$app`、`{{platform}}=$platform`、`{{instance}}=$target.instance_key`、
       `{{team}}=$team`、`{{sentry_app_type}}=$sentry_app_type`、`{{env}}=$target.env`、

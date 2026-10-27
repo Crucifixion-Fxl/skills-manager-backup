@@ -280,6 +280,7 @@ def index_of(text: str, marker: str) -> int:
 
 
 def load_script(name: str):
+    sys.modules.pop("buzz_claude_runtime", None)
     path = SCRIPTS / f"{name}.py"
     spec = importlib.util.spec_from_file_location(f"local_alignment_{name}", path)
     module = importlib.util.module_from_spec(spec)
@@ -289,6 +290,7 @@ def load_script(name: str):
 
 
 def load_python(path: Path, name: str):
+    sys.modules.pop("buzz_claude_runtime", None)
     spec = importlib.util.spec_from_file_location(name, path)
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None

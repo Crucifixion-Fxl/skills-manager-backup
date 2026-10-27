@@ -259,6 +259,17 @@
       "sourceDiscovery": "skills/business-operations/addx-console-admin/references/source-discovery.json"
     },
     {
+      "id": "bakery-dist",
+      "label": "Bakery 打包分发平台",
+      "owner": "bakery-dist",
+      "reference": "skills/delivery/bakery-dist/references/saas-access.md",
+      "accessProfile": "skills/delivery/bakery-dist/references/auth-profile.json",
+      "strategy": "browser-session-owner-contract",
+      "verification": "pending",
+      "runtimeVerification": "pending",
+      "authDiscovery": "skills/delivery/bakery-dist/references/auth-discovery.json"
+    },
+    {
       "id": "cicd",
       "label": "CICD 上线单",
       "owner": "cicd-platform",
@@ -813,6 +824,15 @@
       "strategy": "official-signed-api-plus-opencli",
       "verification": "source-verified",
       "runtimeVerification": "runtime-verified-local-poc"
+    },
+    {
+      "id": "incident-create",
+      "label": "线上事故管理（CS Portal）",
+      "owner": "incident-create",
+      "reference": "skills/observability/incident-create/references/saas-access.md",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending"
     }
   ],
   "platformTriage": [

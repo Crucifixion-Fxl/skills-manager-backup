@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "capability": "builder-static-context/v1",
+  "tool": "read_review_source",
+  "operation": "builder-capacity",
+  "artifact": "builder-static-context.json",
+  "flag": "CODE_REVIEW_BUILDER_STATIC_CONTEXT_ENABLED"
+}

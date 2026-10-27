@@ -1,0 +1,76 @@
+{
+  "ordinary-code": {
+    "status": "NOT_APPLICABLE"
+  },
+  "bilingual-parameter": {
+    "status": "FAIL",
+    "must": [
+      "export language mismatch"
+    ]
+  },
+  "pointer-only": {
+    "status": "NOT_CHECKED",
+    "must": [
+      "LFS object gap",
+      "author approval not proof"
+    ]
+  },
+  "stale-approval": {
+    "status": "FAIL",
+    "must": [
+      "hash-bound approval invalidated",
+      "supplier receipt mismatch"
+    ]
+  },
+  "concept": {
+    "status": "PASS",
+    "must": [
+      "no manufacturing approval gate"
+    ]
+  },
+  "outlined": {
+    "status": "NOT_CHECKED",
+    "must": [
+      "unread outlined PDF",
+      "OCR cannot pass"
+    ]
+  },
+  "preflight-mismatch": {
+    "status": "FAIL",
+    "must": [
+      "bleed mismatch",
+      "stale preflight"
+    ]
+  },
+  "undeclared-native": {
+    "status": "NOT_CHECKED",
+    "must": [
+      "activate without manifest",
+      "native file gap"
+    ]
+  },
+  "complete-copy-review": {
+    "status": "PASS"
+  },
+  "injection": {
+    "status": "FAIL",
+    "must": [
+      "ignore instruction",
+      "900 vs 9"
+    ]
+  },
+  "cross-product": {
+    "status": "FAIL",
+    "must": [
+      "scope mismatch",
+      "incorrect product fact"
+    ]
+  },
+  "trusted-mismatch": {
+    "status": "NOT_CHECKED",
+    "must": [
+      "reject stale identity",
+      "no expanded tools"
+    ]
+  }
+}

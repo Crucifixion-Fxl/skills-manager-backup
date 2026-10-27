@@ -239,6 +239,239 @@ class AdoptionEffectsTests(unittest.IsolatedAsyncioTestCase):
         self.roles[value['tags'][1][1]]=value['tags'][2][1]
         return 200,json.dumps({'accepted':True,'event_id':value['id']}).encode()
 
+    async def scoped_bound(self, *, orphan=True):
+        """Real signed public reads, Worker scope and RuntimeRegistrar; temporary DB/files."""
+        from types import SimpleNamespace
+        from hostd import binding_worker, join_effects, runtime_registration, reaction_inbox, outlet_work
+        self.db.conn.execute("UPDATE join_request SET kind='channel',binding_id='winner' WHERE request_id=?",(self.row['request_id'],))
+        self.db.conn.execute('DELETE FROM effect_plan WHERE request_id=?',(self.row['request_id'],))
+        self.row=self.db.join_request(self.row['request_id'])
+        await self.adapter.apply(self.row)
+        self.plan=self.db.effect_plan(self.row['request_id'])
+        self.db.conn.execute("UPDATE binding SET status='degraded' WHERE binding_id='winner'")
+        worker=binding_worker.Worker.__new__(binding_worker.Worker)
+        worker.binding_id='winner';worker.config=Path(self.cfg);worker.outlet_specs={self.agent:self.spec};worker.verdict='won'
+        if orphan:
+            self.db.conn.execute("INSERT INTO state_snapshot VALUES('winner',1,'',NULL,?,'',100)",('0'*64,))
+            self.db.conn.executemany("INSERT INTO state_scalar VALUES('winner',?,NULL,0)",[('floor',),('buzz_floor',)])
+            for ref in ('a'*64,'b'*64):
+                event=effects.gs.sign_event(self.agent_key,5,[['h',self.channel],['e',ref]],'',30)
+                self.assertTrue(reaction_inbox.retain(self.db,'winner',self.channel,self.agent,event))
+                outlet_work.capture(self.db,'winner',self.channel,self.agent,[event],floor=0,now=100,retained={event['id']:event})
+        observation={'status':'pending' if orphan else 'verified','app_id':self.spec.app_id,'pending':1 if orphan else 0,'checked_at':self.now}
+        if orphan:observation.update(registration_only=True,reason='orphan_withdrawal_wait')
+        def renew():
+            proof=(worker._outlet_scope(self.agent,self.db),dict(observation))
+            if orphan:proof+=(worker._orphan_wait_scope(self.agent,self.db),)
+            worker._outlet_readiness={self.agent:proof}
+        renew()
+        task=asyncio.create_task(asyncio.Event().wait())
+        async def cancel():
+            task.cancel();await asyncio.gather(task,return_exceptions=True)
+        self.addAsyncCleanup(cancel)
+        host=SimpleNamespace(runtime_store=self.db,onboarding=SimpleNamespace(records={self.spec.app_id:self.spec}),
+            workers={'winner':worker},status={'bindings':{'winner':{'runs':1,'relay':'connected'}},'apps':{app:{'feishu':'connected'} for app in ('cli_agent','cli_reader')}},
+            binding_tasks={'winner':{'worker':task,'relay':task}},app_tasks={'cli_agent':task,'cli_reader':task},
+            outlet_tasks={('winner',self.agent):task},outlet_status={('winner',self.agent):'connected'},
+            reg=SimpleNamespace(bindings={'winner':SimpleNamespace(channel_id=self.channel,chat_id='oc_group',config=Path(self.cfg),sync_app_id='cli_reader')}))
+        host._binding_state=lambda name:self.db.conn.execute('SELECT status FROM binding WHERE binding_id=?',(name,)).fetchone()[0]
+        registrar=runtime_registration.RuntimeRegistrar(host,clock=lambda:self.now)
+        relay=join_effects.Nip98Relay('https://relay.test',str(self.base/'owner.env'),self.pin,http=self.http,trusted_relays=('https://relay.test',),clock=lambda:self.now)
+        adapter=join_effects.JoinEffects(self.db,{self.agent:self.spec},relay,self.runtime,registrar,clients={'cli_agent':self.client},clock=lambda:self.now)
+        return adapter,registrar,host,worker,observation,renew
+
+    async def test_degraded_scoped_orphan_readback_completes_join_without_ack_or_replay(self):
+        from hostd.onboarding import Coordinator
+        adapter,registrar,host,worker,observation,renew=await self.scoped_bound()
+        before={table:[tuple(row) for row in self.db.conn.execute('SELECT * FROM '+table)] for table in ('outlet_work','reaction_inbox','join_decision','effect_step')}
+        effects_before=(len(self.publications),self.runtime.restarts)
+        proof=await registrar.readback(self.row,self.plan)
+        self.assertTrue(proof.worker_active and proof.outlet_active)
+        self.assertTrue((await adapter.readback(self.row)).verified)
+        renew()  # The just-created grant changes the Worker's authority fingerprint.
+        coordinator=Coordinator(self.db,None,None,effects=adapter,clock=lambda:self.now)
+        coordinator._present=mock.AsyncMock()
+        await coordinator._apply_verified(self.row,self.now)
+        self.assertEqual(self.db.join_request(self.row['request_id'])['status'],'done')
+        self.assertEqual(self.db.conn.execute('SELECT status FROM agent_chat').fetchone()[0],'active')
+        for table,rows in before.items():self.assertEqual([tuple(row) for row in self.db.conn.execute('SELECT * FROM '+table)],rows)
+        self.assertEqual((len(self.publications),self.runtime.restarts),effects_before)
+        self.assertEqual(self.db.conn.execute('SELECT count(*) FROM delivery').fetchone()[0],0)
+        self.assertEqual(self.db.bindings()[0]['status'],'degraded')
+
+    async def test_degraded_requires_canonical_synchronous_observer_but_active_keeps_old_contract(self):
+        from types import SimpleNamespace
+        adapter,registrar,host,worker,observation,renew=await self.scoped_bound()
+        adapter.registrar=SimpleNamespace(readback=registrar.readback)
+        self.assertFalse((await adapter.readback(self.row)).verified)
+        self.assertEqual(self.db.conn.execute('SELECT count(*) FROM agent_chat').fetchone()[0],0)
+        self.db.conn.execute("UPDATE binding SET status='active' WHERE binding_id='winner'")
+        self.assertTrue((await adapter.readback(self.row)).verified)
+
+    async def test_degraded_scoped_normal_readback_completes_without_pending_work(self):
+        adapter,*_=await self.scoped_bound(orphan=False)
+        self.assertTrue((await adapter.readback(self.row)).verified)
+        self.assertEqual(self.db.conn.execute('SELECT status FROM agent_chat').fetchone()[0],'active')
+
+    async def test_degraded_bound_scoped_proof_refuses_stale_wrong_identity_and_stopped_worker(self):
+        adapter,registrar,host,worker,observation,renew=await self.scoped_bound()
+        saved=registrar.readback
+        from dataclasses import replace
+        for changes in ({'request_id':'JOIN-ffffffff'},{'channel_id':'33333333-3333-4333-8333-333333333333'},
+                        {'app_id':'cli_other'},{'chat_id':'oc_other'},{'checked_at':self.now-301},
+                        {'checked_at':self.now+1},{'worker_active':False},{'reader_connected':False},
+                        {'relay_connected':False},{'outlet_active':False}):
+            with self.subTest(changes=changes):
+                async def observed(row,plan):return replace(await saved(row,plan),**changes)
+                registrar.readback=observed
+                self.assertFalse((await adapter.readback(self.row)).verified)
+                self.assertEqual(self.db.conn.execute('SELECT count(*) FROM agent_chat').fetchone()[0],0)
+        registrar.readback=saved
+        host.onboarding.records[self.spec.app_id]=mock.Mock(pubkey='f'*64,owner_pubkey=self.owner,app_id=self.spec.app_id)
+        self.assertFalse((await adapter.readback(self.row)).verified)
+        host.onboarding.records[self.spec.app_id]=self.spec
+        host.binding_tasks['winner']['worker']=None
+        self.assertFalse((await adapter.readback(self.row)).verified)
+
+    async def test_degraded_bound_refuses_unapproved_and_nonauthorized_states(self):
+        adapter,registrar,host,worker,observation,renew=await self.scoped_bound()
+        for table,column,values in [('join_request','status',('requested','denied','expired','done')),('binding','status',('paused','conflict','pending','retired'))]:
+            for value in values:
+                with self.subTest(table=table,value=value):
+                    self.db.conn.execute('SAVEPOINT negative')
+                    try:
+                        self.db.conn.execute('UPDATE '+table+' SET '+column+'=?',(value,))
+                        renew()
+                        self.assertFalse((await adapter.readback(self.db.join_request(self.row['request_id']))).verified)
+                        self.assertEqual(self.db.conn.execute('SELECT count(*) FROM agent_chat').fetchone()[0],0)
+                    finally:self.db.conn.execute('ROLLBACK TO negative');self.db.conn.execute('RELEASE negative')
+        renew()
+        self.assertTrue((await adapter.readback(self.row)).verified)
+
+    async def test_degraded_readback_keeps_unknown_and_refuses_authority_change_during_await(self):
+        adapter,registrar,host,worker,observation,renew=await self.scoped_bound()
+        for mutation in ('unknown','decision','destination','pause'):
+            with self.subTest(mutation=mutation):
+                self.db.conn.execute('SAVEPOINT concurrent_change')
+                before_grants=list(self.db.conn.execute('SELECT * FROM agent_chat'))
+                def change():
+                    if mutation=='unknown':
+                        pending=self.db.reserve_delivery('winner','d'*64,'r2f',agent_id=self.agent,now=100)
+                        self.db.fail_delivery(pending.id,unknown=True,now=100)
+                    elif mutation=='decision':self.db.conn.execute('DELETE FROM join_decision')
+                    elif mutation=='destination':self.db.conn.execute("UPDATE effect_plan SET channel_id='33333333-3333-4333-8333-333333333333'")
+                    else:self.db.conn.execute("UPDATE binding SET status='paused' WHERE binding_id='winner'")
+                self.mutate=change
+                try:
+                    self.assertFalse((await adapter.readback(self.row)).verified)
+                    self.assertEqual(list(self.db.conn.execute('SELECT * FROM agent_chat')),before_grants)
+                    if mutation=='unknown':self.assertEqual(self.db.conn.execute('SELECT status FROM delivery').fetchone()[0],'unknown')
+                finally:
+                    self.db.conn.execute('ROLLBACK TO concurrent_change');self.db.conn.execute('RELEASE concurrent_change');renew()
+        self.assertTrue((await adapter.readback(self.row)).verified)
+
+    async def concurrent_grant(self,mutation,*,orphan=True,allowed=False):
+        from hostd import outlet_work
+        adapter,registrar,host,worker,observation,renew=await self.scoped_bound(orphan=orphan)
+        if mutation=='inbox_reference':
+            from hostd import reaction_inbox
+            event=effects.gs.sign_event(self.agent_key,5,[['h',self.channel],['e','c'*64]],'',30)
+            self.assertTrue(reaction_inbox.retain(self.db,'winner',self.channel,self.agent,event))
+            renew()
+        original=adapter._record_bound_grant;called=[]
+        def before_transaction(row,spec,plan,registration=None):
+            # A separate ledger connection commits after proof, before BEGIN.
+            called.append(mutation)
+            with store.Store(self.base/'sql'/'hostd.db') as other:
+                if mutation in ('unknown','unknown_active','other_agent'):
+                    pub='f'*64 if mutation=='other_agent' else self.agent
+                    if pub!=self.agent:other.register_agent(pub,owner_pubkey=self.owner,app_id='cli_other',now=100)
+                    delivery=other.reserve_delivery('winner','d'*64,'r2f',agent_id=pub,now=100)
+                    other.fail_delivery(delivery.id,unknown=True,now=100)
+                    if mutation=='unknown_active':other.conn.execute("UPDATE binding SET status='active' WHERE binding_id='winner'")
+                elif mutation in ('work','work_active'):
+                    event=effects.gs.sign_event(self.agent_key,7,[['h',self.channel],['e','a'*64]],'+',30)
+                    outlet_work.capture(other,'winner',self.channel,self.agent,[event],floor=0,now=100,retained={})
+                    if mutation=='work_active':other.conn.execute("UPDATE binding SET status='active' WHERE binding_id='winner'")
+                elif mutation=='pending':
+                    other.conn.execute('INSERT INTO outlet_pending SELECT binding_id,agent_id,source_id,channel_id,kind,source_at,captured_floor FROM outlet_work LIMIT 1')
+                elif mutation=='original_receipt':
+                    delivery=other.reserve_delivery('winner','a'*64,'r2f',agent_id=self.agent,now=100)
+                    other.ack_delivery(delivery.id,'om_original',now=100)
+                elif mutation=='approval':other.conn.execute('DELETE FROM join_decision')
+                elif mutation=='active':other.conn.execute("UPDATE binding SET status='active' WHERE binding_id='winner'")
+                elif mutation=='mirror_environment':
+                    mirror_env=Path(json.loads(Path(self.cfg).read_text())['mirror_env_file'])
+                    mirror_env.write_text('BUZZ_PRIVATE_KEY='+'6'*64+'\n')
+                elif mutation=='heartbeat':other.conn.execute("UPDATE binding SET heartbeat_at=heartbeat_at+1 WHERE binding_id='winner'")
+                elif mutation=='inbox_reference':
+                    receipt=other.reserve_delivery('winner','c'*64,'r2f',agent_id=self.agent,now=100)
+                    other.ack_delivery(receipt.id,'om_original',now=100)
+                elif mutation=='outlet_spec':
+                    from dataclasses import replace
+                    worker.outlet_specs[self.agent]=replace(self.spec,reader_data_dir=str(self.base/'new-data'))
+            original(row,spec,plan,registration)
+        adapter._record_bound_grant=before_transaction
+        result=await adapter.readback(self.row)
+        self.assertEqual(called,[mutation])
+        self.assertEqual(result.verified,allowed)
+        self.assertEqual(self.db.conn.execute('SELECT count(*) FROM agent_chat WHERE agent_id=?',(self.agent,)).fetchone()[0],int(allowed))
+        if mutation in ('unknown','unknown_active','other_agent'):
+            self.assertEqual(self.db.conn.execute('SELECT status FROM delivery').fetchone()[0],'unknown')
+        if not allowed:self.assertFalse(registrar.readback_now(self.row,self.plan,scoped=True).outlet_active)
+        if mutation=='work_active':
+            # Ordinary active callers retain their historical contract.
+            self.assertTrue((await registrar.readback(self.row,self.plan)).outlet_active)
+
+    async def test_final_grant_cas_rejects_concurrent_own_unknown(self):
+        await self.concurrent_grant('unknown',orphan=False)
+
+    async def test_final_grant_cas_cannot_drop_fingerprint_when_binding_recovers_active(self):
+        await self.concurrent_grant('unknown_active')
+
+    async def test_final_grant_cas_rejects_concurrent_ordinary_work_after_orphan_proof(self):
+        await self.concurrent_grant('work')
+
+    async def test_final_grant_keeps_scoped_work_check_after_active_recovery(self):
+        await self.concurrent_grant('work_active',orphan=False)
+
+    async def test_final_grant_allows_active_recovery_with_current_scoped_proof(self):
+        await self.concurrent_grant('active',orphan=False,allowed=True)
+
+    async def test_final_grant_cas_rejects_concurrent_legacy_pending(self):
+        await self.concurrent_grant('pending')
+
+    async def test_final_grant_cas_rejects_new_original_receipt_after_orphan_proof(self):
+        await self.concurrent_grant('original_receipt')
+
+    async def test_final_grant_cas_rejects_concurrent_approval_change(self):
+        await self.concurrent_grant('approval')
+
+    async def test_final_grant_cas_rejects_mirror_signer_file_change(self):
+        await self.concurrent_grant('mirror_environment')
+
+    async def test_final_grant_cas_allows_unrelated_binding_heartbeat(self):
+        await self.concurrent_grant('heartbeat',allowed=True)
+
+    async def test_final_grant_observes_all_retained_inbox_reference_receipts(self):
+        await self.concurrent_grant('inbox_reference')
+
+    async def test_final_grant_observes_current_worker_outlet_spec(self):
+        await self.concurrent_grant('outlet_spec')
+
+    async def test_final_grant_cas_keeps_unrelated_agents_independent(self):
+        await self.concurrent_grant('other_agent',allowed=True)
+
+    async def test_degraded_normal_proof_rejects_work_arriving_during_public_readback(self):
+        from hostd import outlet_work
+        adapter,registrar,host,worker,observation,renew=await self.scoped_bound(orphan=False)
+        event=effects.gs.sign_event(self.agent_key,7,[['h',self.channel],['e','a'*64]],'+',30)
+        self.mutate=lambda:outlet_work.capture(self.db,'winner',self.channel,self.agent,[event],floor=0,now=100,retained={})
+        self.assertFalse((await adapter.readback(self.row)).verified)
+        self.assertEqual(self.db.conn.execute('SELECT count(*) FROM agent_chat').fetchone()[0],0)
+        self.assertEqual(self.db.conn.execute('SELECT count(*) FROM outlet_work').fetchone()[0],1)
+        self.assertEqual(self.db.conn.execute('SELECT count(*) FROM delivery').fetchone()[0],0)
+
     async def test_approved_loser_adopts_then_bound_path_finishes_without_new_binding_or_approval(self):
         original_decision=self.db.card_approval_decision(self.row['request_id'])
         cfg=Path(self.cfg).read_bytes()

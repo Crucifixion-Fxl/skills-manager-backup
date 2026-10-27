@@ -1,0 +1,14 @@
+# Known desired-state mappings, not runtime delivery acceptance.
+# Reviewed against DEV/k8s@1489d4d04cc60855be1bc951a632cd64e309f5d6
+# and DEV/argocd-apps@7daa17dc17dc7a0270c23b0062ee8605b1ec8fec.
+targets:
+  cn-tke-prod:
+    runtime_env_labels:
+      prod-cn:
+        status: compatible-config
+        topic_pattern: addx-cn-prod-{app}
+        note: Preserve only the identity verified from the exact Application and runtime render.
+      prod-cn-tke-2231:
+        status: blocked
+        topic_pattern: addx-uncategorized-prod-cn-tke-2231-{app}
+        reason: Numeric suffix fails the collector alphabetic-region parser; Vector does not subscribe to uncategorized topics.

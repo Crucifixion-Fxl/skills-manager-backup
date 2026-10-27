@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 import re
 import unittest
 
@@ -15,13 +16,27 @@ class MigrationContractTest(unittest.TestCase):
         self.assertIn("独立可信 Web 应用", entry)
 
     def test_local_document_links_resolve(self):
-        documents = [SKILL_ROOT / "SKILL.md", *SKILL_ROOT.glob("references/*.md")]
+        owner = SKILL_ROOT.parent / "micro-app"
+        documents = [SKILL_ROOT / "SKILL.md", *SKILL_ROOT.glob("references/*.md"), owner / "SKILL.md", *owner.glob("references/*.md")]
         for document in documents:
             for target in re.findall(r"\[[^\]]+\]\(([^)]+)\)", document.read_text(encoding="utf-8")):
                 if "://" in target or target.startswith("#"):
                     continue
                 with self.subTest(document=document.name, target=target):
                     self.assertTrue((document.parent / target.split("#", 1)[0]).is_file())
+
+    def test_owner_discovery_entrypoints_and_source_policy_resolve(self):
+        owner = SKILL_ROOT.parent / "micro-app"
+        source = json.loads((owner / "references/source-discovery.json").read_text(encoding="utf-8"))
+        for target in [*source["contractEntrypoints"], source["sourcePolicy"]]:
+            with self.subTest(target=target):
+                self.assertTrue((owner / target).is_file())
+        # auth-discovery.sources[].path is relative to that JSON's directory.
+        auth_path = owner / "references/auth-discovery.json"
+        auth = json.loads(auth_path.read_text(encoding="utf-8"))
+        for entry in auth["sources"]:
+            if entry["kind"] == "owner-contract":
+                self.assertTrue((auth_path.parent / entry["path"]).is_file())
 
     def test_no_retired_entrypoint_in_consumers(self):
         repo = next(p for p in Path(__file__).resolve().parents if (p / ".codex-plugin" / "plugin.json").is_file())

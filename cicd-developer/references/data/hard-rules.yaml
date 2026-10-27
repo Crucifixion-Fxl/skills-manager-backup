@@ -259,13 +259,31 @@ rules:
       个人 namespace 默认 `shared_runners_enabled: false`。
 
   - id: 19
-    title: RDS / Aurora master password 走 vault platform 路径 + A1 ESO Password Generator
+    title: RDS / Aurora master password 必须有隔离且可恢复的 Vault 来源
     enforced_by: human review / 凭据链断裂
     detail: |
-      凭据链：ESO Password Generator → ExternalSecret(refreshInterval=0, deletionPolicy=Retain)
+      已批准存量 A1 链：ESO Password Generator → ExternalSecret(refreshInterval=0, deletionPolicy=Retain)
         → K8s Secret → PushSecret(IfNotExists)
         → Vault secret/{env}/<rds|aurora>/application/<app>/master-password
         → Crossplane passwordSecretRef
+      新建专用 PostgreSQL 的平台 API 不得照搬 A1 的直接引用链：RDS 输入
+      必须从 Vault 回读。若要共用 `secret` mount，还须证明所有 app 身份和
+      app 可选的 ClusterSecretStore 均不能取得管理员值；直接针对该 key 的
+      Vault 权限检查应无 read/write capability。某些目标集群的
+      `vault-backend` 身份可读写 `secret/data/*`；新建 namespaced SecretStore 或改
+      `secret/` 下的路径均不能单独隔离管理员密码。
+      当现有共享 mount 无法做到隔离时，先由平台评审独立 KV v2 mount、精确 JWT
+      role/policy 和同 namespace 的专用 SecretStore；该 mount/role 未就绪则 STOP。
+      受限账号平台 API 的管理员链应为：一次性 Generator → immutable bootstrap
+      Secret → PushSecret(IfNotExists) → 隔离 Vault key → ExternalSecret 回读
+      immutable RDS input Secret → Crossplane passwordSecretRef。RDS 不得从
+      bootstrap Secret 直接取密码；Vault 写入失败时不得创建实例。首次申请前
+      检查同名 Vault key、K8s Secret、XR/RDS 均不存在；恢复时先核对原值。
+      激活前实测应用通过旧 ClusterSecretStore 和自身 Vault 身份均无法取得或
+      覆写管理员值，旧身份对独立 mount 无 read/write capability；验证
+      Vault/K8s 丢失恢复与密码一致性，不在日志暴露值。
+      此平台 API 路线仍须通过 references/app-owned-rds/README.md 的精确目标
+      live gate；SG DevOps 验收源码不是已启用能力或生产发布批准。
       **A1 链路红线**（开发者必读）：
         ① 禁手工 kubectl delete secret <app>-rds-password / <app>-aurora-password
            （触发 generator 重生成 + vault IfNotExists 不更新 → K8s/vault 漂移 →
@@ -273,11 +291,15 @@ rules:
         ② 禁删 generator 型 ExternalSecret 再重建；Retain 只是不删 Secret，不保证重建不覆盖
         ③ 禁改 generator spec
         ④ ArgoCD prune namespace 前先备份 vault
-      应急通道：运维用 rds-admin-<env> role 登 vault 直接写 platform 路径（带外）。
+      仅存量 A1 应急通道：运维用 rds-admin-<env> role 登 vault 直接写旧
+      platform 路径（带外）。新平台 API 应在目标专用 mount 的恢复 runbook 下
+      还原原值并核对 RDS 输入，不得写旧 A1 路径代替恢复。
     applies_to:
       - recipes/crossplane/rds-password-generator.yaml.tmpl
       - recipes/crossplane/rds-password-external-secret.yaml.tmpl
       - recipes/crossplane/rds-password-push-secret.yaml.tmpl
+      - references/app-owned-rds/README.md
+      - workflows/add-rds.md
     validator: check_eso_pushsecret_bug.py
 
   - id: 20
@@ -424,9 +446,10 @@ rules:
         按 clusters.yaml 的准确 target.build_mode 选择，不按云厂商或“非 TKE”猜测。
         dual-arch：三件套 build:<T>:amd64 + build:<T>:arm64 + manifest:<T>
         single-arch-amd64：单 build job (amd64)，适用于已登记的 TKE/GKE/eu-prod-data 等目标。
-      **不允许** dual-arch target 的新应用走旧 single-arch + nodeSelector arch 模式——锁死 NodePool
-      单 arch 调度，失去 Karpenter spot 任挑 arm/amd 的成本优化（arm64 Graviton
-      ~25% 便宜 + spot 中标率提升）。
+      dual-arch target 的新应用仍构建双架构 index；build_mode 是产物要求，不能代替
+      workload placement。按 references/nodepool-placement.md 选择已核验的共享能力池；
+      允许为容量/运行合同显式选单架构池，或用 required affinity 允许有限的双架构池。
+      不能因为产物支持两种架构就取消节点池约束或自动切到 Spot。
       存量 `ALGO/addx_gpu_inference` 原地接管是限时例外：仅
       `namespace-legacy-exceptions.yaml` 中
       `addx-gpu-inference-shared-runtime-namespaces` 与
@@ -438,12 +461,12 @@ rules:
     applies_to: [recipes/ci/gitlab-ci-target-dual-arch.yml.tmpl, recipes/ci/gitlab-ci-target-single-arch.yml.tmpl]
 
   - id: 27
-    title: Harbor image manifest 含的 arch ⊇ 目标集群 NodePool 可起的 arch
+    title: Harbor image manifest 含的 arch ⊇ workload 允许调度的架构
     enforced_by: 不满足 → 节点拉不到镜像
     detail: |
-      clusters.yaml 中 build_mode=dual-arch 的目标：CI 产 multi-arch index；Rollout **不写**
-      nodeSelector.kubernetes.io/arch；Application annotation 配置
-      `<alias>.platforms: linux/amd64,linux/arm64`；Karpenter 任挑。
+      clusters.yaml 中 build_mode=dual-arch 的目标：CI 产 multi-arch index；Application
+      annotation 配置 `<alias>.platforms: linux/amd64,linux/arm64`。Pod 仅能在经验证的
+      目标池/架构集合内调度；显式单池或有限双池的写法见 references/nodepool-placement.md。
       build_mode=single-arch-amd64 的目标：CI 单 build job 产 single-arch amd64；Application annotation 配置
       `<alias>.platforms: linux/amd64`；NodePool 本就只有 amd64。
       `addx-gpu-inference-shared-runtime-namespaces` 与
@@ -451,8 +474,8 @@ rules:
       `image_app=addx-gpu-inference` 的精确存量身份，按红线 26 的限时例外保持
       `linux/amd64`，但仍必须证明 manifest 的 amd64 成员
       与目标 GPU 节点架构一致。
-      反例：Rollout 加 nodeSelector arch=amd64 + image 是 multi-arch → 浪费，
-      arm64 manifest 永远没节点拉。
+      multi-arch image 配合单架构池是合法的能力子集，不是违规；单架构 image 放行
+      另一架构节点才不安全。仅写 arch/capacity、不约束池，也可能误入平台专用池。
 
   - id: 28
     title: CI 模板 image 一律走 ${HARBOR_REGISTRY}/base/<image>:<tag>
@@ -476,7 +499,7 @@ rules:
       误落 app-owned 分支。门禁谓词统一用——
         **shared-middleware 集群**：`$target.cluster ∈ {us-eks-staging, eu-eks-staging,
         cn-tke-staging, us-eks-tech-service, eu-eks-tech-service, cn-tke-tech-service}`；
-        **非 shared-middleware**：其余集群（真 prod `*-eks-prod`/`*-prod-data`/cn-k8s（TKE prod））→ app-owned。
+        **非 shared-middleware**：其余集群（真 prod `*-eks-prod`/`*-prod-data`/cn-k8s/cn-tke-prod（TKE prod））→ app-owned。
       在**这 6 个集群**上，新部署应用的数据需求**只能消费 shared-middleware**，
       **不允许 app-owned 自建**，也不允许在 crossplane-infra 为单 app 新增这些资源：
         - 不允许 app-owned RDS / Aurora / ElastiCache Redis / DocumentDB / MSK(Kafka) / ClickHouse；
@@ -869,7 +892,7 @@ rules:
       - validators/check_object_bucket.py
 
   - id: 36
-    title: DEV/k8s 默认只存放可复用平台能力，专用 RDS 请求限受控平台源
+    title: DEV/k8s 默认只存放可复用平台能力，例外限闭合批准源
     enforced_by: check_repo_boundary.py --repo-context k8s / code-review
     validator: check_repo_boundary.py
     detail: |
@@ -883,7 +906,7 @@ rules:
         - 在任意目录提交 top-level provider-sql Database/User/Role/Grant，或写带字面业务
           `.../{platform}/application/{app}/...` / `{env}/app/{app}/...` Vault 路径的
           PushSecret / ExternalSecret；
-        - 在平台仓直接提交业务 `Database` / `KafkaScramCredential` claim，除下述唯一闭合例外；
+        - 在平台仓直接提交业务 `Database` / `KafkaScramCredential` claim，除下述专用 PostgreSQL 闭合例外；
         - 提交业务 namespace 的 SecretStore、业务 workload，或新建
           `clusters/*/cicd/eso-app-identities/<app>/` 这类逐 app 静态身份树。
 
@@ -892,7 +915,7 @@ rules:
       SecretStore。通用能力尚未存在时 STOP，产 Ops Todo 补能力；不要用“资源运行在平台
       namespace”作为把业务源码放进平台仓的理由。
 
-      唯一窄例外：新建专用 PostgreSQL 16、准确目标 us-eks-prod，在
+      专用 PostgreSQL 窄例外：新建专用 PostgreSQL 16、准确目标 us-eks-prod，在
       references/app-owned-rds/README.md 的 live 激活门禁和每应用 IAM 前置全部通过后，
       平台所有者可在 `clusters/aws-302571458622-us-prod/platform-apis/app-owned-rds/requests/<app>.yaml`
       提交固定字段的 namespaced `platform.addx.io/v1alpha1 Database` 请求，namespace
@@ -900,6 +923,29 @@ rules:
       所以该请求必须由平台 Argo CD source 独占；应用仓只消费受限账号连接。
       `check_repo_boundary.py` 对路径、metadata、spec、版本和 SG 格式逐字段闭合校验；
       该例外不放行其它 claim、raw RDS/SQL/ESO 实例或其它集群/引擎。
+
+      另一个已获用户直接批准的单次例外：DATA-streampark-task3-stage-job-pull-v1，
+      scope SHA256 d8afc427cd2c88f677a89583588ca20ed7f48ec8f40488401bacb29459b5f6e6，
+      仅允许 DEV/k8s 的
+      `clusters/aws-390709477306-us-staging/streampark-access/registry-pull.yaml`
+      完整固定五对象（SA/Role/RoleBinding/SecretStore/ExternalSecret），所有 namespace
+      均为 staging-streampark-jobs。见 references/approved-exceptions/streampark-stage-pull.md。
+      另一个已获用户直接批准的单次例外：us-prod qdrant 只读监控 key（engineering/skills#366），
+      仅允许 DEV/k8s 的
+      `clusters/aws-302571458622-us-prod/victoria-metrics-config/qdrant-monitoring-key.yaml`
+      完整固定单个 ExternalSecret（namespace victoria-metrics，ClusterSecretStore vault-backend，
+      只读 `prod/qdrant/application/flywheel-aws/monitoring-apikey` 的 `read-only-api-key`），
+      供 VMScrapeConfig 以 Bearer 采集 qdrant `/metrics`。完整文件 SHA256
+      3c01a87c18a5e89819c82c11483b99636bfb3c76581484277d96c73ac54ed2a1 由
+      check_repo_boundary.py 闭合校验；见 references/approved-exceptions/us-prod-qdrant-monitoring-key.md。
+      该例外不放行其它 qdrant 环境、其它业务路径、PushSecret/SecretStore 或任何新权限。
+      另有独立人工批准的 staging TLS 八对象源码候选例外，见 references/approved-exceptions/streampark-stage-tls.md；
+      只允许准确两个完整文件，不授权合并、Vault 发布、证书签发或部署。
+      check_repo_boundary.py 对完整文件批准 SHA256 闭合校验；任何字段、对象数、权限、
+      Vault role/path/TTL、目标 Secret 或路径变化都不能继承批准，格式变更也 fail closed。
+      默认禁令、PostgreSQL 例外、生产八对象例外与 app-runtime 权限均不扩大。
+      该明确授权可被规则识别，但仓库自称 approved、标签或任意 MR note 均不能授权新例外；
+      本规则不授权部署，也不以静态 PASS 代替准入、凭据与运行验收。
     applies_to:
       - SKILL.md Review / Scan mode
       - validators/check_repo_boundary.py
@@ -941,3 +987,7 @@ rules:
 #   - 禁止把内部服务暴露到公网（RDS publiclyAccessible / 0.0.0.0/0 SG / 无防护 Ingress）
 #   - DNS 解析申请前必须核查服务暴露面（裸奔 = SG/WAF/SSO 三件缺一）
 # 见 ops-guardrails skill 的 DNS 解析申请检查清单。
+
+# Source-only StreamPark staging TLS eight-object exception: see
+# references/approved-exceptions/streampark-stage-tls.md. Exact two files only;
+# no generic waiver, merge, publication or runtime activation approval.

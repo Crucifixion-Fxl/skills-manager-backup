@@ -709,3 +709,15 @@ Issue/MR 快照之外的字段变化不单独发消息，也不在 `gaps` 里：
 - **重建 bot token 会丢掉旧绑定**：见「角色与权限」，要轮换，不要重建。
 - **脚本是 2000 多行的单文件**。
 - GitLab 是否把 `buzz://` 渲染成可点链接，尚未验证（L4 记录）。
+
+
+### Standalone pipeline UNKNOWN 的窄范围隔离
+
+仅对原 outbox 中严格可识别的、已尝试且未确认的独立失败 pipeline 通知，保留原条目不变并冻结共享 cursor。没有正向原文/身份/目标/提及读回证据时，不 ACK、不重发，也不换 state 根或 producer。隔离单位是 `(project, pipeline id)`，同 pipeline 的状态变化、改文案、改提及、MR-ref 与 webhook 记录不能另开投递；分组前和实际 dispatch 前均检查。保留的 source record 还必须与当前 project、外层 MR、object/key/source id/状态一致；未知或损坏的来源不能先创建根或绑定。
+
+规范 Issue/MR 内容与实际 native 目标（含祖先根）证明不依赖该 pipeline 时，可继续根、绑定、事实、评论及已授权更新；新的独立失败 pipeline 仅接受可还原 source id 的规范 key。每次效果仍经过原身份、可见性和 durable outbox 门禁。来源或目标不明、未经 Issue 显式 origin 证明的外部作者根、opaque webhook scope、其它 UNKNOWN 与原子组未知步骤继续 fail closed。此项不是通用 UNKNOWN 分区，也不恢复既有政策已关闭的 push/成功 pipeline 通知。TagBatches 的独立账本及恢复门禁保持不变，未经证明的 tag/milestone 等路径也不借此绕过旧 pending。
+
+恢复已有独立队列沿原顺序执行；新的 UNKNOWN 保留并停止后续依赖，下一次按原正向读回恢复。运行报告标记 degraded 与 cursor retained。cursor 未前进时会重读旧窗口；去重继续依赖完整原始消息/线程读回，不依赖最多 1000 条 ACK 列表。分页不完整、线程饱和或未知关系时拒绝发送。
+
+
+Issue 的显式 foreign-author origin（ADR-0014）可以沿其原授权链证明独立性：每次 dispatch/queued 恢复读取当前 Issue 与人类评论，确认选中条件、project/iid/规范 URL 和显式 origin marker；使用既有 origin resolver 复核目标，同时要求原始 Nostr 真签、同 Channel、kind9 顶层且无父引用。此窄例外只接受没有 GitLab header/plaque 的外部消息，不将 bare link、单独 binding、调用者 project hint 或任意外部作者当作权限。Issue fact/comment 的规范内容和签名子消息提供具体 Issue 身份，后者可证明其 origin 祖先，供已有 edit/reaction 恢复使用；对外部根本身的任意 edit/reaction/diff 不放行。标记撤销、跨对象/项目/频道、伪签名和其它 UNKNOWN 仍保持零写门禁。该证明不缓存，不新增 outbox 字段，不 ACK 原 pipeline UNKNOWN，不推进其共享 cursor。MR/milestone 等其它 foreign-origin 类别仍保守阻塞。

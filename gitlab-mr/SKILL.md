@@ -1,10 +1,9 @@
 ---
 name: gitlab-mr
-description: 在 gitlab.addx.ai 仓库创建和管理 GitLab Merge Request，驱动到真正可合并为止，并在用户明确要求“MR 已合并后清理本地 worktree/分支”或“清理 session”时安全收尾。自动生成 User Story 文档、push 前对目标 staging/main/master/release 的 MR 强制完整跑一遍 `/code-review`，并通过 `face-review-repair` 判断和安全修复真实 Review 意见；生产晋级 MR 额外执行 release parity check，证明 staging 已验证代码、后续 bugfix、Review 修复、测试、可观测性和必要配置没有遗漏。构造 MR（必须指定且只能指定一位 reviewer，并回读验证；回读通过后按 feishu-channel-rules 飞书通知 reviewer）、推送后由后台 Driver 持续读取 discussion 和 CI：只自主处理语义低风险问题，高风险或人工评论返回用户确认。Supervisor 做存活检查和完工独立审计，直到 CI 全绿、discussion 闭环、无冲突且生产晋级一致性通过。当用户说"提交 MR"、"创建 MR"、"push and create MR"、"合并到 main/master/release"、"从 staging 晋级生产"、"MR 合并后清理本地分支"、"清理 worktree"或"清理 session"时触发。
+description: 在 gitlab.addx.ai 仓库创建和管理 GitLab Merge Request，驱动到真正可合并为止，并在用户明确要求“MR 已合并后清理本地 worktree/分支”或“清理 session”时安全收尾。自动生成 User Story 文档、push 前对目标 staging/main/master/release 的 MR 强制完整跑一遍 `/code-review`，并通过 `face-review-repair` 判断和安全修复真实 Review 意见；生产晋级 MR 额外执行 release parity check，证明 staging 已验证代码、后续 bugfix、Review 修复、测试、可观测性和必要配置没有遗漏。构造 MR（必须指定且只能指定一位 reviewer，并回读验证；回读通过后按 feishu-channel-rules 飞书通知 reviewer）、推送后由后台 Driver 持续读取 discussion 和 CI：只自主处理语义低风险问题，高风险或人工评论返回用户确认。Supervisor 做存活检查和完工独立审计，直到 CI 全绿、discussion 闭环、无冲突且生产晋级一致性通过。当用户说"提交 MR"、"创建 MR"、"push and create MR"、"合并到 main/master/release"、"release 合流"、"换目标分支 / retarget"、"从 staging 晋级生产"、"MR 合并后清理本地分支"、"清理 worktree"或"清理 session"时触发。
 ---
 
 平台登录与认证 SSOT：[gitlab](../gitlab/SKILL.md)。本 Skill 保留业务流程与门禁，认证事实由平台 owner 维护，日常访问调用 `web-access`。
-
 
 # GitLab MR
 
@@ -34,10 +33,12 @@ description: 在 gitlab.addx.ai 仓库创建和管理 GitLab Merge Request，驱
 
 7. **提 MR 必须指定 reviewer** — 创建前按 Step 1.5 确定且只能指定一位 reviewer；创建命令显式传 `--reviewer`，创建/更新后按 Step 4 回读验证。
 8. **MR 完工后主动询问，本地清理仍须明确授权并机械校验** — Step 7 完工时，若原始请求 / 当前 thread 无明确选择，且 state history 无同一 MR / 当前 session 的完整匹配 `pending|approved|declined` 记录，必须主动询问一次“合并完成后是否清理当前 session 的本地 worktree/分支”，避免用户遗漏；已有选择或 `pending` 提醒记录时不重复询问。询问本身不构成删除授权。MR 创建、CI 全绿或可合并都不授权删除，只有用户明确同意后才按 Step 8 处理；不批量扫描、不删除远端分支。
-9. **无 canonical Issue 不得 push/MR** — 按 [`gitlab-issue-sop` 生命周期契约](../../collaboration/gitlab-issue-sop/references/lifecycle-binding.md) 回读验证 Root Issue 与当前仓 Work Item；分支名、commit message、裸 IID 或 closing keyword 不能单独放行。
-10. **技术方案必须回链 Work Item** — 方案 push 后追加幂等 Issue comment 并回读；未确认回链前不得创建或更新 MR。
-11. **关联 Issue 必须同步 update/close 并回读** — 创建/更新 MR、实际合并和 session 收尾均按 [Issue 同步流程](reference/issue-sync.md) 处理已验证关联的 Issue。满足各自完成条件的关闭，未完成的更新证据与下一步；merge 或 CI 全绿不能代替验收，Root Issue 仅在整体验收完成后关闭。失败时保留 MR 事实并报告 `ISSUE_SYNC_UNVERIFIED`，不能声称 Issue 已同步或 session 收尾完成。
+9. **无 canonical Issue 不得 push/MR** — 按 [`gitlab-issue-sop` 生命周期契约](../../collaboration/gitlab-issue-sop/references/lifecycle-binding.md) 回读验证关联 Issue（一个即可，可跨项目）；分支名、commit message、裸 IID 或 closing keyword 不能单独放行。
+10. **技术方案必须回链关联 Issue** — 方案 push 后追加幂等 Issue comment 并回读；未确认回链前不得创建或更新 MR。
+11. **关联 Issue 必须同步 update/close 并回读** — 创建/更新 MR、实际合并和 session 收尾均按 [Issue 同步流程](reference/issue-sync.md) 处理已验证关联的 Issue。满足各自完成条件的关闭，未完成的更新证据与下一步；merge 或 CI 全绿不能代替验收，Issue 仅在其完成条件全部满足后关闭。失败时保留 MR 事实并报告 `ISSUE_SYNC_UNVERIFIED`，不能声称 Issue 已同步或 session 收尾完成。
 12. **大文件存储检查覆盖所有 MR 目标分支** — push、创建或更新 MR 前执行 Step 2.85；跳过完整 code-review 不跳过此项。源资产走 LFS，编译制品走 `addx:addx-nexus-usage`，运行数据/缓存不入 Git；复用统一 reference，规则只存 skill，不写项目 memory。
+13. **验收结论由负责人 AI 主动回写** — 已绑定 Issue/MR 的会话在验收结束或用户明确确认通过/免验/部分/阻塞时，按 [统一验收契约](../../collaboration/gitlab-issue-sop/references/deployment-acceptance.md) 直接执行 `report --issue ...` 并回读，不等再次要求评论，不依赖 release-agent、发布批次或 publisher。合并后继续交接验收负责人和剩余范围；MR 引用 Issue 事实。缺部署信息列待核实，发布侧另行匹配版本、汇总并检查门禁。
+14. **合并不能静默丢内容** — 目标为 `main` / `master` / `staging` / `release/*` / `hotfix/*`，或 `git rev-list --merges origin/<target>..HEAD` 非空的 MR，在 push、创建/更新（含改 target）MR 前和完工审计时通过 Step 2.87；换目标只用 `rebase --onto` / cherry-pick，冲突只改冲突文件。
 
 ---
 
@@ -64,9 +65,9 @@ git status
 
 ### Step 1.25：验证 canonical Issue（push/MR 硬门禁）
 
-- 要求完整 Root Issue 与 Work Item URL。通过 GitLab API 验证二者存在、`opened`、至少一位 assignee，且 Work Item 属于当前仓；跨仓时验证原生 Issue link。
-- 已有 MR 时，MR 描述中的 `Work Item:` / `Root Issue:` 只是候选，仍须确认 GitLab 将当前 MR 列为 Work Item 的 related MR。新 MR 在创建前以 live Issue 与 native Root↔Work link 放行，创建后必须完成 related-MR 回读。
-- 缺失、不可读、歧义、关闭、无 assignee 或项目/关系不匹配时停止，不执行 code-review、push 或 MR 写入。
+- 要求一个完整 Issue URL，可以属于其他项目，不需要再为当前仓单独建 Work Item。通过 GitLab API 验证 Issue 存在、至少一位 assignee；新工作要求 `opened`，release 回流等引用已交付并关闭的 Issue 的 MR 可以是 `closed`，不得为过门禁重开 Issue。选 MR 作者和 CI review token 都能读到的 Issue，否则 code-review 门禁会失败。
+- 已有 MR 时，MR 描述中的 `Issue:` 只是候选，仍须确认 GitLab 将当前 MR 列为该 Issue 的 related MR。新 MR 在创建前以 live Issue 放行，创建后必须完成 related-MR 回读。
+- 缺失、不可读、无 assignee、关系不匹配，或新工作关联了已关闭 Issue 时停止，不执行 code-review、push 或 MR 写入。
 - 保存完整 binding 字段与 snapshot digest，后续 review、方案回链、MR 描述和最终审计使用同一 identity。
 
 #### 1a：识别 MR 模式
@@ -196,6 +197,8 @@ pipeline、验收 note，并要求生产合并结果树等于 staging 树。详�
 不补写项目 memory；规则由 skill 管理。制品发布和下载引用 [addx:addx-nexus-usage](../addx-nexus-usage/SKILL.md)，不自动上传、改写历史或强推。
 
 记录候选 HEAD、目标分支 SHA 和采用的项目政策。`code-submit` 已检查同一候选时复用其有效证据；候选、目标或政策变化后重查，包括 review 修复、rebase、直接更新已有 MR 和 Driver 后续 push。
+### Step 2.87：合并内容完整性检查
+按 Rule 14 适用时，先 `git fetch origin "+refs/heads/$TARGET_BRANCH:refs/remotes/origin/$TARGET_BRANCH"`，再运行 `uv run <skill-path>/scripts/check_merge_integrity.py "origin/$TARGET_BRANCH" HEAD`。再按 reference 只 fetch 长期分支，对 `--sync-parents` 列出的每个提交（合入的其他长期分支提交，release 合流时出现）跑 `<target_sha> <该提交>`。均 exit 0 才继续，并在 MR 描述附每项检查的结论行；exit 1 停止写入，把 FAIL 原样交给用户，只有用户确认后由父会话写入的匹配豁免才能放行；exit 2 记为未完成检查。判据、豁免、换目标分支做法和已知限制见 [合并内容完整性检查](reference/merge-integrity.md)。候选 HEAD 或目标 SHA 变化后重跑。
 
 ### Step 2.9：提交前完整 code-review + 安全修复（push 前的 gate）
 
@@ -231,18 +234,18 @@ verified SHA。放行条件：code-review 结论是「通过」（≥8.0），�
 
 ### Step 3：推送分支
 
-确认 Step 2.85 对当前候选仍有效，再执行 push；Step 2.9 修复产生的新提交必须重新核验。
+确认 Step 2.85 与（适用时）Step 2.87 对当前候选仍有效，再执行 push；Step 2.9 修复产生的新提交必须重新核验。
 
 ```bash
 git push -u origin <branch-name>
 ```
 
-### Step 3.5：技术方案回链 Work Item（MR 前硬门禁）
+### Step 3.5：技术方案回链关联 Issue（MR 前硬门禁）
 
 检查目标分支 diff 中的 `docs/plans/**`、`docs/design/**`、`docs/architecture/**`、ADR 及项目声明的技术方案文件。若存在：
 
 1. 为已推送文件构造绑定当前 branch/HEAD 的 blob URL，并验证 remote 文件存在。
-2. 使用稳定 marker `<!-- gitlab-mr-design-link:<project-id>:<issue-iid>:<head-sha> -->` 查重后，在 Work Item 追加方案链接、HEAD SHA 和分支。
+2. 使用稳定 marker `<!-- gitlab-mr-design-link:<project-id>:<issue-iid>:<head-sha> -->` 查重后，在关联 Issue 追加方案链接、HEAD SHA 和分支。
 3. 通过 Notes API 回读并核验 Issue、作者、marker、HEAD SHA 和链接；超时或结果未知时先对账，不盲目重复。
 4. 回读失败或不一致时返回 `ISSUE_DESIGN_LINK_UNVERIFIED`；保留 push 事实，但不得进入 Step 4。
 
@@ -250,7 +253,7 @@ git push -u origin <branch-name>
 
 ### Step 4：创建或更新 MR
 
-直接从已有远端分支创建/更新 MR 时也执行 Step 2.85，绑定 MR 实际 source/target SHA；不以“分支已推送”代替检查。
+直接从已有远端分支创建/更新 MR 时也执行 Step 2.85 与（适用时）Step 2.87，绑定 MR 实际 source/target SHA；不以“分支已推送”代替检查。修改已有 MR 的 target 前，先对新目标运行 Step 2.87。
 
 #### 查看是否已有 MR
 
@@ -298,8 +301,7 @@ glab mr create \
 - Tech Design 文档：<如有则填，否则删除此行>
 
 ## 关联 Issue
-Work Item: <当前仓完整 Issue URL>
-Root Issue: <Root Issue 完整 URL>
+Issue: <完整 Issue URL，可跨项目>
 
 ## 变更类型
 - [x] <对应类型>
@@ -334,7 +336,7 @@ glab mr update <mr-id> --reviewer '<已核验的唯一username>'
 glab api "projects/:id/merge_requests/<mr-id>"
 ```
 
-核验响应是目标 MR，并确认 `reviewers` 是恰好含一个元素的数组，且该元素的 username / ID 与 Step 1.5 的唯一人选一致；同时确认 GitLab 将当前 MR 列为 Work Item 的 related MR，且 MR 描述中唯一的两个完整 URL 与已验证 binding 一致。空响应、字段缺失、人数不是一位、身份不符、Issue 关系不符或请求失败均不算通过，不能进入 Step 5 或声称提交完成。写请求结果不明时先回读已有 MR，避免重复创建；服务端拒绝指定人选或权限不足时报告具体原因，不擅自换人。
+核验响应是目标 MR，并确认 `reviewers` 是恰好含一个元素的数组，且该元素的 username / ID 与 Step 1.5 的唯一人选一致；同时确认 GitLab 将当前 MR 列为关联 Issue 的 related MR，且 MR 描述中的 `Issue:` URL 与已验证 binding 一致。空响应、字段缺失、人数不是一位、身份不符、Issue 关系不符或请求失败均不算通过，不能进入 Step 5 或声称提交完成。写请求结果不明时先回读已有 MR，避免重复创建；服务端拒绝指定人选或权限不足时报告具体原因，不擅自换人。
 
 最终交付时同时报告 MR URL 和实际回读的 reviewer。命令语义见 [GitLab CLI create](https://docs.gitlab.com/cli/mr/create/) / [update](https://docs.gitlab.com/cli/mr/update/)，回读字段见 [Merge requests API](https://docs.gitlab.com/api/merge_requests/)。
 
@@ -517,7 +519,7 @@ Agent(
 当前 HEAD 重跑 Step 2.8 并实时核验外部 gate，`production-non-promotion` 核查
 staging 流程不存在证据；有 staging 分支时重跑生产 overlay attestation；cleanup 重跑 attestation 并核查 pipeline/branch policy；hotfix 核查批准/回补。
 **只有 Driver done + 结构化 Auditor 结果通过机械校验 + deterministic code parity
-PASS 及外部 gate 实时核验通过（适用时）同时成立，才向用户报告 MR 可合并。**
+PASS 及外部 gate 实时核验通过（适用时）+ 合并内容完整性检查绑定当前 HEAD 通过或有用户签字豁免（适用时）同时成立，才向用户报告 MR 可合并。** 同一完整性 FAIL 被 Auditor 连续拒绝 2 次（state `merge_integrity_rejections`）时停止重派，按 `stuck` 交给用户。
 
 若本轮执行合并、用户告知已合并或收尾回读发现 `state=merged`，父会话必须先执行 [合并后 Issue 同步](reference/issue-sync.md)：逐项 update/close、回读 receipt 与最终状态，记录未完成条件；全部同步成功后才能报告合并收尾完成或进入 Step 8。不等待本地清理授权才同步 Issue，也不因清理受阻省略同步。
 

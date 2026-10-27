@@ -12,7 +12,7 @@
 
 | 端点 | 用途 | 必需参数（推断） | 已验证 |
 |------|------|---------------|-------|
-| `login` | 登录获取 token | username + password（具体字段未验证） | 否 |
+| `login` | 原生账号登录获取 token | `userName` + `password`；成功 `result=0`、`data.token` | 源码和生产前端契约已核验；真实账号登录未实测 |
 | `logout` | 退出登录 | — | 否 |
 | `get_user_info` | 当前 token 对应的用户信息 | ⚠️ 该接口要求 token 同时在 header 和 body 里，header-only 会返回 `KeyError: 'token'`。**不适合做权限体检**，体检用 `get_versions` 或 `get_models` | ✅ |
 | `get_users` | 用户列表 | — | ✅ 需 admin 角色（普通 token 返回 `no auth`） |
@@ -368,29 +368,20 @@ curl -o <local-name>.fw "<上一步返回的 data 字段 URL>"
 
 ## 12. 关键调用示例
 
+按 [SKILL Rule 1](../SKILL.md) 由宿主注入环境对应的账号密码或已有 token；不要在命令行粘贴凭据。脚本自动完成原生登录和探针，支持生产（默认）与 `--environment test`；`get_firmwares` / `get_publishs` 超时为 120 秒，其他请求为 30 秒，不自动重试业务请求。
+
 ```bash
-# Token 从环境变量读取，禁止明文写入文件或 commit
-# 设置：export FIRMWARE_MGR_TOKEN="<your-token>"
-# 测试环境换成 FIRMWARE_MGR_TEST_TOKEN
-BASE="https://firmware-mgr.addx.live/api"
-H1="token: $FIRMWARE_MGR_TOKEN"
-H2="Content-Type: application/json"
-
-# 当前用户
-curl -s -X POST -H "$H1" -H "$H2" -d '{}' "$BASE/get_user_info"
-
 # 全部版本
-curl -s -X POST -H "$H1" -H "$H2" -d '{}' "$BASE/get_versions"
+python3 skills/hardware/firmware-mgr/scripts/query.py get_versions
 
-# 设备型号树
-curl -s -X POST -H "$H1" -H "$H2" -d '{}' "$BASE/get_models"
+# 测试环境设备型号树
+python3 skills/hardware/firmware-mgr/scripts/query.py get_models --environment test
 
-# cn 区某版本的发布记录（注意 group 必填，传 null 即可）
-curl -s -X POST -H "$H1" -H "$H2" -d '{"region":"cn","platform":"T32ZN-Aiw4211L","version":"1.19.0","group":null}' "$BASE/get_publishs"
+# cn 区某版本的发布记录（group 传 null）
+python3 skills/hardware/firmware-mgr/scripts/query.py get_publishs --data '{"region":"cn","platform":"T32ZN-Aiw4211L","version":"1.19.0","group":null}'
 
-# 验证发布是否生效（推荐这个，0% 灰度只能在这里看到）
-curl -s -X POST -H "$H1" -H "$H2" -d '{"region":"cn"}' "$BASE/get_publish_logs"
-
-# 单个 BX 构建详情（注意 GET）
-curl -s -H "$H1" "$BASE/management/firmware/getBxBuildInfo?id=123"
+# 发布历史
+python3 skills/hardware/firmware-mgr/scripts/query.py get_publish_logs --data '{"region":"cn"}'
 ```
+
+`get_user_info`、BX GET、下载 URL 换取与业务写入不在这个只读脚本的白名单内；保持各自已核验的接口契约与授权流程，不因已能账号登录而扩大访问范围。需要直接执行已授权请求时，token 仍须在同一进程内经 stdin/header 传递，不能展开到 curl argv。

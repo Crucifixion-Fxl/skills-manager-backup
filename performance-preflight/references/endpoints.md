@@ -12,15 +12,23 @@ AWS CN 集群已弃用；prod 在腾讯云 `100014919455` / `cn-main`，staging 
 |----------|------|----------|
 | CN prod（`cn` / `cn-prod`） | 存量 `http://thanos-cn.addx.live`；另有 `http://victoria-metrics-cn.addx.live/select/0/prometheus` | Thanos 与 VictoriaMetrics 迁移共存，按目标 job/时间范围确认；`cn` helper 别名仅指 prod |
 | 新 CN staging（`cn-staging`） | 集群 `victoria-metrics` namespace 的 vmsingle，发现实际 Service 后 port-forward | 用 `PROMETHEUS_CN_STAGING_URL` 指定已确认的本地 API base；不得回退到 prod |
-| 新 CN tech-service（`cn-tech-service`） | **目标，待切换**：`https://victoria-metrics-cn-tech-service-tke.addx.live/select/0/prometheus` | VMCluster API base 必须包含租户路径；域名与租户尚需运行态核验，不是默认可用入口 |
+| CN tech-service（`cn-tech-service`） | `https://victoria-metrics-cn-tech-service-tke.addx.live/select/0/prometheus`（2026-10-19 查询 HTTP 200） | VMCluster API base 必须包含租户路径；调用方权限、租户及实际采集范围仍须核验 |
 
-来源：`argocd-apps/tencent-100052802231-cn-staging/victoria-metrics-k8s-stack-application.yaml` 与 `k8s/clusters/tencent-100014919455-cn-main/victoria-metrics-config/`；tech-service 的新目标及固定版本旧声明见 [目标域名与切换证据](../../../infrastructure/k8s-ops/references/cn-tencent-inventory.md#cn-tech-service-目标域名待切换)。Git 声明需与运行态核对，不能把 `cn-*` job 一律送到旧 Thanos。
+来源：`argocd-apps/tencent-100052802231-cn-staging/victoria-metrics-k8s-stack-application.yaml` 与 `k8s/clusters/tencent-100014919455-cn-main/victoria-metrics-config/`；tech-service 的入口证据见 [2026-10-19 准入回执](../../../delivery/cicd-developer/references/cn-tech-service-admission-2026-10-19.md)及 [CN 入口与边界](../../../infrastructure/k8s-ops/references/cn-tencent-inventory.md#cn-tech-service-入口已核验2026-10-19)。回执不替代执行时核验，不能把 `cn-*` job 一律送到旧 Thanos。
 
-`query-helpers.py` 支持上述目标。prod 可用 `PROMETHEUS_CN_PROD_URL` 覆盖 API base；staging / tech-service **必须**通过 `PROMETHEUS_CN_STAGING_URL` / `PROMETHEUS_CN_TECH_SERVICE_URL` 显式提供已核实的 API base，缺失时不发网络请求，不回退旧域名、待切换目标或 prod。tech-service 切换前可使用现场核验的现有入口或 port-forward，不能直接把目标清单当作部署证明。新 staging / tech-service 的 Grafana UID 必须从目标实例发现后通过 `GRAFANA_CN_STAGING_DATASOURCE_UID` / `GRAFANA_CN_TECH_SERVICE_DATASOURCE_UID` 提供；没有 UID 时 helper 不会复用 prod。
+`query-helpers.py` 支持上述目标。prod 可用 `PROMETHEUS_CN_PROD_URL` 覆盖 API base；staging / tech-service **必须**通过 `PROMETHEUS_CN_STAGING_URL` / `PROMETHEUS_CN_TECH_SERVICE_URL` 显式提供已核实的 API base，缺失时不发网络请求，不自动回退其他域名或 prod。tech-service 可使用上表入口或现场核验的 port-forward，仍需确认当前身份、租户及采集范围。新 staging / tech-service 的 Grafana UID 必须从目标实例发现后通过 `GRAFANA_CN_STAGING_DATASOURCE_UID` / `GRAFANA_CN_TECH_SERVICE_DATASOURCE_UID` 提供；没有 UID 时 helper 不会复用 prod。
 
-CN tech-service 的 VMAlert **目标，待切换**：`https://vm-alert-cn-tech-service-tke.addx.live`。VMAlert 评估告警规则并发送至 Alertmanager；它不是 vmselect 的 PromQL 查询 base，不能填入上述 helper URL。规则与通知排查先核对实际 VMAlert、规则选择器、数据源及 Alertmanager 路由，见 [VM 告警链路](../../../delivery/cicd-developer/references/victoriametrics/alerting.md)。目标域名可用性和认证均需另行核验。
+CN tech-service 的 VMAlert 入口：`https://vm-alert-cn-tech-service-tke.addx.live`，2026-10-19 的 `/-/healthy` 已通过 TLS / HTTP 200 核验。VMAlert 评估告警规则并发送至 Alertmanager；它不是 vmselect 的 PromQL 查询 base，不能填入上述 helper URL。健康检查不证明告警通知已送达；排查前核对当前访问权限、实际 VMAlert、规则选择器、数据源及 Alertmanager 路由，见 [VM 告警链路](../../../delivery/cicd-developer/references/victoriametrics/alerting.md)。
 
 下方 job 数量、旧 datasource UID 和版本是 **2026-04-28 历史快照**，不能用作新 CN 集群的容量或路由证据。
+
+## US prod 当前路由（2026-10-21）
+
+| 查询目标 | 入口 | 说明 |
+|----------|------|------|
+| US prod（`us`） | `https://victoria-metrics-us-prod.addx.live/select/0/prometheus` | VictoriaMetrics 集群，API base 含租户路径 `/select/0/prometheus`，再追加 `/api/v1/query` / `/api/v1/query_range`；无需鉴权，网络白名单与原 Thanos 相同；数据保留 60 天。job 命名不变：`prod-us-*`（iot、statemachine、a4x）和 `us-prod-*`（kiss、vernemq） |
+
+Grafana `grafana.addx.live` 的 US 数据源（uid `000000016` 等）已指向该入口，`query-helpers.py` 的 `grafana_q("us", ...)` 不受影响。
 
 ## 1. Thanos (long-term, cross-service per region)
 ## 1. Thanos（每区域长期 + 跨服务）
@@ -30,14 +38,13 @@ CN tech-service 的 VMAlert **目标，待切换**：`https://vm-alert-cn-tech-s
 
 | Region | URL | Job count (2026-04-28) | Naming convention |
 |---|---|---|---|
-| US | `http://thanos-prod-us.addx.live` | 250 | `prod-us-*` (iot, statemachine, a4x) and `us-prod-*` (kiss, vernemq) |
 | EU | `http://thanos-prod-eu.addx.live` | 91 | same |
 | CN | `http://thanos-cn.addx.live` ⚠️ no `prod-` prefix | 143 | `prod-cn-*` (iot, statemachine) and `cn-prod-*` (kiss) |
 
 **Verified empty / not deployed**:
 - `thanos-prod-cn.addx.live` (use `thanos-cn.addx.live` instead)
 - `thanos-prod-sg.addx.live` (no SG region as of 2026-04-28)
-- `thanos-staging-us.addx.live` / `thanos-pre-us.addx.live` (staging/pre is reachable through region Thanos, not separate)
+- `thanos-staging-us.addx.live` / `thanos-pre-us.addx.live` (staging/pre is reachable through the region endpoint, not separate)
 
 **API path**: `POST /api/v1/query` with form-encoded `query=<PromQL>`, or `POST /api/v1/query_range` for range queries.
 See [query-helpers.py](query-helpers.py) for a 5-line client.

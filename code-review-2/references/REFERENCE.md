@@ -24,11 +24,21 @@
 
 ## PRD → observability → 埋点
 
+- [`issue-mr-alignment-review.md`](issue-mr-alignment-review.md)：`[ISSUE-ALIGN]`。用绑定 Issue 的描述和最近人工评论逐条对照 MR，找出未实现、超范围和矛盾。日历、跳过条件和证据规则写在该文件。
 - [`prd-observability-tracking-review.md`](prd-observability-tracking-review.md)：`[PRD-OBS-TRACK]`。从 MR 关联 issue 的 PRD 核对 observability 是否覆盖本次交付的功能，再核对埋点调用点。日历、跳过条件和证据规则写在该文件。
 
 ## L3 staging / release 分阶段门禁
 
 - [`l3-release-gate.md`](l3-release-gate.md)：L3 分阶段门禁。非 release review 中，只有代码/测试事实证明依赖已部署 staging 的 L3 才可延后且不阻断；release context 必须具备绑定 revision 且执行成功的 L3 report。automation capability 只证明可执行性，未运行时仍以 `RELEASE_L3_EXECUTION_UNVERIFIED` 阻断。
+
+## 设计交付与 SVG 预览
+
+- [`design-deliverable-review.md`](design-deliverable-review.md)：按阶段、需求和真实交付角色审查必要设计对象；HTML 依行为分类，SVG 视觉证据仅在 `svg-preview/v1` 双端协商后读取。原生提取、受限预览与视觉观察分开记录。
+- [`design-review-report.md`](design-review-report.md)：设计/混合 review 结果契约；必要交付物的 `role` 与 `required_by` 依据写入现有 evidence 项，不新增结果 schema。
+
+## 大型 JSON/HTML diff 覆盖
+
+- [`review-evidence-checkpoint.md`](review-evidence-checkpoint.md)：仅对 design/mixed 的必要对象，或 reviewer 主动选择的技术风险，按可信固定分页和真实页回执核验大型 diff；无适用文件、能力缺失、截止停止或 incomplete 的边界均见该文件。
 
 ## 代码中文字面量拦截
 

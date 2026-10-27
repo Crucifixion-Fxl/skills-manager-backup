@@ -19,7 +19,10 @@ description: 给应用接入平台日志采集（pod template 加 `app` + `env` 
 
 ## 进入条件
 
-- 工作目录是应用 Git 仓库，已有 `k8s/base/` 与至少一个 `k8s/overlays/<env_keyword>/`。
+- 工作目录是应用 Git 仓库。存量应用先按 `references/runtime-target.md` 的日志专用
+  `--allow-label-repair` 模式解析准确运行入口与 `$target.runtime_env_label`，不能按路由
+  keyword 猜目录或重写合法历史标签。首次候选尚无 Application 时，必须由新建父流程
+  显式传入 app、namespace、runtime_source_path 与 runtime_env_label，不使用存量解析器。
 - 已知目标 app 与 env keyword；按 env 循环处理。
 - 解析 `data/env-keywords.yaml` → `data/clusters.yaml`，Build 写入前确认
   `deployment_status: allowed`。历史 lookup 不能绕过集群准入门禁。
@@ -27,6 +30,18 @@ description: 给应用接入平台日志采集（pod template 加 `app` + `env` 
 - `$delivery_phase` 为 `candidate` 或 `runtime`，独立调用默认 `runtime`。
   `new-service` 的首次部署候选阶段传入 `candidate`：先完成离线标签验证，
   把采集和入库验收登记为 `pending_runtime_checks`，由父流程首次同步后恢复。
+
+## 日志标签写入前置
+
+在首次生成、修复或改写 label 前运行：
+
+```bash
+python3 "$skill_root/validators/check_logging_target.py" \
+  --env-keyword <routing-keyword> --runtime-env <resolved-runtime-env-label>
+```
+
+使用 `references/logging/README.md` 的目标映射门禁；失败则 STOP + Ops Todo。
+`candidate` 不能延期已知不兼容映射；无记录或配置兼容均不证明 live 日志入库。
 
 ## Step 1. 探测 workload 与实际链路
 
@@ -134,7 +149,7 @@ description: 给应用接入平台日志采集（pod template 加 `app` + `env` 
             patch: |-
               - op: add
                 path: /spec/template/metadata/labels/env
-                value: <env-keyword>
+                value: <runtime-env-label>
         ```
   - 保留已有 labels；必要时先创建空的 `spec.template.metadata.labels` map，
     不能用替换整个 map 的办法丢掉其他标签。
@@ -157,7 +172,7 @@ description: 给应用接入平台日志采集（pod template 加 `app` + `env` 
         ```bash
         rendered="$(mktemp -t cicd-v2-rendered.XXXXXX.yaml)"
         trap 'rm -f "$rendered"' EXIT
-        kustomize build k8s/overlays/<env_keyword>/ > "$rendered"
+        kustomize build <runtime-source-path>/ > "$rendered"
         if command -v yq >/dev/null 2>&1; then
           yq 'select(.kind == "Rollout" or .kind == "StatefulSet" or .kind == "Deployment") | .spec.template.metadata.labels' "$rendered"
         fi
@@ -177,7 +192,7 @@ description: 给应用接入平台日志采集（pod template 加 `app` + `env` 
         assert count, "no supported workload found in rendered YAML"
         PY
         ```
-  - 核对输出中目标 workload 的值精确等于 app 和 env keyword；不只检查 key 存在。
+  - 核对输出中目标 workload 的值精确等于 app 和 `$target.runtime_env_label`；不只检查 key 存在。
     任一缺失或错误 → STOP，修复后重新构建。
   - 对比 Step 1 的完整 render：selector、其他 pod 标签、resource metadata 标签和非目标
     资源保持不变；共用 base/source 有改动时也构建受影响的其他 overlay。检查 selector
@@ -195,8 +210,12 @@ description: 给应用接入平台日志采集（pod template 加 `app` + `env` 
   - 不新建测试资源、改平台配置或读取凭据来补足本 workflow 的权限。
 
 [validate]
-  - `bash "$skill_root/validators/validate.sh" k8s/overlays/<env_keyword>/` PASS
-  - 目标 app/env 渲染值正确，selector 保持不变
+  - `bash "$skill_root/validators/validate.sh" --repo-context app <runtime-source-path>/` PASS；
+    同时对该入口完整 render 的独立临时目录运行相同严格门禁，不能遗漏 base/component 资源
+  - 目标 app/env 渲染值正确，selector 保持不变。存量维护修复后用不带
+    `--allow-label-repair` 的解析器重新严格核验完整 render 与 Application 身份。
+    首次候选按父流程绑定的 app、namespace、runtime_source_path 与 runtime_env_label
+    核验完整 render；首次注册后恢复 Application 双端核验
   - 离线 manifest 验证与 live E2E 结论分别记录；缺证据不能输出 E2E PASS
 
 [output]

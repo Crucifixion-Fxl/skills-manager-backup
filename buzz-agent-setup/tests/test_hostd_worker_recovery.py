@@ -5,6 +5,7 @@ from datetime import timedelta
 from pathlib import Path
 import sys
 import unittest
+from unittest import mock
 
 sys.path[:0] = [str(Path(__file__).resolve().parent), str(Path(__file__).resolve().parents[1] / 'scripts')]
 import test_hostd_worker_store as fixture
@@ -17,6 +18,60 @@ StateAdapter = fixture.StateAdapter
 
 class WorkerRecovery(base.TmpCase):
     assembly = fixture.WorkerAssembly.assembly
+
+    def phase_observer(self, order, *, before=None):
+        from contextlib import ExitStack
+        stack=ExitStack()
+        for phase, method in (('members','reconcile_members'),('buzz','buzz_to_feishu'),('feishu','feishu_to_buzz')):
+            original=getattr(fixture.bw.dm.MappedHostdRound,method)
+            def invoke(run,*args,_phase=phase,_original=original,**kwargs):
+                order.append(_phase)
+                if before:before(_phase,run)
+                return _original(run,*args,**kwargs)
+            stack.enter_context(mock.patch.object(fixture.bw.dm.MappedHostdRound,method,invoke))
+        return stack
+
+    def test_mixed_dirty_checkpoints_real_feishu_ack_before_buzz(self):
+        env,_,world,db,factory=self.assembly();worker=factory()
+        world.messages=[base.fmsg('om_priority',base.ALICE_OPEN,'fresh inbound')]
+        order=[]
+        def before(phase,run):
+            if phase=='buzz':
+                with Store(db) as store:
+                    state=StateAdapter(store,'test-binding',env.state_dir).load()
+                    self.assertTrue(base.FGS.HEX64_RE.fullmatch(state.f2b['om_priority']))
+                    self.assertEqual(store.conn.execute("SELECT status FROM delivery WHERE direction='f2b'").fetchone()[0],'acked')
+        with self.phase_observer(order,before=before):report=worker.run({'members','buzz','feishu'},threads=set())
+        self.assertEqual(order,['members','feishu','buzz'])
+        self.assertEqual(report['to_buzz'],1)
+        self.assertEqual(report['hostd']['retry_phases'],[])
+        self.assertEqual(factory().run({'buzz','feishu'},threads=set())['to_buzz'],0)
+        self.assertEqual(len([event for event in world.relay_writes if event['kind']==9]),1)
+
+    def test_failed_priority_phase_restores_cursor_and_later_retry_keeps_order(self):
+        env,_,world,db,factory=self.assembly();worker=factory();worker.run({'buzz'})
+        with Store(db) as store:before_cursor=StateAdapter(store,'test-binding',env.state_dir).load().feishu_since
+        order=[]
+        def fail(phase,run):
+            if phase=='feishu':
+                run.state.feishu_since=before_cursor+100
+                raise base.FGS.GroupSyncError('controlled inbound failure')
+        with self.phase_observer(order,before=fail):report=worker.run({'buzz','feishu'},threads=set())
+        self.assertEqual(order,['feishu','buzz'])
+        self.assertEqual(report['hostd']['retry_phases'],['feishu'])
+        with Store(db) as store:self.assertEqual(StateAdapter(store,'test-binding',env.state_dir).load().feishu_since,before_cursor)
+        world.messages=[base.fmsg('om_retry_priority',base.ALICE_OPEN,'retry inbound')]
+        order.clear()
+        with self.phase_observer(order):report=worker.run({'buzz','feishu'},threads=set())
+        self.assertEqual(order,['feishu','buzz']);self.assertEqual(report['to_buzz'],1)
+        self.assertEqual(report['hostd']['retry_phases'],[])
+        self.assertEqual(factory().run({'feishu'},threads=set())['to_buzz'],0)
+
+    def test_without_feishu_dirty_members_still_precede_buzz(self):
+        _,_,_,_,factory=self.assembly();order=[]
+        with self.phase_observer(order):report=factory().run({'members','buzz'})
+        self.assertEqual(order,['members','buzz'])
+        self.assertEqual(report['hostd']['retry_phases'],[])
 
     def partial_world(self, worker, world, predicate):
         def runner(argv, **kwargs):

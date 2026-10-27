@@ -1,6 +1,10 @@
 # 来源基线与已知漂移
 
-本文件记录 Skill 创建时使用的事实快照。所有 SHA、版本、端点和资源名都可能变化；执行任务时必须重新核验。
+本文件记录 Skill 创建时使用的事实快照，保留用于追溯，不是当前支持清单。所有 SHA、版本、端点和资源名都可能变化；执行任务时必须重新核验。当前三步流程及 catalog/admission 入口见 [平台 admission 正本](../../micro-app/references/sdk-admission.md)；下文“当前/必须”等措辞均属于历史上下文，不能覆盖新接入与显式 legacy 边界。
+
+## 2026-10-16 有限 staging 观察
+
+[平台 MR !153](https://gitlab.addx.ai/WEB/micro_app_platform/-/merge_requests/153) 已合入并部署 `0b36aebed4689f6791c836e634f1a02f8b48edde`。浏览器桥接试点的当前应用管理员可见挂载、会话、ALLOW、手动刷新、返回首页后重新进入及深链整页刷新通过。初次路由拦截通过既有复检恢复，未手工写关系或修改守卫；唯一初因未确定。非管理员 DENY、独立审批/撤权、专用 caller/SecretRef 与实际 SDK 执行器仍缺；不把这次观察提升为 SDK runtimeEvidence 或 supported。具体接入防护见 [实施手册](implementation-playbook.md)。下文历史快照原样保留。
 
 ## 飞书设计文档
 

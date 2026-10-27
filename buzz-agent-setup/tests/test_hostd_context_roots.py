@@ -174,7 +174,14 @@ class ContextRoots(base.TmpCase):
 
     def test_incomplete_native_history_does_not_authorize_context_root_send(self):
         world, run, _ = self.configured();world.events=[self.root()]
-        with mock.patch.object(run.clients.owner,'messages',return_value=([],True)):
+        native_call = run.clients.owner.call
+        def incomplete(what, args, **kwargs):
+            if args[:3] == ['api', 'GET', '/open-apis/im/v1/messages']:
+                return {'items': [], 'has_more': True, 'page_token': 'unread-page'}
+            return native_call(what, args, **kwargs)
+        # Inject the actual discovery transport, rather than a body-list
+        # method that mapping recovery no longer calls.
+        with mock.patch.object(run.clients.owner, 'call', side_effect=incomplete):
             with self.assertRaises(gs.GroupSyncError):run.buzz_to_feishu()
         self.assertEqual([a for a,_ in world.bot_calls if '--content' in a],[])
 

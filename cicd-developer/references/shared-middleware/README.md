@@ -188,6 +188,11 @@ spec:
 `spec.app: order_service_api`；禁止新建 `orderserviceapi`。单词应用（如 `coord`）仍写 `coord`。
 
 <a id="producer-identity-gate"></a>
+
+For the exact CN staging PostgreSQL factory with Manual adoption, also follow
+[the fixed native revision profile](cn-postgres-identity.md). It requires both
+real target inventories and the complete approved revision spec; do not change
+the claim to Automatic or project its credentials through the AWS naming rules.
 ### Producer 身份冲突门禁
 
 新建 claim、增加 purpose/additional user 或修改 claim 身份时，必须在准确目标集群检查

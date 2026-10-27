@@ -62,7 +62,8 @@ def _key(field, key):
         return _matches(M + r"\|" + U + r"\|" + EMOJI, key)
     if field == "member_notes":
         reason, _, who = key.partition(":")
-        return ((reason in {"unresolved", "refused"} and gs._member_source_key_ok(who))
+        return ((reason in {"unresolved", "refused", "unresolved-private"}
+                 and gs._member_source_key_ok(who))
                 or (reason == "protected" and _matches(H, who)))
     if field == "claim_notes":
         return _matches(r"(?:buzz|feishu):[0-9a-f]{40}", key)

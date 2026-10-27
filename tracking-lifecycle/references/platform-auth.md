@@ -10,7 +10,7 @@
 | 凭据 | 请求方式 | 已核对边界 |
 |---|---|---|
 | 飞书账号登录 Session | 服务端 Session Cookie | OAuth code/state 回调将用户存入 HttpSession；角色与应用权限仍有效 |
-| Personal Access Token | `Authorization: Bearer $TMT_TOKEN`，值为 `tmt_…` | 继承创建者当前角色/权限，写操作仍受应用 owner 等校验 |
+| Personal Access Token | `Authorization: Bearer $TMT_TOKEN`，值为 `tmt_…` | 绑定创建者身份；权限按具体操作及目标接口当前返回核验，不能用 owner/admin 探针替代新增事件权限判断 |
 | Project Access Token | 同一 Bearer 头，值为 `tmp_…` | Filter 仅允许 GET，校验启用状态/有效期；可配置 appId 绑定 |
 | MCP API Key | `/api/mcp/**` 的 `X-MCP-API-Key` | 独立 Filter；不是 PAT、Project Token 或 JWT，不作为绕过权限的替代入口 |
 | JWT | 无已核对的入口 | 当前源码没有 JWT 签发、验签或 refresh 实现；Bearer 是传输头，不代表 JWT |
@@ -75,9 +75,23 @@ printf 'Authorization: Bearer %s\n' "$TMT_TOKEN" |
   "$TRACKING_PLATFORM_BASE_URL/api/baseSchema/list?applicationId=$TRACKING_APPLICATION_ID"
 ```
 
-写前检查当前用户/角色、目标应用 owner、唯一活跃工单和完整树。
+写前核验实际请求凭据、当前用户、目标应用、唯一活跃工单和完整树；角色与 owner 查询用于诊断，不是新增事件的统一放行或拒绝条件。
 HTTP 成功仍需检查 `code=200` 且 `success` 不为 false；401 也可能
 封装在 HTTP 200 中。写入超时或结果不明先回读，不能盲重试。
+
+## 新增事件权限判定
+
+2026-10-14 在 US 平台的实测中，同一普通用户 PAT 的 owner/admin 探针均为 false，
+仍成功创建应用 14 的未发布工单和 `saveOrUpdateEventInfo` 新事件，并完成字段/schema 回读。
+这修正了旧文档“新增必须是 app owner”的断言；不是所有 PAT、应用或写操作的通行证明。
+实测范围与回归场景见 [Issue 288 记录](../../../../docs/requirements/288/plan.md)。
+
+1. 用户更换 token 后，在真正发请求的进程内确认已加载新 PAT，并通过 `/api/role/current` 核验预期身份。旧进程可能仍继承旧环境变量；仅写入配置文件不等于请求已切换。只记录一致性和认证结果，不输出 token 或完整环境。
+2. 已授权的新事件仍须通过 `check-contract`、完整树/查重和本次工单检查，再由 `post` 执行。不能因 owner/admin 为 false 自动阻断或要求提权；也不能为了试权限创建无关点位、混入他人工单或绕过既有工作流。
+3. 返回 `请先创建工单!` 表示缺少业务前置条件，不是权限拒绝。按 `create-workorder` 既有门禁创建本次未发布工单（初始态为待审核，`releaseStatus=0`），或核验属于本次的唯一活跃工单后再登记；不得为试权限创建额外工单。
+4. HTTP 401/403 或响应体明确权限拒绝时停止，保留脱敏错误；不得换身份、Session、MCP 或另一写接口规避该拒绝。超时、非 JSON、5xx 等未知结果先回读，不猜成无权限，不盲重试。
+5. 写入成功后逐字段回读事件、公共字段引用、生成的 schema 和工单状态。新增成功不证明已有事件编辑、删除、角色管理、Base/Context/Tag 写入或发布权限；这些操作仍需独立核验和授权。
+6. 用户要求“只登记，不发布”时，完成登记回读即停止，不调用 `onlineTestRelease`、`onlineRelease` 或推进发布审批；登记、sandbox/staging 验证和生产发布仍是不同证据。
 
 ## 如何更新此结论
 

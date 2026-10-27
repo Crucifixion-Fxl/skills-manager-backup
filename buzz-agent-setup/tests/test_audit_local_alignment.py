@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import importlib.util
+import importlib.machinery
 import hashlib
 import json
 import os
 from pathlib import Path
 import re
+import shutil
 import stat
 import subprocess
 import sys
@@ -25,6 +27,7 @@ COMPARE_SCRIPT = (
 )
 SKILL_ROOT = SCRIPT.parent.parent
 LAUNCHER = SKILL_ROOT / "references/scripts/run-agent.py"
+RUNTIME_HELPER = SKILL_ROOT / "references/scripts/buzz_claude_runtime.py"
 GAP_TAXONOMY = SKILL_ROOT / "references/local-alignment-gap-taxonomy.md"
 EXPECTED = "a" * 40
 OLD = "b" * 40
@@ -44,6 +47,8 @@ JOIN_CHANNEL_TABLE = """
 
 
 def load_module():
+    # Each script load models a fresh CLI process; production rejects cached helpers.
+    sys.modules.pop("buzz_claude_runtime", None)
     spec = importlib.util.spec_from_file_location("audit_local_alignment", SCRIPT)
     if spec is None or spec.loader is None:
         raise RuntimeError("cannot load audit_local_alignment")
@@ -64,6 +69,7 @@ def load_compare_module():
 
 
 def load_launcher_module():
+    sys.modules.pop("buzz_claude_runtime", None)
     spec = importlib.util.spec_from_file_location("canonical_run_agent", LAUNCHER)
     if spec is None or spec.loader is None:
         raise RuntimeError("cannot load canonical launcher")
@@ -137,6 +143,8 @@ class LocalAlignmentFixture(unittest.TestCase):
             LAUNCHER.read_text(encoding="utf-8"),
             0o444,
         )
+        self.write(self.release / "references/scripts/buzz_claude_runtime.py",
+                   RUNTIME_HELPER.read_text(), 0o444)
         self.write(
             self.release / "references/agent-prompt-contract.md",
             (SKILL_ROOT / "references/agent-prompt-contract.md").read_text(
@@ -277,6 +285,7 @@ class LocalAlignmentFixture(unittest.TestCase):
             ),
             0o500,
         )
+        self.write(self.agents / "buzz_claude_runtime.py", RUNTIME_HELPER.read_text(), 0o400)
         self.write(
             self.agents / "local-alignment-roles.json",
             json.dumps({"version": 1, "roles": {"demo-dev": "dev"}}),
@@ -667,6 +676,275 @@ class LocalAlignmentAuditTest(LocalAlignmentFixture):
             time.sleep(0.05)
         else:
             self.fail("grandchild survived bounded process-group timeout")
+
+    def test_isolated_claude_binding_is_exact_and_shared_with_audit(self):
+        launcher = load_launcher_module()
+        wrapper = self.home / ".local/bin/claude-demo-dev"
+        config = self.home / ".claude-demo-dev"
+        self.write(wrapper, "#!/bin/sh\nexit 0\n", 0o500)
+        config.mkdir(mode=0o700)
+        binding = self.agents / "demo-dev.claude-runtime.json"
+        payload = {"schema_version": 1, "agent": "demo-dev",
+                   "wrapper": str(wrapper), "wrapper_sha256": hashlib.sha256(wrapper.read_bytes()).hexdigest(),
+                   "config_dir": str(config)}
+        self.write(binding, json.dumps(payload))
+        config.chmod(0o700)
+        auditor = load_module().Auditor(self.home, EXPECTED)
+        launcher.admit_claude_runtime("demo-dev", self.home, os.geteuid(), str(wrapper), str(config))
+        self.assertTrue(auditor.admit_claude_runtime("demo-dev", str(wrapper), str(config)))
+        shutil.copytree(self.home / ".claude-buzz", config, dirs_exist_ok=True)
+        config.chmod(0o700)
+        settings_path = self.workdir / ".claude/settings.local.json"
+        settings_original = settings_path.read_text()
+        self.write(settings_path, settings_original.replace(".claude-buzz", ".claude-demo-dev"))
+        env_path = self.agents / "demo-dev.env"
+        original = env_path.read_text()
+        self.write(env_path, original.replace("claude-buzz", "claude-demo-dev"))
+        prepared = launcher.prepare_launch("demo-dev", home=self.home, uid=os.geteuid(), username="fixture-user")
+        self.assertEqual(str(config), prepared[3]["CLAUDE_CONFIG_DIR"])
+        raw = auditor.parse_env(env_path, "agent:demo-dev")
+        launch = auditor.audit_launcher_preflight("demo-dev", raw)
+        self.assertIsNotNone(launch)
+        auditor.register_harness("demo-dev", {}, launch)
+        self.assertTrue(any(kind == "claude" for kind, _ in auditor.harnesses))
+        isolated_report = load_module().audit_home(self.home, EXPECTED)
+        self.assertTrue(isolated_report["ok"], isolated_report)
+        self.write(settings_path, settings_original)
+        self.write(env_path, original)
+        for change in ({"agent": "other"}, {"config_dir": str(self.home / ".claude-buzz")},
+                       {"wrapper_sha256": "0" * 64}, {"extra": True}, {"schema_version": True}):
+            with self.subTest(change=change):
+                self.write(binding, json.dumps(payload | change))
+                with self.assertRaises(launcher.LauncherError):
+                    launcher.admit_claude_runtime("demo-dev", self.home, os.geteuid(), str(wrapper), str(config))
+                self.assertFalse(auditor.admit_claude_runtime("demo-dev", str(wrapper), str(config)))
+        for body in ('{"agent":"demo-dev","agent":"other"}', '[]', '{'):
+            self.write(binding, body)
+            with self.assertRaises(launcher.LauncherError):
+                launcher.admit_claude_runtime("demo-dev", self.home, os.geteuid(), str(wrapper), str(config))
+        self.write(binding, json.dumps(payload))
+        for path in (binding, wrapper, config):
+            old = path.stat().st_mode
+            path.chmod(0o777)
+            with self.assertRaises(launcher.LauncherError):
+                launcher.admit_claude_runtime("demo-dev", self.home, os.geteuid(), str(wrapper), str(config))
+            path.chmod(old)
+        for path in (binding, wrapper, config):
+            saved = path.with_name(path.name + ".saved")
+            path.rename(saved)
+            path.symlink_to(saved, target_is_directory=saved.is_dir())
+            with self.assertRaises(launcher.LauncherError):
+                launcher.admit_claude_runtime("demo-dev", self.home, os.geteuid(), str(wrapper), str(config))
+            self.assertFalse(auditor.admit_claude_runtime("demo-dev", str(wrapper), str(config)))
+            path.unlink()
+            saved.rename(path)
+        with self.assertRaises(launcher.LauncherError):
+            launcher.admit_claude_runtime("demo-dev", self.home, os.geteuid(), str(wrapper.parent / ".." / "bin" / wrapper.name), str(config))
+        self.write(binding, "x" * 65537)
+        with self.assertRaises(launcher.LauncherError):
+            launcher.admit_claude_runtime("demo-dev", self.home, os.geteuid(), str(wrapper), str(config))
+        with self.assertRaises(launcher.LauncherError):
+            launcher.admit_claude_runtime("other", self.home, os.geteuid(), str(wrapper), str(config))
+
+    def test_two_claude_agents_cannot_claim_each_others_binding(self):
+        launcher = load_launcher_module()
+        auditor = load_module().Auditor(self.home, EXPECTED)
+        pairs = {}
+        for agent in ("reviewer", "desk"):
+            wrapper = self.home / ".local/bin" / f"claude-{agent}"
+            config = self.home / f".claude-{agent}"
+            self.write(wrapper, f"#!/bin/sh\nexport CLAUDE_CONFIG_DIR={config}\n", 0o500)
+            config.mkdir(mode=0o700)
+            binding = self.agents / f"{agent}.claude-runtime.json"
+            self.write(binding, json.dumps({"schema_version": 1, "agent": agent,
+                       "wrapper": str(wrapper), "config_dir": str(config),
+                       "wrapper_sha256": hashlib.sha256(wrapper.read_bytes()).hexdigest()}))
+            config.chmod(0o700)
+            launcher.admit_claude_runtime(agent, self.home, os.geteuid(), str(wrapper), str(config))
+            self.assertTrue(auditor.admit_claude_runtime(agent, str(wrapper), str(config)))
+            pairs[agent] = (wrapper, config, binding)
+        wrapper, config, binding = pairs["reviewer"]
+        other_wrapper, other_config, other_binding = pairs["desk"]
+        copied = json.loads(other_binding.read_text())
+        copied["agent"] = "reviewer"
+        self.write(binding, json.dumps(copied))
+        with self.assertRaises(launcher.LauncherError):
+            launcher.admit_claude_runtime("reviewer", self.home, os.geteuid(), str(other_wrapper), str(other_config))
+        self.assertFalse(auditor.admit_claude_runtime("reviewer", str(other_wrapper), str(other_config)))
+        if os.geteuid() == 0:
+            for path in (other_binding, other_wrapper, other_config):
+                os.chown(path, 65534, 65534)
+                try:
+                    with self.assertRaises(launcher.LauncherError):
+                        launcher.admit_claude_runtime("desk", self.home, os.geteuid(), str(other_wrapper), str(other_config))
+                    self.assertFalse(auditor.admit_claude_runtime("desk", str(other_wrapper), str(other_config)))
+                finally:
+                    os.chown(path, 0, 0)
+
+    def test_claude_binding_preserves_legacy_and_rejects_unverified_source(self):
+        launcher = load_launcher_module()
+        module = load_module()
+        self.assertEqual(module.CLAUDE_ADMISSION_SOURCE_SHA256, hashlib.sha256(RUNTIME_HELPER.read_bytes()).hexdigest())
+        self.assertEqual(launcher.CLAUDE_ADMISSION_SOURCE_SHA256, module.CLAUDE_ADMISSION_SOURCE_SHA256)
+        self.assertIs(launcher.admit_claude_runtime, launcher.buzz_claude_runtime.admit_claude_runtime)
+        auditor = module.Auditor(self.home, EXPECTED)
+        for name in ("buzz", "glm"):
+            wrapper = self.home / ".local/bin" / f"claude-{name}"
+            config = self.home / f".claude-{name}"
+            if not wrapper.exists():
+                self.write(wrapper, "#!/bin/sh\nexit 0\n", 0o500)
+                config.mkdir(mode=0o700)
+            launcher.admit_claude_runtime("demo-dev", self.home, os.geteuid(), str(wrapper), str(config))
+            self.assertTrue(auditor.admit_claude_runtime("demo-dev", str(wrapper), str(config)))
+        source = self.release / "references/scripts/buzz_claude_runtime.py"
+        marker = self.home / "unverified-code-ran"
+        source.chmod(0o644)
+        source.write_text(source.read_text() + f"\nPath({str(marker)!r}).touch()\n")
+        source.chmod(0o444)
+        self.assertFalse(auditor.admit_claude_runtime("demo-dev", str(wrapper), str(config)))
+        self.assertFalse(marker.exists())
+
+    def test_required_helper_package_is_verified_before_normal_isolated_import(self):
+        launcher = self.agents / "run-agent.py"
+        helper = self.agents / "buzz_claude_runtime.py"
+        def invoke():
+            return subprocess.run([sys.executable, "-I", str(launcher)],
+                                  capture_output=True, text=True, timeout=10,
+                                  env={"PYTHONPATH": "/hostile", "PYTHONHOME": "/hostile"})
+        self.assertEqual(2, invoke().returncode)
+        # Only passwd lookup is substituted for the synthetic fixture HOME.
+        # The actual -I launcher validates its package/env/ELF and execs /usr/bin/true.
+        script = (
+            "import os,pwd,runpy,sys;from types import SimpleNamespace;"
+            f"pwd.getpwuid=lambda uid:SimpleNamespace(pw_dir={str(self.home)!r},pw_uid=uid,pw_name='fixture-user');"
+            f"sys.argv=[{str(launcher)!r},'demo-dev'];"
+            f"runpy.run_path({str(launcher)!r},run_name='__main__')"
+        )
+        launched = subprocess.run([sys.executable, "-I", "-c", script], capture_output=True,
+                                  text=True, timeout=10, env={"PYTHONPATH": "/hostile"})
+        self.assertEqual(0, launched.returncode, launched.stderr)
+        dependency_marker = self.home / "dependency-shadow-executed"
+        dependency = self.agents / "json.py"
+        self.write(dependency, f"from pathlib import Path\nPath({str(dependency_marker)!r}).touch()\n")
+        dependency_check = subprocess.run([sys.executable, "-I", "-c", script],
+                                          capture_output=True, text=True, timeout=10)
+        self.assertEqual(0, dependency_check.returncode, dependency_check.stderr)
+        self.assertFalse(dependency_marker.exists())
+        dependency.unlink()
+        helper.chmod(0o600)
+        writable = subprocess.run([sys.executable, "-I", "-c", script], capture_output=True,
+                                  text=True, timeout=10)
+        self.assertNotEqual(0, writable.returncode)
+        self.assertFalse(self.run_audit()["ok"])
+        helper.chmod(0o400)
+        self.assertFalse((self.agents / "__pycache__").exists())
+        original = helper.read_text()
+        marker = self.home / "forged-helper-executed"
+        for content in (None, "# stale helper\n", f"from pathlib import Path\nPath({str(marker)!r}).touch()\n"):
+            if helper.exists():
+                helper.chmod(0o600)
+                helper.unlink()
+            if content is not None:
+                self.write(helper, content, 0o400)
+            completed = invoke()
+            self.assertNotEqual(2, completed.returncode, completed.stderr)
+            self.assertIn("runtime helper", completed.stderr)
+            self.assertFalse(marker.exists())
+            report = self.run_audit()
+            self.assertFalse(report["ok"])
+            self.assertTrue(any(item["subject"] == "launcher:buzz_claude_runtime.py"
+                                and item["status"] == "fail" for item in report["checks"]))
+        helper.chmod(0o600)
+        self.write(helper, original, 0o400)
+        pycache = self.agents / "__pycache__"
+        pycache.mkdir()
+        shadow = pycache / "buzz_claude_runtime.cpython-312.pyc"
+        shadow.write_bytes(b"forged bytecode")
+        self.assertNotEqual(2, invoke().returncode)
+        self.assertFalse(self.run_audit()["ok"])
+        shadow.unlink()
+        pycache.rmdir()
+        target = self.release / "references/scripts/buzz_claude_runtime.py"
+        for path in (self.release, target.parent, target.parent.parent):
+            path.chmod(0o755)
+        target.chmod(0o644)
+        self.write(target, f"from pathlib import Path\nPath({str(marker)!r}).touch()\n", 0o444)
+        manifest = self.release / ".release-manifest.json"
+        value = json.loads(manifest.read_text())
+        value["files"]["references/scripts/buzz_claude_runtime.py"]["sha256"] = hashlib.sha256(target.read_bytes()).hexdigest()
+        manifest.chmod(0o644)
+        self.write(manifest, json.dumps(value), 0o444)
+        for path in self.release.rglob("*"):
+            if path.is_dir():
+                path.chmod(0o555)
+        self.release.chmod(0o555)
+        self.assertFalse(self.run_audit()["ok"])
+        self.assertFalse(marker.exists())
+
+    def test_bootstrap_rejects_empty_import_collisions_and_sticky_writable_parent(self):
+        auditor_root = self.home / "own-auditor"
+        auditor = auditor_root / "scripts/audit_local_alignment.py"
+        own_helper = auditor_root / "references/scripts/buzz_claude_runtime.py"
+        self.write(auditor, SCRIPT.read_text(), 0o500)
+        self.write(own_helper, RUNTIME_HELPER.read_text(), 0o400)
+        entries = ((self.agents / "run-agent.py", self.agents / "buzz_claude_runtime.py"),
+                   (auditor, own_helper))
+        for entry, helper in entries:
+            def invoke(script=None):
+                argv = [sys.executable, "-I", str(entry)] if script is None else [sys.executable, "-I", "-c", script]
+                return subprocess.run(argv, capture_output=True, text=True, timeout=10)
+            for suffix in (*importlib.machinery.EXTENSION_SUFFIXES, ".pyc", ""):
+                collision = helper.with_name("buzz_claude_runtime" + suffix)
+                with self.subTest(entry=entry.name, suffix=suffix):
+                    if suffix:
+                        collision.touch()  # Empty placeholders only; never executable content.
+                    else:
+                        collision.mkdir()
+                    try:
+                        completed = invoke()
+                        self.assertIn("runtime helper unavailable or untrusted", completed.stderr)
+                        self.assertNotIn("file too short", completed.stderr)
+                        if entry.name == "run-agent.py":
+                            report = self.run_audit()
+                            self.assertTrue(any(item["subject"] == "launcher:buzz_claude_runtime.py"
+                                                and item["code"] == "helper_import_shadow"
+                                                for item in report["checks"]))
+                    finally:
+                        collision.unlink() if suffix else collision.rmdir()
+            mode = stat.S_IMODE(helper.parent.stat().st_mode)
+            helper.parent.chmod(0o1777)
+            try:
+                self.assertIn("runtime helper unavailable or untrusted", invoke().stderr)
+            finally:
+                helper.parent.chmod(mode)
+            cached = f"import sys,runpy;sys.modules['buzz_claude_runtime']=None;sys.argv=[{str(entry)!r}];runpy.run_path({str(entry)!r},run_name='__main__')"
+            self.assertIn("runtime helper unavailable or untrusted", invoke(cached).stderr)
+
+    def test_shared_helper_pin_rejects_benign_stale_copy_for_non_claude_harnesses(self):
+        source = self.release / "references/scripts/buzz_claude_runtime.py"
+        installed = self.agents / "buzz_claude_runtime.py"
+        source.chmod(0o644)
+        stale = source.read_text() + "\n# Benign stale packaging fixture.\n"
+        source.write_text(stale)
+        source.chmod(0o444)
+        installed.chmod(0o600)
+        installed.write_text(stale)
+        installed.chmod(0o400)
+        manifest = self.release / ".release-manifest.json"
+        manifest.chmod(0o644)
+        value = json.loads(manifest.read_text())
+        value["files"]["references/scripts/buzz_claude_runtime.py"]["sha256"] = hashlib.sha256(source.read_bytes()).hexdigest()
+        manifest.write_text(json.dumps(value))
+        manifest.chmod(0o444)
+        for harness in ("codex", "grok"):
+            with self.subTest(harness=harness):
+                auditor = load_module().Auditor(self.home, EXPECTED)
+                auditor.harnesses = {(harness, "non-claude-fixture")}
+                self.assertTrue(auditor.validate_release_manifest(self.release))
+                auditor.audit_agent_launcher()
+                self.assertTrue(any(item["subject"] == "launcher:buzz_claude_runtime.py"
+                                    and item["code"] == "helper_digest_mismatch"
+                                    and item["status"] == "fail" for item in auditor.checks), auditor.checks)
 
     def test_good_fixture_covers_every_local_runtime_surface(self) -> None:
         module = load_module()

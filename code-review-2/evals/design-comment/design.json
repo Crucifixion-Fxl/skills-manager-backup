@@ -1,0 +1,59 @@
+{
+  "schema_version": "1.1",
+  "conclusion": "\u901a\u8fc7",
+  "score": "N/A",
+  "should_pass": true,
+  "scope": "Technical API change",
+  "documentation": "Contract checked",
+  "quality": "Error behavior checked",
+  "e2e": "Relevant tests verified",
+  "red_lines": [],
+  "suggestions": [],
+  "review_profile": "design",
+  "design_review": {
+    "stage": "design-review",
+    "dimensions": {
+      "requirements": {
+        "status": "PASS",
+        "required": true,
+        "summary": "EVAL-001 / CA / EN-FR scope matches",
+        "evidence": [
+          "brief.md revision abc; packaging.pdf page 1 actually read"
+        ]
+      },
+      "content": {
+        "status": "PASS",
+        "required": true,
+        "summary": "Both files list Sensor x1, USB-C cable x1, Tripod x1",
+        "evidence": [
+          "brief.md revision abc; packaging.pdf page 1 actually read"
+        ]
+      },
+      "visual": {
+        "status": "PASS",
+        "required": true,
+        "summary": "All pages inspected, no clipping in review scope",
+        "evidence": [
+          "brief.md revision abc; packaging.pdf page 1 actually read"
+        ]
+      },
+      "production": {
+        "status": "PASS",
+        "required": true,
+        "summary": "Source and export hashes agree; editable text read back",
+        "evidence": [
+          "brief.md revision abc; packaging.pdf page 1 actually read"
+        ]
+      },
+      "approval": {
+        "status": "PASS",
+        "required": true,
+        "summary": "Design review scope only; manufacturing is outside this stage",
+        "evidence": [
+          "brief.md revision abc; packaging.pdf page 1 actually read"
+        ]
+      }
+    },
+    "findings": []
+  }
+}

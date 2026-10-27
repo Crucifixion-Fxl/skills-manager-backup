@@ -12,7 +12,7 @@ Usage / 用法:
   python3 query-helpers.py anchors
 
   # 3. Discover what jobs exist in a region
-  python3 query-helpers.py jobs us       # via Thanos US
+  python3 query-helpers.py jobs us       # via US prod VictoriaMetrics
   python3 query-helpers.py jobs eu
   python3 query-helpers.py jobs cn       # CN prod only
   # Tech-service domain cutover is pending. Verify the actual API base, then
@@ -40,11 +40,11 @@ import os, sys, json, time, urllib.request, urllib.parse
 # Endpoints (kept in sync with endpoints.md)
 # ============================================================================
 THANOS = {
-    "us": "http://thanos-prod-us.addx.live",
+    "us": "https://victoria-metrics-us-prod.addx.live/select/0/prometheus",  # US prod VictoriaMetrics
     "eu": "http://thanos-prod-eu.addx.live",
     "cn": "http://thanos-cn.addx.live",  # Legacy CN prod only, not all CN clusters
     "cn-staging": None,  # Discover vmsingle and port-forward; never fall back to prod
-    "cn-tech-service": None,  # Pending cutover; require an explicitly verified API base
+    "cn-tech-service": None,  # Require explicit selection of the verified target API base
 }
 
 TARGET_ALIASES = {"cn-prod": "cn", "prod-cn": "cn", "staging-cn": "cn-staging"}

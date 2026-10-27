@@ -26,7 +26,8 @@ def signed(key=base.MIRROR_KEY, mid='om_root', root='om_root', tags=(), kind=9):
 
 def bot_message(event, app=base.AGENT_APP, mid='om_target', root=None, card=None):
     content = card or dm.message_card(event, 'Speaker', 'hello', base.API_ORIGIN, base.CHANNEL)
-    return {'message_id': mid, 'chat_id': base.CHAT, 'root_id': root or '', 'sender': {'sender_type': 'app', 'id_type': 'app_id', 'id': app},
+    return {'message_id': mid, 'chat_id': base.CHAT, 'create_time': str(int(base.NOW.timestamp()) * 1000),
+            'root_id': root or '', 'sender': {'sender_type': 'app', 'id_type': 'app_id', 'id': app},
             'msg_type': 'interactive', 'content': content, 'body': {'content': content}}
 
 
@@ -686,9 +687,22 @@ class MappedAssembly(base.TmpCase):
         _, _, world, run = self.assembly()
         ev = base.FGS.sign_event(base.OWNER_KEY, 9, [['h', base.CHANNEL]], 'new message', run.now_ts)
         run.resolve_buzz(ev)
-        argv = next(argv for argv, _ in world.bot_calls if argv[2:4] == ['im', '+chat-messages-list'])
-        start = base.datetime.fromisoformat(argv[argv.index('--start') + 1])
-        self.assertEqual(int(start.timestamp()), run.now_ts - 900)
+        argv = next(argv for argv, _ in world.bot_calls if argv[2:5] == ['api', 'GET', '/open-apis/im/v1/messages'])
+        params = json.loads(argv[argv.index('--params') + 1])
+        self.assertEqual(int(params['start_time']), run.now_ts - 900)
+        self.assertEqual(int(params['end_time']), run.now_ts)
+
+    def test_file_body_cannot_block_recovery_or_cause_duplicate_send(self):
+        _, _, world, run = self.assembly()
+        ev = base.FGS.sign_event(base.OWNER_KEY, 9, [['h', base.CHANNEL]], 'already sent', run.now_ts)
+        world.events = [ev]
+        attachment = base.fmsg('om_file', base.ALICE_OPEN, '', msg_type='file')
+        attachment['body'] = {'content': '{"file_key":"opaque"}'}
+        world.messages = [attachment, bot_message(ev)]
+        run.buzz_to_feishu()
+        self.assertEqual(run.state.b2f[ev['id']], 'om_target')
+        self.assertEqual(run.report['to_feishu'], 0)
+        self.assertFalse(any(argv[2:4] == ['im', '+messages-send'] for argv, _ in world.bot_calls))
 
     def test_mapping_card_retains_verified_mention_tokens(self):
         _, _, world, run = self.assembly()

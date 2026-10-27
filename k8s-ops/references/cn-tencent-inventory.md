@@ -11,7 +11,8 @@
 
 本次 cn-tech-service 目标命名核对使用 `DEV/k8s` `origin/master`
 `29144fcbf7bbcea02e0bf2c57232bc564a6daf4c` 和 `DEV/argocd-apps` `origin/main`
-`ad43ebcb7ff3a0475f0325f9a91b74252363e1eb`；新域名仍为用户指定的待切换目标，见下表。
+`ad43ebcb7ff3a0475f0325f9a91b74252363e1eb`；该历史快照时域名待切换，
+入口当前状态由下方 2026-10-19 live 核验回执覆盖。
 
 后续操作先更新远端引用，再查目标 Application 的 `source` / `sources`（含 revision、Helm values 和 Kustomize patches）以及 live root Application。仓库中目录存在、旧 context 仍可连接、旧 fleet scanner 仍有目标，都不能单独证明该环境仍然有效。
 
@@ -21,7 +22,7 @@
 |---|---|---|---|---|
 | CN prod / cn-main | `100014919455` | `ap-beijing` | `tencent-100014919455-cn-main` | `argocd-cn-k8s.addx.live` |
 | CN staging | `100052802231` | `ap-beijing` | `tencent-100052802231-cn-staging` | `argocd-cn-staging.addx.live` |
-| CN tech-service | `100052802231` | `ap-beijing` | `tencent-100052802231-cn-tech-service` | `argocd-cn-tech-service-tke.addx.live`（目标，待切换） |
+| CN tech-service | `100052802231` | `ap-beijing` | `tencent-100052802231-cn-tech-service` | `argocd-cn-tech-service-tke.addx.live`（2026-10-19 已核验） |
 
 `cn-main` 是 prod 集群的规范目录名；扫描时不要额外再加一个代表旧 AWS 的 `cn-prod`，导致重复计算或连接旧集群。业务的 `prod-cn` overlay / namespace 名可以继续存在。
 
@@ -30,37 +31,37 @@
 - prod：现有 k8s `cicd/argocd/values.yaml` / `DEPLOYMENT.md` 记录 TKE `cls-kr3pti7p`；常见本机别名 `tke-cn-k8s`，使用前仍须核验。
 - staging：`argocd-apps/docs/plans/2026-09-24-tencent-staging-ingress-account-mapping.md` 和 k8s `clusters/tencent-100052802231-cn-staging/harbor/node-resolution/README.md` 明确账号 `100052802231`、集群 `cls-riukakjb`、区域 `ap-beijing`。kubeconfig 用 `tccli tke DescribeClusterKubeconfig --ClusterId cls-riukakjb --IsExtranet true`；公网 API endpoint 从部分网络会间歇 `connection reset`，可改从办公网跳板执行。
 - 旧 staging（勿作目标）：`100014919455` / `cls-i860hdh9` / VPC `vpc-jxxz6aiq`（CIDR 与新 staging 相同，均为 `172.17.0.0/16`，不能按 IP 段判断归属）。
-- tech-service：本次读取的集群入口配置未提供可靠 cluster ID；不得按账户 ID、目录名或旧腾讯集群推算。使用已授权的腾讯云 TKE 查询与本机 kubeconfig 核验后设置 `CN_TECH_CONTEXT`。
+- tech-service：2026-10-19 已用 STS/TKE 与 Node providerID 核验 `100052802231 / ap-beijing / cls-o0gwzdpz`，本机 context 为 `cn-tencent-tech-service`。其他机器仍需独立核对，不能仅按别名推断身份。
 - 新账号 profile 名是本地约定，不能假定存在 `new` 或 `tencent-100052802231-*`。使用 `tccli sts GetCallerIdentity --profile <candidate> --region ap-beijing` 校验 `AccountId`（主账号 UIN），再核验目标 cluster ID / API server。不得打印 SecretId、SecretKey、token 或 kubeconfig 凭据。
 
 `GetCallerIdentity.AccountId` 的含义见[腾讯云 STS 官方 API 文档](https://cloud.tencent.com/document/api/1312/66098)。
 
-## CN tech-service 目标域名（待切换）
+## CN tech-service 入口已核验（2026-10-19）
 
-用户于 **2026-09-28** 明确以下地址作为目标命名，技能先更新。全部状态均为
-`pending-cutover`：不表示 DNS、证书、Ingress、认证、镜像或 Vault 已完成迁移。
-执行前读取目标 TKE 的当前 Application/Ingress/SecretStore 和实际服务身份，核验后才使用；
-未完成时暂停该目标操作，不自动连接旧 AWS CN，也不把旧 Git 声明当作已部署或 fallback 授权。
+目录准入已更新为 allowed / verified，完整证据和未开放能力见
+[准入回执](../../../delivery/cicd-developer/references/cn-tech-service-admission-2026-10-19.md)。
+该回执覆盖真实集群身份、live root/source、平台入口、实例 Runner 4942 和有限 AppProject；
+不代表 ResourceSpace 已部署，也不代表共享 MySQL Composition 或 COS OIDC/CSI 就绪。
 
-| 服务 | 目标地址 | 状态与用途 |
-|---|---|---|
-| Vault Builder | `https://vault-cn.builder.addx.live` | `pending-cutover`；cn-tech-service Builder 目标入口，TKE 部署归属和认证待核验 |
-| Harbor 内网 | `harbor-02231-cn-tech-service.addx.live` | `pending-cutover`；目标集群内默认 registry |
-| Harbor 公网 | `harbor-02231-cn-tech-service-pub.addx.live` | `pending-cutover`；获准的外部访问及 SG 同步目标 |
-| ArgoCD | `https://argocd-cn-tech-service-tke.addx.live` | `pending-cutover` |
-| Casdoor | `https://casdoor-cn-tech-service-tke.addx.live` | `pending-cutover`；ArgoCD OIDC issuer/回调须随实际切换核验 |
-| VictoriaMetrics | `https://victoria-metrics-cn-tech-service-tke.addx.live` | `pending-cutover`；VMCluster 查询 API 仍需实际 tenant/path |
-| VMAlert | `https://vm-alert-cn-tech-service-tke.addx.live` | `pending-cutover` |
+用户于 2026-10-19 明确确认：`argocd-cn-tech-service-tke.addx.live` 与
+`argocd-cn-tech-service.addx.live` 指向同一 ArgoCD，均属于 `cn-tke-tech-service`；
+旧 `cn-eks-tech-service` 已下线。两个域名的存在不代表两个实例、迁移仍在进行或旧 EKS 仍在线。
 
-VictoriaMetrics 的目标 Prometheus API base 示例为
-`https://victoria-metrics-cn-tech-service-tke.addx.live/select/0/prometheus`；
-执行前核验实际 tenant，`0` 不是本轮已确认的运行态租户，入口与查询路径仍待切换验收。
+| 服务 | 已核验入口及边界 |
+|---|---|
+| ArgoCD | `https://argocd-cn-tech-service-tke.addx.live` 与 `https://argocd-cn-tech-service.addx.live` 为同一 TKE 实例的双入口；配置中前者为 primary URL、后者为 additionalUrls；已核验 API/version 200、登录重定向 303 |
+| Casdoor | 实际 issuer `https://casdoor-cn-tech-service.addx.live`；`-tke` 为兼容入口，discovery 200；未重新执行交互式 SSO |
+| Harbor | 私网 `harbor-02231-cn-tech-service.addx.live` → `10.2.0.6`；受限公网 `-pub` → `62.234.5.152`，集群内外本轮均如此；两入口 TLS / registry challenge 通过 |
+| Builder Vault | `https://vault-cn.builder.addx.live`，health 200、已初始化且未 sealed；不改变 Ops 密钥域 |
+| VictoriaMetrics | `https://victoria-metrics-cn-tech-service-tke.addx.live/select/0/prometheus`，查询 HTTP 200 |
+| VMAlert | `https://vm-alert-cn-tech-service-tke.addx.live`，`/-/healthy` HTTP 200 |
 
-两个 Harbor 地址的目标设计是**同一实例的双入口**，不自动复制镜像或迁移 runner、
-Image Updater、pull-secret。采用内网镜像前，核验精确 registry hostname 的 `auths`、
-实际 `externalURL` 和 `/v2/` 返回的 token realm，以及调用端对 registry/realm 的 DNS、TLS 和网络。
-tech-service 尚无本轮双入口部署回执，不能照搬 staging 已验收的 split DNS/公网 token realm
-结论，也不能因内网不可达就静默切公网。
+Harbor 的 realm 随请求 host 返回同域 `/service/token`，core `EXT_ENDPOINT` 为私网域。
+本轮不得照搬 staging 的 split DNS / canonical 公网 token realm 合同；公网域在目标 VPC
+内解析到公网，不能自动当私网使用。Runner 默认使用私网 registry，并已有精确 auth key。
+ResourceSpace 指定的 Ubuntu digest 在 `base/ubuntu` 路径返回 404，精确镜像门禁仍未通过。
+
+以下历史声明用于追溯，已由本节的 live 回执覆盖入口状态；未核验能力保持单独门禁。
 
 ### 迁移前 Git 声明（固定快照，非自动回退地址）
 
@@ -94,9 +95,9 @@ metrics 的 `cn-tech-service-2231` 标签及 SG 调用者的 `jwt-eks-sg-devops`
 |---|---|---|---|
 | prod / cn-main | `harbor-cn.addx.live` | `vault-backend` → `https://vault-cn-internal.addx.live` | Kubernetes mount `kubernetes` |
 | staging（2231） | `harbor-02231-cn-staging.addx.live`（内网默认）；`harbor-02231-cn-staging-pub.addx.live`（受限公网）；`harbor-cn-staging.addx.live`（同实例兼容入口，runner/Image Updater 现用） | `vault-backend` → `http://vault-active.vault.svc:8200`（本集群）；公网入口 `vault-cn-staging.addx.live` → `43.179.178.102`（新账号 CLB `lb-kz89y6gx`） | Kubernetes mount `kubernetes` |
-| tech-service（2231） | `harbor-02231-cn-tech-service.addx.live`（内网目标）；`harbor-02231-cn-tech-service-pub.addx.live`（公网目标）；均待切换 | `vault-backend` → `https://vault-cn.addx.live`（Ops Git 声明，保持） | JWT path `jwt-tke-cn-tech-service-2231`（保持） |
+| tech-service（2231） | `harbor-02231-cn-tech-service.addx.live`（已核验内网）；`harbor-02231-cn-tech-service-pub.addx.live`（已核验受限公网） | `vault-backend` → `https://vault-cn.addx.live`（Ops Git 声明，保持） | JWT path `jwt-tke-cn-tech-service-2231`（保持） |
 
-staging Harbor 的后续更新及 tech-service 的待切换目标按各自说明使用；其余值来自各集群 `cicd/external-secrets-config/cluster-secret-store.yaml`、`cicd/argocd-image-updater/values*-override.yaml`、`cicd/argocd/values*.yaml`，并与 `argocd-apps/<cluster>/argocd.yaml` 的源配置核对。不要用历史的“CN staging 必须叫 vault-builder-backend”或“TKE 全部同集群 Kubernetes Auth”覆盖真实配置；Store 名称不等于权限域，仍须核查 server、auth 和 Vault policy，不能把 staging 指到生产密钥域。
+staging Harbor 的后续更新及 tech-service 的已核验入口按各自说明使用；其余值来自各集群 `cicd/external-secrets-config/cluster-secret-store.yaml`、`cicd/argocd-image-updater/values*-override.yaml`、`cicd/argocd/values*.yaml`，并与 `argocd-apps/<cluster>/argocd.yaml` 的源配置核对。不要用历史的“CN staging 必须叫 vault-builder-backend”或“TKE 全部同集群 Kubernetes Auth”覆盖真实配置；Store 名称不等于权限域，仍须核查 server、auth 和 Vault policy，不能把 staging 指到生产密钥域。
 
 staging Harbor 双入口依据用户于 2026-09-28 的最新确认及
 [固定部署回执 ce9e5133](https://gitlab.addx.ai/DEV/k8s/-/blob/ce9e51334789c5accac3cb580e44cbb1685214c5/clusters/tencent-100052802231-cn-staging/harbor/private-entry/README.md)，

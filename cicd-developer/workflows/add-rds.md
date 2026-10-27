@@ -7,13 +7,23 @@ description: 给现有服务申请 AWS RDS。新建专用 PostgreSQL 先走平�
 
 ## CN 迁移能力门禁
 
-当前 CN 路由见 `references/cn-tencent-migration.md`：prod 为 `cn-k8s`（100014919455），
-staging/tech-service 为 `cn-tke-staging` / `cn-tke-tech-service`（100052802231）。
+当前 CN 路由见 `references/cn-tencent-migration.md`：`prod-cn` / `prod-cn-tke` 仍到
+`cn-k8s`（100014919455/cn-main）；AWS prod-cn 迁入专用 `prod-cn-tke-2231` 到
+`cn-tke-prod`（100052802231/cn-prod）。staging/tech-service 为
+`cn-tke-staging` / `cn-tke-tech-service`（100052802231）；能力按精确集群核验。
 AWS CN 已退役。下文 AWS shared-middleware 的已上线证明不能覆盖新 TKE；生成 `Database` /
 `KafkaScramCredential` 前必须核验精确目标的 served API、Composition/ProviderConfig、共享实例、
 Vault writer/reader 和 per-app 凭据交付，缺任一证据则 STOP + Ops Todo。消费策略仍适用，
 不得回退到旧 AWS broker/ARN、共享 root 或 app-owned/self-hosted staging 数据库。
 AWS 托管资源 recipe 仅用于 `cloud=aws`；腾讯云请求转对应原生能力或 Ops Todo。
+
+## 平台隔离验收准备（仅显式 #57 / Root #168 任务）
+
+当用户明确进行自助RDS平台隔离验收时，在普通业务 target 分流前执行
+[隔离验收准备入口](../references/app-owned-rds/isolated-acceptance.md)。只生成
+`PREPARED_NOT_AUTHORIZED` 候选，输出后退出本 workflow；不能进入旧 Steps 2–13。
+普通应用 staging 申请仍按共享数据库规则处理。激活请求必须另行完成该入口的
+真实环境、owner交接、费用与执行授权门禁，不能从准备成功推断已获授权。
 
 ## Application 与渲染入口前置
 

@@ -14,8 +14,10 @@ description: 从零部署一个无状态服务。产出 k8s manifest、ArgoCD Ap
 
 ## CN 迁移能力门禁
 
-当前 CN 路由见 `references/cn-tencent-migration.md`：prod 为 `cn-k8s`（100014919455），
-staging/tech-service 为 `cn-tke-staging` / `cn-tke-tech-service`（100052802231）。
+当前 CN 路由见 `references/cn-tencent-migration.md`：`prod-cn` / `prod-cn-tke` 仍到
+`cn-k8s`（100014919455/cn-main）；AWS prod-cn 迁入专用 `prod-cn-tke-2231` 到
+`cn-tke-prod`（100052802231/cn-prod）。staging/tech-service 为
+`cn-tke-staging` / `cn-tke-tech-service`（100052802231）；能力按精确集群核验。
 AWS CN 已退役。下文 AWS shared-middleware 的已上线证明不能覆盖新 TKE；生成 `Database` /
 `KafkaScramCredential` 前必须核验精确目标的 served API、Composition/ProviderConfig、共享实例、
 Vault writer/reader 和 per-app 凭据交付，缺任一证据则 STOP + Ops Todo。消费策略仍适用，
@@ -124,7 +126,7 @@ workflow；未知资源进入 Ops Todo，不让用户自己记下一步该跑什
 [output]
   - 内存变量
 
-## Step 2. 决定每个 target 的 tier（只读）
+## Step 2. 解析每个 target 的 tier 与 application placement（只读）
 
 [precondition]
   - Step 1 完成
@@ -144,6 +146,19 @@ workflow；未知资源进入 Ops Todo，不让用户自己记下一步该跑什
       - **A（字面 host，单 target / 老应用 grandfather）**：`= $target.harbor_image_path`。
       - 不变量：`$target.runner_tags` 按 clusters.yaml 解析出的 harbor_url 必须 == `$target.harbor_url`
         （即 CI push 落位的 Harbor == 部署侧字面 host）。
+    - 读取 [application NodePool placement](../references/nodepool-placement.md)，在生成
+      workload 前为这个准确 target 解析并记录 `$target.placement`：已批准的目标池、
+      池身份、可运行架构、容量类型、taint/toleration、默认 private subnet/NAT 或已确认网络例外的证据。
+      所有 target 默认私有子网 + 稳定 NAT，特殊网络要求按 reference 明确确认，不因专用池而豁免。
+      普通应用默认共享池；stateful/能力池例外按 reference 记录明确依据，并须符合当前
+      workflow 的资源边界。EKS 显式绑定已核验的 `karpenter.sh/nodepool`、架构、容量和
+      目标已提供的 `network.addx.io/egress` 约束。NodeClass 通过 `nodeClassRef` 及运行
+      证据核验，不把 `karpenter.k8s.aws/ec2nodeclass` 注入 Pod selector/required affinity。
+      网络标签仅在 live 节点/池合同确实提供时使用，不能代替 private subnet + 稳定 NAT 验证。
+    - 选择 reference 的单池 AND 或显式多池 allowlist OR 变体；每个 OR term 独立保留
+      对应池身份、架构、容量和适用的网络约束。不能只用 arch + capacity 泛选节点，
+      也不能因 CI 为 dual-arch 就开放任意池或 Spot。TKE/GKE 使用目标已有且核验的原生
+      节点池合同，不套用 EKS 标签。池、供给配置或网络证据缺失时 STOP + 精确 Ops Todo。
   - 如果任何 target 是 prod：
     - 打开 `references/cost-tiering/_global.yaml -> prod_self_check`
     - 对每条项目，打给用户，要求显式确认（"yes"/"no"）
@@ -151,6 +166,9 @@ workflow；未知资源进入 Ops Todo，不让用户自己记下一步该跑什
 
 [validate]
   - 每个 `$target` 上述字段都已填
+  - 每个 `$target.placement` 已按 reference 核验，普通应用默认共享，例外有明确依据；
+    未将普通业务放入 `cicd-system` / `crossplane-providers` 等平台专用池。
+    namespace、IAM 或多架构镜像均不是进入平台池的授权。
   - 每个 `$target.harbor_image_path`（部署侧字面）匹配 `/cicd/(dev|staging|pre|prod)-[a-z]+/{$app}$`
   - `$target.runner_tags` 必须非空且按架构已验证；`runner_status: not_verified` 时 STOP + Ops Todo，禁止猜旧 AWS CN runner tag。
   - 每个 `$target.runner_tags` 按 clusters.yaml 解析出的 harbor_url == `$target.harbor_url`（CI push 与部署侧同 Harbor）
@@ -176,6 +194,8 @@ workflow；未知资源进入 Ops Todo，不让用户自己记下一步该跑什
   - 用 `recipes/k8s/service.yaml.tmpl` 写 `k8s/base/service.yaml`，填槽：
       `{{app}}=$app`、`{{port}}=$container_port`、`{{target_port}}=$container_port`
   - 用 `recipes/k8s/kustomization-base.yaml.tmpl` 写 `k8s/base/kustomization.yaml`（无槽位）
+  - base 保持跨目标可复用，不写目标池身份；它不是可直接部署的完整 workload。
+    Step 4 必须为每个 overlay 注入 Step 2 已核验的完整 placement。
   - `$runtime_profile=static-web` 时保持 Rollout container 无 `env`、`envFrom`、
     secret-backed volume/volumeMount；Nginx 不做 runtime config substitution。
 
@@ -202,8 +222,11 @@ workflow；未知资源进入 Ops Todo，不让用户自己记下一步该跑什
 
 [precondition]
   - Step 3 完成
+  - 当前 `$target.placement` 已在 Step 2 解析并通过门禁
 
 [action]
+  - 生成 Pod env label 前运行 `python3 "$skill_root/validators/check_logging_target.py" --env-keyword <target-keyword>`；失败则 STOP + Ops Todo，candidate 阶段也不得延期已知映射阻塞。
+  - 记录 `$target.runtime_source_path=k8s/overlays/{$target.env_keyword}`、`$target.runtime_env_label=$target.env_keyword`；仅用于本次新建候选，不能套用存量应用。
   - 创建目录 `k8s/overlays/{$target.env_keyword}/`
   - 用 `recipes/k8s/kustomization-overlay.yaml.tmpl` 写
     `k8s/overlays/{$target.env_keyword}/kustomization.yaml`，填槽：
@@ -211,6 +234,11 @@ workflow；未知资源进入 Ops Todo，不让用户自己记下一步该跑什
       `{{env}}=$target.env_keyword`、
       `{{harbor_image_path}}=$target.harbor_image_path`、
       `{{image_tag}}=0000000`（overlay/draft placeholder，**不带冒号前缀**——kustomize 自动用 `:` 拼）
+  - 将 [NodePool placement reference](../references/nodepool-placement.md) 的完整单池
+    AND / 多池 OR 示例作为本 recipe 的必选 overlay 变体，在同一 Kustomization 的
+    `patches` 中为 Rollout 的 `spec.template.spec` 写入已解析的 selector/required
+    affinity 和必要 tolerations。保留 env-label patch；不得交付只有 env/image patch、
+    没有完整 placement 的 target overlay。所有生成的 Pod template 都须满足该目标合同。
   - 不生成 `.argocd-source-*`、ImageUpdater CR、ApplicationSet 或 Git 凭据；应用仓只保留
     workload overlay，镜像自动化由 argocd-apps 中 Application annotations 表达。
   - 不要用 `staging-latest` / `prod-latest` 这类 env tag，因为 Application `allow-tags` 只接受纯 Git SHA。
@@ -222,6 +250,10 @@ workflow；未知资源进入 Ops Todo，不让用户自己记下一步该跑什
 [validate]
   - `kustomize build k8s/overlays/{$target.env_keyword}/` 退出 0
   - 渲染后 Rollout 的 pod template 含 `env:` label
+  - 检查最终 render 的全部 Pod template：有效 selector/required affinity 只允许
+    `$target.placement` 列出的池；单池约束为 AND，多池 OR 的每个 term 都完整，
+    无 source 池残留、ec2nodeclass Pod 约束、宽泛 toleration 或仅 arch + capacity 的替代写法。
+    对照 reference 的验收清单记录结果；通用 validator PASS 不能替代这项检查。
   - `bash "$skill_root/validators/validate.sh" k8s/overlays/{$target.env_keyword}/` PASS
 
 [output]
@@ -480,6 +512,9 @@ workflow；未知资源进入 Ops Todo，不让用户自己记下一步该跑什
   - 写或更新 `docs/deployment/cicd.md`，包含技术决策：
     - 涉及的集群、分支、namespace
     - CI 策略（per-target dual-arch / single-arch-amd64）
+    - 每 target 的完整 application placement、准确池、允许架构/容量及 reference 第 4 节
+      对应网络路径的核验依据；另记 `nodeClassRef` 的供给配置证据。
+      记录 CI 构建平台与实际允许调度范围，二者分别验证
     - Image Updater 写回方式
     - app 消费的 Vault 路径列表
     - 指回 `docs/deployment/cd-requirements.md`
@@ -552,7 +587,7 @@ workflow；未知资源进入 Ops Todo，不让用户自己记下一步该跑什
     - **尚无消费 Composition（aurora / mariadb-RDS / documentdb / clickhouse）**：STOP 并写 Ops Todo：
       "<resource> on <env>-<region>：补可复用 kind:Database 消费 Composition + 自动 per-app 凭据交付"（注：documentdb /
       clickhouse 共享实例历史部署覆盖含已退役 AWS CN 的六集群；当前 CN TKE 实例须重新核验，仅消费层未落地；不让单 app 自建、不用 StatefulSet 自托管）。
-    - 同一个 resource 若还有 **非 shared-middleware 集群 target（真 prod `*-eks-prod`/`*-prod-data`/cn-k8s（TKE prod）；
+    - 同一个 resource 若还有 **非 shared-middleware 集群 target（真 prod `*-eks-prod`/`*-prod-data`/cn-k8s / cn-tke-prod（TKE prod）；
       tech-service 不在此列）**，只把这些 targets 交给对应 `add-*` workflow 继续生成 app-owned 资源；
       不要因为有 shared-middleware target 就阻断它们。
   - raw 数据面先按 [资源职责拆分](../references/application-resource-split.md) 登记独立 infra
@@ -717,6 +752,11 @@ runtime 初始化 render。下面两次同步只针对 runtime Application；高
 [action]
   - 在已获准的首次同步后，按依赖恢复 `$delivery_phase=runtime`：先平台权限/IRSA，
     再 DB/Redis 等资源与 Secret，接着 DB migration，再 NineData 和其它 consumer 验收。
+  - workload 启用后按 [NodePool placement](../references/nodepool-placement.md) 读回实际
+    Pod/Node 的池身份、架构和容量，另核对 NodeClass 供给配置及实际运行证据，
+    默认核对 Pod 出口与已记录 NAT Gateway；已确认例外按 reference 第 4 节验证替代路径。
+    未启用 workload 时保留这项 runtime check 为 pending，不把 base/render PASS 当作
+    实际调度或网络验收。
   - RDS 按 add-rds Step 1 的分支恢复：平台受限账号路径执行
     references/app-owned-rds/README.md 的 live 验收，命名例外回到旧 Step 10；
     其它已生成资源执行原子流程出口的 live 检查。只读取

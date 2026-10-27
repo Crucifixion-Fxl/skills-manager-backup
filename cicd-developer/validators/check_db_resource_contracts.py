@@ -25,8 +25,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import cn_database_identity
 import yaml
-
 
 EXPECTED_WAVES = {
     ("Password", "-rds-password-gen"): "-5",
@@ -930,6 +930,8 @@ def database_producers(doc: dict[str, Any]) -> dict[str, set[tuple[str, str]]]:
     Redis reads shared-redis-conn, so that read-only source is not an owned key.
     """
     db = spec(doc)
+    if db.get("compositionRef") == {"name": cn_database_identity.COMPOSITION}:
+        return cn_database_identity.producers(doc)
     app, env = db["app"], db["env"]
     dns = app.replace("_", "-")
     engine = db.get("engine", "mysql")
@@ -973,7 +975,7 @@ def database_producers(doc: dict[str, Any]) -> dict[str, set[tuple[str, str]]]:
     return producers
 
 
-def _identity_failures(path: Path, doc: dict[str, Any]) -> list[str]:
+def _identity_failures(path: Path, doc: dict[str, Any], composition_revisions=None) -> list[str]:
     """Fail closed where projection of an unknown/partial claim is impossible."""
     failures = check_platform_database_naming(path, doc)[1]
     if doc.get("apiVersion") != "platform.addx.io/v1alpha1":
@@ -990,6 +992,13 @@ def _identity_failures(path: Path, doc: dict[str, Any]) -> list[str]:
     if db.get("engine", "mysql") not in ("mysql", "redis", "postgres"):
         failures.append(f"FAIL: {path}: unsupported Database spec.engine")
     composition = db.get("compositionRef")
+    if composition == {"name": cn_database_identity.COMPOSITION}:
+        for field in ("compositionSelector", "compositionRevisionSelector"):
+            if field in db:
+                failures.append(f"FAIL: {path}: CN PostgreSQL selectors cannot select a verified revision")
+        failures.extend(f"FAIL: {path}: {reason}" for reason in
+                        cn_database_identity.claim_failures(doc, composition_revisions))
+        return failures
     if composition is not None and composition != {"name": "database.platform.addx.io"}:
         failures.append(f"FAIL: {path}: unknown Database Composition cannot be projected")
     if "compositionSelector" in db:
@@ -1046,6 +1055,7 @@ def check_database_identities(
     candidates: list[tuple[Path, dict[str, Any]]],
     inventory: list[dict[str, Any]] | None = None,
     inventory_path: Path | None = None,
+    composition_revisions=None,
 ) -> list[str]:
     """Compare local producers per directory, or all candidates with one target.
 
@@ -1059,7 +1069,7 @@ def check_database_identities(
     claims = {}
 
     def record(path, doc, scope, *, replacing=False):
-        errors = _identity_failures(path, doc)
+        errors = _identity_failures(path, doc, composition_revisions)
         failures.extend(errors)
         if errors:
             return
@@ -1088,7 +1098,7 @@ def check_database_identities(
     for path, doc in candidates:
         scope = "target" if inventory is not None else str(path.parent.resolve())
         if not isinstance(metadata(doc).get("namespace"), str):
-            failures.extend(_identity_failures(path, doc))
+            failures.extend(_identity_failures(path, doc, composition_revisions))
             continue
         key = (scope, metadata(doc).get("namespace"), name_of(doc))
         # A repeated candidate must fail even when identical; it cannot be
@@ -1136,6 +1146,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("directory", type=Path)
     parser.add_argument("--inventory", type=Path, help="complete Database List JSON from the exact target; use a single-target render")
+    parser.add_argument("--composition-revisions", type=Path, help="complete native CN PostgreSQL CompositionRevisionList from the same target")
     args = parser.parse_args()
     root = args.directory
     if not root.is_dir():
@@ -1178,7 +1189,20 @@ def main() -> int:
         except ValueError as exc:
             print(f"FAIL: invalid Database inventory: {exc}")
             return 2
-    failures.extend(check_database_identities(candidates, inventory, args.inventory))
+    revisions = None
+    if args.composition_revisions:
+        if inventory is None:
+            print("FAIL: Composition revisions require the exact target Database inventory")
+            return 2
+        try:
+            revisions = cn_database_identity.verified_revisions(json.loads(
+                _bounded_text(args.composition_revisions), object_pairs_hook=_unique_json_pairs
+            ))
+        except (OSError, UnicodeError, json.JSONDecodeError, RecursionError, ValueError) as exc:
+            diagnostic = str(exc) if isinstance(exc, ValueError) and not isinstance(exc, json.JSONDecodeError) else type(exc).__name__
+            print(f"FAIL: invalid CN CompositionRevision inventory: {diagnostic}")
+            return 2
+    failures.extend(check_database_identities(candidates, inventory, args.inventory, revisions))
 
     if failures:
         for failure in failures:

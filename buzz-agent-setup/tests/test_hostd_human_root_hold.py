@@ -123,7 +123,12 @@ class HumanRootHold(base.TmpCase):
         reply = event('reply', parent=root['id'])
         world.events = [root, reply]
         # Use real root lookups/history transports through the production hook.
-        with mock.patch.object(run.clients.owner, 'messages', return_value=([], True)):
+        native_call = run.clients.owner.call
+        def incomplete(what, args, **kwargs):
+            if args[:3] == ['api', 'GET', '/open-apis/im/v1/messages']:
+                return {'items': [], 'has_more': True, 'page_token': 'unread-page'}
+            return native_call(what, args, **kwargs)
+        with mock.patch.object(run.clients.owner, 'call', side_effect=incomplete):
             with self.assertRaises(gs.GroupSyncError):
                 run._thread_root_parent(reply, root['id'], None, {})
         self.assertEqual(run.state.unresolved, {})

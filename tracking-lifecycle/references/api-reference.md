@@ -373,7 +373,7 @@ parentPage / parentModule 使用 point 名称引用（非数字 ID），可引�
 > ⚠️ `batchCreateEvents` **只能创建**，对已存在 point 会报 `当前点位已经存在,无法添加`。
 > 给「当前活跃工单内、尚未发布」的事件补参数，**必须走本接口（带 `id`）**，不要试图用 `batchCreateEvents` 升版。
 
-**认证：** Bearer token（同其它写接口）。需要**该应用的 app owner 权限**。
+**认证与权限：** 使用用户已授权、实际请求进程已核验的 PAT。新增事件不能仅因 `isAppOwner=false` 或 `isAdmin=false` 被阻断；2026-10-14 实测非 owner/admin 的 PAT 可完成新增。具体操作以当前接口返回和写后回读为准，不把新增成功外推为编辑或发布权限；见 [新增事件权限判定](platform-auth.md#新增事件权限判定)。契约、完整树、工单与发布门禁不变。
 
 **前提：** 应用必须有**活跃工单**（`releaseStatus ≠ 3 且 ≠ 4`，状态语义见下方[「工单状态」](#工单状态releasestatus)），否则报 `请先创建工单!`。
 
@@ -434,7 +434,7 @@ curl -X POST \
 | 改**继承参数**的 name/type | 被 `validateNameAndTypeImmutableForInheritedParams` 拦截 |
 | 新 point 与他事件冲突 | 报 `当前点位已经存在,无法添加` |
 | 传入失效 `parentPageId`（指向已删除/不存在页面） | ⚠️ 已知缺陷：裸 NPE `{"code":500,"errorMessage":null}`（单事件接口未做 parent 存在性校验）。补参数走上面的 getEventDetail round-trip（`parentPageId` 原样回传）可规避；新建 MODULE/COMPONENT 优先用 `batchCreateEvents` |
-| 非 app owner | 权限拦截 |
+| 非 app owner（已有事件更新） | 沿用权限拦截要求；本次只实测新增，不据此放宽更新权限 |
 
 > 仅当事件由**之前已发布工单**继承（point 不可改）时才退化为「新建事件」；对当前活跃工单内的事件，本接口可直接原地补参数，无需 UI 操作。
 
@@ -508,7 +508,7 @@ curl -X POST \
 | 工单 version 格式 `\d+-\d+-\d+`（如 `1-0-x`，x=上版本+1，只增不退） | 格式不符 | 前端「版本号格式有误」 |
 | 审批 / 发布 / 废弃 等状态流转有 REST 入口，但须遵守业务权限和审批 | — | 当前生产发布以 SKILL.md 受保护发行分支、受限 CI 身份和完整回读门禁为准；不是必须走 UI，也不能直接 curl 绕过门禁 |
 
-> 权限：`saveOrUpdateApplicationInfo`（建应用）需 ADMIN；`saveOrUpdateEventInfo` 需该应用 app owner / admin。`deleteEventDetail`、`batchCreateEvents`、baseSchema/context/tag 写接口当前**后端未在 Controller 层强制鉴权**（MCP 走 API Key 注入 `mcp-system`≈admin），但 skill 仍应按"需 app owner"语义自律，不引导越权操作。
+> 权限：`saveOrUpdateApplicationInfo`（建应用）需 ADMIN。新增事件按 [新增事件权限判定](platform-auth.md#新增事件权限判定)，不从 owner/admin 探针推断拒绝；批量新增仍沿用 `post` 的契约与工单门禁。历史源码记录中部分删除/Base/Context/Tag 接口缺少 Controller 层校验，不构成操作授权；不得利用该缺口或切换 MCP 身份绕过明确拒绝。已有事件编辑、删除、公共字段及发布权限需分别核验，不能由本次新增实测推断。
 
 ## URL 路由参考
 

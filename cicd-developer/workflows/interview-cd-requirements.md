@@ -7,8 +7,10 @@ description: 通过访谈把用户意图填进 `docs/deployment/cd-requirements.
 
 ## CN 迁移能力门禁
 
-当前 CN 路由见 `references/cn-tencent-migration.md`：prod 为 `cn-k8s`（100014919455），
-staging/tech-service 为 `cn-tke-staging` / `cn-tke-tech-service`（100052802231）。
+当前 CN 路由见 `references/cn-tencent-migration.md`：`prod-cn` / `prod-cn-tke` 仍到
+`cn-k8s`（100014919455/cn-main）；AWS prod-cn 迁入专用 `prod-cn-tke-2231` 到
+`cn-tke-prod`（100052802231/cn-prod）。staging/tech-service 为
+`cn-tke-staging` / `cn-tke-tech-service`（100052802231）；能力按精确集群核验。
 AWS CN 已退役。下文 AWS shared-middleware 的已上线证明不能覆盖新 TKE；生成 `Database` /
 `KafkaScramCredential` 前必须核验精确目标的 served API、Composition/ProviderConfig、共享实例、
 Vault writer/reader 和 per-app 凭据交付，缺任一证据则 STOP + Ops Todo。消费策略仍适用，
@@ -217,7 +219,7 @@ AWS 托管资源 recipe 仅用于 `cloud=aws`；腾讯云请求转对应原生�
         "Platform: 补 <kind> 的可复用 kind:Database 消费 Composition + 自动 per-app 凭据交付"（注：documentdb /
         clickhouse 共享实例历史部署覆盖含已退役 AWS CN 的六集群；当前 CN TKE 实例须重新核验，仅消费层未落地）。记为 **Future State**。不要手搓 shared-middleware
         路径或 legacy `staging-{region}/` 资源，也不要让单 app 自建 / StatefulSet 自托管。
-      - **非 shared-middleware 集群 target（真 prod `*-eks-prod`/`*-prod-data`/cn-k8s（TKE prod）；tech-service 不在此列）**
+      - **非 shared-middleware 集群 target（真 prod `*-eks-prod`/`*-prod-data`/cn-k8s / cn-tke-prod（TKE prod）；tech-service 不在此列）**
         continue with the rules below（app-owned 托管实例）。
     - 在 `references/cost-tiering/<kind>.yaml` 找到 → **模板化** 资源；记录各 env 的规格 + immutable 字段
     - 在 `cost-tiering/_global.yaml -> unknown_resources.exceptions` 里（例如 clickhouse）→ 也是模板化

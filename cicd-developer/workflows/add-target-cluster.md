@@ -7,33 +7,20 @@ description: 将已有应用以 parallel-run 方式扩展到新集群。支持 G
 
 ## Purpose
 
-Move an existing application to another cluster without changing the source
-runtime during target preparation. This workflow covers application manifests,
-target Harbor CI, Vault/ESO contracts, ArgoCD registration, passive validation,
-and the handoff to a separate traffic-switch MR. 本文的主运行态 Application 不代表一仓只能有一个 Application。若权限职责或生命周期需要分离，先提出独立 runtime/infra 渲染与唯一资源管理者方案，再为各 Application登记已有且批准的 Project、source/path/destination 合同；不能隐式多生成一个 Application。平台 claim 按合同留 runtime；业务资源分别使用共享 app-runtime/app-data-plane，不新建 owner Project。存量资源拆分需独立 ownership/prune/finalizer/回滚评审，不能套用只改 Project 的迁移。详见 [权限与部署划分合同](../references/data/permission-boundaries.yaml)。
+Prepare application manifests, target Harbor CI, Vault/ESO and ArgoCD contracts for a
+parallel run in another cluster, then validate passively before a separate traffic-switch MR.
+Preparation never changes the source runtime/Service selector, retires it, or switches traffic.
+本文的主运行态 Application 不代表一仓只能有一个 Application。若权限职责或生命周期需要分离，先提出独立 runtime/infra 渲染与唯一资源管理者方案，再为各 Application登记已有且批准的 Project、source/path/destination 合同；不能隐式多生成一个 Application。平台 claim 按合同留 runtime；业务资源分别使用共享 app-runtime/app-data-plane，不新建 owner Project。存量资源拆分需独立 ownership/prune/finalizer/回滚评审，不能套用只改 Project 的迁移。详见 [权限与部署划分合同](../references/data/permission-boundaries.yaml)。
 
-This is a parallel-run workflow. It does not decommission the source workload,
-change the source Service selector, or switch traffic in the same change set.
-It has two source modes: `gitops` preserves the existing source-overlay flow;
-`legacy-live` uses a separately frozen live source plus a same-application,
-different-region GitOps overlay as a structural reference. It is not a shortcut
-through same-cluster kubectl adoption.
-
-For compatibility with existing migration records, these are also named
-**GitOps mode** and **Legacy mode**. Legacy mode keeps the read-only live-source
-capture separate from the different-region structural reference.
-
-For `legacy-live`, this routed workflow remains the entry point, but the
-staging-only procedure is maintained in
-[`workflows/supplements/legacy-live-target-migration.md`](supplements/legacy-live-target-migration.md#legacy-live-entry-conditions).
-Read that document before Step 1 and apply its matching step supplement before
-the shared action in every step below. Missing or conflicting evidence is a
-STOP; the stricter requirement wins.
-
-At the routing boundary, `legacy-live` means a healthy stateless source and a
-target-empty destination. Historical Jenkins YAML is never target source, a
-US-only guard cannot prove writer isolation, target preparation stays at zero replicas,
-and handoff follows `stop-source-before-start-target` ordering.
+The modes retain their migration-record aliases: `gitops` (**GitOps mode**) uses the
+existing source overlay; `legacy-live` (**Legacy mode**) uses a healthy stateless source,
+freezing its live baseline separately from a same-application, different-region GitOps structural reference.
+Legacy requires an empty target; historical Jenkins YAML is never target source and a
+US-only guard cannot prove writer isolation. Legacy preparation stays at zero replicas and handoff
+follows `stop-source-before-start-target`; same-cluster kubectl adoption is a separate route.
+Before Step 1 read the normative [staging-only legacy procedure](supplements/legacy-live-target-migration.md#legacy-live-entry-conditions),
+then apply its matching supplement before each shared step. Missing/conflicting evidence
+means STOP; the stricter requirement wins. This workflow remains the routed entry point.
 
 ## Entry conditions
 
@@ -87,17 +74,11 @@ Missing any condition means STOP and add the missing evidence to Ops Todo.
     no profile, set `service` only when the source build/runtime evidence is an
     unambiguous long-running service; a possible static-web build with no
     production start command is a hard STOP until the profile is explicit.
-  - Resolve and record:
-    - `$source_ownership_mode`
-    - `$app`
-    - `$source_cluster`, `$source_context`, `$source_namespace`
-    - `$source_branch`
-    - `$env_keyword`
-    - `$target_cluster`, `$target_context`, `$target_namespace`
-    - `$target_branch`
-    - `$traffic_entry` and `$rollback_upstream`
-  - Resolve the mode-specific fields without substituting one evidence source
-    for another:
+  - Resolve and record `$source_ownership_mode`, `$app`, `$env_keyword`,
+    `$source_cluster`, `$source_context`, `$source_namespace`, `$source_branch`,
+    `$target_cluster`, `$target_context`, `$target_namespace`, `$target_branch`,
+    `$traffic_entry`, and `$rollback_upstream`.
+  - Resolve mode-specific fields without substituting one evidence source for another:
     - `gitops`: require `$source_application` and `$source_overlay`; preserve
       those historical recipe slot names, set `$source_live_controller`,
       `$source_owner_absence_evidence`, and every legacy-writer/reference-overlay
@@ -107,10 +88,8 @@ Missing any condition means STOP and add the missing evidence to Ops Todo.
       `$dormant_target_status`, `$legacy_writer_fence_status`,
       `$legacy_handoff_status`, and `$legacy_rollback_status`) to literal `n/a`;
       set `$legacy_handoff_evidence_path` to literal `n/a` and do not create a
-      legacy evidence artifact;
-      set `$gitops_source_status` to `TODO` until Step 2 freezes it.
-      `$target_empty_evidence` may remain `TODO` until Step 2 if it is not
-      already frozen.
+      legacy evidence artifact. Set `$gitops_source_status=TODO` until Step 2;
+      `$target_empty_evidence` may also remain `TODO` until frozen there.
   - Verify `$env_keyword` in `references/data/env-keywords.yaml` and both
     clusters in `references/data/clusters.yaml`.
   - For a staging target, require `$target_branch=staging` and fresh read-only
@@ -127,15 +106,12 @@ Missing any condition means STOP and add the missing evidence to Ops Todo.
     source, reference, writer, and target fields. Gate and dependency rows may
     remain `TODO`, but no mode-required field may be empty. Use literal `n/a`
     only for fields declared inapplicable to the selected mode.
-  - Fill the runtime/build contract from `cd-requirements.md`. A service
-    profile writes `n/a` for every static-web-only field. A static-web profile
-    first adds or updates the target row in `cd-requirements.md` as the source
-    of truth for build script, output directory, and reviewed public bundle
-    config source. Copy that contract into the migration document together
-    with SPA decision, exact Node/Nginx versions, port, health path,
-    target-specific Nginx config path, and target Dockerfile path. Mark the
-    migration snapshot's static target fields `TODO` until Step 6 reruns every
-    fail-closed gate.
+  - Use `cd-requirements.md` as the source of truth for the runtime/build contract.
+    Service profiles use `n/a` for all static-web fields. For static-web, first add/update its
+    target row with build script, output directory and reviewed public bundle config.
+    Copy it to the migration document with SPA decision, exact Node/Nginx versions,
+    port, health path, target Nginx config and Dockerfile paths. Keep static target
+    fields `TODO` until Step 6 reruns every fail-closed gate.
 
 [validate]
   - Source and target clusters differ.
@@ -211,14 +187,24 @@ Missing any condition means STOP and add the missing evidence to Ops Todo.
   - From `references/data/clusters.yaml`, resolve target account, region,
     Harbor URL, runner tags, build mode, Vault ClusterSecretStore, and
     argocd-apps directory.
-  - Set `$target_image` to
-    `{$target.harbor_url}/cicd/{$target.env}-{$target.region}/{$app}`.
+  - Before generating workloads, apply [NodePool placement](../references/nodepool-placement.md)
+    in full: record verified target pool/architecture/capacity, taints/tolerations,
+    provisioning/network evidence in the migration record; choose its complete single-pool AND / finite OR variant.
+    Ordinary apps default to shared pools; justified stateful/capability exceptions stay
+    within this workflow's scope. Follow provider-native constraints and NodeClass verification;
+    never inject ec2nodeclass Pod requirements or infer placement permission from multi-arch CI.
+    All applications default to private subnets and stable NAT unless a specific requirement
+    has a confirmed, recorded exception; dedicated pools or absent TKE/GKE labels do not qualify.
+    This policy does not prove fleet migration or authorize existing live changes.
+    Missing evidence is STOP + Ops Todo; all stricter legacy-live gates still apply.
+  - Set `$target_image={$target.harbor_url}/cicd/{$target.env}-{$target.region}/{$app}`.
   - If the application has multiple business component images, set the
     authoritative kebab-case owner to `$app` in `metadata.labels.app` on both
     the target overlay Kustomization and target Application. Every component
     image path must end in either `/$app` or `/$app-<component>`; do not infer
     ownership from image order or a common prefix.
-  - Keep `$env_keyword` as the runtime `env` label and image path segment.
+  - Before generating the target Pod env label, run `python3 "$skill_root/validators/check_logging_target.py" --env-keyword <target-keyword>`; failure is STOP + Ops Todo even in candidate mode.
+  - Use `$env_keyword` for the new Pod env only after that gate; the image path remains `{$target.env}-{$target.region}`. Existing maintenance uses `references/runtime-target.md`, preserving runtime identity.
   - In `gitops` mode, if the source Application already consumes
     `k8s/overlays/{$env_keyword}`, set `$target_overlay_id` to
     `{$env_keyword}-new` for the parallel run. Never repoint or overwrite the
@@ -231,6 +217,8 @@ Missing any condition means STOP and add the missing evidence to Ops Todo.
 
 [validate]
   - `$target_image` matches `/cicd/(dev|staging|pre|prod)-[a-z]+/{$app}$`.
+  - Target placement has fresh evidence, not source labels or namespace/IAM inference;
+    ordinary applications cannot use platform `cicd-system` / `crossplane-providers` pools.
   - `$target_overlay_id` differs from the mode's structural overlay ID.
   - In `gitops`, the source Application path remains unchanged.
   - In `legacy-live`, the linked Step 3 validation passes.
@@ -246,20 +234,18 @@ Missing any condition means STOP and add the missing evidence to Ops Todo.
 [action]
   - For `legacy-live`, first apply
     [Legacy-live Step 4](supplements/legacy-live-target-migration.md#legacy-live-step-4-close-dependency-network-and-vault-gates).
-  - Inventory the mode's structural overlay (`$source_overlay` for `gitops`,
-    `$reference_overlay` for `legacy-live`) and the live source runtime
-    configuration. Keep those inventories distinct. Classify every structural
-    item as `portable`, `target-specific`, `source-only`, or `unresolved`. For
-    every proposed reference-to-target delta, record both that structural class
-    and exactly one allowed delta category:
+  - Separately inventory the structural overlay (`$source_overlay` for `gitops`,
+    `$reference_overlay` for `legacy-live`) and live source config. Classify each item as
+    `portable`, `target-specific`, `source-only`, or `unresolved`; record that class and
+    exactly one allowed delta category for every proposed reference-to-target delta:
     - ConfigMap and environment endpoints
     - ExternalSecret stores, remoteRef paths, and expected key names
     - database/cache/queue endpoints
     - third-party HTTPS dependencies
     - account-specific ARN, security group, IAM, IRSA, certificate, and S3 refs
+    - target placement under the exact approved pool contract from Step 3
     - Ingress, LoadBalancer Service, and traffic-controller resources
-  - Put the structural class, allowed delta category, exact target value, and
-    evidence into the migration document.
+  - Record each structural class, allowed delta category, exact target value and evidence in the migration document.
   - Resolve all Vault paths through `references/vault-paths/resolver.md`. A
     missing resolver match is a hard STOP.
   - Register the app in the correct `gitlab-vault-sync` domain/region. After
@@ -268,10 +254,10 @@ Missing any condition means STOP and add the missing evidence to Ops Todo.
     values. Do not copy a Kubernetes Secret object between clusters.
   - For platform-owned credentials, record the owning controller or platform
     operator. Registry membership alone does not provision those credentials.
-  - For workloads calling external services, require private-subnet scheduling
-    and stable NAT EIPs. Test DNS, dependency TCP ports, and external egress
-    from every eligible target subnet/AZ. Cross-check observed IPs against the
-    recorded NAT gateways; never allowlist dynamic node public IPs.
+  - Apply Step 3's private-subnet/stable-NAT default to every application and verify
+    any confirmed exception. Test DNS, dependency TCP ports and applicable external egress
+    from every eligible subnet/AZ; compare public egress IPs with recorded NAT gateways.
+    Never allowlist dynamic node public IPs; local/peering/endpoint traffic follows its actual routes.
   - Any `unresolved` item is a hard STOP before target manifests are committed.
 
 [validate]
@@ -306,7 +292,8 @@ Missing any condition means STOP and add the missing evidence to Ops Todo.
     - runtime `env` label remains `$env_keyword`
     - target ClusterSecretStore and resolved Vault remoteRef keys
     - approved target dependency endpoints
-    - target scheduling labels/tolerations required for NAT egress
+    - Step 3's complete single-pool AND / finite OR placement in every Pod template;
+      replace source constraints with verified target selector/affinity and necessary tolerations
   - Remove source-only public Ingress, LoadBalancer, source account ARN, and
     source traffic resources from the target overlay.
   - In `gitops`, if a source-only resource is included by
@@ -326,6 +313,9 @@ Missing any condition means STOP and add the missing evidence to Ops Todo.
   - Target render has the target namespace, `$env_keyword` pod label, target
     Harbor path, target Vault store, exact dormant annotation, and no Ingress,
     Endpoints, or EndpointSlice.
+  - Apply the full [placement acceptance checklist](../references/nodepool-placement.md)
+    to every rendered Pod template: complete pool/arch/capacity/network constraints,
+    no source/ec2nodeclass requirements or broad alternatives; record separately from validator PASS.
   - In `legacy-live`, every linked Step 5 validation passes on the exact
     rendered file.
   - A Service, when present, is core `v1`, has absent/`ClusterIP` type, has no
@@ -447,7 +437,8 @@ Missing any condition means STOP and add the missing evidence to Ops Todo.
 
 [validate]
   - Target image tag matches `^[a-f0-9]{7,40}$`.
-  - Target image is pullable for every required architecture.
+  - Target image is pullable for every required/placement-allowed architecture;
+    a multi-arch index never widens verified placement automatically.
   - Migration document contains target tag, digest, and pipeline URL.
   - In `legacy-live`, every linked Step 7 validation passes.
 
@@ -459,12 +450,10 @@ Missing any condition means STOP and add the missing evidence to Ops Todo.
 [precondition]
   - Step 7 is complete.
   - Target Vault paths and target artifact gates are closed.
-  - The exact target cluster has an approved existing AppProject whose current
-    repo/path/revision/destination/resource contract covers the final render, including
-    hooks, and whose namespace prerequisite is ready. Read the target AppProject and
-    argocd-apps boundary lint; never infer permission from the same name in another
-    cluster. Missing permission is an Ops Todo for a separate platform permission MR
-    that must merge and sync before consumer registration.
+  - Read the exact target's approved existing AppProject and argocd-apps boundary lint:
+    its repo/path/revision/destination/resource contract covers final render and hooks,
+    and namespace prerequisites are ready. Same names in other clusters prove no permission.
+    Missing permission needs a separate platform MR, merged/synced before consumer registration.
 
 [action]
   - For `legacy-live`, first apply
@@ -540,6 +529,9 @@ Missing any condition means STOP and add the missing evidence to Ops Todo.
     observe for the agreed passive window without changing public traffic.
   - Confirm logs use the expected app/env labels when a mode-authorized runtime
     exists; zero logs are expected from a dormant `legacy-live` target.
+  - Run the [placement/NAT runtime acceptance](../references/nodepool-placement.md) only
+    when the selected mode permits a running target. Dormant `legacy-live` keeps it pending
+    until separately authorized activation; never start Pods or change ownership handoff for evidence.
   - A build-time or runtime failure enters the matching troubleshooting
     playbook in a separate session; do not mix troubleshooting into this build
     workflow.
@@ -594,7 +586,5 @@ The user receives:
 - Separate mode-appropriate activation/traffic MR and rollback record
 - Ops Todo for source retirement after the rollback window
 
-Source decommission is deliberately outside this workflow.
-Target preparation never scales or deletes the source, switches traffic,
-retires the writer, or starts a `legacy-live` target. Each such action requires
-fresh scoped authorization in the later handoff stage.
+Source decommission is deliberately outside this workflow. Target preparation never scales or deletes the source, switches traffic, retires the writer, or starts a `legacy-live` target.
+Each such action requires fresh scoped authorization in the later handoff stage.

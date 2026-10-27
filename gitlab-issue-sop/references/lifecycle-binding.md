@@ -17,19 +17,19 @@ before any durable remediation, RCA final, release, or closure claim.
 
 ## Binding model
 
-- `root_issue_binding` identifies the business or engineering outcome across the
-  whole workflow.
-- `work_item_binding` identifies the Issue or Task owned by the current repository.
-  It may equal the root binding in a single-repository change.
-- In a cross-repository change, every mutated repository needs a repository-local
-  Issue or Task. Link it to the Root Issue by native parent/child hierarchy when
-  available; otherwise use `relates_to` and record both URLs. A Root Issue in a
-  different project does not by itself authorize or identify the local change.
+- `issue_binding` identifies the Issue (or Task) that the change delivers. One
+  Issue is enough; there is no separate Root/Work Item role.
+- The Issue may live in any project. A change that spans several repositories
+  links every MR to the same Issue and records the per-repository MRs in that
+  Issue (checklist or comment).
+- Create a separate repository-local Issue or child Task only when that part has
+  its own owner, release cadence, environment, approval boundary, or acceptance
+  result (see below). It is never required just to satisfy the MR gate.
 
 Each verified binding records:
 
 ```yaml
-contract_version: issue-lifecycle/v1
+contract_version: issue-lifecycle/v2
 gitlab_host: gitlab.addx.ai
 project_id: 123
 issue_iid: 45
@@ -42,41 +42,47 @@ verified_at: 2026-09-28T00:00:00Z
 
 Resolve from an explicit full URL or exact `project_id + issue_iid`, then read
 GitLab live. Branch names, commit messages, free-text `#45`, chat messages, and
-copied webhook payloads are hints only. The Issue must exist, be open, have an
-assignee, and match the declared repository or root relationship.
+copied webhook payloads are hints only. The Issue must exist, be readable by the
+actor doing the work, and have an assignee. Starting new work requires an `opened`
+Issue; the CI review gate also accepts `closed`, because release-flowback MRs
+legitimately reference an Issue that was already delivered and closed.
 
 ## MR binding and non-closing association
 
-An MR description declares exactly one full URL for each role:
+An MR description declares the Issue with one full URL:
 
 ```text
-Work Item: https://gitlab.addx.ai/group/repository/-/issues/45
-Root Issue: https://gitlab.addx.ai/group/program/-/issues/12
+Issue: https://gitlab.addx.ai/group/program/-/issues/12
 ```
 
-These lines are candidate identifiers, not trusted evidence. The CI adapter must
-live-read both Issues, confirm that the Work Item belongs to the MR target project,
-confirm that GitLab lists the current MR in the Work Item's related MRs, and—when
-the two bindings differ—confirm a native Issue link between Work Item and Root.
-Only then may it emit verified bindings.
+`Work Item:` and `Root Issue:` lines are still accepted as aliases for MRs created
+under the earlier two-role format; they are not required.
+
+The line is a candidate identifier, not trusted evidence. The CI adapter
+live-reads the Issue with the review token and confirms that GitLab lists the
+current MR in the Issue's related MRs (mentioning the URL in the MR description
+creates that relation, also across projects). Pick an Issue the MR author and the
+CI review token can read: a cross-project Issue in a project the triggering user
+cannot access fails the gate. When several candidate lines are present, the first
+one that verifies is bound.
 
 Do not require `Closes`, `Fixes`, `Resolves`, or the `closes_issues` endpoint for
-this gate. Those keywords can close an Issue at merge, while the Root Issue must
+this gate. Those keywords can close an Issue at merge, while the Issue must
 normally remain open through deployment, runtime verification, business acceptance,
-and any observation window. A repository Work Item may use a closing keyword only
-when its own scope explicitly ends at merge and it is not also the Root Issue.
+and any observation window. Use a closing keyword only when the Issue's own scope
+explicitly ends at merge.
 
-## Root Issue versus child Task
+## Issue versus child Task
 
 Do not create one Issue per command or test run. Keep the main lifecycle on one
-Root Issue. Create a child Task only when the work has an independently accountable
+Issue. Create a child Task only when the work has an independently accountable
 owner, repository, release cadence, environment, approval boundary, or acceptance
 result. Typical child Tasks are repository implementation, deployment, migration,
 security remediation, and incident follow-up.
 
 ## Phase receipts
 
-At a lifecycle boundary, append an idempotent comment to the relevant Work Item
+At a lifecycle boundary, append an idempotent comment to the bound Issue
 and read it back. Use a stable marker containing the phase, project ID, Issue IID,
 and immutable revision (artifact digest, commit SHA, pipeline ID, deployment ID,
 or incident revision). Do not edit the original Issue description for progress.
@@ -100,7 +106,7 @@ secrets, personal data, or short-lived local paths into an Issue.
 | Requirements accepted | Exact Requirements artifact ID/hash and Gate decision |
 | Design accepted | Fixed design/ADR links, digests, decision state, reviewer |
 | Test plan accepted | Plan version/digest, AC traceability result, final plan gate |
-| Development started | Repository-local binding, Issue-created branch, assignee |
+| Development started | Verified Issue binding, Issue-created branch, assignee |
 | Review submitted | MR URL, exact head SHA, verified Issue association, review result |
 | Merged | MR URL, exact merge SHA, target branch, terminal pipeline result |
 | Deployment or rollback | Deployment Task, artifact digest, environment, approval, result |
@@ -110,11 +116,11 @@ secrets, personal data, or short-lived local paths into an Issue.
 
 ## Status and closure
 
-- Move to `status::in-progress` only after the repository-local work item is
+- Move to `status::in-progress` only after the bound Issue is
   assigned and implementation has started from its Issue-created branch.
 - Move to `status::in-review` only after the MR and review evidence are linked.
 - Merge, a green pipeline, HTTP 200, or a successful sync is not closure.
-- Keep the Root Issue open while external release, production verification,
+- Keep the Issue open while external release, production verification,
   business acceptance, observation windows, rollback follow-up, or required child
   Tasks remain incomplete.
 - Close only after a persisted, read-back final receipt proves the required

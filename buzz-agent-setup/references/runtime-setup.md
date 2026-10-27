@@ -217,11 +217,15 @@ Harness 必须用官方 `@agentclientprotocol/claude-agent-acp`；Codex 用 `@ag
 
 ```bash
 REL=<immutable-release>
+# 两文件包：先安装校验模块，再切换 launcher；缺失/旧版模块会拒绝启动。
+install -m 0400 "$REL/references/scripts/buzz_claude_runtime.py" ~/.config/buzz/agents/buzz_claude_runtime.py
 install -m 0500 "$REL/references/scripts/run-agent.py" ~/.config/buzz/agents/run-agent.py
 /usr/bin/python3 -I -m py_compile "$REL/references/scripts/run-agent.py"
 ```
 
-env 的 `AGENT_WORKDIR` 必须是 `~/buzz-agent-work/` 下的 canonical、当前用户所有且组/其他人不可写的 Git checkout。`BUZZ_AGENT_SAFE_PATH` 每一段必须是绝对 canonical 目录、可信 owner 且组/其他人不可写；任何 agent 要调用全局 npm CLI（如 lark-cli），先用 owner shell 的 `which <cli>` 找到真实版本目录，再把该目录追加在既有条目之后。launcher 同样回读 proxy、真实 adapter、Buzz CLI、Claude wrapper 和最终 buzz-acp 的 canonical owner/mode；Claude 的 `HARNESS_CLAUDE_WRAPPER` 与 `CLAUDE_CODE_EXECUTABLE` 必须解析到同一文件，并显式提供与 wrapper 对应的 canonical `CLAUDE_CONFIG_DIR`（`claude-buzz` 只能用 `~/.claude-buzz`，`claude-glm` 只能用 `~/.claude-glm`）。只设置 `PWD` 不算切换目录，launcher 会在 exec 前真实 `chdir` 到已校验 checkout。
+env 的 `AGENT_WORKDIR` 必须是 `~/buzz-agent-work/` 下的 canonical、当前用户所有且组/其他人不可写的 Git checkout。`BUZZ_AGENT_SAFE_PATH` 每一段必须是绝对 canonical 目录、可信 owner 且组/其他人不可写；任何 agent 要调用全局 npm CLI（如 lark-cli），先用 owner shell 的 `which <cli>` 找到真实版本目录，再把该目录追加在既有条目之后。launcher 同样回读 proxy、真实 adapter、Buzz CLI、Claude wrapper 和最终 buzz-acp 的 canonical owner/mode；Claude 的 `HARNESS_CLAUDE_WRAPPER` 与 `CLAUDE_CODE_EXECUTABLE` 必须解析到同一文件，并显式提供与 wrapper 对应的 canonical `CLAUDE_CONFIG_DIR`（`claude-buzz` 只能用 `~/.claude-buzz`，`claude-glm` 只能用 `~/.claude-glm`）。独立 Claude 配置只通过固定 owner binding 准入：`~/.config/buzz/agents/<name>.claude-runtime.json`，不是 env 指定的 manifest 路径。文件必须 canonical、owner0600；精确字段为 `{"schema_version":1,"agent":"<name>","wrapper":"/home/<owner>/.local/bin/claude-<name>","wrapper_sha256":"<64位SHA256>","config_dir":"/home/<owner>/.claude-<name>"}`。实际 home 必须来自该 OS 用户；wrapper 必须 canonical、可信 owner、可执行且组/其他人不可写，config 必须 canonical、owner0700。三个 env 路径必须对应这个精确 binding；不能复制另一个 agent 的 binding 或复用共享 config。`glm`、`buzz` 为历史 pair 保留名。缺 binding 只保留历史两组；binding 存在但损坏时拒绝，不回退。binding 没有 secret；wrapper digest 绑定经过 review 的实际字节，review 仍须确认 wrapper 导出此 config、使用批准的 CLI/凭据来源。`run-agent.py` 与 `buzz_claude_runtime.py` 必须作为两文件包安装/备份/回滚。模块0400、launcher0500；模块路径不能从 env 指定，缺失/旧版/摘要不符或同名 package、任何 CPython 支持的 native extension、bytecode 或已缓存模块会在普通 import 前拒绝；helper 直接父目录即使有 sticky bit 也不得允许 group/other write。Python `-I` 下由固定校验过的 sibling 路径导入，不依赖 user site/PYTHONPATH；不生成 helper bytecode，发现 helper pyc 必须移除并重新审计。权威 admission 逻辑只在该模块，修改模块时同步 launcher/auditor 的 `CLAUDE_ADMISSION_SOURCE_SHA256`，测试检查精确字节。auditor 只正常导入自身代码目录的模块，把目标 release/installed helper 作为数据校验，从不加载目标 Python。准入不证明 plugin 已安装或真实 native load。
+
+只设置 `PWD` 不算切换目录，launcher 会在 exec 前真实 `chdir` 到已校验 checkout。
 
 ### 白名单只管启动那一刻：`~/.bashrc` 会把个人密钥灌回 agent 的 Bash 工具
 
@@ -260,7 +264,7 @@ if [ -z "${BUZZ_PRIVATE_KEY:-}" ] && [ -z "${BUZZ_ACP_AGENT_OWNER:-}" ] && [ -r 
 
 ### 用持久用户单元托管 Agent 进程
 
-把同一份 canonical launcher 装成 `~/.config/buzz/agents/run-agent.py`（0500），再让每个 agent 的**持久 systemd 用户单元**由固定 `/usr/bin/python3` 直接执行。不要创建 per-agent shell wrapper，也不要用 `systemd-run` 起：后者创建瞬时单元，重启机器后不会自动恢复，agent 悄悄离线。
+把同一份 canonical launcher 与 `buzz_claude_runtime.py` 两文件包分别装成 `~/.config/buzz/agents/run-agent.py`（0500）和同目录 `buzz_claude_runtime.py`（0400），再让每个 agent 的**持久 systemd 用户单元**由固定 `/usr/bin/python3` 直接执行。不要创建 per-agent shell wrapper，也不要用 `systemd-run` 起：后者创建瞬时单元，重启机器后不会自动恢复，agent 悄悄离线。
 
 瞬时单元还有**安全后果**：单元文件写在 `/run/user/<uid>/systemd/transient/`（目录 0755，文件 0644），里面是起单元时带进去的**整份环境**（私钥、token、密码都在），同机其它用户都读得到。有密钥的 agent 一律用下面的**持久单元 + 0600 env 文件**。**例外**是确需继承会话环境的个人助手（见 [personal-channel.md](personal-channel.md)）：要评估同机其它用户的风险（多用户主机不要这样做），必要时轮换里面出现过的密钥。证据：2026-09-21 审计发现个人助手的瞬时单元文件是 0644，内含 owner 私钥、云服务 token 和 Superset 密码（值不写进任何文档或 issue）。自查只看文件名与权限，不打印内容：`stat -c '%a %n' /run/user/$(id -u)/systemd/transient/*.service`。
 
@@ -437,9 +441,12 @@ receipt 里的 `git_commit_sha` 要等于你要的 `origin/main` 提交。
 
 Workflow 负责主动唤醒，不做权限决策：
 
-**新建业务 Channel 的每日默认项**：[频道讨论 → 已有 Issue](channel-issue-workflow.md)。每天北京时间22:00启动，汇总前24小时全部实质讨论（含AI原创进展），完成后追加到可信Canvas仓库内对应已有Issue。加载`channel-issue-progress`，生成disabled schedule并验收完整读取、固定tick、目标权限、持久账本/单writer与读回；未匹配/多义保留待处理。默认准备不等于现网启用，既有频道补装另行确认。
+**新建业务 Channel 的每日默认项**：[频道讨论 → 已有 Issue](channel-issue-workflow.md)。每天北京时间22:00启动，汇总前24小时全部实质讨论（含AI原创进展），完成后追加到可信Canvas仓库内对应已有Issue。加载`channel-issue-progress`，生成disabled schedule，按现有身份与权限、固定项目与窗口、唯一目标、写前查重和写后回读确认接入后启用；未匹配/多义保留待处理。默认准备不等于现网启用，既有频道补装另行确认。
 
-**新建业务 Channel 的默认配置项**：[妙记 → 已有 Issue](minutes-issue-workflow.md)。由人会后在已绑定群发妙记直链或含妙记链接的 Issue，原生 `message_posted` 候选筛选唤醒本频道已注册 `-desk`/指定 agent，加载 `meeting-issue-notes`。先生成 disabled 模板并验收身份、可信 Canvas repo 交集、读取权限、持久去重/单 writer 与回读；前提不足记 pending，不宣称启用。不邀请 bot 参会、不订阅日程，后续状态触发开发独立配置。
+**新建业务 Channel 的默认配置项**：[妙记 → 已有 Issue](minutes-issue-workflow.md)。由人会后在已绑定群发妙记直链或含妙记链接的 Issue，原生 `message_posted` 候选筛选唤醒本频道已注册 `-desk`/指定 agent，加载 `meeting-issue-notes`。先生成 disabled 模板并验收身份、可信 Canvas repo 交集、读取权限、写前查重与写后回读；前提不足记 pending，不宣称启用。不邀请 bot 参会、不订阅日程，后续状态触发开发独立配置。
+
+
+普通 Issue 评论查重为 best-effort，不承诺并发原子幂等；持久账本、独立 writer 和锁不是默认启用前提。发现重复读回核对、报告并更正自有评论；资料无权或目标多义只暂停相关项，未知写结果先读回核对。
 
 
 - `schedule`：没人 @ 也该产出，例如 Desk 进展分析、Bug 模式分析、BI 复盘、SRE／investigator 巡检，以及 `-dev` 只读分析（周 pipeline 健康、月度架构坏味道）。平台 Desk 在职能 Channel 里还有一个只读的平台反馈周报，且必须排在各业务 Channel 的 pipeline 分析与转交之后（顺序与转交协议见 [scheduled-workflows.md](scheduled-workflows.md)）。目录见 [scheduled-workflows.md](scheduled-workflows.md)。cron 的星期字段按 relay 约定写：1=周日，周一=2，周一到周五=2-6，名字写法未验证（见 [scheduled-workflows.md](scheduled-workflows.md)「cron 的星期字段」）。
@@ -516,7 +523,7 @@ python3 skills/agent-harness/buzz-agent-setup/scripts/run_offline_tests.py
    ```
 
    然后用 REQ `{kinds:[30177],authors:[<owner>]}` 回读，确认该 agent 的策略已消失，而不是只看 `OK true`。
-5. **删本机配置与 state**：agent 的 env、prompt、日志、systemd 单元文件（`~/.config/systemd/user/buzz-local-<name>.service`，删后 `systemctl --user daemon-reload`）、责任人 helper 配置里它的条目，以及它的 state 目录；共享启动脚本 `run-agent.py` 仅在最后一个持久 agent 删除后才移除。env 里有私钥和旧 token，删前不要打印内容。
+5. **删本机配置与 state**：agent 的 env、prompt、日志、systemd 单元文件（`~/.config/systemd/user/buzz-local-<name>.service`，删后 `systemctl --user daemon-reload`）、责任人 helper 配置里它的条目，以及它的 state 目录；共享启动包 `run-agent.py` 与 `buzz_claude_runtime.py` 仅在最后一个持久 agent 删除后才一起移除。env 里有私钥和旧 token，删前不要打印内容。
 6. **删工作目录**：先在里面 `git status`、`git log --branches --not --remotes`，确认没有未提交改动和未推送提交；有就先处理（推送或另存），再删。
 7. **清掉别处对它的引用**：Channel Canvas 的 Agent 表、频道描述、其它 agent prompt 里写的转交对象、同步路由配置（`route.json` 里的 role→mention）。漏了这一步，别人会继续 @ 一个已经不存在的 agent，或让 route gate 把消息路由给它。
 

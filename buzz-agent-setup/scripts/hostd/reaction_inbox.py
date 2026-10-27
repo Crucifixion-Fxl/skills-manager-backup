@@ -73,6 +73,14 @@ def retain(store, binding, channel, author, event):
             prior = store.delivery_by_source(binding, event['id'], 'r2f', agent_id=author)
             if prior is not None and prior['status'] in ('acked', 'removed'):
                 return True
+            # No-effect pairs are durable replay exclusions, not native ACKs.
+            try:
+                from . import reaction_supersession
+            except ImportError:
+                import reaction_supersession
+            agent = store.conn.execute('SELECT app_id FROM agent WHERE pubkey=?', (author,)).fetchone()
+            if agent and reaction_supersession.superseded(store, binding, channel, author, agent['app_id'], event):
+                return True
             # Match Worker._run_outlets' canonical initial_since, atomically
             # with capture. A later cursor/floor cannot manufacture eligibility.
             existing = store.conn.execute('SELECT channel_id,event_json FROM reaction_inbox WHERE binding_id=? AND agent_id=? AND source_id=?',

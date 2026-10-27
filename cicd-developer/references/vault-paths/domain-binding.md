@@ -8,6 +8,7 @@
 | AWS/GCP prod、data、tech-service | ops | vault-backend | 对应区域 ops Vault |
 | AWS US/EU staging | builder | vault-builder-backend | vault-{us,eu}.builder.addx.live |
 | TKE cn-main，100014919455 | ops | vault-backend | vault-cn-internal.addx.live |
+| TKE cn-prod，100052802231 | ops | vault-backend | https://vault-cn.addx.live |
 | TKE cn-tech-service，100052802231 | ops | vault-backend | https://vault-cn.addx.live |
 | TKE cn-staging，100052802231 | builder/staging | vault-backend | http://vault-active.vault.svc:8200 |
 

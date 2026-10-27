@@ -123,6 +123,14 @@ env_keywords:
     namespace_pattern: "prod-{app}"
     app_types: [c-end]
 
+  # AWS prod-cn（741924744516）迁入腾讯云 100052802231 cn-prod 的服务专用；
+  # 业务仓库 overlay 目录名仍为 prod-cn-tke，Application 位于 tencent-100052802231-cn-prod/。
+  prod-cn-tke-2231:
+    cluster: cn-tke-prod
+    env: prod
+    namespace_pattern: "prod-{app}"
+    app_types: [c-end]
+
   # ----- data（数仓集群是 ops 域混合环境集群：staging + prod 同驻，靠前缀区分）-----
   # 两个 env 都读 ops vault（vault-{region}-prod, vault-backend）；env 段决定
   # vault 路径首段。详见上方"重要规则"。

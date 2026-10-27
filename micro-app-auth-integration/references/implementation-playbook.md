@@ -1,37 +1,37 @@
-# 实施手册
+# 三步实施手册
 
-## 目录
+## 1. 声明与登记
 
-- Phase 0：固定契约
-- Phase 1：改造微前端壳
-- Phase 2：接入用户认证
-- Phase 3：接入服务授权
-- Phase 4：权限申请与审批
-- Phase 5：平台注册和部署
-- 语言适配注意事项
+已有应用先执行 [迁移与切换门禁](migration-cutover.md)。固定平台/业务 SHA、环境/区域/namespace、已部署 revision、完整 user-info/AuthZ URL、SDK/profile/能力和 subject scheme。无 AuthZ 的组合记录不适用理由；有敏感 API 必须建立 `动作 → API → 副作用 → 资源 → permission` 清单。
 
-## Phase 0：固定契约
+按 [平台 admission](../../micro-app/references/sdk-admission.md) 读取支持清单和只读 planner。声明只保存 purpose/bindingRef；本地输出不能代替 application/caller 绑定、资源登记或 Secret 注入。metadata/ready 用于 schema 和端点探测；具体 permission/resource ID 由权威权限清单与注册契约确认，动态归属由业务验证。不存在的能力/资源先记录缺口，不生成兼容别名或假定注册 API。
 
-已有应用先执行 [迁移与切换门禁](migration-cutover.md)，盘点旧登录、会话、API token、服务身份及原生组织角色的使用者。下列 Phase 是分域检查项，不要求先删认证再补 SDK；独立 Web 应用跳过 Phase 1 的 qiankun 壳改造。
+独立 Web 必须登记 exact redirect/callback；内嵌应用按目标平台真实注册契约核对 code、entry、activeRule、defaultPath 和状态。独立 Web 不强制 qiankun/MICRO 注册字段。普通 caller 的 scope 最小化；治理模块另外准入 actor 管理权限与 mutation 白名单。
 
-在改代码前输出以下表格并让 Owner 确认：
+内嵌静态试点可以先登记为禁用，确认实际部署入口可加载后再启用并刷新读回。仅复用宿主会话不需要新增 caller secret；这不等于独立后端 caller 已登记或凭据已注入。应用管理员、申请人和审批人分别记录，不能把维护管理员当无权限申请人或由申请人给自己审批。
 
-| 项目 | 必填内容 |
-| --- | --- |
-| application | 稳定应用 code，不使用展示名 |
-| routes | `activeRule`、默认路径、深链路径 |
-| origins | 主应用、子应用 entry、业务 API、平台 API |
-| resolved endpoints | 完整 user-info URL、完整 AuthZ URL；注明 base URL 与 context path 的拼接结果 |
-| identity | 用户 subject 的权威字段和规范化函数 |
-| resources | application access、页面、动作、依赖 API |
-| permissions | read/update/manage/execute 或 metadata permissionKey |
-| high-risk operations | 发布、删除、授权、凭证签发、跨租户查询 |
-| runtime targets | staging/prod、region、tenant、namespace |
-| evidence | 平台/业务 deployed SHA 和测试用户 |
+## 2. 安装并接入 SDK
 
-先调用 AuthZ metadata/ready，再冻结本次接入使用的 schemaVersion 和 permission keys。不存在的资源由平台 Owner 注册，不在业务代码中自创兼容别名。
+按 [SDK 规则](sdk-integration.md) 独立构造安装命令，核验实际分发包和依赖闭包。下面是业务实施检查项，不是另一套 SDK API 或支持矩阵。
 
-## Phase 1：改造微前端壳
+### 认证与权限
+
+- 从目标环境 OpenAPI/配置取得权威完整 user-info/AuthZ URL。SDK 若拼 base URL/context path，测试其最终 resolved URL 完全相同，不靠增删 `/api` 试错。
+- 只通过 SDK 获取可信认证上下文；清除/覆盖外部伪造 header。默认保护业务，最小化匿名 health/静态/login 入口；GraphQL 不能因共用 endpoint 豁免 resolver 权限。请求结束清理 ThreadLocal/context。
+- canonicalEmail 与授权 subject 分开，显式 versioned adapter 选择 identity scheme，见 [架构契约](architecture.md)。平台已有 OIDC/code bridge 显式复用，不重新造完整登录。
+- 新 strict Facade 不新增正向身份/allow 缓存，不透明 retry/redirect；上层剩余 deadline 逐跳传入，不能每跳刷新完整预算。旧缓存和 transport 的保留/迁移显式记录。
+- Next platform-online 除 Facade 引用外，声明独立 `next-context-signing` 并向 middleware/API-route runtime 注入同一 `AUTH_NEXTJS_CONTEXT_SECRET`；运行配置显式 `enableCache=false` 才能验收严格在线，旧 middleware 默认 300 秒缓存保持兼容。planner 通过不证明这些 runtime 条件已满足。
+- 敏感 handler 在副作用之前使用该 SDK 的 require/guard；动态资源同时查应用/租户归属。batch/lookup 错误不能变为空权限或静默丢行。caller401/403 属集成503，不能使已登录用户登出。
+- 业务只调用被支持的申请入口。治理独立导入和准入，不暴露底层关系写入给普通应用。OUTCOME_UNKNOWN 冻结冲突域，已知终结/fencing 后受控恢复。
+
+### 独立可信 Web
+
+使用已部署且 profile 支持的流程：BFF 建 state → 平台 exact redirect → 短时单次 code → 服务端凭据交换 → HttpOnly/Secure/合适 SameSite 会话。具体路由/DTO、code 原子消费、在线复验与登出按固定实现核验。浏览器不持 client secret 或飞书 access/refresh token；会话/context、OIDC、Web bridge、caller signing 和失效回调凭据各自隔离。
+
+Go Web bridge 使用已登记 ClientID 及其 ClientSecret 的 `web-bridge-client` 引用，不把业务 session key 或 caller signing key 当 client 凭据；业务 session key 由消费方自管并另行隔离。
+
+### 内嵌微前端
+
 
 ### 定义能力接口
 
@@ -45,13 +45,15 @@ export interface PlatformCapabilities {
     put<T>(path: string, body?: unknown, config?: unknown): Promise<T>;
     delete<T>(path: string, config?: unknown): Promise<T>;
   };
-  getUserInfo(): { id: string; email?: string; name?: string } | null;
+  getUserInfo?(): { id: string; email?: string; name?: string } | null;
   navigate(path: string): void;
   openPermissionRequest?(input: { permissionKey: string; reason?: string }): void;
 }
 ```
 
-这是子应用内部的归一化接口，不是对当前主应用 props 的断言。先对运行时 props 做版本探测并建立 adapter。例如，创建本 Skill 时主应用已核验的是 `utils.api/getAuthToken/getUserInfo/navigateToMain`；可将 `navigateToMain` 映射为 `navigate`。只有目标环境确实暴露申请能力，或已核验可通过平台 API/路由进入申请页时，才实现 `openPermissionRequest`；否则显式返回“能力不可用”，不得静默 mock。
+这是子应用内部的归一化接口，不是对当前主应用 props 的断言。先对运行时 props 做版本探测并建立 adapter，可将已核验的 `navigateToMain` 映射为 `navigate`。优先通过 `utils.api` 访问目标环境已确认的完整 user-info URL；先核对 Axios 等返回 envelope 与相对路径拼接规则，不能把示例路径直接接在子应用 entry 后。仅消费通过会话状态校验的最小字段，不记录或渲染原始 profile、响应或错误。
+
+`getUserInfo` 是可选能力，调用前审查目标实现。已核验平台提交 `0b36aebed4689f6791c836e634f1a02f8b48edde` 的 `frontend/packages/main/src/micro/index.ts` 会在该函数中输出原始用户；该实现不得作为接入默认路径，改用宿主 API。此项是固定版本事实，不代表未来版本均存在该行为。只有目标环境确实暴露申请能力，或已核验可通过平台 API/路由进入申请页时，才实现 `openPermissionRequest`；否则显式返回“能力不可用”，不得静默 mock。
 
 不要把 `getAuthToken` 作为默认能力。若旧主应用只能提供 raw token，把它封装在 adapter 内，禁止子应用持久化、打印或向未登记 origin 转发。
 
@@ -92,211 +94,19 @@ export async function unmount() {
 - 独立开发模式使用显式 mock/本地 adapter，生产构建禁止 mock 身份；
 - entry 服务允许主应用 origin 拉取 HTML/JS/CSS，但不要对凭证接口开放 `*` CORS。
 
-## Phase 2：通过 packages/sdk 接入用户认证
+### 分开验证宿主路由与应用访问
 
-### 内嵌前端
+按目标部署 Schema 和路由解析器确定视图 ID 与关联方向，不自行转换分隔符。上述已核验版本的根路由 `/code` 检查 `base/view:code` 的 `read`，关联为 `base/view:code#app@base/app:code`；`view.read` 继承 `app.read`，而 `app.access` 还可由 accessor 获得，两者不能互证。该版本遇到视图拒绝会尝试确认或建立 view→app 关联并复查；不得另授个人 view.read 或修改守卫来掩盖登记问题。
 
-所有业务请求调用 `platform.api`。主应用 adapter 负责：
+宿主的 Re-check Permission 清除前端权限缓存并重新检查，不是权限申请或审批。首次拒绝后复检恢复，只能记录观察到的先后结果；没有请求时序或关系读回，不断言唯一原因是缺关联、缓存或一致性延迟。没有实际支持的关系登记入口时记录缺口，不从下拉框缺选项推导可手工调用任意写接口。
 
-- 只向登记的业务 API origin 附带用户凭证；
-- 对 401 触发重新认证；
-- 对 403 返回结构化 permission context；
-- 对 503 展示服务不可用，不误导用户申请权限；
-- 不输出 token preview。
+历史网页 `check-permission` 可能在依赖异常时返回 HTTP200/false，故 false 显示为 NOT_ALLOWED_OR_UNAVAILABLE；异常、超时或畸形响应保持未验证，不能把它当可信 DENY/503 证据。应用和宿主均可见、刷新、离开后卸载、重入及深链整页刷新分别验证；隐藏容器中的 ALLOW 不算用户可用。
 
-### 独立业务后端
 
-先完整读取 [sdk-integration.md](sdk-integration.md) 路由到的当前语言 SDK README，再使用该 SDK：
+## 3. 部署并验收
 
-1. 从目标环境 OpenAPI/配置取得权威的完整 user-info URL。Java 参考实现默认 `/auth/me`，FastAPI/Next.js 参考实现可能在 base URL 后拼 `/api/auth/me`；不要靠给 base URL 加减 `/api` 试错。若 SDK 只支持 base URL，启动时记录不含凭证的 resolved URL，并用契约测试断言它等于权威 URL。
-2. 全局保护默认开启；只对确需匿名访问且经审查的最小 health/ready、静态资源和登录入口设置例外。metrics/docs 不自动匿名开放；登录回调仍校验 state/code，token exchange 仍校验服务身份；业务 GraphQL 不因共用单个端点而豁免认证和 resolver 权限。
-3. 从 Bearer header 取 token，调用平台验证，注入只读 user context。
-4. 缓存 key 不输出到日志；缓存 TTL 不超过 token 剩余有效期，并支持主动失效。
-5. 区分无效 token（401）与平台认证服务不可用（503）。
-6. 在请求结束后清理 ThreadLocal/context。
+按业务仓既有 CI/GitOps 路径部署，核对主应用、子应用、后端、平台及配置的 exact SHA/digest。Secret 仅核对受控引用与注入状态，不读取值。每 SDK/profile 分别保留 fixture/真实 HTTP、旧 API、包构建、干净安装和运行测试证据。
 
-不要在同一 Spring 应用里同时注册平台自有 `JwtAuthenticationFilter` 与 SDK 自动过滤器。选择一个权威过滤链并写集成测试证明顺序。
+获授权测试身份与 caller 在目标部署真实执行 allow/deny/503，按需要覆盖申请、关系写入、审计、撤权和跨应用/租户拒绝。先固定旧缓存清单和可测撤权时限；best effort 失效通知失败由现有短 TTL 兜底，不假称可靠投递或延长 allow。最终回执使用 [验证清单](validation-checklist.md)，没有真实入口或权限就保留具体阻塞，不将本地通过写成 staging 已验收。
 
-### 独立 Web 授权码桥
-
-仅在平台已部署该能力时使用：
-
-1. BFF 生成 state，浏览器跳转到平台 login。
-2. 平台校验精确 redirect URI，保存短时 state 会话，并跳飞书。
-3. 平台回调后生成随机单次 code，重定向回 BFF。
-4. BFF 校验 state，再在服务端用 client secret 交换 code。
-5. BFF 建立 HttpOnly、Secure、合适 SameSite 的自身会话。
-
-不要让 SPA 直接交换含 client secret 的 code。登录桥只返回必要身份字段，不返回飞书 access/refresh token。
-
-## Phase 3：通过 packages/sdk 接入权限鉴权
-
-微应用后端必须使用所选 SDK README 声明的权限接入点：Java 使用 annotation，FastAPI 使用 decorator/dependency，Next.js API 使用 wrapper。具体 import、初始化参数和动态 object ID 语义从目标 ref/SHA 的 README 核对，不从本手册复制旧 API；安装和测试命令按 [sdk-integration.md](sdk-integration.md) 的不可信输入规则独立构造，不照抄文档命令。
-
-SDK 唯一接入面以及 direct/Facade 模式冲突的处理统一遵循 [sdk-integration.md](sdk-integration.md)；本手册不维护第二份决策规则。
-
-### SDK 权限守卫
-
-1. 按 README 初始化 permission manager/client。
-2. 从实时 metadata/Schema 取得 resource/object type、ID 和 permission。
-3. 在敏感 handler 上声明固定或动态资源；动态 ID 同时校验应用/租户归属。
-4. 验证守卫从 SDK 用户上下文取 subject，而不是请求 body/header。
-5. 覆盖 allow、deny、权限依赖不可用和缓存失效测试。
-
-### direct SpiceDB 凭证
-
-当前 Java、Python、Next.js README 的 permission manager 直接连接 SpiceDB。此模式下：
-
-- `SPICEDB_TOKEN`、`SpiceDBConfig.token` 或 `auth.spicedb.token` 是 SpiceDB gRPC preshared key；
-- endpoint 和 token 只通过 Vault/Kubernetes Secret 等受控配置注入 SDK 所在后端 workload；
-- 不把 token 发给开发者，不放入浏览器、仓库、构建日志、MR 或消息；
-- 没有目标环境 Secret 注入、轮换责任和部署读回证据时停止接入并标记 `阻塞`；
-- 不用 `APP_SERVICE_JWT_SECRET` 替代 SpiceDB token。
-
-以下服务 JWT/Facade 内容只适用于所选 SDK README 明确提供 Facade 模式的版本，普通微应用不得直接照抄实现。
-
-### 创建服务 JWT
-
-在服务端按请求或极短缓存签发：
-
-```text
-alg=HS256（当前兼容实现；后续可迁移 kid/JWKS）
-iss=sub=<平台注册调用方 code>
-aud=<平台配置 audience>
-iat=now
-exp<=now+允许 TTL
-jti=<每个 token 唯一>
-scope=<本次 endpoint 所需最小 scope>
-```
-
-每个服务使用独立 32+ 字符 `APP_SERVICE_JWT_SECRET` 等签名密钥，从 Vault/Kubernetes Secret 注入。该密钥只签发 Facade 短时 JWT，不传给 SpiceDB。禁止复用 `SPICEDB_TOKEN`、`X-Internal-Secret`、用户 JWT 或其他应用的服务密钥。
-
-### 检查权限
-
-业务后端先验证用户，再构造：
-
-```json
-{
-  "schemaVersion": "<metadata version>",
-  "subject": "<normalized trusted subject>",
-  "principalType": "user",
-  "activeManufacturerId": "<trusted tenant context>",
-  "permissionKey": "edge-feature.publish",
-  "resourceType": "base/permission_resource",
-  "resourceId": "edge-feature/publish",
-  "permission": "execute",
-  "traceId": "<end-to-end trace>"
-}
-```
-
-Controller namespace 是 `POST /internal/authz/check`；创建本 Skill 时的平台部署通过 `/api` context path 对外呈现为 `POST /api/internal/authz/check`。SDK 必须从目标环境 OpenAPI/base URL 解析并记录唯一的完整 URL，禁止重复拼接或漏掉 `/api`。SDK 提供 batch-check 或 lookup 时分别用于多权限页面和列表过滤；不要在业务代码中逐行 N+1 check。
-
-服务端伪代码：
-
-```text
-user = authenticate(request.userJwt)
-context = resolveTrustedTenantContext(user, request)
-decision = authz.check(serviceJwt(authz:check), user.subject, context, resource, action)
-if unavailable: return 503
-if not allowed: return 403 with permissionKey/resource/traceId
-performSensitiveOperation()
-```
-
-高风险操作在副作用前再次检查，不复用仅为菜单渲染生成的旧缓存决定。
-
-### 关系变更
-
-只允许平台治理服务或明确注册了 `authz:mutate` 和 allowed-mutations 的调用方执行：
-
-```json
-{
-  "application": "edge-feature",
-  "schemaVersion": "<version>",
-  "traceId": "<trace>",
-  "idempotencyKey": "grant:<business-command-id>",
-  "actor": "<trusted actor subject>",
-  "reason": "approved request <id>",
-  "source": "permission-approval",
-  "mutations": [
-    {
-      "mutationId": "grant-publish",
-      "operation": "TOUCH",
-      "resourceType": "base/permission_resource",
-      "resourceId": "edge-feature/publish",
-      "relation": "grantee",
-      "subject": "base/user:<normalized-subject>"
-    }
-  ]
-}
-```
-
-实际 relation 与 subject 语法从实时 metadata/Schema 获取。不要复制示例到生产。
-
-## Phase 4：权限申请与审批
-
-缺权页面提交结构化申请：
-
-```json
-{
-  "application": "edge-feature",
-  "schemaVersion": "<version>",
-  "applicant": {
-    "subject": "<trusted subject>",
-    "feishuUserId": "<optional trusted id>",
-    "email": "user@example.com",
-    "principalType": "user"
-  },
-  "applicantScopeKey": "<trusted immutable scope>",
-  "reason": "需要发布资源包",
-  "idempotencyKey": "permission-request:<client-command-id>",
-  "traceId": "<trace>",
-  "requestedResources": [
-    {
-      "permissionKey": "edge-feature.publish",
-      "resourceType": "base/permission_resource",
-      "resourceId": "edge-feature/publish",
-      "permission": "execute",
-      "displayName": "发布 EdgeFeature 资源包",
-      "autoIncluded": false
-    }
-  ]
-}
-```
-
-后端覆盖客户端 applicant subject，以认证上下文为准。审批成功必须串联：状态变更、关系写入、审计、回调、缓存失效。任何一步失败都保留补偿任务和可关联 trace，不提前显示“权限已生效”。
-
-## Phase 5：平台注册和部署
-
-只有内嵌微应用使用下面的 MICRO 注册示例；独立 Web 应用按目标平台支持的注册类型与登录回调契约填写，不强制登记 activeRule。
-
-内嵌应用注册字段至少包括：
-
-```yaml
-code: edge-feature
-name: EdgeFeature 资源包管理
-entryUrl: https://edge-feature.example.internal/
-activeRule: /edge-feature
-defaultPath: /edge-feature/publish
-type: MICRO
-status: ENABLED
-```
-
-同时完成：
-
-- 应用访问和功能 permission metadata；
-- 服务 JWT client 注册、allowed scopes、administrator applications；
-- mutate 调用方的 allowed-mutations；
-- authz invalidation target 与独立 secret；
-- OAuth redirect/callback allowlist（如使用独立 Web 登录）；
-- CORS/CSP/ingress、健康检查、ready、指标和告警；
-- Vault/Secret 配置和轮换 runbook。
-
-部署后用精确 SHA 验证主应用、子应用、业务后端和平台后端，不用入口 HTTP 200 代替资源树与功能证据。
-
-## 语言适配注意事项
-
-- Java SDK 参考版本通过可配置 auth endpoint 调平台验证，并自动注册 Servlet filter/AOP；检查是否与应用已有 filter 重复。
-- FastAPI SDK 参考版本默认调用 `<auth_server_url>/api/auth/me`，把 user 放入 `request.state`。
-- Next.js SDK 参考版本也调用 `/api/auth/me`，通过内部请求头传 user；确保外部入口覆盖或清除可伪造的 `x-user-info`。
-- Java、Python、Next.js 的 direct SpiceDB 和 view 命名规则不完全一致。新服务必须使用对应 `packages/sdk`；底层 direct/Facade 模式由已发布 SDK README 与平台 Owner 确认，并增加跨语言契约测试。
-- MCP SDK 有单独的 token audience/issuer/resource 约束，不能直接套 Web 用户 JWT 逻辑。
+浏览器桥接夹具的管理员 ALLOW 不覆盖非管理员 DENY→申请→独立审批→ALLOW→撤权→DENY，也不证明实际 SDK 包可安装或已被业务使用。按身份、部署版本、包 digest 和实际副作用计数留证，缺少测试申请人、专用 caller/SecretRef 或执行器时分别列为未验收；不据此修改 catalog 的 candidate 状态。

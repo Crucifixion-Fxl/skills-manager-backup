@@ -331,13 +331,13 @@ patches:
 | eu-prod-data | `harbor-76949-eu-data.addx.live` |
 | cn-k8s (TKE prod，100014919455) | `harbor-cn.addx.live` |
 | cn-tke-staging (100052802231) | `harbor-02231-cn-staging.addx.live`（部署内网入口） |
-| cn-tke-tech-service (100052802231，目标待切换，业务准入 blocked) | `harbor-02231-cn-tech-service.addx.live` |
+| cn-tke-tech-service (100052802231，目录准入 allowed / verified) | `harbor-02231-cn-tech-service.addx.live` |
 | us-tech-service-gke | `harbor-a4xt-us-tech.addx.live` |
 | us-prod-gke | `harbor-a4xp-us-prod.addx.live` |
 
 CN staging 的 Pod 镜像示例为 `harbor-02231-cn-staging.addx.live/base/<name>:<tag>`；SG 同步使用同一 registry 的 `harbor-02231-cn-staging-pub.addx.live`。采用内网域名前，确认平台同步的 `harbor-registry-secret` 在 Docker `auths` 中有精确内网 hostname；缺失则先由平台补齐并验证，不自动切换现存 image refs 或 Secret。网络、token realm 与部署证据见 [Harbor 双入口合同](../../harbor/SKILL.md)。
 
-CN tech-service 表中为待切换的私网目标；受限公网 `harbor-02231-cn-tech-service-pub.addx.live` 用于外部同步。平台组件目前使用 `harbor-registry-pull`，不能照抄 staging 的 Secret 名；须核验实际 Secret 分发及新域名 auth key。准入仍为 blocked，不由模板地址更新自动开放部署。
+CN tech-service 私网与受限公网入口已于 2026-10-19 核验，见 [准入回执](../../cicd-developer/references/cn-tech-service-admission-2026-10-19.md)；`harbor-02231-cn-tech-service-pub.addx.live` 用于获准的外部同步。平台组件使用 `harbor-registry-pull`，不能照抄 staging 的 Secret 名；应用仍须核验实际 Secret 分发、精确 hostname auth key、镜像及 AppProject source/destination/kind。目录准入不替代这些逐应用门禁。
 
 ## overlays/staging-us/external-secret.yaml
 
@@ -442,7 +442,7 @@ spec:
 | `aws-390709477306-eu-staging/` | eu-staging |
 | `tencent-100014919455-cn-main/` | cn-k8s (TKE prod) |
 | `tencent-100052802231-cn-staging/` | cn-tke-staging |
-| `tencent-100052802231-cn-tech-service/` | cn-tke-tech-service（业务准入 blocked） |
+| `tencent-100052802231-cn-tech-service/` | cn-tke-tech-service（目录准入 allowed，逐应用权限仍须核验） |
 | `gcp-a4xcloud-tech-service-us-us-tech-service/` | us-tech-service-gke |
 | `gcp-a4xcloud-p-us-us-prod/` | us-prod-gke |
 

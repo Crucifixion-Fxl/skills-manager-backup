@@ -26,7 +26,8 @@ AddX Troubleshooting 故障诊断平台 API 操作助手。
 
 Troubleshooting 平台是 AddX 内部的故障诊断中枢，服务于技术支持、研发和运维团队。
 
-> 认证边界：本 Skill 使用 Micro App Platform/效能应用 OAuth 换取业务平台 JWT。
+> 认证边界：本 Skill 复用 Micro App Platform 的个人 PAT（`tmt_` 前缀）或业务平台 JWT；
+> 没有凭据且需要交互登录时，才通过效能应用 OAuth 获取 JWT。PAT 直接访问 API，不换取 JWT。
 > 这不是普通飞书消息或资源访问；不得改用普通 `lark-cli` user profile，也不得把该业务
 > token 用于飞书 OpenAPI。
 
@@ -37,7 +38,7 @@ Troubleshooting 平台是 AddX 内部的故障诊断中枢，服务于技术支�
 | Staging-US | `https://troubleshooting-staging-us.addx.live` | `https://micro-app-platform-us.addx.live/troubleshooting-staging-us` |
 | Staging-EU | `https://troubleshooting-staging-eu.addx.live` | `https://micro-app-platform-us.addx.live/troubleshooting-staging-eu` |
 
-四个环境共用同一个 Token，从任意环境获取一次即可通用。
+上述环境接入同一生产微应用平台，但不代表同一凭据必然获准访问全部环境。先按下文选择目标环境，再验证该环境的身份与业务权限；PAT 还依赖平台及消费应用启用支持。
 
 ## 辅助：查应用上下文（用 `service-catalog-search`）
 
@@ -54,18 +55,18 @@ Troubleshooting 平台是 AddX 内部的故障诊断中枢，服务于技术支�
 
 ### 认证（自动化流程）
 
-1. **首次获取**：会话开始时如果 `TROUBLESHOOTING_TOKEN` 为空，运行 `TROUBLESHOOTING_TOKEN=$(node <skill_dir>/references/get_token.mjs us)` 获取 Token
-   - 脚本内部会先检查磁盘缓存（`~/.troubleshooting-token-{region}`），缓存有效则秒返回
-   - 缓存过期则自动打开飞书授权页面，用户点击授权后自动获取新 Token
-   - 详见 [references/get_token.mjs](references/get_token.mjs)
-2. **直接使用**：获取 Token 后，后续所有 API 请求直接使用 `$TROUBLESHOOTING_TOKEN`，**不要每次请求都重新运行 get_token.mjs**
-3. **401 时重新获取**：当 API 返回 401 时，运行 `TROUBLESHOOTING_TOKEN=$(node <skill_dir>/references/get_token.mjs us)` 重新获取 → 重试一次。重试仍 401 则报告失败，不循环
+1. **先复用**：非空 `TROUBLESHOOTING_TOKEN` 直接作为 Bearer 使用，不覆盖、不重新登录。`tmt_` 为 PAT 路由标识，不是有效性证明；PAT 不解码为 JWT、不自动刷新。首次使用或切换环境时，在目标 `$BASE_URL/api/current` 核验 HTTP 状态、业务成功与用户身份；不输出完整响应中的敏感字段。
+2. **没有凭据时按用途选择**：长期脚本使用个人 PAT，由宿主安全注入同一环境变量；创建入口、权限与期限见 [认证流程](references/auth_flow.md)。需要交互 JWT 登录且已有相应授权时，使用该文档的 `get_token.mjs` 流程。脚本只获取 JWT，不创建 PAT。
+3. **失败时保持凭据边界**：PAT 返回 401，停止并核对到期、禁用、撤销或环境支持，不自动换 OAuth JWT。只有来源明确的 JWT 遇到 401 才允许重新登录一次，并仅重试可安全重放的请求。凭据类型不明时先确认来源。403 检查账号/权限；503、超时或网络错误检查依赖，均不靠换 Token 绕过。
+4. **凭据安全**：明文仅通过宿主秘密管理或受控环境变量注入；不发聊天、不写仓库、URL、日志或命令行实参，不将 PAT 写入旧 JWT 缓存。不要每次请求都重新运行登录脚本。拥有 PAT 不替代业务写入、审批或发布授权。
 
 **认证请求格式**：
 
+以下 bash/zsh 示例用 shell 内置 `printf` 经标准输入传递认证头（curl 7.55+），不把 Token 放进 curl 参数；关闭命令追踪，不使用外部 `/usr/bin/printf`、`curl -v` 或重定向跟随。请求字段和响应按目标 OpenAPI 核验。其他执行环境可采用 [Python 环境变量示例](references/auth_flow.md#只读请求示例)。
+
 ```bash
-curl -s -X POST \
-  -H "Authorization: Bearer $TROUBLESHOOTING_TOKEN" \
+printf 'Authorization: Bearer %s\n' "$TROUBLESHOOTING_TOKEN" | \
+curl -s -X POST -H @- \
   -H "Content-Type: application/json" \
   -H "X-Requested-With: XMLHttpRequest" \
   "$BASE_URL/api/v1/..."
@@ -386,7 +387,7 @@ user_sn → device_sn
 
 | 场景关键词 | 参考文件 | 说明 |
 |-----------|---------|------|
-| 认证、Token、401 | [references/auth_flow.md](references/auth_flow.md) | Token 自动获取流程 |
+| 认证、PAT、API Token、JWT、401、403、503 | [references/auth_flow.md](references/auth_flow.md) | PAT 注入、JWT 登录与分类失败处理 |
 | 订阅、VIP、支付、套餐、云存储、免费试用 | [subscription/subscription_issue.md](subscription/subscription_issue.md) | 用户订阅问题排查（套餐规则、升降级规则） |
 | 设备离线、offline、断连、离线根因 | [device-offline-analyzer/guide.md](device-offline-analyzer/guide.md) | 仅适用 Prod-US/EU；Staging 不读取该指南，按本文 logs-v2 流程排查 |
 | 设备状态、绑定状态、在线离线、设备清单、Excel 批量 | [device-status-checker/guide.md](device-status-checker/guide.md) | 设备绑定与在线状态查询 |
@@ -420,28 +421,32 @@ curl ... -d '{"missing_data_items":[{"id_value":"235408",...}]}'
 
 ```bash
 # Staging：无需导入，按 Pod app 标签查询共享 logs-v2 索引
-curl -s -X POST -H "Authorization: Bearer $TROUBLESHOOTING_TOKEN" \
+printf 'Authorization: Bearer %s\n' "$TROUBLESHOOTING_TOKEN" | \
+curl -s -X POST -H @- \
      -H "Content-Type: application/json" \
      "$BASE_URL/api/v1/staging-logs/query" \
      -d '{"query":"error OR timeout","filters":[{"field":"kubernetes.labels.app","operator":"is","value":"troubleshooting-backend"}],"start_time":"2026-09-03T01:00:00Z","end_time":"2026-09-03T01:15:00Z","page":1,"page_size":100,"sort_order":"desc"}'
 
 # Prod iot-service：ES 数据加载完整流程
 # Step 1: 查询数据状态
-STATUS_RESP=$(curl -s -X POST -H "Authorization: Bearer $TROUBLESHOOTING_TOKEN" \
+STATUS_RESP=$(printf 'Authorization: Bearer %s\n' "$TROUBLESHOOTING_TOKEN" | \
+     curl -s -X POST -H @- \
      -H "Content-Type: application/json" \
      "$BASE_URL/api/v1/es-data/status" \
      -d '{"id_type":"user_id","id_value":"235408","start_date":"2026-03-10","end_date":"2026-03-12","es_data":{"app":["event","log"],"backend":["log"]}}')
 echo "$STATUS_RESP" | jq '.result.data.es_data_status[] | select(.status=="unloaded" or .status=="partial" or .status=="failed")'
 
 # Step 2: 用 status 返回的脱敏 ID 构造 load-data（不要替换为原始 ID）
-LOAD_RESP=$(curl -s -X POST -H "Authorization: Bearer $TROUBLESHOOTING_TOKEN" \
+LOAD_RESP=$(printf 'Authorization: Bearer %s\n' "$TROUBLESHOOTING_TOKEN" | \
+     curl -s -X POST -H @- \
      -H "Content-Type: application/json" \
      "$BASE_URL/api/v1/es-data/load-data" \
      -d '{"missing_data_items":[{"id_type":"user_id","id_value":"trouble_shooting_id:abc123","platform":"app","collection_type":"event","status":"unloaded","missing_date_ranges":[["2026-03-10","2026-03-12"]]}],"force_reload":false}')
 TASK_ID=$(echo "$LOAD_RESP" | jq -r '.result.data.task_id')
 
 # Step 3: 轮询 task-status（每 30 秒一次）
-curl -s -H "Authorization: Bearer $TROUBLESHOOTING_TOKEN" \
+printf 'Authorization: Bearer %s\n' "$TROUBLESHOOTING_TOKEN" | \
+curl -s -H @- \
      "$BASE_URL/api/v1/es-data/task-status/$TASK_ID" \
      | jq '{status: .result.data.status, progress: .result.data.progress}'
 ```

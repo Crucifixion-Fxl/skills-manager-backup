@@ -1,7 +1,9 @@
 ---
 name: gitlab-issue-sop
-description: GitLab issue 管理 SOP — AI create/update/close 必带当前 agent 环境、session ID、恢复检查点与回读回执；创建前查重、指定 assignee、标签治理、进展评论、看板和关联。AI 即将改该 Issue 时先写会话认领（harness、session id、恢复指针），该 Issue 分支的 push、MR 与 session 清理都回写 Issue。适用于开发发现、PM/运营/QA 反馈、review 文档导入、AI 对话中已确认的需求变化，也适用于从飞书群聊、文档 revision、会议纪要/妙记提取证据，创建或更新预研 Issue（含鉴权、自动查找会议、权限复查和完整来源链接）。GitLab CE 适配。
+description: GitLab issue 管理 SOP — 验收执行结束或用户确认通过/免验/阻塞时，AI 主动回写关联 Issue/MR，不依赖 release-agent；AI create/update/close 必带当前 agent 环境、session ID、恢复检查点与回读回执；创建前查重、指定 assignee、标签治理、进展评论、看板和关联。AI 即将改该 Issue 时先写会话认领（harness、session id、恢复指针），该 Issue 分支的 push、MR 与 session 清理都回写 Issue。适用于开发发现、PM/运营/QA 反馈、review 文档导入、AI 对话中已确认的需求变化，也适用于从飞书群聊、文档 revision、会议纪要/妙记提取证据，创建或更新预研 Issue（含鉴权、自动查找会议、权限复查和完整来源链接）。GitLab CE 适配。
 ---
+
+**按动作加载与读回**：已有项目任务开始持久产物前完整读取 `references/lifecycle-binding.md`，用 `scripts/check_artifact_binding.py --issue <URL> --repository <namespace/project>` 实时核验关联 Issue（一个即可，可跨项目；旧的 `--root-issue`/`--work-item` 双参数仍兼容）；发布评审/合并/关闭前同时读取 `references/status-workflow.md` 并对账适用字段。不要以只读入口前几行声明全部规则已加载。记录实际返回片段、摘要和所覆盖规则；历史缺失不补造。评审链接已发布后读回 `status::in-review` 或明确记录项目模式缺口，不能仅有 comment 而漏状态流转。写结果未知按稳定 marker 先对账，不重放；离线证据校验不替代实时权限与绑定检查。
 
 # gitlab-issue-sop
 
@@ -30,6 +32,15 @@ GitLab issue 管理的标准操作流程 (SOP)，覆盖**创建 / 状态 / 关�
 
 ## 核心使用场景
 
+### 部署后验收回写与待办
+
+会话已绑定 Issue/MR 时，AI 在验收执行结束或收到用户明确的通过、免验、部分完成、阻塞结论后，
+必须在本次会话主动回写并回读，不等用户再次要求“去评论”。按
+[统一验收契约](references/deployment-acceptance.md)，直接使用 `acceptance.py report --issue ...`；
+恢复相关任务时可用 `pending --issue ...` 查询既有记录。这两个入口不要求 release-agent、发布批次或 publisher。
+已知阶段、版本、范围、证据或人工确认如实记录，缺少的信息列为待核实，不伪造部署事实，也不阻止已知结果回写。
+Issue 维护事实，MR 引用；N/A 不记测试 PASS，Pre 结论不扩展为灰度。版本适用性核对、汇总和推进门禁由发布方消费记录完成。
+
 issue 是团队协作的 SSOT，触发场景分七类（A–G）。
 
 ### 场景 A：开发过程中的"问题外移"（最常见）
@@ -43,6 +54,12 @@ AI 辅助开发或人工开发过程中，遇到当前不能/不想立即解决�
 | **依赖他人/外部系统** | 等运维配置、等数据团队同步、等设计师产出 | 保留真实 status，另标 `flag/blocked` |
 | **方案有分歧需要决策** | 多方案 trade-off，需要 stakeholder 拍板 | 决策类，**指定 owner**，等 reply |
 | **审计发现的 gap** | `:audit` / `:design` 流程列出来的现状 vs 应有差距 | 跟踪 gap，按优先级排期 |
+
+### 开发者向运维提协作需求 / 运维接单
+
+提交、整理或接手这类 Issue 时，先使用 [ops-collaboration-request](../ops-collaboration-request/SKILL.md)：开发侧交代背景、目标、用户故事、验收与真实约束；运维/AI 接单侧先验证实现前提和现有能力，再拆实施任务。组件名、配置片段和“必须先建 X”默认是待验证建议，不自动成为 Scope、AC 或已确认依赖；有来源的有效技术决策保留并核验。
+
+新单使用该 Skill 的需求模板；旧单不覆盖原始描述，以 comment 追加目标提炼与接单评估。GitLab 写入仍遵守本 SOP 的授权、查重、指派、生命周期和回读规则。
 
 ### 场景 B：非开发人员的需求/反馈
 
@@ -856,7 +873,7 @@ Agent: 直接编辑 issue 描述把 "## 进展" 加进去
 
 - [agent-session-context.md](references/agent-session-context.md) — AI create/update/close 的环境字段、操作回执、会话认领与断电恢复
 
-- [Issue Lifecycle Binding Contract](references/lifecycle-binding.md) — Root Issue、repo-local Work Item、MR 非关闭型关联、阶段回执与最终关闭条件
+- [Issue Lifecycle Binding Contract](references/lifecycle-binding.md) — 单 Issue binding、MR 非关闭型关联、阶段回执与最终关闭条件
 - [Label Governance executable SSOT](references/label-system.md) — 本 Skill 维护的跨 Skill label 规则唯一来源
 - [GitLab Milestone 治理规范](../../../docs/collaboration/standards/gitlab-milestone-governance.md) — 版本语义、APP 发版日历、可自动化消费的风险判据
 - [status-workflow.md](references/status-workflow.md) — 状态流转规则 + 反模式

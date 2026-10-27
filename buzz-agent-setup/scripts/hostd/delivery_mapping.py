@@ -678,8 +678,13 @@ class MappedHostdRound(HostdRound):
             return None
         since = max(0, event['created_at'] - 900)
         if since not in self._history:
-            rows, more = self.clients.owner.messages(self.cfg['chat_id'], datetime.fromtimestamp(since, timezone.utc),
-                                                    order='desc', page_limit=LOOKUP_LIMIT)
+            start = datetime.fromtimestamp(since, timezone.utc)
+            reader = getattr(self.clients.owner, 'mapping_messages', None)
+            if reader is not None:
+                rows, more = reader(self.cfg['chat_id'], start, end=self.now, page_limit=LOOKUP_LIMIT)
+            else:
+                rows, more = self.clients.owner.messages(self.cfg['chat_id'], start,
+                                                        order='desc', page_limit=LOOKUP_LIMIT)
             if more:
                 raise failure('历史消息未读完整，暂不能确认旧投递', '缩小目标或直接读取实际消息，不能猜测对应关系后重发')
             self._history[since] = rows

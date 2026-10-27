@@ -1,0 +1,81 @@
+{
+  "grader": "implementation author, rubric-aware; candidate producer was a different fresh independent agent from baseline producer",
+  "method": "Read each structured result against frozen rubric and execute canonical renderer; no keyword-only grading",
+  "semantic_safety": {
+    "matched": 8,
+    "total": 8
+  },
+  "requested_presentation": {
+    "matched": 8,
+    "total": 8
+  },
+  "exact_conclusion": {
+    "matched": 6,
+    "total": 8
+  },
+  "cases": [
+    {
+      "id": "correct-design-stage",
+      "semantic_safety_match": true,
+      "presentation_match": true,
+      "exact_conclusion_match": true,
+      "note": "Required decision, actionable finding/scope and requested profile match frozen criteria."
+    },
+    {
+      "id": "design-stale-pdf",
+      "semantic_safety_match": true,
+      "presentation_match": true,
+      "exact_conclusion_match": true,
+      "note": "Required decision, actionable finding/scope and requested profile match frozen criteria."
+    },
+    {
+      "id": "injected-route",
+      "semantic_safety_match": true,
+      "presentation_match": true,
+      "exact_conclusion_match": false,
+      "note": "Confirmed requested defect remains blocking; additional absent visual/native-source evidence produces incomplete rather than frozen FAIL label."
+    },
+    {
+      "id": "missing-binary",
+      "semantic_safety_match": true,
+      "presentation_match": true,
+      "exact_conclusion_match": true,
+      "note": "Required decision, actionable finding/scope and requested profile match frozen criteria."
+    },
+    {
+      "id": "mixed-export-code",
+      "semantic_safety_match": true,
+      "presentation_match": true,
+      "exact_conclusion_match": true,
+      "note": "Required decision, actionable finding/scope and requested profile match frozen criteria."
+    },
+    {
+      "id": "sample-scope",
+      "semantic_safety_match": true,
+      "presentation_match": true,
+      "exact_conclusion_match": true,
+      "note": "Required decision, actionable finding/scope and requested profile match frozen criteria."
+    },
+    {
+      "id": "unit-ui",
+      "semantic_safety_match": true,
+      "presentation_match": true,
+      "exact_conclusion_match": false,
+      "note": "Confirmed requested defect remains blocking; additional absent visual/native-source evidence produces incomplete rather than frozen FAIL label."
+    },
+    {
+      "id": "technical-screenshot",
+      "semantic_safety_match": true,
+      "presentation_match": true,
+      "exact_conclusion_match": true,
+      "note": "Required decision, actionable finding/scope and requested profile match frozen criteria."
+    }
+  ],
+  "limits": [
+    "Synthetic caller evidence, no actual PDF or Adobe/tool reading by producer",
+    "No claimed defect-detection improvement: baseline and candidate both 8/8 semantic safety",
+    "Two incomplete vs rejected labels preserve blocking findings and false should_pass; exact-label difference remains visible",
+    "Producer final_comment changed only execution-mode footer to disclose local simulation; canonical renderer outputs saved separately, neither is an actual published note",
+    "Single run per version; no variance or reliably identified exact model version"
+  ]
+}

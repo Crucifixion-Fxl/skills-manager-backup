@@ -16,6 +16,13 @@ const workspace = process.env.CODE_REVIEW_WORKSPACE || "";
 const executionId = process.env.CODE_REVIEW_EXECUTION_ID || "";
 if (!path.isAbsolute(workspace)) fail("CODE_REVIEW_WORKSPACE must be an absolute path");
 if (!/^[A-Za-z0-9._:-]{1,200}$/.test(executionId)) fail("CODE_REVIEW_EXECUTION_ID is invalid");
+let root;
+const caller = process.env.CODE_REVIEW_CALLER_SESSION_ID;
+try {
+  root = JSON.parse(fs.readFileSync(process.env.CODE_REVIEW_ROOT_BINDING_PATH, "utf8"));
+  if (root.schema_version !== "1.0" || root.state !== "bound" || root.execution_id !== executionId ||
+      !/^ses_[A-Za-z0-9]+$/.test(caller || "") || root.root_session_id !== caller) throw new Error();
+} catch (_) { fail("trusted root session is required"); }
 
 let raw = "";
 process.stdin.setEncoding("utf8");
@@ -41,7 +48,9 @@ process.stdin.on("end", () => {
     try {
       const receipt = JSON.parse(fs.readFileSync(receiptPath, "utf8"));
       if (
+        receipt.schema_version === "1.1" &&
         receipt.execution_id === executionId &&
+        receipt.root_session_id === caller && receipt.submitting_session_id === caller &&
         receipt.sha256 === digest &&
         fs.readFileSync(resultPath, "utf8") === canonical
       ) {
@@ -71,9 +80,12 @@ process.stdin.on("end", () => {
     } else {
       fs.writeFileSync(
         receiptCandidate,
-        `${JSON.stringify({ schema_version: "1.0", execution_id: executionId, sha256: digest }, null, 2)}\n`,
+        `${JSON.stringify({ schema_version: "1.1", execution_id: executionId, root_session_id: caller, submitting_session_id: caller, sha256: digest }, null, 2)}\n`,
         { encoding: "utf8", flag: "wx", mode: 0o600 },
       );
+      // Each file replacement is atomic, not the pair. The CI consumer verifies
+      // execution, session and digest before publishing; an interrupted pair
+      // fails closed and a later valid root submission can rebuild it.
       fs.renameSync(candidatePath, resultPath);
       fs.renameSync(receiptCandidate, receiptPath);
     }

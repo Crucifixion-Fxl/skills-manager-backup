@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "micro-app-admission/1",
+  "application": "example-app",
+  "environment": "staging-us",
+  "sdk": "python-core",
+  "profile": "platform-online",
+  "requiredCapabilities": ["authn", "facade"],
+  "credentials": [
+    {
+      "purpose": "facade-signing",
+      "bindingRef": "example:workload/facade-signing"
+    }
+  ]
+}

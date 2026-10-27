@@ -5,17 +5,23 @@
 Bulk-call /inner-api/setting-override/upsert to write rows into device_setting_override.
 
 鉴权两种模式 / Two auth modes (默认 ldap; 除非显式指定 --auth=aksk):
-  --auth=ldap (默认/default) — 通过 revenue-sharing 的 /skill-api/invoke 代理转发,
-                                LDAP token 通过环境变量(默认 SKILL_LDAP_TOKEN)注入。
-                                服务端用 PaasConfig AK/SK 帮忙签名后转发到目标节点。
+  --auth=ldap (默认/default) — 通过 revenue-sharing 的 /skill-api/invoke 代理转发。
                                 运维用自己 LDAP 账号操作, 无需 IOT_ADMIN_AK/SK 共享凭证。
+                                token 解析优先级 (见 scripts/rs_auth.py): 显式环境变量
+                                (默认 SKILL_LDAP_TOKEN) > 本地缓存(0600) >
+                                RS_LDAP_CN+RS_LDAP_PASSWORD 自动登录; 401 自动重取一次。
+                                路由防呆: --env/--rs-env/--node-name 环境段必须一致,
+                                缺省自动推导, 跨环境组合直接拒绝 (2026-10-08 事故:
+                                staging RS + prod 节点 → 400/102 accessKey无效)。
   --auth=aksk                — HmacSHA1 + base64(web-safe), 直连 iot-service-cloud
                                 公网入口, 等价于 Java 端 OpenApiUtil.sign + buildUnsignedUrl。
                                 AK/SK 通过环境变量 IOT_ADMIN_AK / IOT_ADMIN_SK 注入。
                                 仅在用户明确要求或需绕过 revenue-sharing 代理时使用。
 
-AK/SK / LDAP token 一律通过 env vars 注入, 绝不写入文件、绝不打印。
-All secrets MUST be injected via env vars; never written to file or printed.
+secret 规则 (2026-10-08 修订): 密码与 AK/SK 绝不落盘、绝不打印;
+短 TTL token (3 天) 允许 0600 本地缓存。
+Secret policy: passwords / AK / SK never touch disk or logs;
+short-TTL tokens may be cached locally with 0600 perms.
 
 安全:  默认 dry-run; 只有 --confirm 才会真正发起请求。
 Safe:  Dry-run by default; --confirm is required to actually POST.
@@ -51,6 +57,10 @@ except ImportError:
     sys.stderr.write("ERROR: 需要 requests,请 pip install requests / requests required\n")
     sys.exit(2)
 
+# 共享鉴权模块 (路由防呆 / token 缓存 / 自动登录 / 401 重试)。与脚本同目录。
+# Shared auth module: routing guard, token cache, auto-login, 401 retry.
+import rs_auth
+
 
 # ---------------------------------------------------------------------------
 # 常量 / Constants
@@ -69,7 +79,7 @@ ENV_HOSTS = {
 
 # revenue-sharing 后端 host (ldap 模式下走 /skill-api/invoke 代理)。
 # staging: console-test 前端, nginx 把 /api/* 转后端 → 需要 /api 前缀
-# prod: 专用后端 host, 无 /api 前缀; **当前 skill-api 仅在 staging, prod 待部署**
+# prod: 专用后端 host, 无 /api 前缀 (2026-10-08 实证 skill-api 已部署且端到端可用)
 # revenue-sharing backend hosts (ldap auth mode goes through /skill-api/invoke proxy).
 RS_HOSTS = {
     "staging": "https://console-test.addx.live/api",
@@ -365,8 +375,9 @@ class AuthCtx:
 
     ldap 模式: 经 revenue-sharing /skill-api/invoke 代理转发, 用 LDAP token 鉴权。
       - rs_host: RS_HOSTS[rs_env]
-      - ldap_token: 从 --skill-token-env 指定的环境变量读取
+      - ldap_token: rs_auth.resolve_token 解析 (显式 env > 缓存 > 自动登录)
       - node_name: ConsoleServiceRegistry 里登记的 paas nodeName(用来路由到目标 iot-service-cloud 节点)
+      - rs_env / token_source / token_env: 401 重试时重新解析 token 用
       - ak, sk, target_host: 未使用(服务端用 PaasConfig 帮忙签名)
     """
     mode: str                               # "aksk" or "ldap"
@@ -376,6 +387,9 @@ class AuthCtx:
     rs_host: Optional[str] = None           # ldap only
     ldap_token: Optional[str] = None        # ldap only
     node_name: Optional[str] = None         # ldap only
+    rs_env: Optional[str] = None            # ldap only; token 缓存按 rs-env 分文件
+    token_source: str = "env"               # ldap only; "env"/"cache"/"auto-login"
+    token_env: str = "SKILL_LDAP_TOKEN"     # ldap only; 显式 token 环境变量名
 
 
 def send_request(ctx: AuthCtx, method: str, path: str,
@@ -422,6 +436,41 @@ def _send_aksk(ctx: AuthCtx, method: str, path: str,
 def _send_ldap(ctx: AuthCtx, method: str, path: str,
                query: Optional[str], body: Optional[dict],
                timeout: int) -> requests.Response:
+    """ldap 请求 + token 失效单次自动重试 (长跑批量时 3 天 TTL token 可能中途过期)。
+
+    响应判定为未登录 (HTTP 401 或信封 code/result=101, 实测部署版返回
+    HTTP 200 + code=101) → 失效缓存、重新解析 token (有密码 env 则自动重登),
+    只重试一次; 显式 env token (token_source="env") 不重试, 响应原样
+    返回由调用方按业务失败处理 (exit 1)。
+
+    写请求重放安全性 (来源:CI code-review r6 P2): 401/101 是 RS 在
+    /skill-api/invoke **鉴权阶段**的拒绝 (SkillApiController 调 skillTokenService
+    校验 token 在进入代理转发之前, 2026-10-08 诊断期实读其源码), 此形态下
+    请求体从未到达 iot-service-cloud 业务逻辑 → 不会发生"已写入但响应丢失",
+    重放不会重复写入。仅非鉴权类业务失败原样返回, 不重放。
+    """
+    resp = _send_ldap_once(ctx, method, path, query, body, timeout)
+    try:
+        body_json = resp.json()
+    except ValueError:
+        body_json = None
+    if not rs_auth.looks_unauthenticated(resp.status_code, body_json) \
+            or ctx.token_source == "env":
+        return resp
+    sys.stderr.write("[auth] token 失效(未登录), 重新获取后重试一次 / "
+                     "token expired, re-authenticating once\n")
+    try:
+        ctx.ldap_token, ctx.token_source = rs_auth.reauth_after_401(
+            ctx.rs_env, ctx.rs_host, ctx.token_env)
+    except (rs_auth.ManualLoginRequired, RuntimeError) as e:
+        sys.stderr.write(f"{e}\n")
+        sys.exit(rs_auth.EXIT_MANUAL_LOGIN)
+    return _send_ldap_once(ctx, method, path, query, body, timeout)
+
+
+def _send_ldap_once(ctx: AuthCtx, method: str, path: str,
+                    query: Optional[str], body: Optional[dict],
+                    timeout: int) -> requests.Response:
     # 把目标 path + query 编码到 invoke 的 path 参数里, 让 revenue-sharing 完整透传给目标节点。
     target_path = path if not query else f"{path}?{query}"
     invoke_query = (
@@ -465,22 +514,24 @@ def parse_args():
     p = argparse.ArgumentParser(description=__doc__.splitlines()[1])
     p.add_argument("--env", required=True, choices=sorted(ENV_HOSTS.keys()),
                    help="目标环境名,会映射到对应 iot-service-cloud 公网域名(aksk 模式直连;"
-                        "ldap 模式仅作为日志标签, 真实路由由 --node-name 决定)/ target env")
+                        "ldap 模式兼作 --node-name 缺省值, 三者环境段必须一致, 详见 rs_auth)"
+                        "/ target env")
     # ---- 鉴权模式(aksk = AK/SK 直连; ldap = 经 revenue-sharing /skill-api/invoke 代理)----
     p.add_argument("--auth", choices=["aksk", "ldap"], default="ldap",
                    help="鉴权模式: ldap(默认, 经 revenue-sharing /skill-api/invoke 代理, 需 LDAP token) "
                         "或 aksk(直连 iot-service-cloud, 需 IOT_ADMIN_AK/SK, 仅在用户显式要求时用)")
     p.add_argument("--rs-env", choices=sorted(RS_HOSTS.keys()), default=None,
-                   help="ldap 模式必填: revenue-sharing 控制台环境, "
-                        "staging→console-test.addx.live/api, "
-                        "prod→revenus-sharing-backend.addx.live (待部署, 当前仅 staging 可用)")
+                   help="ldap 模式: revenue-sharing 控制台环境, 可省略——自动从 node-name "
+                        "环境段推导 (prod-* → prod / revenus-sharing-backend.addx.live, "
+                        "staging-* → staging / console-test.addx.live/api); "
+                        "显式给出但与 node-name 环境段冲突会被拒绝")
     p.add_argument("--node-name", default=None,
-                   help="ldap 模式必填: ConsoleServiceRegistry 登记的 paas nodeName, "
-                        "决定 revenue-sharing 把请求转发到哪个 iot-service-cloud 节点 "
-                        "(如 staging-us / staging-eu / prod-us / prod-eu, 具体由服务端配置决定)")
+                   help="ldap 模式: ConsoleServiceRegistry 登记的 paas nodeName, "
+                        "决定 revenue-sharing 把请求转发到哪个 iot-service-cloud 节点; "
+                        "可省略(缺省取 --env), 必须与 --rs-env 同环境")
     p.add_argument("--skill-token-env", default="SKILL_LDAP_TOKEN",
-                   help="ldap 模式: 存放 LDAP token 的环境变量名, 默认 SKILL_LDAP_TOKEN "
-                        "(token 由 POST <rs-host>/skill-api/login 获得, 3 天有效)")
+                   help="ldap 模式: 显式 token 环境变量名(优先级最高), 默认 SKILL_LDAP_TOKEN; "
+                        "未设时自动走 ~/.cache 缓存或 RS_LDAP_CN/RS_LDAP_PASSWORD 自动登录")
     p.add_argument("--input", required=True, help="xlsx 文件路径 / path to xlsx")
     p.add_argument("--sensitive-sheet", default="灵敏组",
                    help="灵敏组 sheet 名 / sensitive sheet name")
@@ -535,7 +586,10 @@ def build_auth_ctx(args, target_host: str) -> AuthCtx:
     """根据 --auth 选项构造 AuthCtx 并校验必填项。
 
     aksk 模式必填: env 环境变量 IOT_ADMIN_AK / IOT_ADMIN_SK
-    ldap 模式必填: --rs-env, --node-name, env 环境变量 <--skill-token-env>(默认 SKILL_LDAP_TOKEN)
+    ldap 模式: 路由三参经 rs_auth.resolve_ldap_routing 校验/推导
+                (--node-name 缺省取 --env, --rs-env 缺省自动推导);
+                token 经 rs_auth.resolve_token 解析 (显式 env > 缓存 > 自动登录),
+                全部不可用时降级打印手动登录指引 exit 3。
     """
     if args.auth == "aksk":
         # AK/SK 强制走 env 注入, 绝不写入磁盘日志。
@@ -546,15 +600,26 @@ def build_auth_ctx(args, target_host: str) -> AuthCtx:
             sk=env_var_required("IOT_ADMIN_SK"),
         )
     # ldap 模式
-    if not args.rs_env:
-        sys.exit("--auth=ldap 必须给 --rs-env (staging 或 prod) / required for ldap auth")
-    if not args.node_name:
-        sys.exit("--auth=ldap 必须给 --node-name (paas nodeName) / required for ldap auth")
+    try:
+        args.env, args.rs_env, args.node_name = rs_auth.resolve_ldap_routing(
+            args.env, args.rs_env, args.node_name)
+    except rs_auth.RouteMismatch as e:
+        sys.stderr.write(f"ERROR: {e}\n")
+        sys.exit(2)
+    try:
+        token, source = rs_auth.resolve_token(
+            args.rs_env, RS_HOSTS[args.rs_env], args.skill_token_env)
+    except (rs_auth.ManualLoginRequired, RuntimeError) as e:
+        sys.stderr.write(f"{e}\n")
+        sys.exit(rs_auth.EXIT_MANUAL_LOGIN)
     return AuthCtx(
         mode="ldap",
         rs_host=RS_HOSTS[args.rs_env],
-        ldap_token=env_var_required(args.skill_token_env),
+        ldap_token=token,
         node_name=args.node_name,
+        rs_env=args.rs_env,
+        token_source=source,
+        token_env=args.skill_token_env,
     )
 
 
@@ -636,10 +701,9 @@ def main():
         print(f"[plan] auth=aksk (direct to iot-service-cloud)")
     else:
         # 不打印 token 值, 只打印来源 env var 名 + 长度区段, 便于排查 "是不是没读到 token"
-        token_len = len(ctx.ldap_token or "")
         print(f"[plan] auth=ldap rs-env={args.rs_env} rs-host={ctx.rs_host} "
               f"node-name={ctx.node_name} token-env={args.skill_token_env} "
-              f"token-len={token_len}")
+              f"token-source={ctx.token_source}")
     print(f"[plan] xlsx={xlsx_path}")
     print(f"[plan] experiment-prefix={args.experiment_prefix} "
           f"separator='{args.experiment_separator}' "

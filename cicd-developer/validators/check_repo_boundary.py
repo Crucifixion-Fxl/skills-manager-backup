@@ -10,8 +10,9 @@ centralized permission or platform boundary resources such as IAM/IRSA Roles,
 ProviderConfigs, WAF resources, or shared SecurityGroupIngressRule objects.
 
 DEV/k8s normally owns reusable platform capabilities, not static desired state
-for one business application. The only app request exception is a closed,
-platform-owned PostgreSQL RDS claim at its exact source path. Review callers
+for one business application. Closed exceptions are the platform-owned PostgreSQL
+RDS request, the separately user-approved exact StreamPark staging pull set and the
+user-approved exact us-prod qdrant monitoring key ExternalSecret. Review callers
 must pass ``--repo-context k8s`` when they copy changed files to a temporary
 directory; a copy without its repository-relative path cannot qualify for the
 exception.
@@ -20,6 +21,7 @@ exception.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import re
 import sys
 from pathlib import Path
@@ -32,6 +34,7 @@ except ImportError:
     sys.exit(2)
 
 from _scan import ParseError, iter_docs
+from _streampark_tls_contract import TLS_FILES, TLS_REASON, is_reviewed_tls_source
 
 
 GROUP_PREFIX_IAM = "iam.aws."
@@ -90,6 +93,27 @@ APP_RDS_REQUEST_DIR = (
     "app-owned-rds",
     "requests",
 )
+# One directly approved five-object set; never a caller-supplied waiver.
+STREAMPARK_PULL_PATH = (
+    "clusters", "aws-390709477306-us-staging", "streampark-access", "registry-pull.yaml",
+)
+STREAMPARK_PULL_SHA256 = "63431c97819e39e6e52fdb119797a4245c962f11d1515f0bae5442457b8844b7"
+REASON_STREAMPARK_PULL = (
+    "the separately approved StreamPark staging pull exception requires the exact "
+    "closed five-object file; modified fields, missing/additional objects or content "
+    "require a new reviewed authorization and rule update"
+)
+# One directly approved single-ExternalSecret file; never a caller-supplied waiver.
+QDRANT_KEY_PATH = (
+    "clusters", "aws-302571458622-us-prod", "victoria-metrics-config", "qdrant-monitoring-key.yaml",
+)
+QDRANT_KEY_SHA256 = "3c01a87c18a5e89819c82c11483b99636bfb3c76581484277d96c73ac54ed2a1"
+REASON_QDRANT_KEY = (
+    "the separately approved us-prod qdrant monitoring key exception requires the exact "
+    "closed single-ExternalSecret file; modified fields, additional objects or content "
+    "require a new reviewed authorization and rule update"
+)
+
 APP_RDS_REQUEST_ANNOTATIONS = {
     "argocd.argoproj.io/sync-options": "Prune=false,Delete=false",
 }
@@ -404,10 +428,55 @@ def is_reviewed_app_rds_request(path: Path, root: Path, doc: dict[str, Any]) -> 
     )
 
 
+def has_reviewed_streampark_pull_bytes(path: Path) -> bool:
+    """Check fixed bytes only; callers must separately close the source context."""
+    try:
+        return (not path.is_symlink() and path.stat().st_size <= 16384
+                and hashlib.sha256(path.read_bytes()).hexdigest() == STREAMPARK_PULL_SHA256)
+    except OSError:
+        return False
+
+
+def is_reviewed_streampark_pull(path: Path, root: Path) -> bool:
+    """Recognize only fixed approved bytes at their exact repository path.
+
+    Complete-file hashing closes all five objects, fields and YAML cardinality.
+    Even harmless formatting changes fail closed; labels cannot widen scope.
+    """
+    if path.relative_to(root).parts != STREAMPARK_PULL_PATH:
+        return False
+    if path.resolve() != root.resolve().joinpath(*STREAMPARK_PULL_PATH):
+        return False
+    return has_reviewed_streampark_pull_bytes(path)
+
+
+def is_reviewed_qdrant_key(path: Path, root: Path) -> bool:
+    """Recognize only the fixed approved bytes at their exact repository path.
+
+    The complete-file hash closes the Vault path, Store, target Secret and
+    document cardinality; formatting changes also fail closed.
+    """
+    if path.relative_to(root).parts != QDRANT_KEY_PATH:
+        return False
+    if path.resolve() != root.resolve().joinpath(*QDRANT_KEY_PATH):
+        return False
+    try:
+        return (not path.is_symlink() and path.stat().st_size <= 16384
+                and hashlib.sha256(path.read_bytes()).hexdigest() == QDRANT_KEY_SHA256)
+    except OSError:
+        return False
+
+
 def k8s_boundary_reason(path: Path, root: Path, doc: dict[str, Any]) -> str | None:
     group = api_group(doc)
     kind = doc.get("kind")
 
+    if path.relative_to(root).as_posix() in TLS_FILES:
+        return None if is_reviewed_tls_source(path, root) else TLS_REASON
+    if path.relative_to(root).parts == STREAMPARK_PULL_PATH:
+        return None if is_reviewed_streampark_pull(path, root) else REASON_STREAMPARK_PULL
+    if path.relative_to(root).parts == QDRANT_KEY_PATH:
+        return None if is_reviewed_qdrant_key(path, root) else REASON_QDRANT_KEY
     if is_per_app_eso_identity_path(path):
         return REASON_K8S_ESO_IDENTITY
     if group == GROUP_PLATFORM and kind in PLATFORM_APP_CLAIM_KINDS:
@@ -520,6 +589,26 @@ def main(argv: list[str]) -> int:
                 f"{FAIL_PREFIX}{path}: retired image parameter file violates "
                 f"repository boundary: {REASON_ARGOCD_SOURCE}"
             )
+
+    # iter_docs intentionally delegates parse failures elsewhere. The exact
+    # exception must fail closed even when malformed/empty YAML yields no docs.
+    approved_path = root.joinpath(*STREAMPARK_PULL_PATH)
+    if args.repo_context == REPO_CONTEXT_K8S and (approved_path.exists() or approved_path.is_symlink()):
+        if not is_reviewed_streampark_pull(approved_path, root):
+            failures.append(f"{FAIL_PREFIX}{approved_path}: {REASON_STREAMPARK_PULL}")
+    qdrant_path = root.joinpath(*QDRANT_KEY_PATH)
+    if args.repo_context == REPO_CONTEXT_K8S and (qdrant_path.exists() or qdrant_path.is_symlink()):
+        if not is_reviewed_qdrant_key(qdrant_path, root):
+            failures.append(f"{FAIL_PREFIX}{qdrant_path}: {REASON_QDRANT_KEY}")
+
+    if args.repo_context == REPO_CONTEXT_K8S and any(
+        (root / relative).exists() or (root / relative).is_symlink()
+        for relative in TLS_FILES
+    ):
+        for relative in TLS_FILES:
+            candidate = root / relative
+            if not is_reviewed_tls_source(candidate, root):
+                failures.append(f"{FAIL_PREFIX}{candidate}: {TLS_REASON}")
 
     for path, doc in iter_docs(root):
         if isinstance(doc, ParseError):

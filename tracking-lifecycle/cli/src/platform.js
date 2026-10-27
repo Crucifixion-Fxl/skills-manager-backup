@@ -62,20 +62,30 @@ function walkTree(nodes, ancestry = [], out = []) {
 
 async function fetchTransport(baseUrl, token, method, path, body) {
   if (!token) throw new ContractError('MISSING_TOKEN', 'TMT_TOKEN is required');
+  const url = new URL(path, baseUrl);
+  // A published snapshot reads the full immutable event/schema set in one GET.
+  // Production readback can exceed the ordinary API's 30 second budget.
+  const timeoutMs = method === 'GET' && /^\/api\/release\/[1-9]\d*\/snapshot$/.test(url.pathname)
+    ? 90000 : 30000;
+  const signal = AbortSignal.timeout(timeoutMs);
   let response;
   try {
-    response = await fetch(new URL(path, baseUrl), {
+    response = await fetch(url, {
       method,
+      redirect: 'error',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body),
-      signal: AbortSignal.timeout(30000),
+      signal,
     });
   } catch (error) {
     throw new ContractError('PLATFORM_NETWORK',
       `${new URL(baseUrl).origin}: ${error.cause?.code || error.name || 'network error'}`);
   }
   let payload;
-  try { payload = await response.json(); } catch { throw new ContractError('PLATFORM_HTTP', `non-JSON HTTP ${response.status}`); }
+  try { payload = await response.json(); } catch {
+    if (signal.aborted) throw new ContractError('PLATFORM_NETWORK', `${url.origin}: TimeoutError`);
+    throw new ContractError('PLATFORM_HTTP', `non-JSON HTTP ${response.status}`);
+  }
   if (!response.ok || payload.code !== 200 || payload.success === false) {
     throw new ContractError('PLATFORM_HTTP', `HTTP ${response.status}, API ${payload.code}: ${payload.errorMessage || 'request failed'}`);
   }
@@ -121,6 +131,30 @@ class PlatformClient {
     }
     normalizeEvents(events, application);
     return { application, applicationId, events };
+  }
+
+  async readPublishedRelease(expected) {
+    const raw = await this.request('GET', `/api/release/${encodeURIComponent(expected.releaseId)}/snapshot?applicationId=${encodeURIComponent(expected.applicationId)}`);
+    if (!raw || !Array.isArray(raw.events)) throw new ContractError('PUBLISHED_SNAPSHOT_SHAPE', 'historical events are required');
+    const ids = new Set();
+    const events = raw.events.flatMap(event => {
+      if (!event || !Number.isSafeInteger(event.id) || event.id <= 0 || ids.has(event.id) ||
+          event.parentApplicationId !== expected.applicationId || !Array.isArray(event.spm) ||
+          !Array.isArray(event.baseSchemas) || event.baseSchemas.some(id => !Number.isSafeInteger(id) || id <= 0) ||
+          !Array.isArray(event.parameters) ||
+          event.parameters.some(p => ![0, 1].includes(p.isRequired) || !([2, 3].includes(event.type) ? [1, 2] : [0]).includes(p.trackerType))) {
+        throw new ContractError('PUBLISHED_SNAPSHOT_SHAPE', 'invalid or duplicate historical event identity');
+      }
+      ids.add(event.id);
+      const normalized = detailToEvents(event, event.spm);
+      // Historical publisher emits the configured interaction trackers only;
+      // a parameterless interaction emits both. Do not invent an EXP schema.
+      const trackers = new Set(event.parameters.map(parameter => parameter.trackerType));
+      return [2, 3].includes(event.type) && trackers.size
+        ? normalized.filter(item => trackers.has(TRACKER_CODES[item.trackerType])) : normalized;
+    });
+    normalizeEvents(events, expected.application);
+    return { ...raw, events };
   }
 
   saveEvent(payload) { return this.request('POST', '/api/info/saveOrUpdateEventInfo', payload); }

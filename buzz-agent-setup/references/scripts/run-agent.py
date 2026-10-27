@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.machinery
+import json
 import os
 from pathlib import Path
 import pwd
@@ -75,25 +77,70 @@ FORBIDDEN = frozenset(
 FORBIDDEN_PREFIXES = ("BASH_FUNC_", "DYLD_", "LD_AUDIT", "LD_LIBRARY_PATH")
 
 
-class LauncherError(RuntimeError):
-    pass
+# The helper is a required companion file with a fixed import path.
+CLAUDE_ADMISSION_SOURCE_SHA256 = "6af1063beec57a89c98a91629e79d26bf5fb300ef68ef897534f0489c769a981"
+_HELPER = Path(__file__).parent / "buzz_claude_runtime.py"
+_HELPER = _HELPER.absolute()
+try:
+    if _HELPER.resolve(strict=True) != _HELPER:
+        raise OSError("noncanonical runtime helper")
+    _parent_meta = _HELPER.parent.lstat()
+    if (not stat.S_ISDIR(_parent_meta.st_mode)
+            or _parent_meta.st_uid not in {0, os.geteuid()}
+            or stat.S_IMODE(_parent_meta.st_mode) & 0o022):
+        raise OSError("runtime helper parent must not be writable by others")
+    for _entry in (_HELPER, *_HELPER.parents):
+        _meta = _entry.lstat()
+        if (_meta.st_uid not in {0, os.geteuid()}
+                or (stat.S_IMODE(_meta.st_mode) & 0o022
+                    and not (stat.S_ISDIR(_meta.st_mode) and _meta.st_mode & stat.S_ISVTX))):
+            raise OSError("untrusted runtime helper path")
+    if not stat.S_ISREG(_HELPER.lstat().st_mode) or _HELPER.stat().st_size > 65536:
+        raise OSError("invalid runtime helper")
+    _fd = os.open(_HELPER, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    try:
+        _before = os.fstat(_fd)
+        _body = b""
+        while len(_body) <= 65536:
+            _chunk = os.read(_fd, min(65536, 65537 - len(_body)))
+            if not _chunk:
+                break
+            _body += _chunk
+        _after = os.fstat(_fd)
+        _current = _HELPER.lstat()
+        _identity = lambda value: (value.st_dev, value.st_ino, value.st_size, value.st_mtime_ns, value.st_ctime_ns)
+        if (not stat.S_ISREG(_before.st_mode) or _before.st_uid not in {0, os.geteuid()}
+                or stat.S_IMODE(_before.st_mode) & 0o022
+                or len(_body) > 65536 or len(_body) != _before.st_size
+                or _identity(_before) != _identity(_after) or _identity(_after) != _identity(_current)
+                or hashlib.sha256(_body).hexdigest() != CLAUDE_ADMISSION_SOURCE_SHA256):
+            raise OSError("runtime helper digest or metadata mismatch")
+    finally:
+        os.close(_fd)
+    _reserved = {"buzz_claude_runtime", "buzz_claude_runtime.pyc"} | {
+        "buzz_claude_runtime" + suffix for suffix in importlib.machinery.EXTENSION_SUFFIXES
+    }
+    if ("buzz_claude_runtime" in sys.modules
+            or any((_HELPER.parent / name).exists() or (_HELPER.parent / name).is_symlink()
+                   for name in _reserved)
+            or (_HELPER.parent / "__pycache__").is_symlink()
+            or any((_HELPER.parent / "__pycache__").glob("buzz_claude_runtime.*.pyc"))):
+        raise OSError("runtime helper import shadow")
+except OSError as error:
+    raise RuntimeError("runtime helper unavailable or untrusted") from error
+sys.dont_write_bytecode = True
+sys.path.insert(0, str(_HELPER.parent))
+try:
+    import buzz_claude_runtime
+finally:
+    sys.path.pop(0)
+if Path(buzz_claude_runtime.__file__) != _HELPER:
+    raise RuntimeError("runtime helper import origin mismatch")
 
-
-def _trusted_directory_chain(path: Path, uid: int) -> bool:
-    for candidate in (path, *path.parents):
-        try:
-            metadata = candidate.lstat()
-        except OSError:
-            return False
-        mode = stat.S_IMODE(metadata.st_mode)
-        sticky = bool(mode & stat.S_ISVTX)
-        if (
-            not stat.S_ISDIR(metadata.st_mode)
-            or metadata.st_uid not in {0, uid}
-            or (bool(mode & 0o022) and not sticky)
-        ):
-            return False
-    return True
+LauncherError = buzz_claude_runtime.LauncherError
+_trusted_directory_chain = buzz_claude_runtime._trusted_directory_chain
+_trusted_path = buzz_claude_runtime._trusted_path
+admit_claude_runtime = buzz_claude_runtime.admit_claude_runtime
 
 
 def _literal(raw: str) -> str:
@@ -193,37 +240,6 @@ def _read_env(path: Path, uid: int) -> dict[str, str]:
     return values
 
 
-def _trusted_path(
-    raw: str,
-    uid: int,
-    *,
-    directory: bool = False,
-    executable: bool = False,
-    canonical: bool = False,
-    root_owned: bool = False,
-) -> Path:
-    path = Path(raw)
-    if not path.is_absolute() or ".." in path.parts:
-        raise LauncherError("trusted path must be absolute and normalized")
-    try:
-        resolved = path.resolve(strict=True)
-        metadata = resolved.lstat()
-    except OSError as error:
-        raise LauncherError("trusted path is unavailable") from error
-    if canonical and resolved != path:
-        raise LauncherError("trusted path must name its canonical target")
-    expected_type = stat.S_ISDIR(metadata.st_mode) if directory else stat.S_ISREG(metadata.st_mode)
-    if (
-        not expected_type
-        or metadata.st_uid not in ({0} if root_owned else {0, uid})
-        or bool(stat.S_IMODE(metadata.st_mode) & 0o022)
-        or (executable and not bool(stat.S_IMODE(metadata.st_mode) & 0o111))
-        or not _trusted_directory_chain(resolved.parent, uid)
-    ):
-        raise LauncherError("trusted path owner, mode or type is invalid")
-    return resolved
-
-
 def _safe_path(raw: str, uid: int) -> str:
     parts: list[str] = []
     for item in raw.split(":"):
@@ -291,18 +307,7 @@ def prepare_launch(
             raise LauncherError(
                 "Claude adapter requires HARNESS_CLAUDE_WRAPPER and CLAUDE_CONFIG_DIR"
             )
-        wrapper = _trusted_path(wrapper_raw, uid, executable=True)
-        config = _trusted_path(
-            config_raw,
-            uid,
-            directory=True,
-            canonical=True,
-        )
-        expected_config = home / (
-            ".claude-glm" if wrapper.name == "claude-glm" else ".claude-buzz"
-        )
-        if wrapper.name not in {"claude-buzz", "claude-glm"} or config != expected_config:
-            raise LauncherError("Claude wrapper and config directory disagree")
+        wrapper, config = admit_claude_runtime(agent, home, uid, wrapper_raw, config_raw)
         configured = env.get("CLAUDE_CODE_EXECUTABLE")
         if configured and _trusted_path(configured, uid, executable=True) != wrapper:
             raise LauncherError("Claude executable and wrapper disagree")
@@ -507,6 +512,9 @@ def _exec_binary(
 
 def launch(agent: str) -> NoReturn:
     account = pwd.getpwuid(os.geteuid())
+    # CLI activation requires the reviewed read-only companion installation.
+    if stat.S_IMODE(_HELPER.lstat().st_mode) != 0o400:
+        raise LauncherError("runtime helper must be installed with mode 0400")
     workdir, binary, argv, environment, expected_digest = prepare_launch(
         agent,
         home=Path(account.pw_dir),

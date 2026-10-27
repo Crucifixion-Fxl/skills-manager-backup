@@ -1,0 +1,6 @@
+{
+  "id": "technical-screenshot",
+  "mode": "synthetic controlled evidence review; no external actions",
+  "trusted_task": "MR fixes retry logic in client.py. Changed README screenshot is a sample network-debug console, not a shipped design deliverable. Exact diff returns error after 3 retries; relevant test red and green verified. API contract unchanged. Review normal software scope.",
+  "output": "Return final review-result JSON supported by the supplied skill. Do not read oracle or other runs. All observations above are synthetic caller-supplied fixtures; do not claim tool operations. Use real local skill instructions, with caller capability design-review-report/v1 only when that skill supports it."
+}

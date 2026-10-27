@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.machinery
 import json
 import os
 from pathlib import Path
@@ -29,6 +30,67 @@ import tempfile
 import tomllib
 from typing import Any, Sequence
 import urllib.parse
+
+
+# The helper is a required source file, not an environment-selected import.
+CLAUDE_ADMISSION_SOURCE_SHA256 = "6af1063beec57a89c98a91629e79d26bf5fb300ef68ef897534f0489c769a981"
+_HELPER = Path(__file__).parent.parent / "references/scripts/buzz_claude_runtime.py"
+_HELPER = _HELPER.absolute()
+try:
+    if _HELPER.resolve(strict=True) != _HELPER:
+        raise OSError("noncanonical runtime helper")
+    _parent_meta = _HELPER.parent.lstat()
+    if (not stat.S_ISDIR(_parent_meta.st_mode)
+            or _parent_meta.st_uid not in {0, os.geteuid()}
+            or stat.S_IMODE(_parent_meta.st_mode) & 0o022):
+        raise OSError("runtime helper parent must not be writable by others")
+    for _entry in (_HELPER, *_HELPER.parents):
+        _meta = _entry.lstat()
+        if (_meta.st_uid not in {0, os.geteuid()}
+                or (stat.S_IMODE(_meta.st_mode) & 0o022
+                    and not (stat.S_ISDIR(_meta.st_mode) and _meta.st_mode & stat.S_ISVTX))):
+            raise OSError("untrusted runtime helper path")
+    if not stat.S_ISREG(_HELPER.lstat().st_mode) or _HELPER.stat().st_size > 65536:
+        raise OSError("invalid runtime helper")
+    _fd = os.open(_HELPER, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    try:
+        _before = os.fstat(_fd)
+        _body = b""
+        while len(_body) <= 65536:
+            _chunk = os.read(_fd, min(65536, 65537 - len(_body)))
+            if not _chunk:
+                break
+            _body += _chunk
+        _after = os.fstat(_fd)
+        _current = _HELPER.lstat()
+        _identity = lambda value: (value.st_dev, value.st_ino, value.st_size, value.st_mtime_ns, value.st_ctime_ns)
+        if (not stat.S_ISREG(_before.st_mode) or _before.st_uid not in {0, os.geteuid()}
+                or stat.S_IMODE(_before.st_mode) & 0o022
+                or len(_body) > 65536 or len(_body) != _before.st_size
+                or _identity(_before) != _identity(_after) or _identity(_after) != _identity(_current)
+                or hashlib.sha256(_body).hexdigest() != CLAUDE_ADMISSION_SOURCE_SHA256):
+            raise OSError("runtime helper digest or metadata mismatch")
+    finally:
+        os.close(_fd)
+    _reserved = {"buzz_claude_runtime", "buzz_claude_runtime.pyc"} | {
+        "buzz_claude_runtime" + suffix for suffix in importlib.machinery.EXTENSION_SUFFIXES
+    }
+    if ("buzz_claude_runtime" in sys.modules
+            or any((_HELPER.parent / name).exists() or (_HELPER.parent / name).is_symlink()
+                   for name in _reserved)
+            or (_HELPER.parent / "__pycache__").is_symlink()
+            or any((_HELPER.parent / "__pycache__").glob("buzz_claude_runtime.*.pyc"))):
+        raise OSError("runtime helper import shadow")
+except OSError as error:
+    raise RuntimeError("runtime helper unavailable or untrusted") from error
+sys.dont_write_bytecode = True
+sys.path.insert(0, str(_HELPER.parent))
+try:
+    import buzz_claude_runtime
+finally:
+    sys.path.pop(0)
+if Path(buzz_claude_runtime.__file__) != _HELPER:
+    raise RuntimeError("runtime helper import origin mismatch")
 
 
 SHA40 = re.compile(r"[0-9a-f]{40}")
@@ -1635,8 +1697,12 @@ class Auditor:
         deny_rules = (
             permissions.get("deny") if isinstance(permissions, dict) else None
         )
-        wrapper = self.resolve_path(runtime_env.get("HARNESS_CLAUDE_WRAPPER"))
-        claude_home = ".claude-glm" if wrapper and wrapper.name == "claude-glm" else ".claude-buzz"
+        config = self.resolve_path(runtime_env.get("CLAUDE_CONFIG_DIR"))
+        if (config is None or config.parent != self.home
+                or not self.admit_claude_runtime(agent, runtime_env.get("HARNESS_CLAUDE_WRAPPER"), runtime_env.get("CLAUDE_CONFIG_DIR"))):
+            self.fail("sandbox", subject, "claude_config_unresolved")
+            return
+        claude_home = config.name
         required_denies = {
             "Read(~/.config/buzz/**)",
             "Read(~/.bash_secrets)",
@@ -1679,6 +1745,24 @@ class Auditor:
         else:
             self.pass_("sandbox", subject)
 
+    def admit_claude_runtime(self, agent: str, wrapper: str | None, config: str | None) -> bool:
+        # Target source is data only. The imported validator belongs to this auditor.
+        release = self.release_root / self.expected_sha
+        try:
+            if not wrapper or not config or not self.validate_release_manifest(release):
+                return False
+            source = release / "references/scripts/buzz_claude_runtime.py"
+            mode, content = read_immutable_file(source, MAX_TEXT_BYTES)
+            record = self._release_records_cache[release]["references/scripts/buzz_claude_runtime.py"]
+            if (mode != record["mode"]
+                    or hashlib.sha256(content).hexdigest() != record["sha256"]
+                    or record["sha256"] != CLAUDE_ADMISSION_SOURCE_SHA256):
+                return False
+            buzz_claude_runtime.admit_claude_runtime(agent, self.home, os.geteuid(), wrapper, config)
+            return True
+        except (OSError, ValueError, TypeError, KeyError, RuntimeError):
+            return False
+
     def register_harness(
         self,
         agent: str,
@@ -1697,15 +1781,11 @@ class Auditor:
         if adapter_name == "claude-agent-acp":
             wrapper = runtime_env.get("HARNESS_CLAUDE_WRAPPER")
             raw_config = runtime_env.get("CLAUDE_CONFIG_DIR")
-            name = Path(wrapper).name if wrapper else ""
             config = Path(raw_config) if raw_config else None
-            expected_config = self.home / (
-                ".claude-glm" if name == "claude-glm" else ".claude-buzz"
-            )
             if (
-                name in {"claude-buzz", "claude-glm"}
-                and config == expected_config
-                and self.trusted_private_directory(expected_config)
+                self.admit_claude_runtime(agent, wrapper, raw_config)
+                and config is not None
+                and self.trusted_private_directory(config)
                 and safe_path is not None
                 and self.trusted_path_list(safe_path)
             ):
@@ -1972,20 +2052,15 @@ class Auditor:
                     self.resolved_trusted_executable(wrapper_raw) if wrapper_raw else None
                 )
                 config = self.resolve_path(raw_env.get("CLAUDE_CONFIG_DIR"))
-                expected_config = self.home / (
-                    ".claude-glm"
-                    if wrapper is not None and wrapper.name == "claude-glm"
-                    else ".claude-buzz"
-                )
                 configured = self.resolve_path(raw_env.get("CLAUDE_CODE_EXECUTABLE"))
                 resolved_configured = (
                     self.resolved_trusted_executable(configured) if configured else None
                 )
                 if (
                     wrapper is None
-                    or wrapper.name not in {"claude-buzz", "claude-glm"}
-                    or config != expected_config
-                    or not self.trusted_private_directory(expected_config)
+                    or not self.admit_claude_runtime(agent, environment.get("HARNESS_CLAUDE_WRAPPER"), environment.get("CLAUDE_CONFIG_DIR"))
+                    or config is None
+                    or not self.trusted_private_directory(config)
                     or (configured is not None and resolved_configured != wrapper)
                 ):
                     raise ValueError("Claude launcher contract is invalid")
@@ -2618,15 +2693,12 @@ class Auditor:
         root = Path(raw_config)
         workdir = Path(raw_workdir)
         subject = f"harness:{wrapper.name}:agent:{agent}"
-        expected_root = self.home / (
-            ".claude-buzz" if wrapper.name == "claude-buzz" else ".claude-glm"
-        )
         resolved_wrapper = self.resolved_trusted_executable(wrapper)
         try:
             paths_good = (
                 resolved_wrapper is not None
                 and resolved_wrapper == wrapper
-                and root == expected_root
+                and self.admit_claude_runtime(agent, raw_wrapper, raw_config)
                 and self.trusted_private_directory(root)
                 and workdir.resolve(strict=True) == workdir
                 and workdir.is_dir()
@@ -2953,11 +3025,11 @@ class Auditor:
         normalize_sync: bool = False,
         expected_mode: int = 0o700,
     ) -> None:
-        if not self.owner_executable(
-            path,
-            "shared_launcher",
-            subject,
-            "launcher_not_owner_executable",
+        if expected_mode == 0o400:
+            if not self.regular_file(path, "shared_launcher", subject, "helper_not_trusted"):
+                return
+        elif not self.owner_executable(
+            path, "shared_launcher", subject, "launcher_not_owner_executable",
         ):
             return
         try:
@@ -2995,6 +3067,47 @@ class Auditor:
             "",
             expected_mode=0o500,
         )
+
+        helper = self.agents_dir / "buzz_claude_runtime.py"
+        try:
+            parent = helper.parent.lstat()
+        except OSError:
+            self.fail("shared_launcher", "launcher:buzz_claude_runtime.py", "helper_not_trusted")
+            return
+        reserved = {"buzz_claude_runtime", "buzz_claude_runtime.pyc"} | {
+            "buzz_claude_runtime" + suffix for suffix in importlib.machinery.EXTENSION_SUFFIXES
+        }
+        if (parent.st_uid not in {0, os.geteuid()} or stat.S_IMODE(parent.st_mode) & 0o022
+                or any((helper.parent / name).exists() or (helper.parent / name).is_symlink()
+                       for name in reserved)
+                or (helper.parent / "__pycache__").is_symlink()
+                or any((helper.parent / "__pycache__").glob("buzz_claude_runtime.*.pyc"))):
+            self.fail("shared_launcher", "launcher:buzz_claude_runtime.py", "helper_import_shadow")
+        self.audit_documented_launcher(
+            self.agents_dir / "buzz_claude_runtime.py",
+            "launcher:buzz_claude_runtime.py",
+            self.release_root / self.expected_sha / "references/scripts/buzz_claude_runtime.py",
+            "",
+            expected_mode=0o400,
+        )
+
+        # This package gate is unconditional: Codex/Grok also execute this launcher.
+        release = self.release_root / self.expected_sha
+        try:
+            if not self.validate_release_manifest(release):
+                raise ValueError("release manifest invalid")
+            source = release / "references/scripts/buzz_claude_runtime.py"
+            mode, content = read_immutable_file(source, MAX_TEXT_BYTES)
+            record = self._release_records_cache[release]["references/scripts/buzz_claude_runtime.py"]
+            installed_mode, installed = read_immutable_file(helper, MAX_TEXT_BYTES)
+            if (mode != record["mode"]
+                    or hashlib.sha256(content).hexdigest() != record["sha256"]
+                    or record["sha256"] != CLAUDE_ADMISSION_SOURCE_SHA256
+                    or installed_mode != 0o400
+                    or hashlib.sha256(installed).hexdigest() != CLAUDE_ADMISSION_SOURCE_SHA256):
+                raise ValueError("runtime companion does not match trusted pin")
+        except (OSError, ValueError, KeyError, TypeError):
+            self.fail("shared_launcher", "launcher:buzz_claude_runtime.py", "helper_digest_mismatch")
 
     def discover_lookup_only_units(self, primary_names: set[str]) -> list[str]:
         patterns = (AGENT_UNIT, SYNC_UNIT, FEISHU_UNIT, TODO_UNIT, JOIN_UNIT, RECOVERY_UNIT)

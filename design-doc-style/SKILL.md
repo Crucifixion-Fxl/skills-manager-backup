@@ -38,16 +38,18 @@ description: 复用一套已在生产文档里验证过的自包含 HTML 视觉�
 
 16. **业务 Loop 正文按阅读层次展开**：首屏一句主线、图先于长解释；节点详情以短动作和 Owner / 证据 / Gate 字段组织。完整目的、指标口径、护栏、交接、能力缺口与引用放入原生可展开说明，全部保留在 HTML 中；不用 CSS 裁剪替代精简，不把折叠态当信息已删除。无 JS 能原生展开，打印打开所有层级的 details 并在打印后恢复原状态。
 
+17. **方案正文的 hero = 文档名 + 三支柱，覆盖全部范围**：技术方案 / 架构设计 / UX PRD 的 `h1` 写文档名（名称 + 文档类型，第二行可放 `<em>`，如「GS001 数据管道 / 架构设计」），不写口号或论点——「借 X 的模式，不引它的框架」这类做法归 Key ideas。标题行下方用整行 `.hero-pillars` 放三张卡：**Motivation**（为什么要改：3–4 条具体痛点，每条以加粗短句开头，带数字或证据，如文件行数、数量、缺失的测试）、**Goal**（要达到什么：3–4 条可度量结果，`.pillar-foot` 链到指标详情节）、**Key ideas**（怎么做：4–6 条编号要点，加粗短语 + 一句话，链到总览图和第一步）。hero 覆盖设计的全部范围，不只写作者起手的那一端：eyebrow 写范围（如「GS001 · 设备端 + App 端 · 架构设计 · 提案草稿」），dek 一段话讲端到端范围；多端时每张卡逐条标「设备端：/ App 端：/ 两端之间：」。状态、基线 commit、日期、Issue 链接和状态胶囊只进紧凑的 `.hero-side`，保持简短，不与三支柱抢注意力。配色守 Rules #3：Motivation = orange，Goal = mint，Key ideas = mint + 浅 mint 底与描边作为重点卡，不用 blue 或 violet。布局：桌面三栏、≤1180px 单栏堆叠，390px 手机宽度可读，打印为白底；CSS 见 [`references/tokens.css`](references/tokens.css) 的 `.hero-pillars`。产品首页与业务 Loop 页仍按 Rules #13 / #16。
+
 ## 用法
 
 1. 看一眼 [`example.html`](example.html)——完整、可独立打开的成品示例，比读规则更快建立直觉。
 2. 检查所在仓库是否已有共享浅色基座；没有就复制 [`references/base-skeleton.css`](references/base-skeleton.css)。再复制 [`references/tokens.css`](references/tokens.css)，两段一起内联进新文档同一个 `<style>` 块；给 `<div class="page">` 加上 `atlas-page` 类。
-3. 按内容体量选结构：短文档只需要 `.hero` + 若干 `section`（`.section-head` + `.section-no` + `.section-copy`）；长文档（多个 Part）在 Part 之间插入 `.part-divider`。产品首页使用 Rules #13 的低密度叙事；目录和文化页共用 Rules #14 的主题。
+3. 先写 hero（Rules #17）：列出设计覆盖的所有端，h1 写文档名，再填 `.hero-side` 元数据和 Motivation / Goal / Key ideas 三支柱。再按内容体量选结构：短文档只需要 `.hero` + 若干 `section`（`.section-head` + `.section-no` + `.section-copy`）；长文档（多个 Part）在 Part 之间插入 `.part-divider`。产品首页使用 Rules #13 的低密度叙事；目录和文化页共用 Rules #14 的主题。
 4. 需要论证结构关系的图 → 读 [`references/diagram-language.md`](references/diagram-language.md)，按 `plate` 容器 + 颜色语义画 SVG；节点多到需要展开细节时，按同一文件的"交互模式"加局部节点目录与右侧详情（原生 `<details>` + 内联 vanilla JS，见 Rules #5）。
    多张交互图时按 Rules #10/#11 逐图展开：总览 → 专题图；每张图下立即放它自己的详情组。
 5. 需要展示界面交互的图册（UX PRD）→ 读 [`references/mockup-components.md`](references/mockup-components.md)，复制配套的 [`references/mockup-components.css`](references/mockup-components.css)，按 `.shot-frame` 外框 + `.adm`/`.wz`/`.fk` 骨架拼装。
 6. 决策类表格用 `.table-wrap` + `.thesis`（一段话论点）+ `.boundary-grid`（范围内/外/待定三分类），不要把决策淹没在大段散文里。
-7. 发布前对照 diagram-language.md 末尾的校验清单过一遍：颜色语义是否统一、SVG 是否有无障碍标注、交互模式是否在无 JS / 打印时仍完整可读、深色底在 `@media print` 下是否会整页打印成黑色。再检查一处带行内 `code` 的长段 callout，确认文字连续、背景与正文足够清楚。
+7. 发布前对照 diagram-language.md 末尾的校验清单过一遍：颜色语义是否统一、SVG 是否有无障碍标注、交互模式是否在无 JS / 打印时仍完整可读、深色底在 `@media print` 下是否会整页打印成黑色。再检查一处带行内 `code` 的长段 callout，确认文字连续、背景与正文足够清楚；hero 的 h1 是文档名、三支柱覆盖全部范围，1440px 三栏、390px 单栏无横向溢出。
 
 ## Examples
 
@@ -82,6 +84,24 @@ description: 复用一套已在生产文档里验证过的自包含 HTML 视觉�
 - 同一个 orange 在这张图里同时表示"外部依赖"和"已阻断"两件不相干的事，违反"一张图里同一个颜色只能代表一件事"（diagram-language.md）
 - 没有 `role="img"`、`<title>`、`<desc>`，读屏软件拿不到图的内容，色盲或黑白打印场景下这张图完全不可读
 - 颜色是手写的十六进制值而不是 `.svg-box` 语义类，换一次主题色就要全图逐个改
+
+#### 3. hero 写成口号，只覆盖一端
+
+```html
+<header class="hero">
+  <div>
+    <p class="eyebrow">GS001 · 设备端 · 架构设计</p>
+    <h1>借 ROS 2 的模式，<br><em>不引它的框架。</em></h1>
+    <p class="dek">设备端把 soc_main 里的手工接线换成 topic 总线……</p>
+  </div>
+  <aside class="hero-side">…五张决策 / 依赖 / 风险速览卡…</aside>
+</header>
+```
+
+**问题分析：**
+- h1 是论点口号，读者看不出这是哪份文档、什么类型——评审时被直接指出「不是标题」
+- 范围只写了作者起手的设备端，App 端和两端之间的契约没出现在首屏
+- 没有 Motivation / Goal / Key ideas，读者要翻进正文才知道为什么改、改成什么样；aside 堆满卡片，和主体抢注意力（Rules #17）
 
 ### ✅ Good
 
@@ -133,11 +153,45 @@ description: 复用一套已在生产文档里验证过的自包含 HTML 视觉�
 **优点：**
 - 图的交互水准可以参考 Archify，但整份文档仍然是 hero / section / 表格 / 决策记录这些常规结构，不会退化成"打开就是一张可探索大图"（Rules #5）
 
+#### 3. hero = 文档名 + 紧凑元数据 + 三支柱（示例取自 GS001 架构设计）
+
+```html
+<header class="hero">
+  <div>
+    <p class="eyebrow">GS001 · 设备端 + App 端 · 架构设计 · 提案草稿</p>
+    <h1>GS001 数据管道<br><em>架构设计</em></h1>
+    <p class="dek">覆盖一杆数据从设备采集、触发、算法，到 App 解码、上屏和入库的整条链路……</p>
+  </div>
+  <aside class="hero-side" aria-label="文档信息">
+    <div class="hero-note hot"><b>状态 · Draft</b><span>尚未经各场景责任人评审。</span></div>
+    <div class="hero-note"><b>基线 · 日期</b><span>两仓 commit · 2026-10-23</span></div>
+    <div class="status-line"><span class="live">Proposal</span><span><a href="…">#1359</a></span></div>
+  </aside>
+  <div class="hero-pillars">
+    <article class="pillar why"><b>01 · Motivation</b><h2>为什么要改</h2>
+      <ul><li><strong>设备端：接线全堆在一处。</strong>soc_main.c 11180 行、133 个回调……</li>
+          <li><strong>App 端：同一份数据各管各的。</strong>四条链路各自解析同一份 JSON……</li>
+          <li><strong>两端之间：契约没人看守。</strong>没有跨仓契约测试……</li></ul></article>
+    <article class="pillar goal"><b>02 · Goal</b><h2>要达到什么</h2>
+      <ul><li><strong>设备端模块能独立构建、单独测试</strong>：依赖环 21 → 0……</li>…</ul>
+      <p class="pillar-foot">指标与现值见 <a href="#goals">§01</a></p></article>
+    <article class="pillar idea"><b>03 · Key ideas</b><h2>怎么做</h2>
+      <ol><li><strong>借 ROS 2 的模式，不引框架。</strong>……</li>…</ol>
+      <p class="pillar-foot">全景见 <a href="#overview">§02</a> · 第一步见 <a href="#roadmap">§11</a></p></article>
+  </div>
+</header>
+```
+
+**优点：**
+- h1 是「名称 + 文档类型」，原先的口号降为 Key ideas 第一条；eyebrow 与 dek 写明设备端 + App 端的完整范围
+- 三张卡逐端写痛点、可度量目标和做法，并链到指标节、总览图和第一步；元数据收进简短的 `.hero-side`
+- 颜色只用 orange（Motivation）与 mint（Goal / Key ideas），符合 Rules #3；完整可运行版本见 [`example.html`](example.html)
+
 ## 参考
 
-- [`example.html`](example.html) —— 完整可运行的单文件示例：hero、part-divider、决策表格、交互式 plate 图（点节点展开细节）、一屏 UX mock，全部内联
+- [`example.html`](example.html) —— 完整可运行的单文件示例：hero（文档名 + Motivation / Goal / Key ideas 三支柱）、part-divider、决策表格、交互式 plate 图（点节点展开细节）、一屏 UX mock，全部内联
 - [`references/base-skeleton.css`](references/base-skeleton.css) —— 没有共享基座时的最小起点（page 网格、表格、callout 等结构性规则）
-- [`references/tokens.css`](references/tokens.css) —— 可直接复制的 design tokens 与页面级组件（hero / callout / table / boundary-grid / thesis / part-divider / plate 图 / 交互高亮）
+- [`references/tokens.css`](references/tokens.css) —— 可直接复制的 design tokens 与页面级组件（hero / hero 三支柱 / callout / table / boundary-grid / thesis / part-divider / plate 图 / 交互高亮）
 - [`references/diagram-language.md`](references/diagram-language.md) —— SVG `plate` 组件图的容器、颜色语义、无障碍标注、图例约定，以及可选的点击展开交互模式
 - [`references/mockup-components.md`](references/mockup-components.md) + [`references/mockup-components.css`](references/mockup-components.css) —— UX PRD 逐屏图册用的高保真界面模拟组件（管理后台 / 向导 / 飞书消息 / 对话框）
 

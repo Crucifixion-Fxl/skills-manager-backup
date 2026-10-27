@@ -88,6 +88,34 @@ class Registration(fixture.base.TmpCase, unittest.IsolatedAsyncioTestCase):
         observation.clear()
         self.assertFalse((await registrar.readback(row,plan)).outlet_active)
 
+    async def test_fresh_registration_only_orphan_proof_preserves_business_pending(self):
+        registrar,host,row,plan=self.prepare()
+        worker=host.workers[plan['binding_id']]
+        observation=dict(status='pending',reason='orphan_withdrawal_wait',registration_only=True,
+            app_id=row['callback_app_id'],pending=1,checked_at=int(fixture.base.NOW.timestamp()))
+        worker.registration_readiness=lambda agent,db:dict(observation)
+        worker.outlet_readiness=lambda agent,db:{}
+        self.assertTrue((await registrar.readback(row,plan)).outlet_active)
+        for changes in ({'app_id':'cli_elsewhere'},{'checked_at':int(fixture.base.NOW.timestamp())-301},
+                        {'checked_at':int(fixture.base.NOW.timestamp())+1},{'registration_only':False},
+                        {'reason':'own_outlet_deferred'},{'pending':0},{'pending':True}):
+            with self.subTest(changes=changes):
+                worker.registration_readiness=lambda agent,db:dict(observation,**changes)
+                self.assertFalse((await registrar.readback(row,plan)).outlet_active)
+        worker.registration_readiness=lambda agent,db:{}
+        self.assertFalse((await registrar.readback(row,plan)).outlet_active)
+        self.assertEqual((observation['status'],observation['pending']),('pending',1))
+
+    async def test_report_or_business_observer_cannot_impersonate_registration_only_proof(self):
+        registrar,host,row,plan=self.prepare()
+        worker=host.workers[plan['binding_id']]
+        observation=dict(status='pending',reason='orphan_withdrawal_wait',registration_only=True,
+            app_id=row['callback_app_id'],pending=1,checked_at=int(fixture.base.NOW.timestamp()))
+        worker.last['hostd']['outlet_results'][row['agent_id']]=observation
+        self.assertFalse((await registrar.readback(row,plan)).outlet_active)
+        worker.outlet_readiness=lambda agent,db:dict(observation)
+        self.assertFalse((await registrar.readback(row,plan)).outlet_active)
+
     async def test_stopped_worker_and_stale_outlet_receipt_never_become_active(self):
         registrar,host,row,plan=self.prepare()
         task=host.binding_tasks[plan['binding_id']]['worker'];await self.cancel(task)

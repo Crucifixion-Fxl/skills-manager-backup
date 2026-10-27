@@ -46,9 +46,15 @@ AWS CN 集群已弃用；当前 CN 全部使用腾讯云 TKE。账号分工和�
 |------|------|------|------|------|
 | CN Prod / cn-main | Tencent `100014919455` / `ap-beijing` | `tke-cn-k8s`（仍需核验实际集群） | `clusters/tencent-100014919455-cn-main/` | `argocd-cn-k8s.addx.live` |
 | CN Staging | Tencent `100052802231` / `ap-beijing` | 本机核验后设 `CN_STAGING_CONTEXT` | `clusters/tencent-100052802231-cn-staging/` | `argocd-cn-staging.addx.live` |
-| CN Tech Service | Tencent `100052802231` / `ap-beijing` | 本机核验后设 `CN_TECH_CONTEXT` | `clusters/tencent-100052802231-cn-tech-service/` | `argocd-cn-tech-service-tke.addx.live`（目标，待切换） |
+| CN Tech Service | Tencent `100052802231` / `ap-beijing` | 本机核验后设 `CN_TECH_CONTEXT` | `clusters/tencent-100052802231-cn-tech-service/` | `argocd-cn-tech-service-tke.addx.live`（2026-10-19 已核验入口） |
 
-CN tech-service 的新域名均为 `pending-cutover`，执行前按 [目标域名与迁移前声明](references/cn-tencent-inventory.md#cn-tech-service-目标域名待切换) 核对 live 服务归属、DNS/TLS 和认证。名称更新不代表入口已可用；未核实就暂停，不自动使用旧 AWS CN 或迁移前域名。
+CN tech-service 已于 2026-10-19 核验平台入口、实例 Runner 和 ResourceSpace AppProject，
+context `cn-tencent-tech-service` 对应 `100052802231 / ap-beijing / cls-o0gwzdpz`。
+按 [入口与验收边界](references/cn-tencent-inventory.md#cn-tech-service-入口已核验2026-10-19)
+核对实际服务和逐应用权限；目录准入不代表全部能力、指定镜像或应用上线验收通过。
+`argocd-cn-tech-service-tke.addx.live` 与 `argocd-cn-tech-service.addx.live` 是该 TKE
+集群同一 ArgoCD 实例的两个入口；旧 `cn-eks-tech-service` 已下线，不能按 `-tke` 后缀
+将两个域名解释为新旧集群或两个实例。
 
 不再默认连接 `cn-eks-*` / `arn:aws-cn:eks:*`，也不把旧 CN Dev 视作仍在使用的集群。新 TKE 的本机别名须由 `kubectl config get-contexts` 和云端身份/集群信息核验，不凭目录名生成。遗留应用的实际归属按 Application 的当前 source/destination 查证，不能仅按 overlay 后缀迁移。
 

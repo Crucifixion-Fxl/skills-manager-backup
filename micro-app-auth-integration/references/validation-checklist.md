@@ -1,129 +1,73 @@
-# 验证清单
+# 三步验收清单
 
-## 目录
+## 审计脚本资源边界
 
-- 静态证据
-- 认证测试
-- 授权测试
-- 审批与一致性测试
-- 微前端测试
-- 部署和运行时证据
-- 完成判定
+可信 shell 入口只调用同目录普通、非 symlink 的 stdlib Python helper；支持 macOS/Linux、Python 3.9+、git 与 rg。应用仓和平台仓共享一次预算，包含 Git facts、增量文件名枚举、内容读取/匹配及输出，不按 section 重置。默认 `--max-files 10000`、`--max-file-bytes 2097152`、`--max-total-bytes 67108864`、`--timeout-seconds 30`；可在审查输入规模后显式调整，硬上限依次为 100000、16 MiB、1 GiB、60 秒。
 
-## 静态证据
+file/total bytes 按去重后的路径 corpus/stat 计量，敏感文件仅列名和 stat，不读取内容，但其大小仍计入同一预算。普通内容遵守 gitignore/rgignore，每文件仅读一次，并受实际累计读取字节限制（最多额外读 1 byte 检出超限后失败）；保留 rg smartcase、UTF-16 BOM 解码及 NUL/binary 的文件名候选匹配，均不输出内容。Git status 的增量记录数也受同一 max-files 上限约束。文件名和结果各另有 8 MiB 内存上限。
 
-- [ ] 业务仓库 HEAD、平台仓库 HEAD、SDK 版本和目标环境已记录。
-- [ ] 已固定所选 `packages/sdk` 子目录、README ref/SHA 和 manifest 版本，并完整按该 README 接入。
-- [ ] 后端没有自行解析 JWT、直接调用用户信息接口或绕过 SDK 编写权限客户端。
-- [ ] SDK 认证中间件与 SDK 权限 annotation/decorator/dependency/wrapper 都已注册；不是只接入 `UserInfo`。
-- [ ] 当前 OpenAPI、metadata、Schema 与代码使用的 resource/permission 一致。
-- [ ] 认证与 AuthZ 的完整 resolved URL 已记录，并分别通过一次契约探测；没有重复或遗漏 `/api` context path。
-- [ ] 当前主应用 runtime props 已记录；子应用 adapter 对缺失/未知能力安全失败，不把理想接口误当成现有接口。
-- [ ] 子应用没有自己的飞书 OAuth、服务 secret、token localStorage 或 token 日志。
-- [ ] 用户 subject 从服务端认证上下文派生。
-- [ ] 每个敏感 API 有服务端 permission guard。
-- [ ] 普通业务代码没有取得 SDK 底层 SpiceDB client 或直接关系写入；direct/Facade 模式与目标环境治理结论一致。
-- [ ] direct 模式的 `SPICEDB_TOKEN`/`SpiceDBConfig.token` 已确认为 SpiceDB gRPC preshared key，并由受控 Secret 链路直接注入后端 workload；开发者没有查看或复制明文。
-- [ ] Facade 模式的 `APP_SERVICE_JWT_SECRET` 只用于签发短时服务 JWT；没有传给 SpiceDB，也没有与 `SPICEDB_TOKEN` 或其他 caller/环境复用。
-- [ ] 所选模式的 Secret 来源、目标 workload、轮换责任和部署读回均有证据；任一缺失时状态为 `阻塞`。
-- [ ] application code 与 caller service code 已从权威注册表读回并分别记录；维护流程缺失时标记平台流程阻塞，不把 Owner 当作未定义流程的兜底。
-- [ ] Facade 模式的服务 JWT client 使用独立 secret 和最小 allowed scopes。
-- [ ] Facade mutate 调用方有 operation/resource/relation/subject 白名单。
-- [ ] redirect URI 精确匹配，callback URL 完整解析后校验 scheme/host/port/path boundary。
-- [ ] health/docs allowlist 足够小；业务 API 默认保护。
-- [ ] 已有应用按 [迁移与切换门禁](migration-cutover.md) 完成替代链路验证后才移除旧认证；未通过禁用 SDK、跳过测试或放行业务 GraphQL 绕过门禁。
-- [ ] 独立 Web 应用保留经审查的授权码回调和自身安全会话，不套用内嵌应用的“删除全部登录接口”；原生 API token/服务身份有独立迁移结论。
-- [ ] 日志、错误响应和 trace 不包含 token、secret、code 或临时凭证。
+Git 探针禁用 optional locks、hooks、fsmonitor、untracked cache；status 前仅枚举最多 128 个 filter 配置键名（不读取值），清空 clean/process 并禁用 required，避免执行仓库 filter。`dirty_paths` 仅统计 superproject，忽略 submodule 状态，避免进入子仓执行其独立配置；它不是完整子模块审计。上述 Git 阶段同样计入全局 deadline。
 
-## 认证测试
+全局耗时由扫描进程外的 supervisor 控制，超时终止整个 Git/rg/扫描进程组，最多另给 0.5 秒回收；无法确认回收时明确 `CLEANUP_UNKNOWN` 并非零退出。文件数/字节数/耗时超限均返回 4、标记 `Inventory is incomplete`，不输出 JSON 成功 envelope；输出候选数截断仍返回 3。`--max-results` 只限每节输出，不能替代扫描预算，非零或 UNKNOWN 都不得当作 clean。
 
-| 用例 | 期望 |
+## 声明与登记
+
+- [ ] 平台/业务仓 origin、ref/SHA、目标环境、OpenAPI/fixture/Schema 与完整 resolved URL 已固定。
+- [ ] 声明只含 purpose/bindingRef，无真实凭据；AuthN-only 有理由，所有敏感操作仍需 AuthZ。
+- [ ] catalog entry 的 SDK/profile/必要能力匹配；candidate 只进入允许的 staging，未知/unsupported 必要能力阻塞。
+- [ ] 本地 planner 的 REGISTRATION_PENDING 与 pending gates 原样保留，不当作平台注册/注入完成。
+- [ ] application、caller 和绑定从目标环境权威来源读回；最小 scope、资源清单、mutation 白名单按需要确认。
+- [ ] Facade/OIDC/Web bridge/会话/context/失效回调/legacy direct 的凭据目的隔离；受控注入引用、workload、轮换责任与读回明确，不查看值。
+- [ ] Next platform-online 的 `next-context-signing` 与 Facade 引用独立，`AUTH_NEXTJS_CONTEXT_SECRET` 在 middleware/API-route runtime 配对生效；实际 `enableCache=false`，不把保留的 legacy 默认 300 秒缓存当严格在线。
+- [ ] Go Web bridge 的 `web-bridge-client` 对应已注册 ClientID/ClientSecret；消费方自管业务 session key 独立，未误用临时 HMAC purpose 或 caller key。
+- [ ] metadata 仅作 schema/静态能力发现，资源登记、caller 有效 scope、动态归属和 SDK 支持各有证据。
+- [ ] 没有可执行登记、注入、测试身份或跨应用试点入口时，明确缺口和责任方，未借用其他身份。
+
+## SDK 与协议
+
+逐 SDK/框架/profile 留证，不能以一语言通过覆盖其余语言：
+
+| 范围 | 必须覆盖 |
 | --- | --- |
-| 无 Authorization | 401，业务 handler 未执行 |
-| token 格式错误 | 401，无用户上下文 |
-| token 过期/撤销 | 401，缓存不延长有效期 |
-| `/auth/me` 超时/5xx | 503 或明确依赖不可用，不返回普通 401/403 |
-| SDK 缓存命中 | subject 与未缓存结果一致，TTL 有界 |
-| SDK 权限守卫未声明 | 静态检查或默认保护阻止敏感 handler 裸奔 |
-| 伪造 userId/x-user-info | 被忽略或覆盖 |
-| 请求结束 | ThreadLocal/request context 已清理 |
-| 登录 state 重放 | 拒绝 |
-| 授权码二次兑换 | `invalid_grant` |
-| 非 allowlist redirect | 400 |
+| 分发与安装 | exact source/version/digest、真实包构建、干净安装、实际导出/加载、最小依赖闭包 |
+| legacy 回归 | 旧 API 错误/缓存/分页不原地改变，显式 adapter 才迁移 |
+| AuthN | 缺失/错误/过期/撤销凭据、依赖故障、canonicalEmail 优先级与非法 fallback、实际账户状态策略 |
+| 身份映射 | issuer/sub 编码共同向量、scheme 冲突、旧 email/OIDC 不自动继承、伪造 header/subject 被拒绝 |
+| Facade | ALLOW/DENY、HTTP200 unavailable、caller401/403→503、scope/audience/签名/TTL、schema/trace/unknown reason |
+| batch | 完整逐项 Decision、关联/顺序错位整体协议错误、require-batch unavailable 优先于 deny |
+| lookup | 空页+cursor、边界/扫描上限、依赖故障不为空集合、unknown revision 不承诺快照 |
+| transport | 剩余 deadline 更短、预算耗尽不发请求、慢 header/body、响应体上限、TLS、redirect/proxy/retry 禁用 |
+| 业务 | 每个敏感 handler 在副作用前守卫、跨应用/租户 IDOR 拒绝、上下文清理、最小公开路径 |
 
-## 授权测试
+共同 fixture 不能只复制字段：测试必须实际消费平台 `docs/api/fixtures/unified-facade-v1.json`，再补真实 HTTP 交换和分发安装测试。既有 legacy Go AuthN 的 status 策略按其 exact 版本单列，不扩展到新 Go Facade Guard；新 Guard 仅 ENABLED 可继续，DISABLED/缺失/未知不得触发 Facade。旧 OIDC/transport 没有新路径的总 deadline 证明时不得扩展声明。
 
-| 用例 | 期望 |
-| --- | --- |
-| 登录用户无权限 | 403 或 allowed=false/DENY |
-| 登录用户有权限 | 允许，traceId 可关联 |
-| 错 resourceId | 拒绝，不自动兼容别名 |
-| 其他应用同名页面 | 不发生权限串用 |
-| 其他租户/厂家动态 ID | 拒绝 IDOR |
-| Facade 超时/SpiceDB 故障 | 503/AUTHZ_UNAVAILABLE，fail closed |
-| lookup 故障 | 明确故障，不返回空权限集合 |
-| batch-check 部分非法 | 对应单项有 reason，其他项行为符合契约 |
+## 审批、治理与缓存（按所需能力）
 
-以下用例只适用于已确认由所选 SDK 支持的 Facade 模式：
+- [ ] 普通应用仅申请，不直接授予；申请者由可信认证上下文覆盖。
+- [ ] 申请/审批各自重复键、不同 payload、回调重复/乱序按实际接口契约验证。
+- [ ] 审批拒绝/取消不写关系；关系或审计失败不宣称最终生效。
+- [ ] 写后响应丢失、部分写入、超时迟到 grant/revoke 交错：OUTCOME_UNKNOWN 冻结冲突域，终结/fencing/恢复后才解锁；一次 readback 不解锁。
+- [ ] 审批最终状态、关系、审计、投递和业务 check 分开记录；未实现全局持久幂等账本时明确不支持恰好一次。
+- [ ] 旧缓存层/TTL/失效 receiver 清单完整；application+subject、eventId、generation 验证，revision 不比较。
+- [ ] best effort 通知丢失、重复/乱序、receiver 重启、在途旧查询均测试；TTL 兜底且失败不延长 allow。
+- [ ] 目标环境实测 revoke→deny 和身份停用时限；设计建议不充当 SLA。
 
-| 用例 | 期望 |
-| --- | --- |
-| 错 service JWT 签名 | 401 |
-| `iss != sub` 或未注册 client | 401 |
-| audience 错 | 401 |
-| 缺 iat/exp/jti 或 TTL 超限 | 401 |
-| token 有 scope、client 白名单无 scope | 401 |
-| client 白名单有 scope、token 无 scope | 401 |
-| mutate 越过 allowed-mutations | 403/拒绝且不写关系 |
+## 前端与登录（按拓扑）
 
-## 审批与一致性测试
+- [ ] 内嵌应用首次 mount/刷新/深链/切换/unmount/重入均通过；router、public path、DOM 容器和 activeRule 一致。
+- [ ] 登记状态、实际入口文件和持久化启用状态分别读回；入口 HTTP200 须确认不是主应用 fallback。用户可见页面通过，隐藏容器中的 ALLOW 不算装载完成。
+- [ ] 使用实际 props 的 versioned adapter；能力缺失安全失败，生产不使用 dev/mock 身份。
+- [ ] `getUserInfo` 等宿主函数经审查后才调用，不输出原始用户；优先宿主 API 和已确认的完整 URL，返回 envelope、用户状态与最小身份字段校验明确。
+- [ ] 宿主 route read 与应用 access 分开取证，视图→应用关联按部署 Schema/解析器确认，不额外授个人权限或修改守卫来通过试点。
+- [ ] 复检只算清缓存重查，不算申请/审批；初次失败原因未获唯一证据时不推断。历史网页 false 含故障合并态时不计真实 DENY。
+- [ ] 只向已登记可信 origin 转发凭据；CORS/CSP/cookie/SameSite/ingress 有证据。
+- [ ] 独立可信 Web 保留必要回调与安全会话；exact redirect、state、防重放、code 原子消费与服务端 secret 生效。
+- [ ] 用户401触发认证，确定deny403展示无权/申请，依赖503显示不可用；caller401/403不引发用户登出。
 
-- [ ] 同一个 idempotency key 与相同请求返回同一结果。
-- [ ] 同一个 idempotency key 与不同请求返回 409。
-- [ ] 重复飞书回调不重复授权。
-- [ ] 审批拒绝和取消不写授权关系。
-- [ ] 权限关系写入失败时不标记最终生效。
-- [ ] 审计写入失败时有幂等补偿或整体失败。
-- [ ] 外部回调失败时进入可恢复重试，不回滚已确认事实而制造双状态。
-- [ ] 缓存失效失败时保留 subject 级恢复任务。
-- [ ] revoke 后再次 check 返回 deny，旧缓存不继续 allow。
-- [ ] UI 权限和自动包含的 API 依赖都出现在申请详情。
+## 分层回执和完成边界
 
-## 微前端测试
+逐 SDK/环境/profile 记录：source SHA → candidate 包/version/digest → 干净安装 → merge/CI → 部署 SHA/image digest/config revision → 获授权身份的 runtime 回执 → 业务验收。supported 的结构化证据必须与环境/profile、SDK 版本、源 SHA、包 digest、contract 和必要能力匹配；空列表、[null] 或其他环境证据不能通过。
 
-- [ ] 首次从主应用进入能 mount。
-- [ ] 浏览器刷新 activeRule 深链能恢复。
-- [ ] 切换其他微应用后 unmount 干净，无重复监听/请求。
-- [ ] 再次进入能重新 mount。
-- [ ] router basename 与 activeRule 一致。
-- [ ] JS/CSS/public path 在生产 entry origin 正确。
-- [ ] 主应用 capability adapter 只向 allowlisted origin 附带用户凭证。
-- [ ] 401 触发登录，403 展示申请，503 展示不可用；三者不混淆。
-- [ ] 独立开发模式无生产 mock 身份。
-- [ ] 主应用不可用或 props 缺失时安全失败。
+真实环境至少读回一次 allow、一次 deny 和依赖503，并验证本次所需的申请/关系写入/审计/撤权闭环。health200、ready/metadata200、fixture/隔离平台测试、CI绿灯或旧应用Healthy均不能替代目标部署和业务验收。按缺口使用 `实现完成/待部署`、`已部署/待 E2E`、`阻塞`，不得统称完成。
 
-## 部署和运行时证据
-
-按顺序收集：
-
-1. Source：commit SHA、diff、生成的 OpenAPI/Schema、配置模板。
-2. Merge：MR/PR、审批、最终 merge SHA。
-3. Pipeline：业务前端、业务后端、平台配置和契约测试结果。
-4. Deployment：每个环境/区域的镜像 digest 或 deployed SHA、配置版本、资源树。
-5. Runtime：health 与 ready、AuthZ metadata、允许/拒绝请求、审批写入、缓存失效。
-6. User acceptance：真实测试用户完成一次 401、一次 403/申请、一次允许操作。
-
-健康检查 200、旧应用 Healthy 或源分支 pipeline 通过都不能单独证明新版本已部署。
-
-## 完成判定
-
-只有以下条件同时满足才标记完成：
-
-- 目标 SHA 已合并；
-- 目标 SHA/镜像已部署到声明环境；
-- 认证 401、授权 403、依赖 503 语义已验证；
-- 至少一个 allow 和一个 deny 用例在真实环境读回；
-- 审批到关系写入和缓存失效有闭环证据；
-- 无未解释的高风险 exception、fail-open 或共享 secret。
-
-其余情况使用 `实现完成/待部署`、`已部署/待 E2E`、`阻塞` 或 `待用户确认`，不要统称“完成”。
+浏览器桥接夹具与实际 SDK 消费者分别记录。当前管理员 ALLOW 不能覆盖非管理员申请人、独立审批人、专用后端 caller/SecretRef、真实包执行器和业务副作用计数；这些输入缺失时不填 runtimeEvidence、不晋级 candidate。仅创建内嵌应用无需新增 secret，不代表后端凭据链路已完成。

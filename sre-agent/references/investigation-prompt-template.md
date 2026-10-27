@@ -333,7 +333,7 @@ r.add_solution(
     risk="low",                                                   # 风险等级 critical/high/medium/low
     reversible=False,                                             # 是否可回滚 (严格真实性)
     blast_radius="单域名,无云资源变更",                           # 影响范围 (必须量化)
-    verify_cmd="curl -sG 'http://thanos-prod-us.addx.live/api/v1/query' "
+    verify_cmd="curl -sG 'https://victoria-metrics-us-prod.addx.live/select/0/prometheus/api/v1/query' "
                "--data-urlencode 'query=domain_expiry_days{domain=\"dzeesja.com\"}'",
     prompt="...(zero-context 完整步骤)...",
     # relation=... 可选, 默认 {mode: parallel}

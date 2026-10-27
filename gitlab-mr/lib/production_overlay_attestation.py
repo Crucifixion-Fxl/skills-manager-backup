@@ -257,13 +257,13 @@ def _attest(args: Any) -> dict[str, Any]:
     if not overlay_paths or len(plan_paths) > 1:
         raise InputError("candidate needs production YAML and at most one issue plan")
     if plan_paths:
-        issue_path = (
-            f"Work Item: https://gitlab.addx.ai/{project_path}/-/issues/"
+        issue_url = (
+            f"https://gitlab.addx.ai/{project_path}/-/issues/"
             f"{PLAN_PATH.fullmatch(plan_paths[0]).group(1)}"
         )
         description = required_text(mr.get("description"), "MR description")
-        if re.search(rf"(?m)^{re.escape(issue_path)}[ \t]*$", description) is None:
-            raise InputError("issue plan path does not match MR Work Item")
+        if re.search(rf"(?m)^(?:Issue|Work Item):[ \t]*{re.escape(issue_url)}[ \t]*$", description) is None:
+            raise InputError("issue plan path does not match MR Issue")
         after = tree_entry(candidate_sha, plan_paths[0])
         if after is None or after["type"] != "blob" or after["mode"] != "100644":
             raise InputError("issue plan must be a regular file")

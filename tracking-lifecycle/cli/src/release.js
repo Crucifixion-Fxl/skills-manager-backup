@@ -1,26 +1,14 @@
 'use strict';
 
 const crypto = require('node:crypto');
-const { ContractError, assertBaseline, digest, planAgainstCurrent } = require('./contracts');
+const { ContractError, assertBaseline, digest, planAgainstCurrent, eventSchemaName, normalizeEvents } = require('./contracts');
 const { verifyUsage } = require('./verification');
 
 function schemaPath(application, event, version) {
   if (!/^[a-z][a-z0-9_]*$/.test(application) || !/^\d+-\d+-\d+$/.test(version)) {
     throw new ContractError('INVALID_SCHEMA_ID', 'application and release version required');
   }
-  let name;
-  if (event.type === 'PAGE' && event.trackerType === 'BASE' && event.spm.length === 1) {
-    name = `${event.spm[0]}_pv`;
-  } else if (['MODULE', 'COMPONENT'].includes(event.type) &&
-      ['CLK', 'EXP'].includes(event.trackerType) && event.spm.length === (event.type === 'MODULE' ? 2 : 3)) {
-    name = `${event.spm.join('_')}_${event.trackerType.toLowerCase()}`;
-  } else if (event.type === 'SELF_DEFINE' && event.trackerType === 'BASE' && event.spm.length === 1) {
-    name = event.point;
-  } else {
-    throw new ContractError('INVALID_SCHEMA_ID', 'event hierarchy or tracker type does not match platform schema path');
-  }
-  if (!/^[a-z][a-z0-9_]*$/.test(name)) throw new ContractError('INVALID_SCHEMA_ID', `invalid schema name ${name}`);
-  return `com.${application}/${name}/jsonschema/${version}`;
+  return `com.${application}/${eventSchemaName(event)}/jsonschema/${version}`;
 }
 
 class IgluReader {
@@ -34,9 +22,10 @@ class IgluReader {
         this.baseUrls.some(url => !String(url).startsWith('https://'))) {
       throw new ContractError('BLOCKED_DEPENDENCY', 'read-only HTTPS prod Iglu schema URL is required');
     }
+    const verifiedEvents = normalizeEvents(events, application);
     const checked = [];
     for (const baseUrl of this.baseUrls) {
-      for (const event of events) {
+      for (const event of verifiedEvents) {
         const path = schemaPath(application, event, version);
         const response = await this.fetch(`${String(baseUrl).replace(/\/$/, '')}/${path}`, { signal: AbortSignal.timeout(30000) });
         if (!response.ok) throw new ContractError('PROD_SCHEMA_MISSING', `${path}: HTTP ${response.status}`);

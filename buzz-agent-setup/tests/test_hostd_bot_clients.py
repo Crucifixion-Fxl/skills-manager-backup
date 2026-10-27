@@ -61,6 +61,62 @@ class ClientContracts(base.TmpCase):
         client = bc.BotLarkCli(base.AGENT_APP, cfg, data, base_env={'HOME': str(self.tmp), 'BUZZ_PRIVATE_KEY': 'never-child', 'LARKSUITE_CLI_CONFIG_DIR': '/personal/global'}, runner=runner)
         return client, runner
 
+    def test_human_recording_card_preserves_minutes_link_for_workflow(self):
+        row = {'message_id': 'om_recording', 'chat_id': base.CHAT, 'create_time': '1791774832917',
+               'msg_type': 'interactive', 'sender': {'id': base.ALICE_OPEN, 'sender_type': 'user'},
+               'body': {'content': json.dumps({'header': {'title': {'tag': 'plain_text', 'content': '会议录制已完成'}},
+                'elements': [{'tag': 'div', 'fields': [{'text': {'tag': 'lark_md',
+                'content': '录制文件（妙记）: [项目站会](https://example.feishu.cn/minutes/obcnexample123?from_source=finish_recording)'}}]}]})}}
+        normalized = bc.BotLarkCli._normalize_message(row)
+        self.assertEqual(normalized['content'], '会议录制已完成\nhttps://example.feishu.cn/minutes/obcnexample123')
+        self.assertEqual(normalized['message_id'], row['message_id'])
+        self.assertEqual(normalized['sender'], row['sender'])
+        bot = copy.deepcopy(row); bot['sender'] = {'id': base.AGENT_APP, 'sender_type': 'app'}
+        self.assertEqual(bc.BotLarkCli._normalize_message(bot)['content'], '')
+
+    def test_rendered_recording_card_has_one_source_and_hidden_actions_are_ignored(self):
+        good = 'https://example.feishu.cn/minutes/obcnexample123'
+        raw = {'title': '会议录制已完成', 'elements': [[{'tag': 'a', 'href': good}],
+               {'tag': 'action', 'value': {'url': 'https://example.feishu.cn/minutes/hidden'}}]}
+        self.assertEqual(bc.recording_card_text(raw), '会议录制已完成\n' + good)
+        raw['elements'][0].append({'tag': 'a', 'href': 'https://example.feishu.cn/minutes/another'})
+        with self.assertRaises(ValueError): bc.recording_card_text(raw)
+        raw['elements'] = [raw['elements'][1]]
+        with self.assertRaises(ValueError): bc.recording_card_text(raw)
+
+    def test_recording_card_does_not_execute_actions_or_accept_foreign_minutes(self):
+        for href in ('https://example.feishu.cn.evil.test/minutes/obcnexample123',
+                     'javascript:alert(1)', 'https://example.feishu.cn/docx/doc123',
+                     'https://example.feishu.cn/minutes/obcnexample123%2fother',
+                     'https://example.feishu.cn:443/minutes/obcnexample123',
+                     'https://example.feishu.cn/minutes/real)untrusted_suffix',
+                     'prefix https://example.feishu.cn/minutes/real'):
+            row = {'create_time': '1791774832917', 'msg_type': 'interactive',
+                   'sender': {'id': base.ALICE_OPEN, 'sender_type': 'user'},
+                   'body': {'content': json.dumps({'title': '会议录制已完成',
+                    'elements': [[{'tag': 'a', 'text': '查看', 'href': href}]]})}}
+            with self.subTest(href=href), self.assertRaises(ValueError):
+                bc.BotLarkCli._normalize_message(row)
+
+    def test_private_member_notice_uses_own_bot_profile_for_send_and_readback(self):
+        mid = 'om_private000000000000000000000001'
+        text = f'频道 buzz://channel/{base.CHANNEL}'
+        client, runner = self.client([
+            {'message_id': mid}, {'items': [{'message_id': mid, 'chat_type': 'p2p',
+            'sender': {'id': base.AGENT_APP}, 'msg_type': 'text',
+            'body': {'content': json.dumps({'text': text})}}]}])
+        self.assertEqual(client.send_private(base.union_of(base.EXTRA_OPEN), text, 'same-key', base.AGENT_APP), mid)
+        self.assertEqual(len(runner.calls), 2)
+        for argv, options in runner.calls:
+            self.assertEqual(argv[:2], [bc.NODE, bc.CLI_ENTRY])
+            self.assertEqual(argv[argv.index('--as') + 1], 'bot')
+            self.assertEqual(argv[argv.index('--profile') + 1], 'sync-agent')
+            self.assertNotIn('BUZZ_PRIVATE_KEY', options['env'])
+            self.assertEqual(options['env']['LARKSUITE_CLI_CONFIG_DIR'], str(self.tmp / 'bot-cfg'))
+        argv = runner.calls[0][0]
+        self.assertEqual(json.loads(argv[argv.index('--params') + 1]), {'receive_id_type': 'union_id'})
+        self.assertEqual(json.loads(argv[argv.index('--data') + 1])['receive_id'], base.union_of(base.EXTRA_OPEN))
+
     def test_bot_member_request_preserves_buckets_full_pagination_and_bot_open_ids(self):
         client, runner = self.client([
             {'users': [{'member_id': base.union_of(base.OWNER_OPEN), 'name': 'Owner'}], 'user_total': 1, 'has_more': False, 'truncations': []},

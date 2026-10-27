@@ -7,8 +7,10 @@ description: 给现有服务加 DB schema migration（建表 / 加列 / 改索�
 
 ## CN 迁移能力门禁
 
-当前 CN 路由见 `references/cn-tencent-migration.md`：prod 为 `cn-k8s`（100014919455），
-staging/tech-service 为 `cn-tke-staging` / `cn-tke-tech-service`（100052802231）。
+当前 CN 路由见 `references/cn-tencent-migration.md`：`prod-cn` / `prod-cn-tke` 仍到
+`cn-k8s`（100014919455/cn-main）；AWS prod-cn 迁入专用 `prod-cn-tke-2231` 到
+`cn-tke-prod`（100052802231/cn-prod）。staging/tech-service 为
+`cn-tke-staging` / `cn-tke-tech-service`（100052802231）；能力按精确集群核验。
 AWS CN 已退役。下文 AWS shared-middleware 的已上线证明不能覆盖新 TKE；生成 `Database` /
 `KafkaScramCredential` 前必须核验精确目标的 served API、Composition/ProviderConfig、共享实例、
 Vault writer/reader 和 per-app 凭据交付，缺任一证据则 STOP + Ops Todo。消费策略仍适用，
@@ -55,6 +57,12 @@ AWS 托管资源 recipe 仅用于 `cloud=aws`；腾讯云请求转对应原生�
 这里的“继续”不豁免下文的 Secret 字段、migration binary 与同步时序检查。
 **engine=aurora / mariadb / documentdb / scylla / clickhouse**：kind:Database 消费 Composition 未落地 → STOP 产 Ops Todo（其中 documentdb/
 clickhouse 共享实例已部署、仅消费层未落地），**不要**手搓 shared-root 或 `staging-{region}/shared-middleware/` 路径。
+
+## 运行入口前置
+
+先按 `references/runtime-target.md` 解析 `$target.runtime_source_path` 等准确运行身份；
+已有应用读取真实 Application，新建候选使用父流程明确传入的入口。缺少证明时 STOP，
+不得按 keyword 猜目录。本文原有云厂商、资源、namespace 和权限门禁仍先行适用。
 
 ## Step 1. 验证 migration binary 契约
 
@@ -122,13 +130,13 @@ clickhouse 共享实例已部署、仅消费层未落地），**不要**手搓 s
       `{{migration_command}}=`（如 `/usr/local/bin/{{app}}-migrate`）、
       `{{envfrom_block}}=`（按 `$envfrom_refs` 渲染）
   - 默认复用主应用 image，让 Application Image Updater 的主 image override 同时更新 Rollout 和 Job；只有在 CI 已经构建并推送独立 migrate image、Application annotations 与 recovery seed 也配置了第二个 alias 时，才把模板里的 `image` 改为独立 migrate image
-  - 写到 `k8s/overlays/{$target.env_keyword}/migration-job.yaml`
+  - 写到 `{$target.runtime_source_path}/migration-job.yaml`
   - 加到 `kustomization.yaml` resources
 
 [validate]
   - 文件存在
   - YAML 可解析
-  - `kustomize build k8s/overlays/{$target.env_keyword}/` 成功
+  - `kustomize build {$target.runtime_source_path}/` 成功
   - Job 有 `argocd.argoproj.io/hook: PreSync`
   - Job 有 `argocd.argoproj.io/hook-delete-policy: BeforeHookCreation`
       （`BeforeHookCreation` 让下次 sync 自动删上次的 Job；
@@ -137,7 +145,7 @@ clickhouse 共享实例已部署、仅消费层未落地），**不要**手搓 s
   - Job spec `serviceAccountName` 跟精确 target 渲染后主应用的有效 ServiceAccount 一致；未指定时按 Kubernetes 的 `default` 语义比较，不按云厂商或 IRSA 文件存在性推断
 
 [output]
-  - k8s/overlays/{$target.env_keyword}/migration-job.yaml
+  - {$target.runtime_source_path}/migration-job.yaml
 
 ## Step 4. 验证时序约束
 
@@ -163,7 +171,11 @@ clickhouse 共享实例已部署、仅消费层未落地），**不要**手搓 s
   - Step 4 通过
 
 [action]
-  - `bash "$skill_root/validators/validate.sh" k8s/`
+  - 对 `{$target.runtime_source_path}` 的源文件运行严格 app 门禁；另将该入口完整
+    `kustomize build` 结果写入独立临时目录，对完整 render 运行
+    `bash "$skill_root/validators/validate.sh" --repo-context app <render-directory>`。
+    不能固定扫描根 `k8s/` 而遗漏 `backend/k8s/...`；原 namespace、Secret、hook
+    与仓库边界规则仍适用。
 
 [validate]
   - 退出 0

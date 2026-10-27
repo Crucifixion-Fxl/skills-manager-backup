@@ -1,0 +1,24 @@
+{
+  "schema_version": "1.1",
+  "conclusion": "审查未完成",
+  "score": "N/A",
+  "should_pass": false,
+  "scope": "Synthetic compatibility check: packaging/final.pdf at fixed head; not a real MR review.",
+  "documentation": "本次要求检查最终PDF语言准确性。",
+  "quality": "NOT_CHECKED：文字已转曲，无可读预览，低置信OCR不能证明正确。",
+  "e2e": "实际最终PDF内容尚未核验，源文案正确不能替代最终导出。",
+  "red_lines": [],
+  "incomplete_reasons": [
+    "最终PDF页面未取得可靠文字或视觉证据。"
+  ],
+  "suggestions": [],
+  "tdd_assessment": {
+    "level": "N/A",
+    "applicability": "not_applicable",
+    "summary": "设计材料审查，不提供代码TDD结论。",
+    "evidence": [
+      "Synthetic fixture: cases.json outlined"
+    ],
+    "gaps": []
+  }
+}

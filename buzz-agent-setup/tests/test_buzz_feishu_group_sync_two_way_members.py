@@ -541,18 +541,65 @@ class FeishuAdds(TwoWay):
         self.assertEqual(w.member_writes(), [(9000, BOB_PK, "member")])
         self.assertIn({"pubkey": BOB_PK, "role": "member"}, w.members)
 
-    def test_a_person_nobody_can_place_stays_and_is_told_once(self):
-        """L2-1-FGS-826: 拉进群的人认不出（没绑定，或本机没见过）：不写 relay，他留在群里；owner 的 bot 在群里提示一次去绑定（链接是 bridge 的
-        /bind/），报告 members_unresolved；之后的轮次不再提示。"""
+    def test_unresolved_member_gets_one_private_notice_and_no_group_notice(self):
         w = self.world()
         env = self.settled(w)
         w.users.add(EXTRA_OPEN)
-        report = env.round(w)
-        env.round(w)
+        with mock.patch.object(FGS.LarkCli, "send_private", create=True, return_value="om_private") as send:
+            report = env.round(w)
+            env.round(w)
         self.assertEqual(w.relay_write_attempts, [])
         self.assertIn(EXTRA_OPEN, w.users)
         self.assertEqual(report["members_unresolved"], 1)
-        self.assertEqual(len(self.feishu_notes(w, f"{API_ORIGIN}/bind/")), 1)
+        self.assertEqual(self.feishu_notes(w, f"{API_ORIGIN}/bind/"), [])
+        send.assert_called_once()
+        recipient, text, key, sender_app = send.call_args.args
+        self.assertEqual(recipient, union_of(EXTRA_OPEN))
+        self.assertEqual(sender_app, DESK_APP)
+        self.assertIn(f"{API_ORIGIN}/bind/", text)
+        self.assertIn(f"buzz://channel/{CHANNEL}", text)
+        self.assertIn(CHANNEL, text)
+        self.assertLessEqual(len(key), 50)
+
+    def test_private_notice_failure_stays_quiet_and_is_not_retried(self):
+        w = self.world()
+        env = self.settled(w)
+        w.users.add(EXTRA_OPEN)
+        with mock.patch.object(FGS.LarkCli, "send_private", create=True,
+                               side_effect=FGS.CliError("private send", -1, "unavailable", definite=False)) as send:
+            report = env.round(w)
+            env.round(w)
+        send.assert_called_once()
+        self.assertEqual(self.feishu_notes(w, f"{API_ORIGIN}/bind/"), [])
+        self.assertEqual(report["member_notices_private_unconfirmed"], 1)
+        self.assertEqual(w.relay_write_attempts, [])
+
+    def test_unknown_private_notice_is_not_repeated_after_normal_note_ttl(self):
+        w = self.world()
+        env = self.settled(w)
+        w.users.add(EXTRA_OPEN)
+        with mock.patch.object(FGS.LarkCli, "send_private", create=True,
+                               side_effect=FGS.CliError("private send", -1, "unknown", definite=False)) as send:
+            env.round(w)
+            state = env.state()
+            private = f"unresolved-private:{user_key(EXTRA_OPEN)}"
+            state["member_notes"][private] = int(NOW.timestamp()) - FGS.MEMBER_NOTE_TTL - 1
+            state["member_notes"]["protected:another"] = int(NOW.timestamp())
+            write_owner_only(env.state_dir / FGS.STATE_FILE, json.dumps(state))
+            env.round(w)
+            self.assertIn(private, env.state()["member_notes"])
+        send.assert_called_once()
+        self.assertEqual(self.feishu_notes(w, f"{API_ORIGIN}/bind/"), [])
+
+    def test_email_mode_does_not_reuse_owner_open_id_for_desk_dm(self):
+        w = self.world()
+        env = self.settled(w, self.env(identity="email"))
+        w.users.add(EXTRA_OPEN)
+        with mock.patch.object(FGS.LarkCli, "send_private", create=True) as send:
+            report = env.round(w)
+        send.assert_not_called()
+        self.assertEqual(self.feishu_notes(w, f"{API_ORIGIN}/bind/"), [])
+        self.assertEqual(report["member_notices_private_unconfirmed"], 1)
 
     def test_the_shared_cache_places_people_from_other_channels(self):
         """L2-1-FGS-827: 配了 people_cache_file：每轮把本频道认得的人写进这份全机共享的缓存（0600）；另一个频道同步写进去的人（OUTSIDER）在这里
@@ -1229,3 +1276,36 @@ class OtherMirrors(TwoWay):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PrivateNoticeTransport(unittest.TestCase):
+    def test_bot_posts_union_id_and_reads_back_its_private_text(self):
+        cli = FGS.LarkCli("unused", {})
+        text = f"绑定入口 {API_ORIGIN}/bind/\n频道 buzz://channel/{CHANNEL}"
+        mid = "om_private000000000000000000000001"
+        row = {"message_id": mid, "chat_type": "p2p", "sender": {"id": DESK_APP},
+               "msg_type": "text", "body": {"content": json.dumps({"text": text})}}
+        with mock.patch.object(cli, "call", side_effect=[{"message_id": mid}, {"items": [row]}]) as call:
+            self.assertEqual(cli.send_private(union_of(EXTRA_OPEN), text, "member-dm-stable", DESK_APP), mid)
+        post = call.call_args_list[0].args[1]
+        get = call.call_args_list[1].args[1]
+        self.assertEqual(post[:3], ["api", "POST", "/open-apis/im/v1/messages"])
+        self.assertEqual(json.loads(post[post.index("--params") + 1]), {"receive_id_type": "union_id"})
+        data = json.loads(post[post.index("--data") + 1])
+        self.assertEqual(data["receive_id"], union_of(EXTRA_OPEN))
+        self.assertEqual(data["uuid"], "member-dm-stable")
+        self.assertEqual(json.loads(data["content"]), {"text": text})
+        self.assertEqual(post[-2:], ["--as", "bot"])
+        self.assertEqual(get, ["api", "GET", f"/open-apis/im/v1/messages/{mid}", "--as", "bot"])
+
+    def test_wrong_sender_group_or_content_cannot_be_acknowledged(self):
+        for bad in ({"sender": {"id": OWNER_APP}}, {"chat_type": "group"},
+                    {"body": {"content": json.dumps({"text": "another"})}}):
+            with self.subTest(bad=bad):
+                cli = FGS.LarkCli("unused", {})
+                mid = "om_private000000000000000000000001"
+                row = {"message_id": mid, "chat_type": "p2p", "sender": {"id": DESK_APP},
+                       "msg_type": "text", "body": {"content": json.dumps({"text": "expected"})}, **bad}
+                with mock.patch.object(cli, "call", side_effect=[{"message_id": mid}, {"items": [row]}]):
+                    with self.assertRaises(FGS.CliError):
+                        cli.send_private(union_of(EXTRA_OPEN), "expected", "same-key", DESK_APP)

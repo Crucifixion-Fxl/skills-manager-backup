@@ -15,8 +15,10 @@ REPO_CONTEXT="auto"
 PLATFORM_SOURCE=""
 OBJECTBUCKET_TARGET=""
 DATABASE_INVENTORY=""
+DATABASE_COMPOSITION_REVISIONS=""
+VM_SCRAPE_ARGS=()
 DIR=""
-usage="usage: $0 [--repo-context <auto|app|k8s|argocd-apps|crossplane-infra>] [--platform-source <DEV/k8s-component-path>] [--objectbucket-target <target>] [--database-inventory <target-DatabaseList.json>] <directory>"
+usage="usage: $0 [--repo-context <auto|app|k8s|argocd-apps|crossplane-infra>] [--platform-source <DEV/k8s-component-path>] [--objectbucket-target <target>] [--database-inventory <target-DatabaseList.json>] [--database-composition-revisions <target-CompositionRevisionList.json>] [--vm-scrape-profile eu-prod-vm-stack-v1 --vm-scrape-cluster <cluster> --vm-scrape-source-revision <HEAD-SHA>] <directory>"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -36,6 +38,14 @@ while [[ $# -gt 0 ]]; do
       PLATFORM_SOURCE="$2"
       shift 2
       ;;
+    --vm-scrape-profile|--vm-scrape-source-revision|--vm-scrape-cluster)
+      if [[ $# -lt 2 || -z "$2" ]]; then
+        echo "FAIL: VM scrape profile options require a non-empty value" >&2
+        exit 2
+      fi
+      VM_SCRAPE_ARGS+=("$1" "$2")
+      shift 2
+      ;;
     --objectbucket-target)
       if [[ $# -lt 2 ]]; then
         echo "$usage" >&2
@@ -44,16 +54,20 @@ while [[ $# -gt 0 ]]; do
       OBJECTBUCKET_TARGET="$2"
       shift 2
       ;;
-    --database-inventory)
+    --database-inventory|--database-composition-revisions)
       if [[ $# -lt 2 ]]; then
         echo "$usage" >&2
         exit 2
       fi
       if [[ -z "$2" ]]; then
-        echo "FAIL: --database-inventory requires a non-empty path" >&2
+        echo "FAIL: $1 requires a non-empty path" >&2
         exit 2
       fi
-      DATABASE_INVENTORY="$2"
+      if [[ "$1" == "--database-inventory" ]]; then
+        DATABASE_INVENTORY="$2"
+      else
+        DATABASE_COMPOSITION_REVISIONS="$2"
+      fi
       shift 2
       ;;
     --*)
@@ -174,12 +188,19 @@ for c in "${checks[@]}"; do
   echo "==> ${c} on ${DIR}"
   if [[ "$c" == "check_vault_paths.py" && -n "$PLATFORM_SOURCE" ]]; then
     command=(python3 "$script" "$DIR" --platform-source "$PLATFORM_SOURCE")
-  elif [[ "$c" == "check_repo_boundary.py" || "$c" == "check_victoriametrics_scrapes.py" ]]; then
+  elif [[ "$c" == "check_victoriametrics_scrapes.py" ]]; then
+    command=(python3 "$script" "$DIR" --repo-context "$REPO_CONTEXT")
+    if [[ ${#VM_SCRAPE_ARGS[@]} -gt 0 ]]; then
+      command+=("${VM_SCRAPE_ARGS[@]}")
+    fi
+  elif [[ "$c" == "check_repo_boundary.py" ]]; then
     command=(python3 "$script" "$DIR" --repo-context "$REPO_CONTEXT")
   elif [[ "$c" =~ ^check_(namespace_pattern|object_bucket)\.py$ && -n "$OBJECTBUCKET_TARGET" ]]; then
     command=(python3 "$script" "$DIR" --objectbucket-target "$OBJECTBUCKET_TARGET")
-  elif [[ "$c" == "check_db_resource_contracts.py" && -n "$DATABASE_INVENTORY" ]]; then
-    command=(python3 "$script" "$DIR" --inventory "$DATABASE_INVENTORY")
+  elif [[ "$c" == "check_db_resource_contracts.py" ]]; then
+    command=(python3 "$script" "$DIR")
+    [[ -z "$DATABASE_INVENTORY" ]] || command+=(--inventory "$DATABASE_INVENTORY")
+    [[ -z "$DATABASE_COMPOSITION_REVISIONS" ]] || command+=(--composition-revisions "$DATABASE_COMPOSITION_REVISIONS")
   else
     command=(python3 "$script" "$DIR")
   fi

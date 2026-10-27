@@ -35,7 +35,7 @@ A4x 按 **Ops / Builder** 分域管理 Vault。实例和服务集群会随迁移
 | US | `vault-us.builder.addx.live` | 同集群优先 `http://vault-builder-active.vault-builder.svc.cluster.local:8200` | us-staging 等 Builder 域集群 |
 | EU | `vault-eu.builder.addx.live` | 同集群优先 `http://vault-builder-active.vault-builder.svc.cluster.local:8200` | eu-staging 等 Builder 域集群 |
 | CN staging | 不从 Builder tech-service 域名推断 staging 入口 | 新 staging 的 `vault-backend` 指向 `http://vault-active.vault.svc:8200`；这是 Pod 内地址，本机须先发现服务再 port-forward 或使用已核验的登录入口 | 腾讯云 `100052802231` / cn-staging；应用 registry 见 `k8s/builder/cn-staging` |
-| CN tech-service（目标） | `vault-cn.builder.addx.live`（`pending-cutover`） | 新 TKE 的 Builder 部署、Store 和集群内地址均待核验 | 腾讯云 `100052802231` / cn-tech-service 的目标归属；不能据旧 URL/DNS 宣称已迁移 |
+| CN tech-service | `vault-cn.builder.addx.live`（2026-10-19 health / Ingress 已核验） | Builder Store、集群内地址和认证消费链路仍待核验 | 腾讯云 `100052802231` / cn-tech-service 有对应 Ingress；健康检查不证明身份、权限或数据迁移已验收 |
 
 > Builder 域已覆盖 CN/US/EU。`gitlab-vault-sync` 按域与部署目录管理应用 registry，不能再假设所有 CN 应用共用 `k8s/builder/cn`。新 staging 的 ArgoCD Application 已指向 `k8s/builder/cn-staging`，需继续读取其 Kustomize 引用以定位实际 registry。不要自行复制旧 registry 或密钥。
 
@@ -49,10 +49,10 @@ A4x 按 **Ops / Builder** 分域管理 Vault。实例和服务集群会随迁移
 
 来源为 `k8s/clusters/<完整集群名>/cicd/external-secrets-config/cluster-secret-store.yaml` 和 `argocd-apps/tencent-100052802231-cn-staging/gitlab-vault-sync-builder-cn-staging.yaml`。Git 声明不等于认证已可用，写入前核实实际 SecretStore、registry、挂载和路径。
 
-用户指定 `vault-cn.builder.addx.live` 为 cn-tech-service Builder **目标入口，待切换**；
+cn-tech-service Builder 入口 `vault-cn.builder.addx.live` 已于 2026-10-19 核验 health HTTP 200、initialized=true、sealed=false，目标 TKE 存在对应 Ingress，见 [准入回执](../../delivery/cicd-developer/references/cn-tech-service-admission-2026-10-19.md)。
 它与上述 Ops `vault-backend` 是两个身份/权限域，不能把 Ops server 改为 Builder。
 旧 Builder URL 的存在不证明实例已迁入 TKE，旧 `vault-cn-internal.builder.addx.live` 也不是新集群默认入口。
-[固定声明与迁移边界](../../infrastructure/k8s-ops/references/cn-tencent-inventory.md#cn-tech-service-目标域名待切换)
+[已核验入口与能力边界](../../infrastructure/k8s-ops/references/cn-tencent-inventory.md#cn-tech-service-入口已核验2026-10-19)
 保留 AWS Builder 历史回执及新 tech-service Ops 的真实声明；执行前须核验 Builder 部署归属、
 registry、登录方式和 Store 的完整 auth 合同，未核实就暂停，不自动连接旧 AWS 或切到 Ops。
 域名更新不改 Ops 的 `jwt-tke-cn-tech-service-2231`、KV 前缀、role/SA/audience；
@@ -102,7 +102,7 @@ KV engine 统一：`secret/` (KV v2)。
    - Ops Vault 示例: `https://vault-us-new.addx.live/ui`、`https://vault-eu.addx.live/ui`、`https://vault-cn.addx.live/ui`
    - US/EU Builder Vault 示例: `https://vault-{us,eu}.builder.addx.live/ui`
    - CN staging：先核验 `100052802231` 目标集群的 `vault-backend`、实际 Service 和认证配置，再使用该实例已核验的登录入口；若只有集群内地址，按下方「CN staging 登录入口核验」建立本机转发。不能回退到旧 CN Builder 域名。
-   - CN tech-service Builder：目标 UI 为 `https://vault-cn.builder.addx.live/ui`，当前 `pending-cutover`。先核实新 TKE 实例、登录方式/回调和权限域；未核实前不发起登录，不将它替换为 Ops `vault-cn.addx.live`。
+   - CN tech-service Builder：UI 入口为 `https://vault-cn.builder.addx.live/ui`；health / Ingress 已核验，但不代表交互登录已通过。先核实新 TKE 实例、登录方式/回调和权限域；未核实前不发起登录，不将它替换为 Ops `vault-cn.addx.live`。
 2. 选认证方式登录：
    - 运维用 userpass（Method → Username）
    - 开发者用 OIDC 飞书 SSO（Method → OIDC；如实例要求 Role，使用平台提供的通用 OIDC role，不再手建每 app role）

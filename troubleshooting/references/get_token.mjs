@@ -8,7 +8,8 @@
  * 3. 用户点击授权 → 飞书重定向到 localhost 带上 code
  * 4. 用 code 调微应用平台 prepare → confirm → 拿到 JWT
  *
- * 用法: node get_token.mjs [us|eu]
+ * 用法: node get_token.mjs [us|eu|staging-us|staging-eu] [--force-login]
+ * stdout 仅返回通过目标身份校验的 JWT；不得裸运行或自动替换已注入的凭据。
  */
 import { spawn } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
@@ -18,6 +19,7 @@ import { homedir, platform } from 'node:os';
 import path from 'node:path';
 
 const REGION = process.argv[2] || 'us';
+const FORCE_LOGIN = process.argv.slice(3).includes('--force-login');
 const API_BASE_URL = `https://troubleshooting-${REGION}.addx.live`;
 const PLATFORM_BASE_URL = 'https://micro-app-platform-us.addx.live';
 const TOKEN_CACHE_FILE = path.join(homedir(), `.troubleshooting-token-${REGION}`);
@@ -28,6 +30,49 @@ const OAUTH_CALLBACK_PORT = 9876;
 const OAUTH_REDIRECT_URI = `http://localhost:${OAUTH_CALLBACK_PORT}/callback`;
 const FEISHU_AUTH_URL = `https://open.feishu.cn/open-apis/authen/v1/index?client_id=${FEISHU_APP_ID}&response_type=code&redirect_uri=${encodeURIComponent(OAUTH_REDIRECT_URI)}`;
 const TIMEOUT = 120_000;
+const MAX_RESPONSE_BYTES = 256 * 1024;
+
+// 只有本脚本生成的固定消息允许进入日志，不能转发上游正文/异常。
+class AuthError extends Error {}
+function safeErrorMessage(err) {
+  return err instanceof AuthError ? err.message : '认证失败，请检查网络、权限或响应契约';
+}
+
+function readJsonResponse(res) {
+  return new Promise((resolve, reject) => {
+    let size = 0;
+    const chunks = [];
+    res.on('error', () => reject(new AuthError('认证响应读取失败')));
+    res.on('aborted', () => reject(new AuthError('认证响应中断')));
+    res.on('data', (chunk) => {
+      size += Buffer.byteLength(chunk);
+      if (size > MAX_RESPONSE_BYTES) {
+        reject(new AuthError('认证响应超过大小限制'));
+        res.destroy();
+        return;
+      }
+      chunks.push(Buffer.from(chunk));
+    });
+    res.on('end', () => {
+      if (size > MAX_RESPONSE_BYTES) return;
+      try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8'))); }
+      catch { reject(new AuthError('认证响应不是有效 JSON')); }
+    });
+  });
+}
+
+function validIdentity(body) {
+  if (!body || typeof body !== 'object') return false;
+  // 兼容已有 success envelope 与 a4x APIResponse；显式失败不能被另一字段覆盖。
+  const hasSuccess = Object.hasOwn(body, 'success');
+  const hasErrorCode = Object.hasOwn(body, 'error_code');
+  if (!hasSuccess && !hasErrorCode) return false;
+  if (hasSuccess && body.success !== true) return false;
+  if (hasErrorCode && body.error_code !== '') return false;
+  if (Object.hasOwn(body, 'status_code') && body.status_code !== 200) return false;
+  const userId = body.result?.data?.userid;
+  return typeof userId === 'string' && userId.trim().length > 0;
+}
 
 // ─── Token 缓存 ─────────────────────────────────────────────
 function readCachedToken() {
@@ -41,18 +86,35 @@ function writeCachedToken(token) {
   try { writeFileSync(TOKEN_CACHE_FILE, token, 'utf-8'); } catch {}
 }
 
-/** 用 /api/current 验证 Token 是否仍然有效 */
+/** 只有明确 HTTP 401 返回 false；其他失败抛错，不触发重新登录。 */
 function validateToken(token) {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const req = https.get(`${API_BASE_URL}/api/current`, {
       headers: { Authorization: `Bearer ${token}` },
       timeout: 5000,
     }, (res) => {
-      res.resume();
-      resolve(res.statusCode === 200);
+      if (res.statusCode === 401) {
+        res.on('error', () => {});
+        res.resume();
+        resolve(false);
+        return;
+      }
+      if (res.statusCode !== 200) {
+        res.on('error', () => {});
+        res.resume();
+        reject(new AuthError(`身份校验 HTTP ${res.statusCode}；停止，不重新登录`));
+        return;
+      }
+      readJsonResponse(res).then((body) => {
+        if (!validIdentity(body)) throw new AuthError('身份校验业务失败或响应契约不匹配');
+        resolve(true);
+      }).catch(reject);
     });
-    req.on('error', () => resolve(false));
-    req.on('timeout', () => { req.destroy(); resolve(false); });
+    req.on('error', () => reject(new AuthError('身份校验网络错误；停止，不重新登录')));
+    req.on('timeout', () => {
+      reject(new AuthError('身份校验超时；停止，不重新登录'));
+      req.destroy();
+    });
   });
 }
 
@@ -81,14 +143,19 @@ function httpsPost(url, data) {
       headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
       timeout: 10_000,
     }, (res) => {
-      let result = '';
-      res.on('data', (c) => (result += c));
-      res.on('end', () => {
-        try { resolve(JSON.parse(result)); } catch { reject(new Error(`Invalid JSON: ${result.substring(0, 200)}`)); }
-      });
+      if (res.statusCode !== 200) {
+        res.on('error', () => {});
+        res.resume();
+        reject(new AuthError(`登录接口 HTTP ${res.statusCode}`));
+        return;
+      }
+      readJsonResponse(res).then(resolve, reject);
     });
-    req.on('error', reject);
-    req.on('timeout', () => { req.destroy(); reject(new Error('Request timeout')); });
+    req.on('error', () => reject(new AuthError('登录接口网络错误')));
+    req.on('timeout', () => {
+      reject(new AuthError('登录接口超时'));
+      req.destroy();
+    });
     req.write(body);
     req.end();
   });
@@ -106,9 +173,9 @@ async function exchangeCodeForToken(code) {
     redirect_uri: OAUTH_REDIRECT_URI,
   });
 
-  const prepareToken = prepareResp.data?.prepare_token;
-  if (!prepareToken) {
-    throw new Error(`prepare 失败: ${JSON.stringify(prepareResp).substring(0, 200)}`);
+  const prepareToken = prepareResp?.data?.prepare_token;
+  if (typeof prepareToken !== 'string' || !prepareToken.trim() || prepareResp.success === false) {
+    throw new AuthError('prepare 失败：响应缺少有效登录凭据');
   }
 
   // Step 2: confirm
@@ -117,9 +184,9 @@ async function exchangeCodeForToken(code) {
     prepare_token: prepareToken,
   });
 
-  const token = confirmResp.data?.token;
-  if (!token) {
-    throw new Error(`confirm 失败: ${JSON.stringify(confirmResp).substring(0, 200)}`);
+  const token = confirmResp?.data?.token;
+  if (typeof token !== 'string' || !token.trim() || token.startsWith('tmt_') || confirmResp.success === false) {
+    throw new AuthError('confirm 失败：响应缺少有效 JWT');
   }
 
   return token;
@@ -157,7 +224,7 @@ async function acquireTokenViaOAuth() {
           process.stderr.write('INFO: Token 获取成功\n');
           done(token);
         } catch (err) {
-          process.stderr.write(`ERROR: Token 换取失败: ${err.message}\n`);
+          process.stderr.write(`ERROR: Token 换取失败: ${safeErrorMessage(err)}\n`);
           done(null);
         }
         return;
@@ -192,21 +259,30 @@ async function acquireTokenViaOAuth() {
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 async function main() {
+  if (!['us', 'eu', 'staging-us', 'staging-eu'].includes(REGION) ||
+      process.argv.slice(3).some((arg) => arg !== '--force-login')) {
+    throw new AuthError('用法：get_token.mjs [us|eu|staging-us|staging-eu] [--force-login]');
+  }
+  if (process.env.TROUBLESHOOTING_TOKEN) {
+    throw new AuthError('已有注入凭据；本脚本不会自动将其替换为 JWT，请先确认凭据来源和登录授权');
+  }
   // 第 1 步：检查缓存 Token
-  const cached = readCachedToken();
+  const cached = FORCE_LOGIN ? null : readCachedToken();
   if (cached) {
+    if (cached.startsWith('tmt_')) throw new AuthError('JWT 缓存中存在 PAT；停止，不发送凭据');
     const valid = await validateToken(cached);
     if (valid) {
       process.stdout.write(cached);
       return;
     }
-    process.stderr.write('INFO: 缓存 Token 已过期，重新获取\n');
+    process.stderr.write('INFO: 缓存 JWT 返回 401，尝试一次重新登录\n');
   }
 
   // 第 2 步：飞书 OAuth 授权流程
   const token = await acquireTokenViaOAuth();
 
   if (token) {
+    if (!await validateToken(token)) throw new AuthError('新 JWT 未通过目标身份校验；停止，不重试');
     writeCachedToken(token);
     process.stdout.write(token);
   } else {
@@ -216,6 +292,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  process.stderr.write(`ERROR: ${err.message}\n`);
+  process.stderr.write(`ERROR: ${safeErrorMessage(err)}\n`);
   process.exit(1);
 });

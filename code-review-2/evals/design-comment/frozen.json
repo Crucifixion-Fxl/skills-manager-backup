@@ -1,0 +1,10 @@
+{
+  "baseline": "9b3fc398a681f1e9e2f4a0e5982fb45158383c75",
+  "type": "deterministic renderer contract fixtures, not agent behavioral results",
+  "files": {
+    "technical.json": "89025c76f7ddbeab34698e921d9a5a01ec95f193369b4b614b24d97a1c5b9859",
+    "design.json": "1b3bf756f3e8330df28e3de6400bec7d60b2a553c767ea0ab2ef370ee523f5dd"
+  },
+  "baseline_observation": "18 initial deterministic cases: 17 failed, 1 passed before implementation; raw baseline-pytest.json. Four later safety/receipt/blocking cases and finding impact/blocking refinement were added after baseline and are not claimed as baseline cases.",
+  "technical_golden_sha256": "2357a655f40b69f18f2a1545d3bf9363b4bfe7879b9d5bbee40f71768d5be3b6"
+}

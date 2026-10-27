@@ -1,0 +1,14 @@
+{
+  "type": "Synthetic caller-evidence behavior tasks; no actual PDF I/O or production claims",
+  "files": {
+    "behavior-visible/injected-route.json": "6ba868223426ff3757224285154a05a172cc72986c7e107559c6090c9027950c",
+    "behavior-visible/technical-screenshot.json": "1bf0492348780a55e1bc39e617770045cd96d83dba03017a7d62716a157915fb",
+    "behavior-visible/missing-binary.json": "f86b411b13d2709b2e6d5ce9ce1ad0e23e2354695a4e7ce88a66d5c56dae385a",
+    "behavior-visible/unit-ui.json": "90c3c1af60c30cbe925b1219c9c9d297595b27434f9ef20fdb3363ce79b0e15f",
+    "behavior-visible/sample-scope.json": "281d164d98f98b7535d0e94db699114214bd0fe0db52c923645e17ade34397ef",
+    "behavior-visible/design-stale-pdf.json": "aa0378b0da08e20ad4dbc8eb901b3d73ed89bfed7f3d22ada08c27ae13d40ad7",
+    "behavior-visible/mixed-export-code.json": "b13e5767a655c79f9cb01d8980270a960c5f69b8aa11ad48fc8c783c0bd8819a",
+    "behavior-visible/correct-design-stage.json": "3a1eb07f9357313432f42f9ffb5831e17a36a9f6e0b120db17f80862f3817229",
+    "behavior-oracle/rubric.json": "83e4ac768813e366c1b30f6ae5f5061e0cfd7a8fb74a205b76e47d2cb2856b43"
+  }
+}

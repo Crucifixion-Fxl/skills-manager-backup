@@ -1,0 +1,28 @@
+# 单次批准例外（engineering/skills cicd-developer hard-rule 36）：本文件按完整字节 SHA-256
+# 闭合，任何改动都需要重新走规则更新。见 cicd-developer
+# references/approved-exceptions/us-prod-qdrant-monitoring-key.md。
+# qdrant 只读监控 key：Vault owner path 由 ALGO/flywheel!409 的 PushSecret
+# flywheel-qdrant-monitoring-key-push（prod-us，IfNotExists）建立；prod-us/pre-us
+# 两个 namespace 与老 Prometheus 挂载的 qdrant-monitoring-key 是同一个值。
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: qdrant-monitoring-key
+  namespace: victoria-metrics
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  labels:
+    app.kubernetes.io/part-of: victoria-metrics
+    monitoring.addx.io/purpose: qdrant-metrics-auth
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: vault-backend
+    kind: ClusterSecretStore
+  target:
+    name: qdrant-monitoring-key
+    creationPolicy: Owner
+    deletionPolicy: Retain
+  data:
+    - secretKey: read-only-api-key
+      remoteRef: {key: prod/qdrant/application/flywheel-aws/monitoring-apikey, property: read-only-api-key, conversionStrategy: Default, decodingStrategy: None, metadataPolicy: None}

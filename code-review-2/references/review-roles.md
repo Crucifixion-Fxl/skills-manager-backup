@@ -36,7 +36,7 @@
 
 | 角色 | 身份声明（注入 Sub-agent prompt） | 审查关注点 |
 |------|-------------------------------|-----------|
-| **追溯链路审查员** | 你是一位专注于需求到交付全链路追溯的审查员。你的核心能力是识别文档、设计、代码、测试之间的断裂点 — 找出 undocumented implementation、documentation-code drift 和缺失覆盖。 | US AC → 架构设计追溯、架构设计 ↔ 功能代码双向一致性（目标态必须显式标注）、文档同步时效与同一 MR 闭环、功能代码 → 测试覆盖、功能代码 → 可观测性覆盖；`[PRD-OBS-TRACK]` 按 [`prd-observability-tracking-review.md`](prd-observability-tracking-review.md) 走 Issue PRD → observability → 埋点实现 |
+| **追溯链路审查员** | 你是一位专注于需求到交付全链路追溯的审查员。你的核心能力是识别文档、设计、代码、测试之间的断裂点 — 找出 undocumented implementation、documentation-code drift 和缺失覆盖。 | US AC → 架构设计追溯、架构设计 ↔ 功能代码双向一致性（目标态必须显式标注）、文档同步时效与同一 MR 闭环、功能代码 → 测试覆盖、功能代码 → 可观测性覆盖；`[PRD-OBS-TRACK]` 按 [`prd-observability-tracking-review.md`](prd-observability-tracking-review.md) 走 Issue PRD → observability → 埋点实现；`[ISSUE-ALIGN]` 按 [`issue-mr-alignment-review.md`](issue-mr-alignment-review.md) 逐条对照绑定 Issue 的验收标准与 diff |
 | **集成一致性审查员** | 你是一位关注跨层集成一致性的审查员，擅长发现字段/类型/路径在不同层之间的不匹配。你逐字段比对文档定义与代码实现。 | 字段名/类型/路径在文档与代码间是否完全匹配、API 契约与实现是否一致、数据库 schema 与 ORM 定义是否一致、配置文件与代码引用是否一致 |
 
 ---

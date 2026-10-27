@@ -325,6 +325,35 @@ class StateStoreTests(unittest.TestCase):
         with self.assertRaises(store.StoreError):
             self.adapter.migrate_identity("bot:cli_a:union_id:v1", candidate=candidate, now=101)
 
+    def test_unresolved_private_member_note_round_trips_only_for_member_keys(self):
+        state = self.adapter.load()
+        state.binding = CHANNEL + "|oc_a"
+        notes = {
+            "unresolved:u:on_u": 100,
+            "refused:b:cli_a": 100,
+            "protected:" + HEX: 100,
+            "unresolved-private:u:on_u": 100,
+            "unresolved-private:b:cli_a": 101,
+            "unresolved-private:o:cli_a:ou_a": 102,
+        }
+        state.member_notes = dict(notes)
+        self.adapter.save(state, now=100)
+        self.assertEqual(self.adapter.load().member_notes, notes)
+
+        rejected = (
+            "unresolved-private:not-a-member",
+            "unresolved-private:",
+            "unresolved-private-extra:u:on_u",
+            "unresolved:" + HEX,
+            "private:u:on_u",
+        )
+        for key in rejected:
+            bad = self.adapter.load()
+            bad.member_notes[key] = 103
+            with self.assertRaises(store.StoreError):
+                self.adapter.save(bad, now=104)
+        self.assertEqual(self.adapter.load().member_notes, notes)
+
 
 if __name__ == "__main__":
     unittest.main()

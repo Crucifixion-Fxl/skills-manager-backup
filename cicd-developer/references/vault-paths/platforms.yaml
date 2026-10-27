@@ -28,6 +28,17 @@ platforms:
     typical_keys: [access_key_id, secret_access_key, bucket, region]
     written_by: Crossplane / Platform Admin (aws-admin-<env>)
 
+  cos:
+    covers: Tencent Cloud COS bucket-scoped CAM access credentials
+    typical_keys: [secret_id, secret_key, bucket, region]
+    written_by: Platform Admin
+    notes: |
+      Platform-issued COS credentials use secret/{env}/cos/application/{app}/{key}.
+      Preserve existing owner paths, including cluster-specific key suffixes.
+      This classification does not provision credentials, grant Vault/CAM access,
+      or imply that OIDC/CSI or long-lived keys are required for every COS workload.
+      Platform administrators maintain credentials; ESO uses independent machine policies.
+
   oci:
     covers: OCI API signing keys and Object Storage S3-compatible Customer Secret Keys
     typical_keys: [access_key, secret_key]

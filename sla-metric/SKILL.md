@@ -1,6 +1,6 @@
 ---
 name: sla-metric
-description: SLA 指标监控配置。集成 Superset 和 dapp API，完成 SLA 指标的新增、修改、查看/搜索。当用户需要配置 SLA 监控、设置指标告警阈值、查看 SLA 指标状态时使用。
+description: SLA 指标监控配置。集成 Superset、Dagster 和 dapp API，完成上游依赖发现与校验及 SLA 指标的新增、修改、查看/搜索。当用户需要配置 SLA 监控、设置指标告警阈值、查看 SLA 指标状态时使用。
 ---
 
 # sla-metric
@@ -20,6 +20,7 @@ description: SLA 指标监控配置。集成 Superset 和 dapp API，完成 SLA 
 | 系统 | 用途 | 入口（US 默认） | 认证方式 |
 |------|------|----------------|----------|
 | Superset | 指标图表创建、查询 | `superset-us.addx.live` | JWT（用户名/密码） |
+| Dagster | 上游数据资产发现、分区粒度校验 | `dagster.addx.live` | 复用 Dagster owner 的目标实例认证 |
 | dapp API | SLA 指标 CRUD | `dapp-api.addx.live` | JWT Bearer Token |
 | dapp Web | 删除、Grafana 构建、通知 | `dapp.addx.live` | 飞书 OAuth |
 | Grafana | 监控看板和告警规则 | `grafana-next.addx.live` | — |
@@ -63,6 +64,18 @@ description: SLA 指标监控配置。集成 Superset 和 dapp API，完成 SLA 
 - 无匹配分类时，提示用户前往 [dapp Web UI](https://dapp.addx.live) 新增
 - **阈值必填** — 至少配置一个告警等级（warning/critical）
 - `metric_id` 必须设值 — 自定义指标填 `0`，预定义指标填 `metric.id`
+- **`deps` 必须显式提供** — 使用下述发现结果序列化为 JSON 字符串；后端缺省为 `"[]"` 不代表已完成依赖检查
+
+### 上游数据依赖（创建前必须完成）
+
+`deps` 控制数仓上游完成后再查询 SLA 指标，与 `upstream_app_monitor_configs`（上游应用版本监控）用途不同，不能相互替代。
+
+1. 按 [上游依赖发现与校验](references/upstream-dependencies.md)，取得与最终 `metric_config`、`time_grain` 一致的 Superset 查询 SQL，解析实际引用的物理表。
+2. 复用 [Dagster](../../data/dagster/SKILL.md) 的认证契约，只读查询同区域、同环境的资产及分区信息，匹配并保留完整 asset key（如 `analytics/ads_order_count_di`）。检查每个依赖的分区窗口不大于 SLA 时间窗口。
+3. **发现失败不等于无依赖。** SQL 获取/解析失败、权限不足、资产未匹配或匹配歧义、分区粒度无法核实，均须停止创建并说明缺口；禁止静默回退到 `deps="[]"`。只有已查明无适用 Dagster 依赖并在配置摘要中获得用户确认，才允许空数组。
+4. 配置摘要必须包含源表 → 完整资产 key、粒度检查、排除项及原因；将确认后的去重依赖列表 JSON 序列化到 `deps`。
+5. 修改指标来源、查询、过滤条件或 `time_grain` 时重新发现，并展示新旧依赖差异；仅修改阈值、标题、分类、通知群时保留原依赖，不在更新 payload 中补空值。
+6. 创建或更新依赖后，使用 `GET /api/v1/sla_metric/get?name={name}` 回读，解析 `deps` 并核对集合与确认结果一致。回读失败或不一致时不能宣称配置完成，也不能盲目重试创建。
 
 ### 飞书通知群
 
@@ -121,6 +134,10 @@ create_dataset(sql="SELECT current_date as dt, ... WHERE dt = current_date")
 curl -X DELETE .../sla_metric/123
 # ❌ 严禁通过 API 删除，必须去 dapp Web UI
 
+# 没有发现上游依赖就照抄 API 默认值
+Agent: Dagster 查询失败，先传 deps="[]" 创建，之后再补
+# ❌ 发现失败必须停止创建；API 不会自动发现依赖
+
 # 不确认就执行修改
 Agent: 已为您修改了 SLA 指标阈值为 0.8
 # ❌ 修改前必须展示配置摘要并获得用户确认
@@ -136,10 +153,12 @@ Agent:
 2. 生成 dapp API Token → ✅
 3. 在 Superset 中创建图表 sla_metric_daily_order_count，获取 slice_id
 4. 查询分类选项展示给用户选择（业务域、业务过程、应用域）
-5. 构建配置，展示摘要（name、指标来源、阈值、分类），获得用户确认
-6. 调用 POST /create 创建 → ✅
-7. 引导选择飞书通知群（可选）
-8. 输出详情页链接，提示构建 Grafana 资源
+5. 用最终指标配置生成 SQL，匹配同区域、同环境的 Dagster 完整资产 key，校验上游分区粒度
+6. 展示摘要（name、指标来源、阈值、分类、deps、粒度检查与排除原因），获得用户确认
+7. 调用 POST /create，显式传递 JSON 序列化的 deps
+8. 调用 GET /get 回读并核对依赖 → ✅
+9. 引导选择飞书通知群（可选）
+10. 输出详情页链接，提示构建 Grafana 资源
 ```
 
 ## References
@@ -147,6 +166,7 @@ Agent:
 - [SLA 配置操作流程](references/sla-config-flow.md)
 - [dapp API 数据模型](references/dapp-api.md)
 - [Superset 操作规范](references/superset-ops.md)
+- [上游依赖发现与校验](references/upstream-dependencies.md)
 - [SLA 指标配置文档](https://a4x-paas.feishu.cn/wiki/LKJaw2KVziiP2Kku3KpcRQy0nze)
 - [SLA 告警配置帮助](https://a4x-paas.feishu.cn/wiki/PfFRwGgDCiyrbDkC6WSc1NFEndf)
 - 源码: `/project/dbt/a4x_backend/api/sla_metric.py`（API 端点）

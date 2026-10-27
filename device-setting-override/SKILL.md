@@ -21,38 +21,56 @@ description: 通过 inner-api 在 /deviceMsg/setting 响应中按设备 SN 覆�
 ### 鉴权 / Auth
 
 两种鉴权模式, 通过 `--auth` 切换。**默认 `--auth=ldap`**; 除非用户明确要求, 一律走 ldap 模式。
-**所有 secret 一律通过环境变量注入, 绝不写入文件、绝不打印。**
+**secret 规则 (2026-10-08 修订): 密码与 AK/SK 绝不落盘、绝不打印; 短 TTL token (缺省 3 天, 以响应 expiresInSeconds 为准) 允许 0600 本地缓存。**
 
-#### `--auth=ldap` (默认)
+#### `--auth=ldap` (默认) — 全自动, 无需手动登录取 token
 
 经 **revenue-sharing 服务** 的 `/skill-api/invoke` 代理调用, 用自己的 LDAP 账号鉴权。
 revenue-sharing 服务端用 PaasConfig 的 AK/SK 帮忙做签名, 然后把请求转发到 `--node-name`
 指定的目标 iot-service-cloud 节点。运维 / SRE 用自己 LDAP 账号操作即可, 不需要拿到
 共享 AK/SK; 每次调用在 revenue-sharing 端有审计日志关联到 LDAP cn。
 
+**token 解析全自动** (`scripts/rs_auth.py`, 三脚本共用), 优先级:
+
+1. 显式环境变量 `SKILL_LDAP_TOKEN` (可用 `--skill-token-env` 改名; 设了就用它, 行为同旧版)
+2. 本地缓存 `~/.cache/device-setting-override/token-<rs-env>.json` (0600; 有效期以登录响应 `expiresInSeconds` 为准, 缺省 3 天, 提前 5 分钟视为到期; 到期自动重登换新, 非续期)。**缓存绑定登录主体 ldapCn** —— 配置了 `RS_LDAP_CN` 时仅复用同主体 token, 同机切换账号会自动重登换新 token, 绝不复用前一个账号的
+3. **自动登录**: 环境变量 `RS_LDAP_CN` + `RS_LDAP_PASSWORD` 存在时静默登录并写缓存
+
 | 变量 | 说明 | 必需 |
 |------|------|------|
-| `SKILL_LDAP_TOKEN` | LDAP token (由 `POST <rs-host>/skill-api/login` 拿到, 3 天有效); 可用 `--skill-token-env <NAME>` 改用自定义变量名 | 是 |
+| `RS_LDAP_CN` | 你的 LDAP cn (非机密, 可放进 shell profile) | 自动登录时 |
+| `RS_LDAP_PASSWORD` | 你的 LDAP 密码 (仅当前会话: `read -s` 交互输入; 绝不写入 profile/history/任何文件) | 自动登录时 |
+| `SKILL_LDAP_TOKEN` | 显式 token (优先级最高, 覆盖缓存与自动登录) | 否 |
 
-获取 token (一次性, 之后 3 天内复用):
+以上全都没有 → 脚本**降级**: 打印手动登录指引 (一条 curl) 后 exit 3, 不交互、不静默失败。
+token 中途过期 (RS 返回 HTTP 401 或 `code=101 未登录`, 实测部署版是后者) → 自动失效缓存、
+重新取 token、原请求重试一次。例外: 显式 `SKILL_LDAP_TOKEN` (token_source=env) 不自动重试,
+响应原样返回按业务失败处理 (exit 1)。自动登录本身失败 (网络错/密码错) 也 exit 3。
+
+手动登录 (不配自动登录时的备选; token 有效期以响应 `expiresInSeconds` 为准, 缺省 3 天):
 
 ```bash
-# staging
+# staging (操作 staging-* 节点)
 RS_HOST=https://console-test.addx.live/api
-# prod (待部署, 当前不可用):
-# RS_HOST=https://revenus-sharing-backend.addx.live
+# prod (操作 prod-* 节点; 2026-10-08 实证已部署可用):
+RS_HOST=https://revenus-sharing-backend.addx.live
 
-curl -sS -X POST "$RS_HOST/skill-api/login" \
-  -H 'Content-Type: application/json' \
-  -d '{"ldapCn":"<your-cn>","password":"<your-ldap-password>"}'
+# 密码交互输入, 不进 history / 进程参数; JSON 由 python3 json.dumps 编码
+# (printf 直拼遇引号/反斜杠/换行密码会产出非法 JSON), curl 经 stdin 取数:
+read -rs IOT_PW
+printf '%s\0%s' '<your-cn>' "$IOT_PW" \
+  | python3 -c 'import json,sys; a=sys.stdin.read().split("\0"); print(json.dumps({"ldapCn":a[0],"password":a[1]}))' \
+  | curl -sS -X POST "$RS_HOST/skill-api/login" \
+      -H 'Content-Type: application/json' --data @-
 # → {"code":0,"msg":"","data":{"token":"...","ldapCn":"<cn>","expiresInSeconds":259200}}
 export SKILL_LDAP_TOKEN='<token-value>'
 ```
 
-撤销 token (主动登出, 幂等):
+撤销 token (主动登出, 幂等; 直接删缓存文件同理):
 
 ```bash
 curl -sS -X POST "$RS_HOST/skill-api/logout" -H "Authorization: $SKILL_LDAP_TOKEN"
+rm ~/.cache/device-setting-override/token-<rs-env>.json
 ```
 
 #### `--auth=aksk` (仅在用户明确要求时使用)
@@ -97,14 +115,18 @@ curl -sS -X POST "$RS_HOST/skill-api/logout" -H "Authorization: $SKILL_LDAP_TOKE
 
 `--rs-env` 决定走哪一套 revenue-sharing 控制台; `--node-name` 决定服务端把请求转发到哪个
 iot-service-cloud 节点 (由后端 `ConsoleServiceRegistry.queryByNodeIdAndServiceId(nodeName, "paas")`
-解析)。
+解析)。**两者现在都可省略**——脚本会自动推导: `--node-name` 缺省取 `--env`,
+`--rs-env` 缺省从 node-name 环境段推导 (`prod-us` → `prod`)。日常**只给 `--env` 一个旋钮**即可;
+显式给出但与推导冲突 → 脚本直接拒绝 (exit 2) 并解释原因, 绝不按错误组合发请求。
 
 | `--rs-env` | revenue-sharing 后端 host | 状态 |
 |:--|:--|:--|
-| `staging` | `https://console-test.addx.live/api` | ✅ 可用 (console-test 前端, nginx 把 /api/* 转后端) |
-| `prod` | `https://revenus-sharing-backend.addx.live` | ⚠️ 待部署 (skill-api 当前只在 staging; prod 待 staging 验收后部署) |
+| `staging` | `https://console-test.addx.live/api` | ✅ 可用 (console-test 前端, nginx 把 /api/* 转后端); 仅可用于 `--node-name=staging-*` |
+| `prod` | `https://revenus-sharing-backend.addx.live` | ✅ 已部署且端到端验收通过 (2026-10-08 实测: login + stats 经 prod RS 代理打 prod-us/eu/cn 三节点全部 result=0, 其 accessKey `revenue-sharing-prod` 已注册三集群 auth 库, PAAS_ACCESS_SECRET 配置正确); 操作 `--node-name=prod-*` 必须用它 |
 
-`--node-name` 有效值固定为以下 6 个 (与 `--env` 同名, 但**两者不交叉校验**, 务必两边都显式给对):
+**⚠️ rs-env 与 node-name 必须同环境 (2026-10-08 事故实证, 已有客户端防呆)**: RS 用**自己部署环境**的 PaasConfig 单一静态 AK/SK 签名 (与 `--node-name` 无关), 而 accessKey 注册表**按集群**存在各集群 auth 服务的库里。`--rs-env=staging` + `--node-name=prod-*` 组合 → 请求正确路由到 prod 集群, 但 staging 的 key 在 prod auth 库不存在 → `HTTP 400 {"code":102,"message":"accessKey无效"}`。这不是凭据配错, 是设计上不存在的能力; 唯一修法是换成同环境的 `--rs-env` (脚本现在会直接拦下这个组合)。
+
+`--node-name` 有效值固定为以下 6 个 (与 `--env` 同名):
 
 | `--node-name` | 含义 |
 |:--|:--|
@@ -115,15 +137,12 @@ iot-service-cloud 节点 (由后端 `ConsoleServiceRegistry.queryByNodeIdAndServ
 | `prod-eu` | 欧洲 prod 集群 |
 | `prod-us` | 美国 prod 集群 |
 
-ldap 模式下 `--env` 仅作日志标签; **真实路由由 `--node-name` 决定**, 务必显式给值。
-如果 `--env=staging-us` 但 `--node-name=prod-us` 之类混搭, 服务端会按 `--node-name` 路由,
-日志标签可能误导, **请保证两者一致**。
-
 ### 三个脚本 / Three scripts
 
 - `scripts/upsert.py` — 批量从 xlsx 读 SN + 双组写入(默认 dry-run,`--confirm` 才发请求)
 - `scripts/admin_cli.py` — 其它 4 个端点的 CLI:`get` / `stats` / `list` / `delete`
 - `scripts/verify.py` — 写入后闭环体检:DB 落库 + 抽样内容 + Thanos `applied`/`failed`/`admin_request` 指标(详见 Rule 8)
+- `scripts/rs_auth.py` — 共享鉴权模块(路由防呆 / token 缓存 / 自动登录 / 失效重试); 纯逻辑单测 `scripts/tests/test_rs_auth.py` (`cd scripts && python3 -m pytest tests/ -q`)
 
 ## Rules
 
@@ -261,16 +280,16 @@ grep "setting override failed" <log> | grep "stage=<stage>"
 ### 烟雾测试(staging,只跑 1 批)— `--auth=ldap` (默认)
 
 ```bash
-# 一次性: 拿 LDAP token (3 天有效)
-RS_HOST=https://console-test.addx.live/api   # staging; prod 待部署后改成 revenus-sharing-backend.addx.live
-curl -sS -X POST "$RS_HOST/skill-api/login" -H 'Content-Type: application/json' \
-  -d '{"ldapCn":"<your-cn>","password":"<your-ldap-password>"}'
-export SKILL_LDAP_TOKEN='<token-from-response>'
+# 自动登录凭据 (CN 非机密可放 profile; 密码绝不落盘 —— 当前会话交互输入):
+export RS_LDAP_CN='<your-cn>'
+read -rs RS_LDAP_PASSWORD && export RS_LDAP_PASSWORD   # 不回显、不进 history
+# 登录一次后 token 进 0600 缓存 (缺省 3 天, 以响应为准), 期间无需再输密码
+# (未配且无缓存时脚本会打印手动登录指引并 exit 3, 按指引 curl 登录即可)
 
-# Dry-run plan (--auth=ldap 是默认值, 可省略 --auth; 但 --rs-env / --node-name 必填)
+# Dry-run plan (--auth=ldap 是默认值; 只给 --env 一个旋钮,
+#  rs-env/node-name 自动推导, 也可显式给但必须同环境)
 python3 scripts/upsert.py \
   --env staging-us \
-  --rs-env staging --node-name staging-us \
   --input <xlsx-path> \
   --sensitive-json   @<sensitive.json> \
   --insensitive-json @<insensitive.json> \
@@ -280,7 +299,6 @@ python3 scripts/upsert.py \
 # Smoke 1 batch
 python3 scripts/upsert.py \
   --env staging-us \
-  --rs-env staging --node-name staging-us \
   --input <xlsx-path> \
   --sensitive-json   @<sensitive.json> \
   --insensitive-json @<insensitive.json> \
@@ -315,7 +333,7 @@ python3 scripts/upsert.py \
   --insensitive-json @<insensitive.json> \
   --experiment-prefix <prefix> \
   --expire-at 0 \
-  --only-group sensitive --limit-batches 1 \
+  --only-group sensitive --limit-batches 1 --no-repush \
   --confirm
 
 # Full rollout
@@ -327,7 +345,7 @@ python3 scripts/upsert.py \
   --insensitive-json @<insensitive.json> \
   --experiment-prefix <prefix> \
   --expire-at 0 \
-  --start-batch 1 --qps-sleep 1.0 \
+  --start-batch 1 --qps-sleep 1.0 --no-repush \
   --confirm
 ```
 
@@ -338,16 +356,12 @@ python3 scripts/upsert.py \
 ### 实验进度抽查 / 监控
 
 ```bash
-# ldap 模式 (默认; --auth 可省略)
-python3 scripts/admin_cli.py --env staging-us \
-  --rs-env staging --node-name staging-us stats
-
-python3 scripts/admin_cli.py --env staging-us \
-  --rs-env staging --node-name staging-us get --sn <sn>
-
-python3 scripts/admin_cli.py --env staging-us \
-  --rs-env staging --node-name staging-us list \
+# ldap 模式 (默认; 只给 --env 即可, token 自动解析)
+python3 scripts/admin_cli.py --env staging-us stats
+python3 scripts/admin_cli.py --env staging-us get --sn <sn>
+python3 scripts/admin_cli.py --env staging-us list \
   --experiment <tag> --all --page-size 1000 --out out/sns.jsonl
+python3 scripts/admin_cli.py --env prod-us stats   # prod 同理, 自动走 prod RS
 
 # aksk 模式 (仅在用户明确要求时用)
 python3 scripts/admin_cli.py --auth aksk --env <env> stats

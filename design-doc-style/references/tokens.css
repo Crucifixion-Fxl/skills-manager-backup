@@ -11,6 +11,9 @@
  * 自包含 HTML（VS Code 内置预览、沙箱、离线打开、GitLab Pages 都不一定能取到外链
  * 资源）。完整可运行示例见 [`example.html`](../example.html)。
  *
+ * 增补：来源文件之后在真实文档评审中补进来的组件（如 Hero 三支柱 .hero-pillars），
+ * 在各自注释里标明"增补"，同样只用 --atlas-* 变量。
+ *
  * 已知现状：本仓库同一批文档里，历史上出现过两种变量命名方言
  * （前缀 --atlas-* 与不加前缀的 --mint/--night/--hair...），十六进制颜色值本身
  * 从未漂移，只是命名各写各的。新文档一律使用本文件的 --atlas-* 命名，
@@ -108,7 +111,9 @@ pre code { color: #d7efe7; background: none; border: 0; }
 .atlas-page .crumbs { border-color: var(--atlas-line); color: var(--atlas-muted); }
 .atlas-page .crumbs a { color: var(--atlas-mint); }
 
-/* Hero：文档开场，一句话论点 + 侧边 2-3 张「决策/依赖/未授权」速览卡 */
+/* Hero：文档开场。上排左侧 = eyebrow（项目 · 范围 · 文档类型 · 状态）+ h1 文档名
+   （名称 + 文档类型，不写口号/论点）+ 一段 dek 讲端到端范围；右侧 .hero-side 只放
+   状态、基线、日期、Issue 这类元数据。下排是 .hero-pillars 三支柱（见下方增补）。 */
 .hero {
   min-height: 440px; padding: 64px 0 54px;
   display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(300px, .75fr);
@@ -129,6 +134,25 @@ pre code { color: #d7efe7; background: none; border: 0; }
 .hero-note span { display: block; margin-top: 8px; color: var(--atlas-ink); font-size: 15px; line-height: 1.65; }
 .hero-note.hot { border-top-color: var(--atlas-orange); }
 .hero-note.hot b { color: var(--atlas-orange); }
+
+/* Hero 三支柱（增补，非来源文件原文）：Motivation（为什么要改）/ Goal（要达到什么）/
+   Key ideas（怎么做），放在标题与 aside 下方整行（grid-column: 1 / -1），桌面三栏，
+   ≤1180px 单栏堆叠。颜色守 5 色规则：why = orange（需要注意），goal = mint，
+   idea = mint + 浅 mint 底与描边作为重点卡；不用 blue（外部系统）或 violet（待决）。 */
+.atlas-page .hero { row-gap: 40px; }
+.hero-pillars { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; align-self: stretch; }
+.pillar { display: flex; flex-direction: column; gap: 10px; padding: 22px 24px; border: 1px solid var(--atlas-line); border-top: 3px solid var(--atlas-mint); background: var(--atlas-panel-2); }
+.pillar.why { border-top-color: var(--atlas-orange); }
+.pillar.idea { background: linear-gradient(rgba(102, 215, 178, .07), rgba(102, 215, 178, .07)), var(--atlas-panel-2); border-color: var(--atlas-mint); }
+.pillar > b { color: var(--atlas-mint); font: 700 11px/1.3 var(--atlas-mono); letter-spacing: .12em; text-transform: uppercase; }
+.pillar.why > b { color: var(--atlas-orange); }
+.atlas-page .pillar h2 { margin: 0; padding: 0; border: 0; color: var(--atlas-ink); font: 500 26px/1.2 var(--atlas-display); }
+.pillar ul, .pillar ol { margin: 0; padding-left: 1.15em; display: grid; gap: 9px; color: var(--atlas-ink); font-size: 14.5px; line-height: 1.7; }
+.pillar li strong { color: var(--atlas-ink); }
+.pillar.why li::marker { color: var(--atlas-orange); }
+.pillar.goal li::marker, .pillar.idea li::marker { color: var(--atlas-mint); font-family: var(--atlas-mono); }
+.pillar-foot { margin-top: auto; padding-top: 6px; color: var(--atlas-muted); font: 12px/1.5 var(--atlas-mono); }
+@media (max-width: 1180px) { .hero-pillars { grid-template-columns: minmax(0, 1fr); } }
 
 /* 状态胶囊：一句话状态徽标，等宽字全大写 */
 .status-line { display: flex; flex-wrap: wrap; gap: 7px; }
@@ -277,6 +301,7 @@ footer.doc-foot { padding: 28px 0 0; border-color: var(--atlas-line); color: var
   .page.atlas-page { display: block; max-width: none; }
   .hero { min-height: auto; }
   .hero-note, .table-wrap, .boundary, .part-divider, .plate, .node-detail { background: #fff; break-inside: avoid; }
+  .pillar, .pillar.idea { background: #fff; break-inside: avoid; }
 
   /* 硬编码颜色值，不是 var(--atlas-*)，变量重定义覆盖不到，逐个手动补深色 */
   .plate { border-color: #d9deea; }

@@ -54,6 +54,33 @@ INITIAL_AGENT_MODE=agent-full-access
 - 只改 `~/.codex/config.toml` 不可靠——adapter 每轮都会显式传入自己的沙箱策略，覆盖全局配置。
 - 根因在 Buzz → ACP 的权限档传递；正式修复是 Buzz 在创建/恢复 ACP 会话后用 `session/set_mode`（`modeId: agent-full-access`）显式设置并校验结果。Buzz 修好之前，这个 env 是 Codex agent 的必要配置，不是可选项。
 
+### 根因 C（Codex ≥0.16x）：code-mode host 未安装，模型零命令执行
+
+开发机（公共安装 codex 0.161.0，buzz-acp 0.5.27，2026-10-10 实测）：`INITIAL_AGENT_MODE=agent-full-access` 配置正确、会话正常创建，agent 被 @ 后日志里 `turn starting` → `agent_returned outcome="ok"`、模型有 thought/message 输出、频道里有 👀 表情，但**全程零 `tool_call`、频道里永远没有回帖**——Codex 把所有 shell 执行路由到独立组件 `codex-code-mode-host`；开发机只安装了 codex 主程序、没装这个 host（官方 npm 包的 vendor/bin 里本来就有），模型物理上无法执行任何命令，包括回帖必需的 `buzz messages send`。
+
+不开 debug 的快速确诊（在 agent 所在主机）：
+
+```bash
+codex exec --skip-git-repo-check "run: echo ok" 2>&1 | grep -i "unavailable\|code-mode"
+# 命中：ERROR codex_core::tools::router: error=failed to spawn code-mode host
+#       /usr/local/bin/codex-code-mode-host: No such file or directory (os error 2)
+```
+
+**修法**（无 sudo、写不了 `/usr/local/bin` 时，实测有效）：
+
+```bash
+VER=$(codex --version | awk '{print $2}')
+npm install --prefix /tmp/codexnpm @openai/codex@"$VER"
+V=/tmp/codexnpm/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin
+install -d ~/.local/opt/codex-"$VER"
+cp -r "$V" ~/.local/opt/codex-"$VER"/bin   # codex 与 codex-code-mode-host 必须同目录
+# agent env 的 CODEX_PATH 改为 ~/.local/opt/codex-"$VER"/bin/codex，重启单元
+```
+
+验证：新路径 `codex exec` 真实输出 echo 结果，再 @ agent 应在原 Thread 回帖。`codex update` 对手动安装（install method "other"）会拒绝执行（"Could not detect the Codex installation method"），不能靠它补组件。
+
+**运维侧根治**：开发机系统级安装应部署完整官方包（npm 包 `vendor/<target>/bin/` 内含 `codex-code-mode-host`，与主程序一起放 `/usr/local/bin`）；只放主程序 = 该机上所有 codex agent 静默不回复。
+
 ## agent 用了 owner 的身份发消息（冒名）
 
 **根因**：`buzz` CLI wrapper 无条件 `source` owner 的 env 文件，agent 子进程调 CLI 时 owner 私钥覆盖了它自己的身份。

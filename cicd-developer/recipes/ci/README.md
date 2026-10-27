@@ -73,9 +73,15 @@ immutable digest 和目标所需架构，再生成/提交独立 Application MR�
 
 ### 为什么 dual-arch target 构建两种架构
 
-ARM64 Graviton 实例比 amd64 同档 **~25% 便宜**，spot 中标率也更高。Karpenter NodePool 可同时申请 c5/c6i（amd64）+ c7g/m7g（arm64）spot 实例，扩缩时自动挑可用 + 便宜。
-
-如果镜像只有 amd64，Karpenter 锁死 amd64 NodePool，arm64 spot 池白白浪费。
+同一 target 的 amd64/arm64 镜像产物可供已批准、已验证的对应架构节点池使用。
+新应用继续遵守 target 的 dual-arch 构建策略；镜像支持两种架构不等于允许 Pod
+在任意 NodePool 或 Spot 上运行。每个目标 overlay 在生成前必须按
+[application NodePool placement](../../references/nodepool-placement.md) 解析完整放置合同：
+普通应用默认共享池，stateful/能力例外须有 reference 要求的明确依据。
+可选择一个已验证池，或显式允许多个池，并在每个 required-affinity OR term 中保持
+池身份、架构、容量和适用网络约束的准确配对。不能只写 arch + capacity。
+EKS 同时核验 private subnet/NAT；network 标签只在目标 live 合同提供时使用。
+NodeClass 通过 `nodeClassRef` 与运行证据核验，不写入 Pod selector/required affinity。
 
 ### CI 三件套（dual-arch target）
 
@@ -108,7 +114,9 @@ build:<target>:           # 只一个 job，产 amd64-only image，直接终态 
   tags: [tke-amd64]       # 或 gcp-tech-amd64
 ```
 
-无 manifest job。Rollout 也不写 `nodeSelector.kubernetes.io/arch`（集群本就单 arch）。
+无 manifest job。Rollout overlay 仍须有目标已核验的原生节点池 placement；
+`kubernetes.io/arch: amd64` 可作为兼容性约束，但不能替代池身份与网络核验。
+不要向 TKE/GKE 写入 EKS/Karpenter 标签。
 
 ### Application Image Updater `<alias>.platforms`
 
@@ -123,9 +131,12 @@ argocd-image-updater.argoproj.io/app.platforms: linux/amd64,linux/arm64  # build
 
 ## 边界情况
 
-### 反例：Rollout 加 `nodeSelector arch=amd64` + image 是 multi-arch
+### Multi-arch image 与单池 placement
 
-浪费——arm64 manifest 永远没节点拉，NodePool 锁死 amd64 单 arch。新应用 **禁止** 这个组合（hard rule #27）。`recipes/k8s/rollout.yaml.tmpl` 默认不写 nodeSelector arch。
+Multi-arch image 配合已批准的 amd64-only 共享池是有效组合；构建平台与调度范围分别验收。
+不可为了“利用 arm64”删除已有池身份/架构/容量/网络约束。base Rollout 保持可复用，
+每个 target overlay 必须注入 reference 的完整 placement 变体；base 本身不能直接部署。
+如果要让两个池都可调度，先逐池验证镜像兼容性、容量与网络，再使用完整的 OR terms。
 
 ### 部分 target 是 TKE，部分不是（mixed-arch / mixed-cloud）
 
@@ -220,4 +231,5 @@ target runner.
 - 失败模式诊断：`troubleshooting/image-pull-failure.md`
 - hard-rules.yaml #25 / #26 / #27 / #28
 - `references/data/clusters.yaml` 的 `build_mode` 字段
-- `recipes/k8s/rollout.yaml.tmpl` 头注释（不写 nodeSelector arch）
+- [application NodePool placement](../../references/nodepool-placement.md)
+- `recipes/k8s/rollout.yaml.tmpl` 头注释（base 可复用，每 target overlay 必须注入完整 placement）

@@ -91,7 +91,9 @@ class Durability(base.TmpCase):
 
     def test_restart_reordered_stock_withdrawal_is_causal_and_sliced(self):
         self.assembly()
-        self.reaction = base.FGS.sign_event(base.AGENT2_KEY,7,[['e',self.root_event['id']]],'💬',self.run.now_ts)
+        # Ordinary reactions retain add-before-delete slicing; transient pairs
+        # now have separate no-effect/restart coverage in test_hostd_reaction_supersession.
+        self.reaction = base.FGS.sign_event(base.AGENT2_KEY,7,[['e',self.root_event['id']]],'✅',self.run.now_ts)
         deletion = base.FGS.sign_event(base.AGENT2_KEY,5,[['e',self.reaction['id']]],'',self.run.now_ts-1)
         self.capture(deletion, self.reaction, self.reaction)
         self.assertEqual(self.count(),2)

@@ -102,7 +102,7 @@ stop_conditions:
     action: STOP before writing any manifest；输出包含 target/namespace/current phase/prerequisites/acceptance 的 Ops Todo。禁止生成 pilot CR、raw GCP managed resource、ProviderConfig、Composition revision、静态 GCP 凭据或单独 ObjectBucket Application，也禁止直接 kubectl 或回退到 AWS S3 workflow。
 
   - condition: 为单个业务 app 设计资源时，计划把 raw User/Grant、字面 per-app PushSecret、逐 app ESO identity YAML，或业务 claim 写进 DEV/k8s；仅 references/app-owned-rds/README.md 的准确 us-eks-prod 受控 Database 请求在完整 live 门禁后排除
-    action: STOP（hard rule #36）。通常由应用仓提交高层 claim / ownership declaration，DEV/k8s 只补可复用 Composition/controller/policy；通用能力尚未存在则产 Ops Todo。唯一窄例外是 references/app-owned-rds/README.md 的新建专用 PostgreSQL：准确目标 us-eks-prod 的平台所有者在 live 激活门禁全部通过后，才可把固定 XRD 的高层 Database 请求写入 crossplane-system 的受控源。该例外用于保持 RDS 管理 Secret 不落入应用 namespace，不允许业务直接写 raw SQL/RDS/ESO 资源，也不允许套用到其它集群或引擎。
+    action: STOP（hard rule #36）。通常由应用仓提交高层 claim / ownership declaration，DEV/k8s 只补可复用 Composition/controller/policy；通用能力尚未存在则产 Ops Todo。专用 PostgreSQL 窄例外是 references/app-owned-rds/README.md 的新建专用 PostgreSQL：准确目标 us-eks-prod 的平台所有者在 live 激活门禁全部通过后，才可把固定 XRD 的高层 Database 请求写入 crossplane-system 的受控源。该例外用于保持 RDS 管理 Secret 不落入应用 namespace，不允许业务直接写 raw SQL/RDS/ESO 资源，也不允许套用到其它集群或引擎。 另有已直接批准的固定 StreamPark staging 五对象例外，必须严格满足 references/approved-exceptions/streampark-stage-pull.md 和完整文件 hash 校验；us-prod qdrant 只读监控 key 单个 ExternalSecret 例外同理，见 references/approved-exceptions/us-prod-qdrant-monitoring-key.md；另有人工批准的 StreamPark staging 八对象源码候选例外，仅限 references/approved-exceptions/streampark-stage-tls.md 的两个完整固定文件及对应校验，不授权合并、发布或部署；不得推导通用 waiver 或继承到其它资源。
 
   - condition: 为业务应用镜像自动更新计划引入 ImageUpdater CR、ApplicationSet、Git/MR write-back、`.argocd-source-*`、merger、Flux CR、Git 写 Secret、个人 Git 账号，提升 Argocd-deploy GitLab 写权限，或活动 Application source path 仍保留 `.argocd-source-*`
     action: STOP（hard rule #37）。使用 Application annotations + `write-back-method=argocd` + `spec.source.kustomize.images` current recovery seed；应用仓无需新增自动化 YAML、凭据或 CI loop guard。历史参数文件只通过 Git commit/MR 留档，删除活动文件，避免 Argo CD manifest generation 覆盖 Application source。
@@ -136,3 +136,7 @@ stop_conditions:
 
   - condition: Protected Crossplane Provider infrastructure workflow attempts publisher execution, registry publication, fan-out, external Harbor/GitLab credential write, Provider/XRD/Claim installation, Argo CD sync, kubectl/helm action, or Kubernetes/GCP live action
     action: STOP before the action. Return phased Git changes and an Ops Todo only; select a separately sanctioned protected publisher or rollout route after explicit approval.
+
+# Source-only StreamPark staging TLS eight-object exception: see
+# references/approved-exceptions/streampark-stage-tls.md. Exact two files only;
+# no generic waiver, merge, publication or runtime activation approval.

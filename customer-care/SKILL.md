@@ -25,6 +25,8 @@ Customer Care 管理后台是 **SmartPopup 智能弹窗引擎的运营配置中�
 
 **完整 API 清单 / 请求样例 / 状态机** → [`references/api-reference.md`](references/api-reference.md)
 
+**相邻领域分界**：消息中心（recipe `message_center` 字段族的端到端语义 / op-log 同步 / 红点黄条 / 消息不落库排障）是独立 skill [`development/message-center`](../../development/message-center/SKILL.md)；本 skill 只覆盖 cc-admin 配置面本身。
+
 ## Rules
 
 ### 1. 认证

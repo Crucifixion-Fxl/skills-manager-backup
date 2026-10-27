@@ -1,0 +1,12 @@
+{
+  "date": "2026-10-24",
+  "baseline_agent": "/root/review_extension/baseline_eval",
+  "candidate_agent": "/root/review_extension/candidate_eval",
+  "model": "inherited Codex session; exact version unavailable",
+  "candidate_files": {
+    "SKILL.md": "a57b09210836f71b5246b4459ec2774ce66322eebe6189027cf278f65617366d",
+    "references/design-deliverable-review.md": "a168d1f10af2d31f2c3780c357efe53810d406e89813389007fb1fc46348241d",
+    "references/packaging-evidence-contract.json": "d9819ac1eb8c065a9da0a08582d015a3f3034672aa8280b8c7015fc37a2d0316"
+  },
+  "evaluation_scope": "Independent synthetic subdimension decisions; no software execution or external writes; exact-label comparison plus human-agent semantic adjudication."
+}

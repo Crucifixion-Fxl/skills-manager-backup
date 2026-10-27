@@ -1,5 +1,10 @@
 # Physical-device and payment UAT runbook
 
+Use the authoritative CMS or instance source defined in `../SKILL.md`; the UAT
+runner freezes the actual collected evidence in this run, not in Skill text.
+Instance offer intent comes from deployed config; product facts come from live
+runtime metadata. Missing repository policy/gate support is a contract gap.
+
 Use this runbook for P5-P9. GitLab CI verifies policy and evidence; it does not
 execute Apple IAP, Google Play Billing, Stripe, or Airwallex payment. Before
 P6-P9, read `payment-channel-runbook.md` and select the exact platform-channel
@@ -59,7 +64,7 @@ Within the first five minutes:
    checkout or overwrite unrelated dirty work. Keep the installed app artifact
    identity separate from the checkout identity. Explicitly exclude every
    successful-payment test when the requested run is cancellation-only.
-   Expand the live CMS plus typed-quote catalog into the expected unique
+   Expand the frozen source evidence plus typed-quote catalog into the expected unique
    product/offer denominator and report it before device execution. One scenario
    account can legitimately require several independent provider-sheet checks;
    never describe that work as a single checkout.
@@ -318,7 +323,7 @@ At batch start, create one protected execution context and reuse it:
    authenticated context. Do not invoke the token helper once per product when
    the batch token remains valid. Refresh only after one observed `401`, then
    retry the failed read exactly once.
-3. Freeze one live CMS plus typed-quote product/offer matrix and one verified
+3. Freeze one source-evidence plus typed-quote product/offer matrix and one verified
    build/Runner/`.xctestrun` tuple. Use one owner-only credential injection copy
    for the batch and delete it on every exit path. Account, product, or backend
    state changes do not justify rebuilding or reinstalling.

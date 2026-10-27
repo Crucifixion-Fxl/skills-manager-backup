@@ -1,0 +1,40 @@
+{
+  "apiVersion": "apiextensions.crossplane.io/v1",
+  "kind": "Composition",
+  "metadata": {
+    "name": "database.cn-staging.platform.addx.io",
+    "labels": {
+      "platform.addx.io/environment": "cn-staging",
+      "platform.addx.io/service": "shared-postgres"
+    }
+  },
+  "spec": {
+    "compositeTypeRef": {
+      "apiVersion": "platform.addx.io/v1alpha1",
+      "kind": "XDatabase"
+    },
+    "mode": "Pipeline",
+    "pipeline": [
+      {
+        "step": "render",
+        "functionRef": {
+          "name": "function-go-templating"
+        },
+        "input": {
+          "apiVersion": "gotemplating.fn.crossplane.io/v1beta1",
+          "kind": "GoTemplate",
+          "source": "Inline",
+          "inline": {
+            "template": "{{- $xr := .observed.composite.resource -}}\n{{- $app := $xr.spec.app | default \"\" -}}\n{{- if not (regexMatch \"^[a-z][a-z0-9]*(_[a-z0-9]+)*$\" $app) -}}\n{{- fail \"CN PostgreSQL requires a canonical snake_case app\" -}}\n{{- end -}}\n{{- if or (lt (len $app) 2) (gt (len $app) 31) -}}\n{{- fail \"CN PostgreSQL app length must be 2..31\" -}}\n{{- end -}}\n{{- if or (ne ($xr.spec.engine | default \"\") \"postgres\") (ne ($xr.spec.env | default \"\") \"staging\") -}}\n{{- fail \"CN PostgreSQL requires explicit engine=postgres and env=staging\" -}}\n{{- end -}}\n{{- if ne ($xr.spec.purpose | default \"\") \"\" -}}\n{{- fail \"CN PostgreSQL supports primary app only; purpose is not activated\" -}}\n{{- end -}}\n{{- if hasKey $xr.spec \"additionalUsers\" -}}\n{{- fail \"CN PostgreSQL does not support additionalUsers\" -}}\n{{- end -}}\n{{- $dns := $app | replace \"_\" \"-\" -}}\n{{- $claimNamespace := \"\" -}}\n{{- if $xr.spec.claimRef -}}\n{{- $claimNamespace = $xr.spec.claimRef.namespace | default \"\" -}}\n{{- end -}}\n{{- if ne $claimNamespace (printf \"staging-%s\" $dns) -}}\n{{- fail \"CN PostgreSQL requires a namespaced Database claim in staging-<app-slug>\" -}}\n{{- end -}}\n{{- $secret := printf \"cn-staging-%s-postgres-db-cred\" $dns -}}\n{{- $schemaPC := printf \"cn-staging-%s-postgres-schema\" $dns -}}\n---\napiVersion: postgresql.sql.crossplane.io/v1alpha1\nkind: Role\nmetadata:\n  annotations:\n    gotemplating.fn.crossplane.io/composition-resource-name: role\n    crossplane.io/external-name: {{ $app | quote }}\nspec:\n  deletionPolicy: Orphan\n  forProvider:\n    privileges:\n      login: true\n      superUser: false\n      createDb: false\n      createRole: false\n      inherit: false\n      replication: false\n      bypassRls: false\n    connectionLimit: 20\n  providerConfigRef:\n    name: shared-postgres\n  writeConnectionSecretToRef:\n    namespace: crossplane-system\n    name: {{ $secret | quote }}\n---\napiVersion: postgresql.sql.crossplane.io/v1alpha1\nkind: Database\nmetadata:\n  annotations:\n    gotemplating.fn.crossplane.io/composition-resource-name: database\n    crossplane.io/external-name: {{ $app | quote }}\nspec:\n  deletionPolicy: Orphan\n  forProvider: {}\n  providerConfigRef:\n    name: shared-postgres\n---\napiVersion: postgresql.sql.crossplane.io/v1alpha1\nkind: Grant\nmetadata:\n  annotations:\n    gotemplating.fn.crossplane.io/composition-resource-name: grant\nspec:\n  deletionPolicy: Orphan\n  forProvider:\n    role: {{ $app | quote }}\n    database: {{ $app | quote }}\n    privileges: [CONNECT, CREATE, TEMPORARY]\n    revokePublicOnDb: true\n  providerConfigRef:\n    name: shared-postgres\n---\n# Platform-composed app login; never a copy of the platform credential.\napiVersion: postgresql.sql.crossplane.io/v1alpha1\nkind: ProviderConfig\nmetadata:\n  name: {{ $schemaPC | quote }}\n  annotations:\n    gotemplating.fn.crossplane.io/composition-resource-name: schema-provider-config\n    gotemplating.fn.crossplane.io/ready: \"True\"\nspec:\n  defaultDatabase: {{ $app | quote }}\n  sslMode: verify-full\n  credentials:\n    source: PostgreSQLConnectionSecret\n    connectionSecretRef:\n      namespace: crossplane-system\n      name: {{ $secret | quote }}\n---\n# Creating as the app login assigns schema ownership without membership.\napiVersion: postgresql.sql.crossplane.io/v1alpha1\nkind: Schema\nmetadata:\n  annotations:\n    gotemplating.fn.crossplane.io/composition-resource-name: schema\n    crossplane.io/external-name: {{ $app | quote }}\nspec:\n  deletionPolicy: Orphan\n  forProvider:\n    database: {{ $app | quote }}\n  providerConfigRef:\n    name: {{ $schemaPC | quote }}\n"
+          }
+        }
+      },
+      {
+        "step": "auto-ready",
+        "functionRef": {
+          "name": "function-auto-ready"
+        }
+      }
+    ]
+  }
+}

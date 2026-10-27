@@ -107,7 +107,16 @@ if os.name == "nt":
 _SCRIPTS_DIR = str(Path(__file__).resolve().parent)
 if _SCRIPTS_DIR not in sys.path:
     sys.path.insert(0, _SCRIPTS_DIR)
-from device_cloud_auth import DeviceCloudAuthClient, server_base_url  # noqa: E402
+from device_cloud_auth import (  # noqa: E402
+    AuthenticationError,
+    DeviceCloudAuthClient,
+    server_base_url,
+)
+from resource_affinity import (  # noqa: E402
+    normalize_constraints,
+    validate_affinity_counts,
+    validate_assignment,
+)
 
 ENV_ENDPOINTS = {
     "prod-cn": "https://device-cloud-server.builder.addx.live/graphql",
@@ -159,6 +168,13 @@ class GraphQLRequestError(RuntimeError):
 
 TERMINAL_STATUSES = {
     "COMPLETE",
+    "COMPLETED",
+    "PASSED",
+    "FAILED",
+    "CANCELLED",
+    "CANCELED",
+    "ABORTED",
+    "ERROR",
     "ABORTED_BY_WEB",
     "ABORTED_BY_CLIENT",
     "ABORTED_BY_HOST",
@@ -170,6 +186,15 @@ TERMINAL_STATUSES = {
     "FAILED_CLIENT_EXIT",
 }
 SUCCESS_STATUSES = {"COMPLETE"}
+
+
+def terminal_job_status(value) -> bool:
+    status = str(value or "").upper()
+    return (
+        status in TERMINAL_STATUSES
+        or status.startswith("FAILED_")
+        or status.startswith("ABORTED_")
+    )
 
 
 def job_fully_passed(job: dict) -> bool:
@@ -208,11 +233,19 @@ def gql(endpoint: str, auth, query: str, variables: dict) -> dict:
             break
         except urllib.error.HTTPError as e:
             if e.code == 401 and attempt == 0 and hasattr(auth, "refresh"):
-                auth.refresh()
+                try:
+                    auth.refresh()
+                except AuthenticationError as error:
+                    raise GraphQLRequestError(
+                        "Device Cloud authentication refresh failed"
+                    ) from error
                 continue
             raise GraphQLRequestError(f"HTTP {e.code} from {endpoint}") from e
         except urllib.error.URLError as e:
             raise GraphQLRequestError(f"网络异常 {e.reason}") from e
+        except OSError as e:
+            # Socket timeouts and connection resets can escape urlopen directly.
+            raise GraphQLRequestError(f"网络异常 {e}") from e
     if payload.get("errors"):
         raise GraphQLRequestError(
             "GraphQL errors: " + json.dumps(payload["errors"], ensure_ascii=False)
@@ -239,6 +272,48 @@ query($id: ID!) {
     completedScenarios passedScenarios totalScenarios
     allocatedResources { success message }
   }
+}
+"""
+
+QUERY_JOB_CONSTRAINTS = """
+query DeviceCloudJobConstraints($id: ID!) {
+  job(id: $id) { constraints { type topologyKey resources } }
+}
+"""
+
+AFFINITY_BINDINGS_QUERY = """
+query DeviceCloudJobAffinityBindings($first: Int!) {
+  phoneConnection(first: $first) {
+    edges { node { jobId jobRequirementName belongToHost belongToCabinet } }
+    pageInfo { hasNextPage }
+  }
+  deviceConnection(first: $first) {
+    edges { node { jobId jobRequirementName belongToHost belongToCabinet } }
+    pageInfo { hasNextPage }
+  }
+}
+"""
+
+CANCEL_JOB = """
+mutation DeviceCloudCancelJob($id: ID!) {
+  cancelJob(id: $id, cancelSource: WEB_CANCEL)
+}
+"""
+
+RESOURCE_BINDINGS_QUERY = """
+query DeviceCloudJobResourceBindings($first: Int!) {
+  phoneConnection(first: $first) {
+    edges { node { jobId } }
+  }
+  deviceConnection(first: $first) {
+    edges { node { jobId } }
+  }
+}
+"""
+
+PLAN_JOBS_QUERY = """
+query DeviceCloudPlanCleanupJobs($id: ID!) {
+  testPlan(id: $id) { id jobs { id } }
 }
 """
 
@@ -375,7 +450,8 @@ def create_job(endpoint, token, plan_id, feature_id, metadata,
 
 def create_job_batch(endpoint, token, plan_id, metadata,
                      resource_requirements, job_type, priority,
-                     launched_by, feature_id=None, name=None) -> int:
+                     launched_by, feature_id=None, name=None,
+                     constraints=None) -> int:
     """批量模式下创建 job，接受完整的 resourceRequirements 列表。"""
     job_input = {
         "testPlanId": int(plan_id),
@@ -389,6 +465,12 @@ def create_job_batch(endpoint, token, plan_id, metadata,
         job_input["name"] = name
     if feature_id is not None:
         job_input["featureId"] = int(feature_id)
+    if constraints is not None:
+        normalized = normalize_constraints(
+            constraints, [item["name"] for item in resource_requirements]
+        )
+        if normalized:
+            job_input["constraints"] = normalized
     data = gql(endpoint, token, CREATE_JOB, {"in": job_input})
     res = data["createJob"]
     if not res["success"]:
@@ -433,10 +515,179 @@ def poll_job(endpoint, token, job_id, interval, timeout) -> dict:
             print(f"[{ts}] job#{job_id} status={status} "
                   f"scenarios={job.get('passedScenarios')}/{job.get('totalScenarios')}")
             last_status = status
-        if status in TERMINAL_STATUSES:
+        if terminal_job_status(status):
             return job
         time.sleep(interval)
-    sys.exit(f"error: 轮询超时 ({timeout}s)，job#{job_id} 仍处于 {last_status}")
+    raise TimeoutError(f"轮询超时 ({timeout}s)，job#{job_id} 仍处于 {last_status}")
+
+
+def _job_resource_binding_count(endpoint: str, auth, job_id: int) -> int:
+    query_limit = 1000
+    data = gql(endpoint, auth, RESOURCE_BINDINGS_QUERY, {"first": query_limit})
+    expected = str(job_id)
+    count = 0
+    for connection_name in ("phoneConnection", "deviceConnection"):
+        connection = data.get(connection_name) or {}
+        edges = connection.get("edges") or []
+        if len(edges) >= query_limit:
+            raise GraphQLRequestError(
+                f"{connection_name} 资源列表达到查询上限，无法确认 Job 绑定已全部释放"
+            )
+        for edge in edges:
+            node = (edge or {}).get("node") or {}
+            if str(node.get("jobId") or "") == expected:
+                count += 1
+    return count
+
+
+def ensure_job_released(
+    endpoint: str,
+    auth,
+    job_id: int,
+    *,
+    cancel_immediately: bool,
+    timeout_seconds: int = 60,
+    poll_interval: float = 2,
+) -> dict:
+    """Ensure one Job is terminal and no resource remains bound to it.
+
+    Normal completions get one grace window to reach terminal state naturally.
+    Abnormal exits cancel immediately.  If the grace window expires, cleanup
+    falls back to cancel and waits for a second window before reporting failure.
+    """
+    result = {
+        "jobId": job_id,
+        "cancelRequested": False,
+        "verifiedTerminal": False,
+        "resourcesReleased": False,
+        "finalStatus": None,
+        "error": None,
+    }
+    cancel_requested = False
+    deadline = time.monotonic() + timeout_seconds
+    if cancel_immediately:
+        try:
+            accepted = gql(
+                endpoint, auth, CANCEL_JOB, {"id": str(job_id)}
+            ).get("cancelJob")
+            if accepted is not True:
+                raise GraphQLRequestError(f"cancelJob({job_id}) 未被接受")
+            cancel_requested = True
+            result["cancelRequested"] = True
+        except (GraphQLRequestError, KeyError, TypeError, ValueError) as error:
+            # Keep polling: the Job may already be terminal, and the final
+            # verification must report both its state and resource binding.
+            result["error"] = str(error)
+    while True:
+        try:
+            job = gql(endpoint, auth, QUERY_JOB, {"id": str(job_id)}).get("job")
+            if not isinstance(job, dict):
+                raise GraphQLRequestError(f"job#{job_id} 查询结果为空")
+            status = job.get("status")
+            result["finalStatus"] = status
+            terminal = terminal_job_status(status)
+            if terminal:
+                result["verifiedTerminal"] = True
+                bindings = _job_resource_binding_count(endpoint, auth, job_id)
+                if bindings == 0:
+                    result["resourcesReleased"] = True
+                    result["error"] = None
+                    return result
+        except (GraphQLRequestError, KeyError, TypeError, ValueError) as error:
+            result["error"] = str(error)
+
+        if time.monotonic() >= deadline:
+            if not result["verifiedTerminal"] and not cancel_requested:
+                try:
+                    accepted = gql(
+                        endpoint, auth, CANCEL_JOB, {"id": str(job_id)}
+                    ).get("cancelJob")
+                    if accepted is not True:
+                        raise GraphQLRequestError(f"cancelJob({job_id}) 未被接受")
+                    cancel_requested = True
+                    result["cancelRequested"] = True
+                    result["error"] = None
+                    deadline = time.monotonic() + timeout_seconds
+                    continue
+                except (GraphQLRequestError, KeyError, TypeError, ValueError) as error:
+                    result["error"] = str(error)
+            if result["error"] is None:
+                if not result["verifiedTerminal"]:
+                    result["error"] = (
+                        f"job#{job_id} 未在 {timeout_seconds}s 内进入终态"
+                    )
+                else:
+                    result["error"] = f"job#{job_id} 终态后资源仍未释放"
+            return result
+        time.sleep(max(0.01, poll_interval))
+
+
+def ensure_jobs_released(
+    endpoint: str,
+    auth,
+    job_ids: list[int],
+    *,
+    cancel_immediately: bool,
+    timeout_seconds: int = 60,
+    poll_interval: float = 2,
+) -> dict:
+    jobs = [
+        ensure_job_released(
+            endpoint,
+            auth,
+            job_id,
+            cancel_immediately=cancel_immediately,
+            timeout_seconds=timeout_seconds,
+            poll_interval=poll_interval,
+        )
+        for job_id in dict.fromkeys(job_ids)
+    ]
+    return {
+        "verified": all(
+            item["verifiedTerminal"] and item["resourcesReleased"]
+            for item in jobs
+        ),
+        "jobs": jobs,
+    }
+
+
+def ensure_plan_jobs_released(
+    endpoint: str,
+    auth,
+    plan_id: int | str,
+    known_job_ids: list[int],
+    *,
+    cancel_immediately: bool,
+    timeout_seconds: int = 60,
+    poll_interval: float = 2,
+) -> dict:
+    """Discover every Job in a Plan before cleanup to cover ambiguous creates."""
+    job_ids = list(known_job_ids)
+    discovery_error = None
+    try:
+        plan = gql(
+            endpoint, auth, PLAN_JOBS_QUERY, {"id": str(plan_id)}
+        ).get("testPlan")
+        if not isinstance(plan, dict) or not isinstance(plan.get("jobs"), list):
+            raise GraphQLRequestError(f"plan#{plan_id} Job 列表查询结果无效")
+        for job in plan["jobs"]:
+            if isinstance(job, dict) and job.get("id") is not None:
+                job_ids.append(int(job["id"]))
+    except (GraphQLRequestError, KeyError, TypeError, ValueError) as error:
+        discovery_error = str(error)
+    cleanup = ensure_jobs_released(
+        endpoint,
+        auth,
+        job_ids,
+        cancel_immediately=cancel_immediately,
+        timeout_seconds=timeout_seconds,
+        poll_interval=poll_interval,
+    )
+    cleanup["planId"] = int(plan_id)
+    cleanup["discoveryError"] = discovery_error
+    if discovery_error is not None:
+        cleanup["verified"] = False
+    return cleanup
 
 
 def parse_args(argv=None):
@@ -514,6 +765,10 @@ def parse_args(argv=None):
     p.add_argument("--queue-timeout", type=int, default=7200,
                    help="单 job 排队超时秒数（从建单到 startedAt 出现），默认 7200（2h）。"
                         "排队不计入执行超时，避免农场繁忙时误报 timeout（见 device-cloud#15）")
+    p.add_argument(
+        "--cleanup-timeout", type=int, default=60,
+        help="Job 终态与资源释放核验超时秒数，默认 60",
+    )
     return p.parse_args(argv)
 
 
@@ -621,6 +876,20 @@ def load_batch_jobs(path: str) -> list[dict]:
             for required in ("name", "type"):
                 if required not in res:
                     sys.exit(f"error: {res_label} 缺少 '{required}' 字段")
+        if "constraints" in job:
+            try:
+                aliases = [res["name"] for res in job["resources"]]
+                if (
+                    any(not isinstance(name, str) or not name.strip() for name in aliases)
+                    or len(set(aliases)) != len(aliases)
+                ):
+                    raise ValueError("亲和资源逻辑名必须是非空、唯一字符串")
+                job["constraints"] = normalize_constraints(
+                    job["constraints"], aliases
+                )
+                validate_affinity_counts(job["constraints"], job["resources"])
+            except ValueError as error:
+                sys.exit(f"error: {label}.constraints 无效: {error}")
     return jobs
 
 
@@ -664,13 +933,117 @@ def _batch_dry_run(jobs_def: list[dict]) -> int:
         print(f"\n--- job[{index}] {job['name']} ---")
         print(f"  tags: {job['tags']}")
         print(f"  resourceRequirements: {json.dumps(requirements, ensure_ascii=False)}")
+        if job.get("constraints"):
+            print(f"  constraints: {json.dumps(job['constraints'], ensure_ascii=False)}")
     _emit_result({
         "planId": None, "jobIds": [],
         "resources": [item.get("resources", []) for item in jobs_def],
+        "constraints": [item.get("constraints", []) for item in jobs_def],
         "scenarioCount": len(jobs_def), "finalStatus": "DRY_RUN",
         "firstFailureReason": None,
     })
     return 0
+
+
+def _verify_persisted_constraints(context: dict, job_id: int, job: dict) -> None:
+    resource_names = [item["name"] for item in job["resources"]]
+    data = gql(
+        context["endpoint"], context["auth"], QUERY_JOB_CONSTRAINTS,
+        {"id": str(job_id)},
+    )
+    persisted = data.get("job")
+    if not isinstance(persisted, dict):
+        raise RuntimeError(f"job#{job_id} 亲和约束读回失败")
+    try:
+        expected = normalize_constraints(job["constraints"], resource_names)
+        actual = normalize_constraints(persisted.get("constraints"), resource_names)
+    except ValueError as error:
+        raise RuntimeError(f"job#{job_id} 亲和约束读回无效") from error
+    if actual != expected:
+        raise RuntimeError(f"job#{job_id} 亲和约束未完整持久化")
+
+
+def _job_affinity_bindings(context: dict, job_id: int) -> dict[str, dict]:
+    query_limit = 1000
+    data = gql(
+        context["endpoint"], context["auth"], AFFINITY_BINDINGS_QUERY,
+        {"first": query_limit},
+    )
+    allocations = {}
+    for connection_name in ("phoneConnection", "deviceConnection"):
+        connection = data.get(connection_name)
+        if not isinstance(connection, dict):
+            raise RuntimeError(f"job#{job_id} 亲和资源列表缺失")
+        edges = connection.get("edges")
+        page_info = connection.get("pageInfo")
+        if (
+            not isinstance(edges, list)
+            or not isinstance(page_info, dict)
+            or page_info.get("hasNextPage") is not False
+            or len(edges) >= query_limit
+        ):
+            raise RuntimeError(f"job#{job_id} 亲和资源列表不完整，无法核验")
+        for edge in edges:
+            node = edge.get("node") if isinstance(edge, dict) else None
+            if not isinstance(node, dict):
+                raise RuntimeError(f"job#{job_id} 亲和资源记录无效")
+            if str(node.get("jobId") or "") != str(job_id):
+                continue
+            alias = node.get("jobRequirementName")
+            if not isinstance(alias, str) or not alias:
+                raise RuntimeError(f"job#{job_id} 绑定资源缺少逻辑名")
+            if alias in allocations:
+                raise RuntimeError(f"job#{job_id} 同一逻辑名绑定多个资源，无法核验")
+            allocations[alias] = node
+    return allocations
+
+
+def _query_affinity_job(context: dict, job_id: int) -> dict:
+    job = gql(
+        context["endpoint"], context["auth"], QUERY_JOB, {"id": str(job_id)}
+    ).get("job")
+    if not isinstance(job, dict):
+        raise RuntimeError(f"job#{job_id} 亲和核验时 Job 状态缺失")
+    return job
+
+
+def _verify_batch_job_affinity(
+    context: dict, state: dict, job_id: int, job: dict
+) -> bool:
+    definition = context["jobs"][state["running"][job_id]["index"]]
+    constraints = definition.get("constraints")
+    if not constraints:
+        return True
+    verification = state["affinityVerification"][job_id]
+    allocations = _job_affinity_bindings(context, job_id)
+    expected_names = {item["name"] for item in definition["resources"]}
+    if set(allocations) - expected_names:
+        raise RuntimeError(f"job#{job_id} 绑定资源逻辑名与申请不符")
+    try:
+        matched = validate_assignment(constraints, allocations)
+    except ValueError as error:
+        # Topology values are deliberately kept out of user-visible evidence.
+        raise RuntimeError(f"job#{job_id} 亲和资源拓扑缺失或不匹配") from error
+    status = str(job.get("status") or "").upper()
+    terminal = terminal_job_status(status)
+    complete = expected_names == set(allocations) and matched
+    if not complete and not terminal and (
+        job.get("startedAt") or status in {"RUNNING", "STARTED", "EXECUTING", "IN_PROGRESS"}
+    ):
+        # Job state and bindings are separate reads: normal completion may
+        # release bindings between them. Re-read status before declaring loss.
+        latest = _query_affinity_job(context, job_id)
+        if not terminal_job_status(latest.get("status")):
+            raise RuntimeError(f"job#{job_id} 已启动但亲和资源未完整绑定")
+        job.clear()
+        job.update(latest)
+        status = str(job.get("status") or "").upper()
+    if status in SUCCESS_STATUSES and not verification["verified"]:
+        raise RuntimeError(f"job#{job_id} 终态成功前未核验完整亲和分配")
+    if complete:
+        verification["verified"] = True
+        return True
+    return False
 
 
 def _fill_batch_window(args, context: dict, state: dict) -> None:
@@ -689,7 +1062,7 @@ def _fill_batch_window(args, context: dict, state: dict) -> None:
             context["endpoint"], context["auth"], context["plan_id"], metadata,
             build_resource_requirements(job["resources"]), args.job_type,
             args.priority, context["launched_by"], feature_id=args.feature_id,
-            name=job["name"],
+            name=job["name"], constraints=job.get("constraints"),
         )
         if job_id < 0:
             print(f"[{timestamp}] [FAILED] job {job['name']} 创建失败")
@@ -697,10 +1070,20 @@ def _fill_batch_window(args, context: dict, state: dict) -> None:
             continue
         print(f"[{timestamp}] [OK] job#{job_id} {job['name']}")
         state["running"][job_id] = {"index": index, "name": job["name"]}
+        state["created_ids"].append(job_id)
         state["created_mono"][job_id] = time.monotonic()
+        if job.get("constraints"):
+            state["affinityVerification"][job_id] = {"jobId": job_id, "verified": False}
+            _verify_persisted_constraints(context, job_id, job)
+            _verify_batch_job_affinity(
+                context, state, job_id, _query_affinity_job(context, job_id)
+            )
 
 
 def _record_terminal_job(job_id: int, job: dict, state: dict) -> None:
+    verification = state.get("affinityVerification", {}).get(job_id)
+    if job_fully_passed(job) and verification and not verification["verified"]:
+        raise RuntimeError(f"job#{job_id} 终态成功前未核验完整亲和分配")
     info = state["running"].pop(job_id)
     status = job.get("status")
     timestamp = dt.datetime.now().strftime("%H:%M:%S")
@@ -749,24 +1132,36 @@ def _poll_batch_once(args, context: dict, state: dict) -> None:
                 context["endpoint"], context["auth"], QUERY_JOB, {"id": str(job_id)}
             )["job"]
         except GraphQLRequestError as error:
+            definition = context["jobs"][state["running"][job_id]["index"]]
+            if definition.get("constraints"):
+                raise
             timestamp = dt.datetime.now().strftime("%H:%M:%S")
             print(f"[{timestamp}] [WARN] job#{job_id} 查询失败: {error}")
             continue
         now = time.monotonic()
+        _verify_batch_job_affinity(context, state, job_id, job)
         if job.get("startedAt"):
             state["started_mono"].setdefault(job_id, now)
-        if job.get("status") in TERMINAL_STATUSES:
+        if terminal_job_status(job.get("status")):
             _record_terminal_job(job_id, job, state)
         else:
             _record_timeout(job_id, job.get("status"), args, state, now)
 
 
-def _run_batch_schedule(args, context: dict) -> tuple[dict, int]:
-    total = len(context["jobs"])
-    state = {
-        "pending": list(range(total)), "running": {}, "created_mono": {},
-        "started_mono": {}, "completed": [], "failed": [], "create_failed": [],
+def _new_batch_state(total: int) -> dict:
+    return {
+        "pending": list(range(total)), "running": {}, "created_ids": [],
+        "created_mono": {}, "started_mono": {}, "completed": [],
+        "failed": [], "create_failed": [], "cleanup": None,
+        "affinityVerification": {},
     }
+
+
+def _run_batch_schedule(
+    args, context: dict, state: dict | None = None
+) -> tuple[dict, int]:
+    total = len(context["jobs"])
+    state = state or _new_batch_state(total)
     deadline = time.monotonic() + 6 * 3600
     while state["pending"] or state["running"]:
         if time.monotonic() > deadline:
@@ -800,14 +1195,30 @@ def _print_batch_summary(plan_id: str, jobs_def: list[dict], state: dict,
     for item in create_failed:
         print(f"      - {item['name']}: {item['error']}")
     print(f"{'=' * 60}")
-    failures = [*failed, *create_failed]
+    cleanup = state.get("cleanup") or {"verified": False, "jobs": []}
+    cleanup_failures = [
+        item for item in cleanup["jobs"]
+        if not item["verifiedTerminal"] or not item["resourcesReleased"]
+    ]
+    if not cleanup.get("verified") and not cleanup_failures:
+        cleanup_failures.append({
+            "error": cleanup.get("discoveryError") or "Job 终态或资源释放核验失败"
+        })
+    affinity = list(state.get("affinityVerification", {}).values())
+    affinity_failures = [
+        {"error": f"job#{item['jobId']} 未核验完整亲和分配"}
+        for item in affinity if not item["verified"]
+    ]
+    failures = [*failed, *create_failed, *cleanup_failures, *affinity_failures]
     _emit_result({
         "planId": plan_id,
-        "jobIds": [item["job_id"] for item in [*completed, *failed] if item.get("job_id")],
+        "jobIds": list(state.get("created_ids") or []),
         "resources": [item.get("resources", []) for item in jobs_def],
         "scenarioCount": total,
         "finalStatus": "FAILED" if failures else "PASSED",
         "firstFailureReason": failures[0].get("error") if failures else None,
+        "cleanup": cleanup,
+        "affinityVerification": affinity,
     })
     return 1 if failures else 0
 
@@ -824,6 +1235,8 @@ def batch_mode(args, *, auth_client=None, launched_by: str | None = None):
     )
     reject_managed_credential_inputs(injected_env, extra_metadata)
     jobs_def = load_batch_jobs(args.batch)
+    if args.no_wait and any(job.get("constraints") for job in jobs_def):
+        raise ValueError("亲和约束暂仅支持云端 run；不支持本地交接 --no-wait，未创建 TestPlan")
     print(f"[+] batch mode : {len(jobs_def)} jobs, concurrency={args.concurrency}")
     print(f"[+] endpoint   : {endpoint}")
     if args.dry_run:
@@ -850,14 +1263,47 @@ def batch_mode(args, *, auth_client=None, launched_by: str | None = None):
                "launched_by": launched_by, "jobs": jobs_def,
                "extra_metadata": extra_metadata, "injected_env": injected_env}
     started = time.monotonic()
-    state, total = _run_batch_schedule(args, context)
+    state = _new_batch_state(len(jobs_def))
+    try:
+        state, total = _run_batch_schedule(args, context, state)
+    except BaseException as error:
+        state["cleanup"] = ensure_plan_jobs_released(
+            endpoint,
+            auth_client,
+            plan_id,
+            state["created_ids"],
+            cancel_immediately=True,
+            timeout_seconds=args.cleanup_timeout,
+            poll_interval=min(2, args.poll_interval),
+        )
+        _emit_result({
+            "planId": plan_id,
+            "jobIds": list(state["created_ids"]),
+            "resources": [item.get("resources", []) for item in jobs_def],
+            "scenarioCount": len(jobs_def),
+            "finalStatus": "FAILED",
+            "firstFailureReason": f"{type(error).__name__}: {error}",
+            "cleanup": state["cleanup"],
+            "affinityVerification": list(state["affinityVerification"].values()),
+        })
+        raise
     if args.no_wait:
         _emit_result({"planId": plan_id, "jobIds": sorted(state["running"]),
                       "resources": [item.get("resources", []) for item in jobs_def],
                       "scenarioCount": total, "finalStatus": "CREATED",
+                      "affinityVerification": list(state["affinityVerification"].values()),
                       "firstFailureReason": (state["create_failed"][0]["error"]
                                              if state["create_failed"] else None)})
         return 1 if state["create_failed"] or len(state["running"]) != total else 0
+    state["cleanup"] = ensure_plan_jobs_released(
+        endpoint,
+        auth_client,
+        plan_id,
+        state["created_ids"],
+        cancel_immediately=bool(state["running"] or state["failed"]),
+        timeout_seconds=args.cleanup_timeout,
+        poll_interval=min(2, args.poll_interval),
+    )
     return _print_batch_summary(plan_id, jobs_def, state, time.monotonic() - started)
 
 
@@ -938,12 +1384,31 @@ def main():
         return 0
     print(f"[+] testPlanId : {plan_id}  ({plan_name})")
 
-    job_id = create_job(
-        endpoint, auth_client, plan_id, args.feature_id, metadata,
-        args.job_type, args.priority, args.resource_type, args.count, launched_by,
-        device_id=args.device_id,
-        resource_name=args.resource_name,
-    )
+    try:
+        job_id = create_job(
+            endpoint, auth_client, plan_id, args.feature_id, metadata,
+            args.job_type, args.priority, args.resource_type, args.count, launched_by,
+            device_id=args.device_id,
+            resource_name=args.resource_name,
+        )
+    except BaseException as error:
+        cleanup = ensure_plan_jobs_released(
+            endpoint,
+            auth_client,
+            plan_id,
+            [],
+            cancel_immediately=True,
+            timeout_seconds=args.cleanup_timeout,
+            poll_interval=min(2, args.poll_interval),
+        )
+        _emit_result({
+            "planId": plan_id,
+            "jobIds": [item["jobId"] for item in cleanup.get("jobs", [])],
+            "finalStatus": "FAILED",
+            "firstFailureReason": f"{type(error).__name__}: {error}",
+            "cleanup": cleanup,
+        })
+        raise
     print(f"[+] jobId      : {job_id}")
 
     if args.no_wait:
@@ -951,14 +1416,57 @@ def main():
         return 0
 
     print(f"[+] polling every {args.poll_interval}s (timeout {args.timeout}s)...")
-    job = poll_job(endpoint, auth_client, job_id, args.poll_interval, args.timeout)
+    try:
+        job = poll_job(endpoint, auth_client, job_id, args.poll_interval, args.timeout)
+    except BaseException as error:
+        cleanup = ensure_plan_jobs_released(
+            endpoint,
+            auth_client,
+            plan_id,
+            [job_id],
+            cancel_immediately=True,
+            timeout_seconds=args.cleanup_timeout,
+            poll_interval=min(2, args.poll_interval),
+        )
+        _emit_result({
+            "planId": plan_id,
+            "jobIds": [job_id],
+            "finalStatus": "FAILED",
+            "firstFailureReason": f"{type(error).__name__}: {error}",
+            "cleanup": cleanup,
+        })
+        raise
+    cleanup = ensure_plan_jobs_released(
+        endpoint,
+        auth_client,
+        plan_id,
+        [job_id],
+        cancel_immediately=False,
+        timeout_seconds=args.cleanup_timeout,
+        poll_interval=min(2, args.poll_interval),
+    )
     print(json.dumps(job, indent=2, ensure_ascii=False, default=str))
     scenarios = f"{job.get('passedScenarios', '?')}/{job.get('totalScenarios', '?')}"
-    if job_fully_passed(job):
+    if job_fully_passed(job) and cleanup["verified"]:
         print(f"[+] [PASS] 通过: status={job.get('status')} scenario {scenarios}")
+        _emit_result({
+            "planId": plan_id, "jobIds": [job_id], "finalStatus": "PASSED",
+            "firstFailureReason": None, "cleanup": cleanup,
+        })
         return 0
     print(f"[+] [FAILED] 失败: status={job.get('status')} scenario {scenarios} "
           f"(COMPLETE 不代表通过，需 scenario 全过)")
+    _emit_result({
+        "planId": plan_id,
+        "jobIds": [job_id],
+        "finalStatus": "FAILED",
+        "firstFailureReason": (
+            "Job 终态或资源释放核验失败"
+            if not cleanup["verified"]
+            else "scenario 未全部通过"
+        ),
+        "cleanup": cleanup,
+    })
     return 1
 
 

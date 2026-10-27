@@ -114,10 +114,22 @@ git checkout -b feat/<skill-name-or-change-description>
 
 无论是新建还是更新，最后都走这个流程：
 
+**新 Skill 分类与目录同步：**
+
+Skill 放在 `skills/<domain>/<skill-name>/`；新建时在 `.config/harness-classification.json` 的 `skills` 映射登记同一名称和 domain，并在 `.config/skill-hub-content.json` 的 `skillGuides` 补充使用说明。修改 Skill 描述或新增文档后，同样检查生成目录是否过期：
+
+```bash
+python scripts/build_docs.py --indexes-only
+python scripts/build_docs.py --check
+python scripts/check_docs.py
+```
+
+仅提交本次内容影响的分类、说明和生成目录差异。生成器读取 Git 历史统计作者；含 `SKILL.md` 变更的提交完成后，再跑 `build_docs.py --check`。若统计变化使目录过期，重新生成并以仅含生成文件的提交保存，再复查通过后 push。不能只跑 Skill 格式检查就声称新增能力已被共享目录收录；CI 的 docs:validate 也检查上述一致性。
+
 **格式验证：**
 
 ```bash
-uv run python scripts/validate.py --skill skills/<skill-name>
+uv run python scripts/validate.py --skill skills/<domain>/<skill-name>
 ```
 
 如果报错，自动修复后重新验证，直到 0 errors。
@@ -125,7 +137,7 @@ uv run python scripts/validate.py --skill skills/<skill-name>
 **提交变更：**
 
 ```bash
-git add skills/<skill-name>/
+git add skills/<domain>/<skill-name>/
 git commit -m "feat(skills): add <skill-name>"  # 新建
 # 或
 git commit -m "fix(skills): update <skill-name> - <变更摘要>"  # 更新

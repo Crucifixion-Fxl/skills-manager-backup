@@ -29,10 +29,17 @@
 #   {{liveness_initial_delay}}   default 15
 #   {{readiness_initial_delay}}  default 5
 #
-# DO NOT add `nodeSelector: kubernetes.io/arch: amd64`. Default rollout supports both
-# arches; Karpenter NodePool picks amd64 or arm64 spot at scheduling time, ~25% cheaper.
-# Exception: target cluster is TKE (single-arch), workflow generates an overlay-level
-# override; the base template stays multi-arch.
+# This base stays portable; it is NOT a complete deployable target workload.
+# Every target overlay MUST add the full, verified application placement variant
+# from references/nodepool-placement.md (single-pool AND or explicit pool-allowlist OR).
+# Ordinary workloads default to shared pools; reference-approved stateful/capability
+# exceptions require explicit evidence and the selected workflow's resource scope.
+# EKS uses verified nodepool, architecture, capacity, and supplied network constraints;
+# verify NodeClass through nodeClassRef/runtime evidence, not an ec2nodeclass Pod
+# selector or affinity requirement. Verify private-subnet/NAT egress.
+# Architecture/capacity alone do not identify a pool. Multi-arch images do not
+# authorize arbitrary pools or Spot; an approved amd64-only placement is valid.
+# TKE/GKE use their verified native pool contract, not EKS-specific labels.
 #
 # DO NOT add canary steps. If user wants Tier 2 (ALB weighted canary + Prometheus
 # AnalysisTemplate auto-judge), v2 currently does NOT ship the recipe yet — the four

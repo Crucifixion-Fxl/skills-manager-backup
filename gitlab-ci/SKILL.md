@@ -25,12 +25,12 @@ description: Create and review .gitlab-ci.yml files based on GitLab CI best prac
 
 ## Issue lifecycle gate
 
-- 创建或修改项目 CI 配置前，按 [`gitlab-issue-sop` 生命周期契约](../../collaboration/gitlab-issue-sop/references/lifecycle-binding.md) 验证 Root Issue 与当前仓 Work Item。只读审查可在缺少 binding 时输出事实，但不得给出可用于 merge/release 的 PASS。
-- MR pipeline 的可信 adapter 从 MR 描述中只提取唯一的完整 `Work Item:` / `Root Issue:` URL 作为候选，然后实时验证 Work Item 属于 MR target project、GitLab 将当前 MR 列为该 Work Item 的 related MR，并在跨项目时验证 Root↔Work Item 原生 Issue link。不得要求 `Closes`/`Fixes`/`Resolves` 或依赖 `closes_issues` 放行。
-- adapter 输出的 `root_issue_binding` 与 `work_item_binding` 至少包含 contract version、host、project ID、Issue IID/URL、state、assignee IDs、snapshot digest 和 `verified_at`。分支名、commit message、自由文本裸 `#IID` 或客户端 JSON 不可信。
-- 读取 Issue、related-MR 与 Issue-link API 的 adapter 必须使用明确批准、具备最小 read-api 权限的凭据；当前全局 Code Review 使用 `MR_USER_TOKEN`，不得静默回退到能力不足的 `CI_JOB_TOKEN`。
-- consumer job 必须 fail closed：binding 缺失、关闭、无 assignee、项目不匹配、关系为零/多义、snapshot 无法核验或 revision 漂移时，不运行会给出通过结论的 review/release Gate。
-- pipeline 完成后只把 terminal pipeline ID/status、exact commit SHA、artifact/report 固定链接和证据边界写回 Work Item；完整日志保留为 CI artifact。写回需幂等并读回。
+- 创建或修改项目 CI 配置前，按 [`gitlab-issue-sop` 生命周期契约](../../collaboration/gitlab-issue-sop/references/lifecycle-binding.md) 验证关联 Issue（可跨项目）。只读审查可在缺少 binding 时输出事实，但不得给出可用于 merge/release 的 PASS。
+- MR pipeline 的可信 adapter 从 MR 描述中提取完整 `Issue:` URL 作为候选（兼容旧的 `Work Item:` / `Root Issue:` 行），然后实时验证 Issue 可读、有 assignee，且 GitLab 将当前 MR 列为该 Issue 的 related MR。Issue 可以跨项目。不得要求 `Closes`/`Fixes`/`Resolves` 或依赖 `closes_issues` 放行。
+- adapter 输出的 `issue_binding` 至少包含 contract version、host、project ID、Issue IID/URL、state、assignee IDs、snapshot digest 和 `verified_at`。分支名、commit message、自由文本裸 `#IID` 或客户端 JSON 不可信。
+- 读取 Issue 与 related-MR API 的 adapter 必须使用明确批准、具备最小 read-api 权限的凭据；当前全局 Code Review 使用 `MR_USER_TOKEN`，不得静默回退到能力不足的 `CI_JOB_TOKEN`。
+- consumer job 必须 fail closed：binding 缺失、`issue_binding_evidence.status` 非 verified、无 assignee、当前 MR 不在 related MR 中、snapshot 无法核验或 revision 漂移时，不运行会给出通过结论的 review/release Gate。Issue 属于其他项目或 state 为 `closed` 不是拒绝理由（closed 是 release 回流等场景的合法终态）。
+- pipeline 完成后只把 terminal pipeline ID/status、exact commit SHA、artifact/report 固定链接和证据边界写回关联 Issue；完整日志保留为 CI artifact。写回需幂等并读回。
 
 ## 公司标准
 
@@ -140,6 +140,8 @@ include:
 | R9 | 禁止在 yml 中硬编码密钥/凭证 | 🔴 必须 |
 | R10 | 敏感变量使用 CI/CD Variables（masked + protected） | 🔴 必须 |
 | R11 | 生产部署 job 限制 `protected` 分支/标签 | 🔴 必须 |
+
+**跨项目获取受保护 CI 脚本**：先核实目标仓库对源项目的 Job Token allowlist 和执行者的读取权限。本 GitLab 实例曾出现同一项目访问关系下，使用 `CI_JOB_TOKEN` 的浅层 Git fetch 成功、Repository Files raw-file API 却返回 404 的情况；不能仅凭 allowlist 推断两种访问方式等价。需要在 job 中运行共享仓库的脚本时，可从受保护分支用短期 `CI_JOB_TOKEN` 做浅层 Git fetch，通过 `GIT_ASKPASS` 从环境变量供给令牌，不把令牌写进 URL、命令参数或日志；固定受信路径并校验脚本摘要后再执行。获取、权限或摘要校验失败时直接阻断，不回退到个人 Token 或未经校验的本地副本。变更上线前，用目标项目的实际 MR 流水线验证访问和失败传播。
 
 ### 性能
 

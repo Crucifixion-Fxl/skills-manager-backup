@@ -129,7 +129,7 @@ Debug 模式与生产共享完全相同的执行模型（cron 驱动、subagent 
 
 **CN 路由**：AWS CN 已弃用；prod 是腾讯云 `100014919455` / `cn-main`，staging 与 tech-service 是腾讯云 `100052802231` 的两个独立集群。`cn-*` 不代表同一个账户或同一个监控端点。先核对 [当前 CN 清单](../k8s-ops/references/cn-tencent-inventory.md)、告警 cluster label 与 Application destination，再派发云资源/K8s/指标采集；旧告警记录只作历史证据。
 
-CN tech-service 的 [监控目标域名](references/infra/prometheus.md) 尚待切换。Dispatcher 环境分类不证明端点可用；采集前核验实际 API base，query helper 要求显式 `PROMETHEUS_CN_TECH_SERVICE_URL`，不自动连接新旧域名。VictoriaMetrics 查询入口与 VMAlert 告警入口分别核验。
+CN tech-service 的 [监控入口](references/infra/prometheus.md) 已于 2026-10-19 完成 VM 查询 / VMAlert 健康检查，见 [准入回执](../../delivery/cicd-developer/references/cn-tech-service-admission-2026-10-19.md)。入口核验不代表采集覆盖或告警通知验收。Dispatcher 环境分类不代替目标确认；采集前核对实际 API base、调用方权限和租户，query helper 仍要求显式 `PROMETHEUS_CN_TECH_SERVICE_URL`，不自动连接新旧域名。VictoriaMetrics 查询入口与 VMAlert 告警入口分别核验。
 
 ## Examples
 

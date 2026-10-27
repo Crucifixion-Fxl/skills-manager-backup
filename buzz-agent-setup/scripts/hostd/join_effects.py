@@ -61,6 +61,11 @@ def _hash(value):
 
 
 @dataclass(frozen=True)
+class _ScopedRegistration:
+    proof: object
+
+
+@dataclass(frozen=True)
 class AgentSpec:
     pubkey: str
     owner_pubkey: str
@@ -926,7 +931,7 @@ class JoinEffects:
         elif reserved:
             self.store.defer_effect_step(row['request_id'],'registrar',status='unknown',now=int(self.clock()))
 
-    def _bound_authorization(self,row,spec,plan):
+    def _bound_authorization(self,row,spec,plan,registration=None):
         current=self.store.join_request(row['request_id'])
         saved=self.store.effect_plan(row['request_id'])
         keys=('request_id','agent_id','owner_pubkey','callback_app_id','chat_id','kind','binding_id','status')
@@ -938,16 +943,32 @@ class JoinEffects:
         agent=self.store.conn.execute('SELECT * FROM agent WHERE pubkey=?',(spec.pubkey,)).fetchone()
         binding=self._bound_plan(current,spec,plan)
         if (not agent or agent['status'] != 'active' or agent['owner_pubkey'] != spec.owner_pubkey
-            or agent['app_id'] != spec.app_id or binding['status'] != 'active'
+            or agent['app_id'] != spec.app_id
             or binding['chat_ref'] not in ('',gs.chat_ref(current['chat_id']))):
             raise EffectError(NOTICE)
+        if binding['status'] != 'active' or isinstance(registration,_ScopedRegistration):
+            # Reuse the root's canonical Worker observation inside the grant
+            # transaction: ledger/Worker threads may write after the awaited proof.
+            # A later transition to active cannot discard this scoped obligation.
+            observe=getattr(self.registrar,'readback_now',None)
+            if (binding['status'] not in ('active','degraded')
+                or not isinstance(registration,_ScopedRegistration)
+                or not self._registration_valid(registration.proof,row,spec,plan)
+                or not callable(observe)
+                or self.store.conn.execute('SELECT 1 FROM console_pause WHERE binding_id=?', (binding['binding_id'],)).fetchone()
+                or not self._registration_valid(observe(row,plan,scoped=True),row,spec,plan)):
+                raise EffectError(NOTICE)
 
-    def _record_bound_grant(self,row,spec,plan):
+    async def _scoped_registration_proof(self,row,spec,plan):
+        proof=await self._registration_proof(row,spec,plan)
+        return _ScopedRegistration(proof) if proof is not None else None
+
+    def _record_bound_grant(self,row,spec,plan,registration=None):
         # The live proof was awaited outside SQL. Recheck approval and its exact
         # agent/binding tuple while holding the write transaction before granting
         # startup restoration authority. A later disconnect never revokes it.
         with self.store.transaction():
-            self._bound_authorization(row,spec,plan)
+            self._bound_authorization(row,spec,plan,registration)
             self.store.record_agent_chat(spec.pubkey,row['chat_id'],gs.chat_ref(row['chat_id']),
                                          binding_id=plan['binding_id'],status='active',now=int(self.clock()))
 
@@ -972,7 +993,9 @@ class JoinEffects:
                 self._guard(row,plan)
                 if self._file_proof(spec,plan)!=files:verified=False
                 return EffectReceipt(row['request_id'], row['agent_id'], row['chat_id'], bool(verified))
-            self._bound_authorization(row,spec,plan)
+            registration = (await self._scoped_registration_proof(row,spec,plan)
+                            if self._bound_plan(row,spec,plan)['status'] == 'degraded' else None)
+            self._bound_authorization(row,spec,plan,registration)
             channel = plan['channel_id']
             roles = await self._read('members',channel)
             self._guard(row,plan)
@@ -988,10 +1011,14 @@ class JoinEffects:
                         and channel in prompt[prompt.index(legacy.PROMPT_BEGIN):prompt.index(legacy.PROMPT_END)]
                         and channel in responsible['channels'] and _subscription_mode(env, channel) is not None
                         and running)
-            if verified: verified = await self._registration(row,spec,plan)
+            if verified:
+                scoped=isinstance(registration,_ScopedRegistration) or self._bound_plan(row,spec,plan)['status']=='degraded'
+                registration = (await self._scoped_registration_proof(row,spec,plan) if scoped
+                                else await self._registration_proof(row,spec,plan))
+                verified = registration is not None
             self._guard(row,plan)
             if self._file_proof(spec,plan)!=files:verified=False
-            if verified: self._record_bound_grant(row,spec,plan)
+            if verified: self._record_bound_grant(row,spec,plan,registration)
         except Exception:
             verified = False
         return EffectReceipt(row['request_id'], row['agent_id'], row['chat_id'], bool(verified))
@@ -1208,9 +1235,15 @@ class JoinEffects:
             self.store.defer_effect_step(row['request_id'],'registrar',status='unknown',now=int(self.clock()))
 
     async def _registration(self,row,spec,plan):
-        if self.registrar is None: return False
+        return await self._registration_proof(row,spec,plan) is not None
+
+    async def _registration_proof(self,row,spec,plan):
+        if self.registrar is None: return None
         answer = await self.registrar.readback(row,plan)
         self._guard(row,plan)
+        return answer if self._registration_valid(answer,row,spec,plan) else None
+
+    def _registration_valid(self,answer,row,spec,plan):
         return (isinstance(answer,RegistrationProof) and answer.request_id == row['request_id'] and answer.binding_id == plan['binding_id']
                 and answer.channel_id == plan['channel_id'] and answer.chat_id == row['chat_id'] and answer.app_id == spec.app_id
                 and 0 <= int(self.clock()) - answer.checked_at <= 300

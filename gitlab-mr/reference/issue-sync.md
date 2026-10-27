@@ -1,5 +1,13 @@
 # Associated Issue update and closure
 
+When a bound Issue/MR session finishes acceptance or receives an explicit owner result/waiver,
+write it back in that session and verify readback without waiting for another request to comment.
+Route to [the shared acceptance contract](../../../collaboration/gitlab-issue-sop/references/deployment-acceptance.md):
+`acceptance.py report --issue ...` and `pending --issue ...` work independently of release-agent,
+a publisher or a deployment batch. Record known facts and missing context separately; the release
+consumer later matches records to actual deployments and applies its gates. MR notes only reference
+the Issue record. Keep acceptance ownership and remaining work after merge; no closure on CI alone.
+
 This is a mandatory parent-session responsibility at MR submission/update,
 actual merge, and session wrap-up. It complements the shared
 [Issue lifecycle contract](../../../collaboration/gitlab-issue-sop/references/lifecycle-binding.md);
@@ -7,11 +15,10 @@ it does not replace acceptance with a merge result.
 
 ## Scope and triggers
 
-Use the verified Root Issue and repository Work Item from Step 1.25. Include
-other Issues only when their native MR/Issue association and delivered scope
-have been verified. A URL in prose, related example, dependency or historical
-reference is not a closure instruction. Deduplicate by GitLab host/project/IID;
-when Root and Work Item are the same Issue, write one receipt.
+Use the verified Issue from Step 1.25. Include other Issues only when their
+native MR/Issue association and delivered scope have been verified. A URL in
+prose, related example, dependency or historical reference is not a closure
+instruction. Deduplicate by GitLab host/project/IID and write one receipt per Issue.
 
 - After creating/updating the MR, append and read back a submitted/revised
   receipt before starting or resuming Driver. Include MR URL, exact HEAD,
@@ -32,13 +39,13 @@ Read the current Issue and its completion conditions before deciding:
 |:--|:--|
 | Scope partly delivered, blockers or required acceptance remain | Keep open; append progress, verified boundary, remaining conditions, dependency, next action and responsible owner |
 | All conditions for this Issue are proved by persisted, read-back evidence | Append final receipt, read it back, close and read back `state=closed` |
-| Root Issue still has required release/runtime/business/observation/child work | Keep open, even if this MR and a repository Work Item are complete |
+| Issue still has required release/runtime/business/observation/child work or MRs in other repositories | Keep open, even if this MR is complete |
 | Issue already closed | Read the closure evidence; do not reopen or repeat a close automatically. If current evidence contradicts closure, report the discrepancy and stop the transition |
 
 A green pipeline, HTTP 200, Collector acknowledgement, package publication or
-MR merge proves only its own stage. Close a Work Item at merge only when its
-documented scope actually ends there. Root and Work Item sharing an identity
-must satisfy the Root's full completion conditions. Do not introduce closing
+MR merge proves only its own stage. Close the Issue at merge only when its
+documented scope actually ends there and no other repository MR is pending.
+Do not introduce closing
 keywords to bypass this decision or close every Issue mentioned by the MR.
 
 ## Receipt and readback
@@ -79,11 +86,12 @@ Independent reversible validation can continue while synchronization is pending.
 
 ## Acceptance scenarios
 
-1. Merge delivers implementation but deployment/observation is pending: Work Item
-   and Root receive evidence; any Issue with outstanding conditions stays open.
-2. A merge-only Work Item is complete and Root awaits business acceptance:
-   final receipt and close readback for Work Item; progress receipt for Root.
-3. Root equals Work Item: one receipt; close only when the full Root scope is done.
+1. Merge delivers implementation but deployment/observation is pending: the
+   Issue receives evidence and stays open.
+2. One of several repository MRs for the same Issue merges: progress receipt
+   naming the merged MR and the remaining ones; the Issue stays open.
+3. The last MR merges and the Issue scope ends at merge: final receipt, close,
+   and read back `state=closed`.
 4. Notes POST or close PUT times out: reconcile before retry; no false completion
    and no local deletion while the result is unknown.
 5. A superseding push changes HEAD: submission receipt must be refreshed before

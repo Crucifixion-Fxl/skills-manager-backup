@@ -18,6 +18,18 @@ description: 统一处理网站和平台登录、授权、会话恢复及人工�
 5. 完成后核验目标身份、权限与资源范围，再恢复业务。未知站点缺身份契约时只报告目标内容可访问，不宣称 Token/API 或读写权限已核验。
 6. 结束时撤销短时租约、停本任务进程与隧道；once 清理 profile 和本次新建的一次性凭据，save 保留私有 profile/受控凭据。借用资源保留；Mac 和开发机分别记录清理结果。
 
+## 用户电脑上的 AI 接管 prompt
+
+浏览器位于远端、用户需在自己电脑上完成登录时，优先提供一段可以直接交给用户电脑上的 AI 执行的自包含 prompt。由该 AI 准备或复用官方 `web-view` 运行库、已核验 SSH Host alias、私有转发与任务画面 bootstrap，并打开浏览器/置前；人只完成登录、扫码、MFA、主机信任或密钥解锁等本人动作。不要默认让用户下载运行 `.command`、手敲 SSH/Node 命令，或把登录二维码贴到终端作为远程画面接管的替代。
+
+先核验用户电脑上的 AI 能否读取本 Skill；尚未安装 plugin 时，prompt 必须提供本任务实测可访问的 Skill/runtime/helper 获取位置与执行入口，不猜测已安装。
+
+prompt 只携带真实目标站点、预期账号、已确认 Host alias、远端 viewer 端口、所选私有 capability 文件路径、本人动作、once/save 选择与期限；不包含 capability 值、Cookie、Token、device_code、回调 code/state 或原始 CDP websocket。端口和文件路径是给执行 AI 的 setup 参数，不是公开画面地址。接管 AI 必须真实核验 SSH、选定任务和画面，使用运行库输出的真实本机 URL；远端 prepared/render-verified 不等于用户电脑已连接，不提前声称页面已置前。没有可执行的用户电脑 AI 通道时明确交接状态，提供 prompt，不承诺已经在用户电脑执行。
+
+示例（占位值必须替换为本任务实测参数）：
+
+> 使用 `$addx:web-access`，通过已配置 SSH Host `<alias>` 连接本次 `<目标站点>` 登录任务：远端 viewer 端口 `<port>`，capability 文件 `<绝对私有路径>`。由你准备运行库、检查连接并打开本任务浏览器，将页面置前让我完成 `<本人动作>`；不得关闭主机校验、读取秘密输入或输出凭据。若本机未安装该 Skill，先使用已核验的 `<Skill/runtime/helper 获取位置与执行入口>`；本次接管期限为 `<到期时间>`。网页登录态选择 `<once/save>`。核验真实画面和目标身份后回报连接、登录与清理状态；不要操作其它会话或扩大业务权限。
+
 ## References
 
 - 原生凭据、运行库与远程调用：[认证使用](references/auth-usage.md)。命令入口为 web-access、web-view、platform-onboard。旧名直接迁移，不保留兼容入口。

@@ -16,6 +16,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).parents[1] / "lib"))
 
+from merge_integrity_audit import validate_merge_integrity
 from production_overlay_audit import validate_non_promotion_overlay_audit
 from release_branch_audit import validate_branch_acceptance
 from release_drive_validation import cleanup_job_binding_matches
@@ -258,9 +259,7 @@ def validate(state: dict[str, Any], audit: dict[str, Any]) -> None:
         if audit.get(field) != state.get(field):
             raise AuditError(f"audit {field} does not match Driver state")
     snapshot = state.get("last_snapshot")
-    if not isinstance(snapshot, dict) or audit.get("head_sha") != snapshot.get(
-        "head_sha"
-    ):
+    if not isinstance(snapshot, dict) or audit.get("head_sha") != snapshot.get("head_sha"):
         raise AuditError("audit head_sha does not match latest Driver snapshot")
     if audit.get("pipeline_status") != "success":
         raise AuditError("latest pipeline is not successful")
@@ -273,6 +272,7 @@ def validate(state: dict[str, Any], audit: dict[str, Any]) -> None:
     if not isinstance(release, dict):
         raise AuditError("audit.release must be an object")
     validate_release_evidence(state, release)
+    validate_merge_integrity(state, audit, AuditError)
 
 
 def main(argv: list[str] | None = None) -> int:

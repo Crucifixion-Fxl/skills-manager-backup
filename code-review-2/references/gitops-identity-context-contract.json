@@ -1,0 +1,5 @@
+{
+  "schema_version": 1,
+  "capability": "gitops-identity-context/v1",
+  "tool": "read_review_source"
+}

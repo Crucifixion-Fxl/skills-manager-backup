@@ -71,7 +71,7 @@ Authorization: Bearer <jwt_token>
   "app_domain_id": 1,
   "metric_app_monitor_config": "{JSON字符串，可选}",
   "upstream_app_monitor_configs": "[]",
-  "deps": "[]"
+  "deps": "[\"analytics/ads_order_count_di\"]"
 }
 
 # 返回: {"data": {"Id": 123, "name": "sla_daily_order_count"}, "message": "创建成功"}
@@ -79,11 +79,15 @@ Authorization: Bearer <jwt_token>
 
 **必填字段：** `name`、`title`、`time_grain`、`metric_config`、`threshold_config`、`biz_domain_id`、`biz_process_id`
 
+**Skill 创建门禁：** 另须显式传入经 [发现与校验](upstream-dependencies.md) 的 `deps`。上例资产仅示意，必须替换为当前查询实际匹配的完整 key，不能照抄。后端仅校验 `deps` 是否是合法 JSON 并原样保存，未传时写入 `"[]"`；它不会执行 Web 页面的依赖自动匹配，也不会替客户端检查资产存在性或分区粒度。
+
 **校验规则：**
 - `name` 必须唯一
 - `time_grain` 可选值：`hour`、`day`、`week`
 - `threshold_config` 必须包含合法的 `op`（`lt`/`gt`）和至少一个告警等级（`warning`/`critical`）
 - 所有 JSON 字段必须是合法的 JSON 字符串
+
+**调用方依赖校验：** `deps` 解码后必须是去重的非空字符串数组，元素取自目标 Dagster 实例的完整 asset key；只有已核实无适用依赖、且用户已确认时允许空数组。发现失败不能使用空数组兜底。`POST /create` 成功后须通过 `GET /get` 回读比对，不能仅凭创建响应判断依赖保存正确。
 
 **创建时默认值：**
 - `owners` — 自动设为当前 Token 用户
@@ -109,6 +113,7 @@ Authorization: Bearer <jwt_token>
 
 - `name` 必填，用于定位目标记录
 - 其余字段均为可选，仅传需要更新的字段
+- 修改 `metric_config` 或 `time_grain` 时重新发现并校验 `deps`，展示原有手工依赖和自动发现结果的差异后一起提交；仅修改阈值、标题、分类、通知群时不要传 `deps`。传 `"[]"` 会清空依赖，不是“保持原值”。依赖修改后必须 `GET /get` 回读核对。
 - **权限检查：** 只有 `owners` 中的用户可以修改
 - `feishu_group_chats` 格式为 `Dict[str, Dict]`，key 是 chat_id，value 含 `chat_id` 和 `chat_name`。示例：`"{\"oc_xxx\":{\"chat_id\":\"oc_xxx\",\"chat_name\":\"群名\"}}"` 。传 `"null"` 字符串表示恢复为业务域默认群
 
@@ -121,7 +126,7 @@ GET /api/v1/sla_metric/get?name={metric_name}
 Authorization: Bearer <jwt_token>
 ```
 
-返回**完整字段**（含 `threshold_config`、`metric_config`、`metric_app_monitor_config`、`upstream_app_monitor_configs`、`subscribers`、`feishu_group_chats`）。
+返回**完整字段**（含 `threshold_config`、`metric_config`、`metric_app_monitor_config`、`upstream_app_monitor_configs`、`deps`、`subscribers`、`feishu_group_chats`）。`deps` 按返回类型解析为数组后做集合比较；缺失、null、非法类型不能当作空依赖通过验收。
 
 #### 列表查询
 
@@ -244,11 +249,17 @@ Authorization: Bearer <jwt_token>
   "biz_domain_id": 2,
   "biz_process_id": 3,
   "app_domain_id": 1,
-  "deps": "[\"dagster_asset_name\"]"
+  "deps": "[\"analytics/ads_order_count_di\"]"
 }
 ```
 
 **重要：所有复杂字段必须 JSON 序列化为字符串后传递。**
+
+#### deps（上游数据资产依赖）
+
+例如 Dagster 返回 `assetKey.path = ["analytics", "ads_order_count_di"]`，对应 key 是 `analytics/ads_order_count_di`，请求字段为 `"deps": "[\"analytics/ads_order_count_di\"]"`。必须保留完整路径，不能只传表名 `ads_order_count_di`。示例 key 不代表目标实例一定存在该资产。
+
+`deps` 用于等待数仓上游完成后查询指标；`upstream_app_monitor_configs` 用于上游应用版本监控，不能代替数据依赖。发现、空依赖例外、粒度约束与保存后回读的完整规则见 [上游依赖发现与校验](upstream-dependencies.md)。
 
 #### metric_config（Superset 指标配置）
 

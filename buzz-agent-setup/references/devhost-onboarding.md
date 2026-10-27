@@ -4,6 +4,11 @@
 
 **状态：reference candidate。**开发机一侧的配置（账号准入、sshd、每用户独立的 rootless Docker、`codex login --device-auth` 能给出验证码）已在真实开发机上用本地测试账号核对过；**没有用真实 LDAP 密码登录过**，也**没有端到端跑过** Buzz 一侧（申请频道里的对话、agent 注册、`buzz-acp` 真实接单）。标了「待验证」的地方不要当成已确认的事实。
 
+> **2026-10-10 实测记录**（buzz-acp 0.5.27 / codex-cli 0.161.0 / codex-acp 2.1.1，真实开发机）：
+> - 真实 LDAP 密码登录 ✅；`wss://` relay 地址 ✅；0.5.27 通过启动器全部启动契约（9 必填键 + recovery 目录）✅
+> - **buzz-acp 真实接单 ⚠️ 有前置地雷**：开发机公共安装缺 `codex-code-mode-host`，agent 被唤醒但模型无法执行任何命令、频道不回帖——修复方法见 [troubleshooting.md](troubleshooting.md) 根因 C（下面 §2 的环境核对已加此项检查）
+> - 仍未验证：申请频道 @get-dev-vps 对话流程、释放账号流程
+
 ## 1. 申请开发机
 
 在 Buzz 频道「申请开发机」（频道 ID `9bb7f433-8830-4a9f-a16d-e1bf31bab27b`，公开频道，自己加入即可）里发一条消息：
@@ -53,6 +58,8 @@ id            # 没有 sudo
 docker ps     # 用的是你自己的 rootless Docker
 codex --version
 which buzz buzz-acp codex-acp
+ls /usr/local/bin/codex-code-mode-host 2>/dev/null \
+  || echo "缺 codex-code-mode-host：codex 无法执行任何命令，agent 不会回帖（见 troubleshooting.md 根因 C）"
 ```
 
 ## 3. 登录自己的 Codex
@@ -106,10 +113,16 @@ install -d -m 700 ~/.config/buzz/agents
 
 ```bash
 scp <本机上的 agent env 文件> <登录名>@<IP>:~/.config/buzz/agents/<agent 名>.env
+scp <skill 目录>/references/scripts/buzz_claude_runtime.py <登录名>@<IP>:~/.config/buzz/agents/buzz_claude_runtime.py
+```
+
+先回到开发机：`chmod 600 ~/.config/buzz/agents/<agent 名>.env && chmod 400 ~/.config/buzz/agents/buzz_claude_runtime.py`，确认 helper 已为0400后，再在你的电脑上传 launcher：
+
+```bash
 scp <skill 目录>/references/scripts/run-agent.py <登录名>@<IP>:~/.config/buzz/agents/run-agent.py
 ```
 
-回到开发机：`chmod 600 ~/.config/buzz/agents/<agent 名>.env && chmod 500 ~/.config/buzz/agents/run-agent.py`，用 `stat -c '%a %U' <文件>` 确认权限和属主。env 必须是 0600、属主是你。
+再回到开发机：`chmod 500 ~/.config/buzz/agents/run-agent.py`，用 `stat -c '%a %U' <文件>` 确认权限和属主。env 必须是0600、属主是你；helper0400必须先于launcher复制/启用。
 
 启动器 `run-agent.py` **强制要求**下表「必填」列为「是」的 9 个键（对照 `run-agent.py` 里的 `REQUIRED`），缺一个就拒绝启动，报错只有 `launch contract failed`，不带细节。其余键启动器不强制，但 agent 要正常工作需要配置：
 
@@ -138,7 +151,7 @@ scp <skill 目录>/references/scripts/run-agent.py <登录名>@<IP>:~/.config/bu
 
 ### 4.3 安装 `run-agent.py` 并启动
 
-- 把 skill 里的 [`run-agent.py`](scripts/run-agent.py) 装成 `~/.config/buzz/agents/run-agent.py`，权限 0500。
+- 把 skill 里的 [`run-agent.py`](scripts/run-agent.py) 装成 `~/.config/buzz/agents/run-agent.py`，权限 0500，同时安装同源 `buzz_claude_runtime.py` 到相同目录，权限0400；缺失/旧版/摘要错误均拒绝启动。
 - 开发机上 `/usr/local/bin/buzz-acp` 是公共安装的二进制（`desktop-v0.5.27` 构建，root 属主）。用假密钥在开发机上验证过：把它的路径和 `sha256sum` 写进 env 后，`run-agent.py` 的启动校验（`prepare_launch`）能通过。
 - 但这个构建里**没有找到**启动器要求的自动恢复（`BUZZ_ACP_RECOVERY_REVISION`）对应的字符串，skill 其余部分固定的是 `buzz-0.5.23`。两者是否兼容**未验证**。要严格按 skill 的版本，请按 [local-upgrade-runbook.md](local-upgrade-runbook.md) 取对应二进制放到你自己的目录，再把路径和 sha256 写进 env。
 - 持久单元写法见 [runtime-setup.md](runtime-setup.md)「用持久用户单元托管 Agent 进程」（`ExecStart=/usr/bin/python3 -I %h/.config/buzz/agents/run-agent.py <agent 名>`）；linger 已在首次登录时开启，登出后单元继续运行。

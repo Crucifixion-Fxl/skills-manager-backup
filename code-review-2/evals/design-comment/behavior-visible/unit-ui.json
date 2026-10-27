@@ -1,0 +1,6 @@
+{
+  "id": "unit-ui",
+  "mode": "synthetic controlled evidence review; no external actions",
+  "trusted_task": "Pure design-review. Approved truth: in Carry view units yards; in Speed view units mph. PDF screen illustration page 1 upper-right labelled Carry shows 120 mph; page 2 Speed shows 120 mph and is correct. Numbers alone match but scenario/unit correspondence does not. All actual pages read and versions identified.",
+  "output": "Return final review-result JSON supported by the supplied skill. Do not read oracle or other runs. All observations above are synthetic caller-supplied fixtures; do not claim tool operations. Use real local skill instructions, with caller capability design-review-report/v1 only when that skill supports it."
+}

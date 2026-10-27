@@ -58,6 +58,10 @@ import subprocess
 import sys
 import time
 from typing import Any
+
+# Keep adapter imports on the CLI module so exception classes retain identity.
+if __name__ == "__main__":
+    sys.modules.setdefault("gitlab_buzz_sync", sys.modules[__name__])
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -225,7 +229,7 @@ NOSTR_URI_RE = re.compile(r"(?i)(nostr):")
 DAILY_OBJECTS = frozenset({"access_token", "sync"})
 CONFIG_KEYS = frozenset({"channel_id", "publisher_pubkey", "since", "include_confidential", "exclude", "diff", "audience",
                          "agent_pubkeys", "people", "people_file", "gitlab", "buzz", "mute_events",
-                         "compact_status_updates"})
+                         "compact_status_updates", "stage_review"})
 # `mute_events` entries are `<object>:<event>` or `<object>:*`. Only top-level instant notices can be
 # muted, and only with the event names the script really emits, so a typo fails loud instead of muting
 # nothing. Thread records (issue/mr/note/milestone, MR pipeline results) and `sync` are never mutable.
@@ -244,6 +248,10 @@ DIFF_CONFIG_KEYS = frozenset({"enabled", "private"})
 
 class SyncError(RuntimeError):
     """Fail-closed error: the run must stop without further writes."""
+
+
+class StageDeliverySuperseded(SyncError):
+    """A positively unattempted stage delivery may be durably cancelled."""
 
 
 class GitLabHTTPError(SyncError):
@@ -687,6 +695,8 @@ def _sanitize_comment_line(line: str) -> str:
     """Keep markdown, but stop a GitLab note from forging header / note / events lines."""
 
     text = neutralize(line.rstrip("\n"))
+    if "<!-- stage-review-request:v1 " in text:
+        text = text.replace("<!-- stage-review-request:v1 ", "<!-- stage-review-request：v1 ")
     if _parse_header_line(text) is not None:
         return text.replace("[gitlab-notify:", "[gitlab-notify：", 1)
     if NOTE_LINE_RE.fullmatch(text):
@@ -2756,6 +2766,12 @@ def validate_config(config: Any) -> None:
     if not isinstance(config, dict):
         raise SyncError("config must be a JSON object")
     _reject_unknown_keys(config, CONFIG_KEYS, "config")
+    if "stage_review" in config:
+        import gitlab_stage_review_dispatch as stage_review
+        try:
+            stage_review.validate_config(config)
+        except (stage_review.StageError, KeyError) as exc:
+            raise SyncError(f"invalid stage review config: {exc}") from None
     if not isinstance(config.get("channel_id"), str) or not UUID_RE.fullmatch(config["channel_id"]):
         raise SyncError("channel_id must be a lowercase UUID")
     if not isinstance(config.get("publisher_pubkey"), str) or not HEX64_RE.fullmatch(config["publisher_pubkey"]):
@@ -3978,6 +3994,14 @@ class Syncer:
         return str(visibility)
 
     def _check_delivery_gates(self, kind: str, payload: dict[str, Any]) -> None:
+        if kind == "buzz_message" and "<!-- stage-review-request:v1 " in str(payload.get("content", "")):
+            import gitlab_stage_review_dispatch as stage_review
+            try:
+                stage_review.recheck_delivery(self, payload)
+            except stage_review.SupersededStage as exc:
+                raise StageDeliverySuperseded(str(exc)) from None
+            except stage_review.StageError as exc:
+                raise SyncError(str(exc)) from None
         if kind == "buzz_message":
             header = parse_header(payload.get("content"))
             project_id = header.get("project") if isinstance(header, dict) else None
@@ -4121,6 +4145,27 @@ class Syncer:
         ][-(OUTBOX_ACK_LIMIT - 1):] + [record]
         self._write_outbox(ledger)
 
+    def _cancel_unattempted_stage(self, change_id: str, reason: str) -> None:
+        """Retain evidence atomically; never cancel attempted or grouped operations."""
+        ledger = self._read_outbox()
+        matching = [x for x in ledger["pending"] if x.get("change_id") == change_id]
+        if len(matching) != 1:
+            raise SyncError("stage cancellation requires exactly one pending operation")
+        item = matching[0]
+        payload = item.get("payload")
+        if (item.get("attempted") is not False or item.get("kind") != "buzz_message"
+                or "group_id" in item or "group_index" in item or not isinstance(payload, dict)
+                or "<!-- stage-review-request:v1 " not in str(payload.get("content", ""))
+                or change_id != delivery_change_id(self.channel, "buzz_message", payload)):
+            raise SyncError("stage cancellation is not an exact unattempted standalone request")
+        cancelled = ledger.setdefault("cancelled", [])
+        if not isinstance(cancelled, list):
+            raise SyncError("durable outbox cancellation journal is invalid")
+        cancelled.append({**item, "status": "CANCELLED", "reason": reason,
+                          "cancelled_at": format_timestamp(dt.datetime.now(dt.timezone.utc))})
+        ledger["pending"] = [x for x in ledger["pending"] if x.get("change_id") != change_id]
+        self._write_outbox(ledger)
+
     def _discard_rejected_delivery(self, change_id: str) -> None:
         """Remove a queued operation only when the adapter proves that no write occurred."""
 
@@ -4156,6 +4201,175 @@ class Syncer:
             return None
         return int(header["project"])
 
+    def _held_pipeline_scopes(self, pending: list[dict[str, Any]] | None = None) -> set[tuple[int, int]]:
+        # Derive this from the current ledger at every effect boundary. A cached
+        # project id or a caller-supplied scope is never a dispatch capability.
+        result = set()
+        for item in self._read_outbox()["pending"] if pending is None else pending:
+            project = self._isolatable_pipeline(item)
+            if project is not None:
+                key = parse_header(item["payload"]["content"])["events"][0]
+                result.add((project, int(key.split("-")[1])))
+        return result
+
+    def _pipeline_keys_independent(self, header: dict[str, Any], held: set[tuple[int, int]]) -> bool:
+        for key in header.get("events", []):
+            match = re.fullmatch(r"pipeline-([1-9][0-9]*)-([a-z_]+)", key)
+            if match and (header["project"], int(match[1])) in held:
+                return False
+            # A hashed webhook key cannot prove it is unrelated to a held
+            # pipeline. Source records are filtered before grouping as well.
+            if key.startswith("webhook-") or key.startswith("pipeline-") and not match:
+                return False
+        return True
+
+    def _independent_object_content(self, content: Any, project: int | None = None) -> int | None:
+        """Identify an Issue/MR by its header AND canonical URL, or canonical plaque."""
+        header = parse_header(content)
+        if header:
+            kind, identified = header.get("object"), header.get("project")
+            iid = header.get(kind)
+            if kind not in {"issue", "mr"} or not _positive_int(iid):
+                return None  # A pipeline header cannot masquerade as a plaque.
+            if project is not None and project != identified:
+                return None
+            project = identified
+            if project not in self._projects:
+                return None
+            url = self._object_url(project, kind, iid)
+            # Compare whole URL tokens, preserving legacy work_items aliases and
+            # note anchors without accepting another host/project or IID prefix.
+            urls = re.finditer(
+                r"(?:^|[\s(])(?P<url>https?://[^\s)#\x00-\x1f\x7f]+)(?=[)#\s]|$)",
+                str(content),
+            )
+            if not any(canonical_plaque_url(match["url"]) == url for match in urls):
+                return None
+            return project
+        url = plaque_url(content)
+        ident = plaque_identity(url) if url else None
+        if not ident or ident["object"] not in {"issue", "mr"}:
+            return None
+        matches = [pid for pid in self._projects
+                   if (project is None or project == pid)
+                   and canonical_plaque_url(url) == self._object_url(pid, ident["object"], ident["iid"])]
+        return matches[0] if len(matches) == 1 else None
+
+    def _independent_issue_origin(self, target: str, event: dict[str, Any],
+                                  project: int | None, iid: int | None) -> bool:
+        """Reprove one explicit Issue origin; a foreign publisher is not a capability.
+
+        The caller has verified the raw event signature. Only a selected current
+        Issue's explicit origin marker can authorize its plain top-level target;
+        bare links, bindings alone and arbitrary foreign ancestors cannot do so.
+        This is deliberately uncached so a queued restart rechecks revocation.
+        """
+        if (not _positive_int(project) or project not in self._projects or not _positive_int(iid)
+                or origin_top_level_root(event, self.channel) != target
+                or "[gitlab-notify:" in str(event.get("content", ""))
+                or plaque_url(event.get("content")) is not None):
+            return False
+        issue = self.gitlab.issue(project, iid)
+        if (not isinstance(issue, dict) or issue.get("iid") != iid
+                or issue.get("project_id") != project
+                or canonical_plaque_url(issue.get("web_url")) != self._object_url(project, "issue", iid)
+                or not issue_selected(issue, self.config)[0]):
+            return False
+        # Validate the complete current Issue contract before granting its scope.
+        issue_fact(issue, project)
+        notes = self.gitlab.notes(project, iid)
+        texts = [issue.get("description") or "", *origin_note_bodies(notes, self.bot_user_id)]
+        sources = [source for text in texts for source in parse_origin_sources(text)]
+        for origin, hint in sources:
+            if hint or origin.get("root_event_id") != target:
+                continue
+            try:
+                if self._checked_origin_root(origin, subject=f"issue {iid}", hint=False) == target:
+                    return True
+            except OriginUnusable:
+                continue
+        return False
+
+    def _independent_target(self, target: Any, held: set[tuple[int, int]],
+                            project: int | None = None, seen: frozenset[str] = frozenset(),
+                            *, issue_iid: int | None = None) -> int | None:
+        """Prove the real target and every ancestor, never just a payload's project_id."""
+        if not isinstance(target, str) or not HEX64_RE.fullmatch(target) or target in seen or len(seen) >= 32:
+            return None
+        events = self.buzz.thread(target)
+        if sum(e.get("id") != target for e in events) >= THREAD_REPLY_LIMIT:
+            raise SyncError("independent target history is incomplete")
+        matching = [e for e in events if e.get("id") == target]
+        if len(matching) != 1:
+            return None
+        event = matching[0]
+        # BuzzCLI.thread verifies header facts, but legacy plaques have no
+        # header. This new scope proof must verify every raw target/ancestor.
+        verify_nostr_event_signature(event, label="independent target")
+        if (event.get("kind") != 9
+                or [t[:2] for t in _tag_values(event, "h")] != [["h", self.channel]]):
+            return None
+        if event.get("pubkey") != self.publisher:
+            return project if self._independent_issue_origin(target, event, project, issue_iid) else None
+        header = parse_header(event.get("content"))
+        if header and not self._pipeline_keys_independent(header, held):
+            return None
+        identified = self._independent_object_content(event.get("content"), project)
+        if identified is None:
+            return None
+        parents = _tag_values(event, "e")
+        if len(parents) > 2 or any(len(t) < 4 or t[3] not in {"root", "reply"} for t in parents):
+            return None
+        # A signed Issue fact supplies its own identity to its origin ancestor.
+        # Caller hints never turn an MR/plaque/unscoped message into Issue proof.
+        ancestor_issue = header.get("issue") if header and header.get("object") == "issue" else None
+        if any(self._independent_target(t[1], held, identified, seen | {target},
+                                       issue_iid=ancestor_issue) is None for t in parents):
+            return None
+        return identified
+
+    def _independent_delivery(self, kind: str, payload: dict[str, Any],
+                              held: set[tuple[int, int]]) -> bool:
+        header = parse_header(payload.get("content"))
+        if header and not self._pipeline_keys_independent(header, held):
+            return False
+        project = payload.get("project_id")
+        if header:
+            if project is not None and project != header.get("project"):
+                return False
+            project = header.get("project")
+        if kind == "gitlab_note":
+            object_kind, iid = payload.get("object"), payload.get("iid")
+            if object_kind not in {"issue", "mr"} or not _positive_int(iid) or project not in self._projects:
+                return False
+            root = parse_binding([{"author": {"id": self.bot_user_id}, "body": payload.get("body")}],
+                                 self.bot_user_id, project, object_kind, iid, self.channel)
+            return root is not None and self._independent_target(
+                root, held, project, issue_iid=iid if object_kind == "issue" else None) is not None
+        target = payload.get("reply_to") if kind in {"buzz_message", "buzz_diff"} else payload.get("event_id")
+        if target:
+            if header and header.get("object") not in {"issue", "mr"}:
+                return False
+            if kind not in {"buzz_message", "buzz_edit", "buzz_reaction", "buzz_diff"}:
+                return False
+            issue_iid = None
+            if (kind == "buzz_message" and header and header.get("object") == "issue"
+                    and self._independent_object_content(payload.get("content"), project) == project):
+                issue_iid = header.get("issue")
+            return self._independent_target(target, held, project, issue_iid=issue_iid) is not None
+        if kind != "buzz_message":
+            return False
+        if self._independent_object_content(payload.get("content"), project) is not None:
+            return True
+        # Finite standalone source identity; opaque webhook/group scopes stay closed.
+        if (header and header.get("object") == "pipeline" and project in self._projects
+                and set(header) == {"object", "event", "project", "events"}
+                and len(header["events"]) == 1):
+            key = header["events"][0]
+            return bool(re.fullmatch(r"pipeline-[1-9][0-9]*-failed", key)
+                        and header["event"] == "failed")
+        return False
+
     def _check_outbox_start(self, kind: str, payload: dict[str, Any]) -> None:
         """Check durable truth before dispatch, including direct and group paths."""
         change_id = delivery_change_id(self.channel, kind, payload)
@@ -4165,11 +4379,13 @@ class Syncer:
             raise SyncError("durable outbox action was already attempted; readback is required")
         others = [item for item in pending if item.get("change_id") != change_id
                   and item.get("kind") != "summary_request"]
-        if self._isolated_pending_projects or any(item.get("attempted") is not False for item in others):
-            if (kind != "buzz_message" or change_id != self._independent_comment_id
-                    or any("group_id" in item or "group_index" in item for item in same)
-                    or not others or any(self._isolatable_pipeline(item) is None for item in others)):
-                raise SyncError("durable outbox topic remains blocked")
+        held = self._held_pipeline_scopes(pending)
+        if held:
+            if not self._independent_delivery(kind, payload, held):
+                raise SyncError("durable outbox topic remains blocked: independent scope is unproven")
+            others = [item for item in others if self._isolatable_pipeline(item) is None]
+        if any(item.get("attempted") is not False for item in others):
+            raise SyncError("durable outbox topic remains blocked")
 
     def _deliver(
         self, kind: str, payload: dict[str, Any], action: Any, *, discard_rejected: bool = True,
@@ -4286,6 +4502,9 @@ class Syncer:
             ) is None
         ):
             raise SyncError("durable outbox pending binding is outside the configured scope")
+        held = self._held_pipeline_scopes()
+        if held and not self._independent_delivery("gitlab_note", payload, held):
+            raise SyncError("durable outbox topic remains blocked: binding scope is unproven")
         self._check_delivery_gates("gitlab_note", payload)
         if object_kind == "mr":
             self.gitlab.add_mr_note(project_id, iid, body)
@@ -4302,6 +4521,9 @@ class Syncer:
             or emoji not in STATUS_REACTION_EMOJIS
         ):
             raise SyncError("durable outbox pending reaction is outside the configured scope")
+        held = self._held_pipeline_scopes()
+        if held and not self._independent_delivery("buzz_reaction", payload, held):
+            raise SyncError("durable outbox topic remains blocked: reaction scope is unproven")
         self._check_delivery_gates("buzz_reaction", payload)
         self.buzz.set_status_reaction(target, emoji)
 
@@ -4349,8 +4571,8 @@ class Syncer:
     def _reconcile_pending(self) -> int:
         recovered = 0
         pending = list(self._read_outbox()["pending"])
-        # Mixed, grouped, or unknown scopes retain the original global barrier.
-        isolatable = bool(pending) and all(self._isolatable_pipeline(item) is not None for item in pending)
+        # Partition only the strict standalone pipeline class. All other
+        # UNKNOWNs and atomic queued groups keep their original recovery order.
         for item in pending:
             change_id = item.get("change_id")
             if not isinstance(change_id, str) or not HEX64_RE.fullmatch(change_id):
@@ -4366,6 +4588,9 @@ class Syncer:
             if item.get("attempted") is False:
                 try:
                     result = self._execute_queued_delivery(item)
+                except StageDeliverySuperseded as exc:
+                    self._cancel_unattempted_stage(change_id, str(exc))
+                    continue
                 except BuzzSendRejected:
                     if item.get("group_index") == 0:
                         self._discard_persisted_group(item)
@@ -4379,11 +4604,15 @@ class Syncer:
                 # so they are safe to retry after a negative readback.
                 # Buzz messages and diffs cannot be retried without risking a second
                 # externally visible event; those remain fail-closed.
-                if isolatable:
-                    self._isolated_pending_projects.add(self._isolatable_pipeline(item))
+                isolated_project = self._isolatable_pipeline(item)
+                if isolated_project is not None:
+                    self._isolated_pending_projects.add(isolated_project)
                     continue
                 if item.get("kind") not in {"gitlab_note", "buzz_reaction"}:
                     raise SyncError(f"durable outbox delivery {change_id[:12]} is still pending")
+                held = self._held_pipeline_scopes()
+                if held and not self._independent_delivery(item["kind"], item["payload"], held):
+                    raise SyncError("durable outbox topic remains blocked: retry scope is unproven")
                 if item.get("kind") == "gitlab_note":
                     self._retry_pending_binding(item)
                 else:
@@ -4593,11 +4822,9 @@ class Syncer:
             self._check_run_budget()
             summary["recovered"] += self._reconcile_pending()
             if self._isolated_pending_projects:
-                # Never advance the shared cursor over the unresolved source.
-                self._resume_independent_issue_comments(projects, updated_after, summary)
-                summary["status"] = "degraded"
-                self._degraded.append("pending pipeline delivery; only independent existing Issue comments resumed")
-                return summary
+                # Continue only through the mandatory per-effect scope guard.
+                # The shared cursor remains pinned to this unresolved responsibility.
+                self._degraded.append("pending pipeline delivery isolated; shared cursor retained")
             self._check_run_budget()
             summary["summary_requests"] = self._pending_summary_requests()
             if summary["summary_requests"]:
@@ -4618,7 +4845,7 @@ class Syncer:
                 self._isolated(summary, project_id, "mr", mr, self._sync_mr, project_id, project, mr, summary,
                                dry_run)
             self._sync_top_level(project_id, project, updated_after, summary, dry_run)
-        if not dry_run:
+        if not dry_run and not self._held_pipeline_scopes():
             self._check_run_budget()
             atomic_write_json(self.cache_path(), {
                 "channel_id": self.channel, "since": self.config["since"],
@@ -4637,69 +4864,6 @@ class Syncer:
             # some records to digest. Timer and desk runner already accept this status as success.
             summary["status"] = "degraded"
         return summary
-
-    def _resume_independent_issue_comments(
-        self, projects: dict[int, dict[str, Any]], cursor: str, summary: dict[str, Any],
-    ) -> None:
-        """Keep root, lifecycle, MR/diff and top-level scheduling paused during UNKNOWN."""
-        for project_id in projects:
-            for listed in self.gitlab.issues(project_id, cursor):
-                self._check_run_budget()
-                iid = listed.get("iid")
-                if not _positive_int(iid):
-                    raise SyncError("independent Issue scan has an invalid identity")
-                issue = self.gitlab.issue(project_id, iid)
-                fact = _object_data(issue_fact, issue, project_id)
-                if fact["issue"] != iid:
-                    raise SyncError("independent Issue readback changed identity")
-                if not _object_data(issue_selected, issue, self.config)[0]:
-                    continue
-                notes = self.gitlab.notes(project_id, iid)
-                root = parse_binding(notes, self.bot_user_id, project_id, "issue", iid, self.channel)
-                if root is None:
-                    continue
-                events = self._thread(root, project_id, "issue", iid)
-                root_event = next((event for event in events if event.get("id") == root), {})
-                header = parse_header(root_event.get("content"))
-                plaque = plaque_url(root_event.get("content"))
-                ident = plaque_identity(plaque) if plaque else None
-                own_header = (header and header.get("object") == "issue"
-                              and header.get("project") == project_id and header.get("issue") == iid)
-                own_plaque = (header is None and ident and ident.get("object") == "issue"
-                              and ident.get("iid") == iid)
-                tags = root_event.get("tags") or []
-                if (root_event.get("pubkey") != self.publisher or root_event.get("kind") != 9
-                        or [tag[1] for tag in tags if len(tag) > 1 and tag[0] == "h"] != [self.channel]
-                        or any(tag and tag[0] == "e" for tag in tags) or not (own_header or own_plaque)):
-                    continue
-                if any(origin != root for origin in self._resolve_origin_roots(
-                        issue, notes, subject="issue", project_id=project_id)):
-                    continue
-                previous = previous_fact_from_thread(events, self.publisher, project_id, iid)
-                if classify_change(previous, fact) is not None:
-                    continue  # A comment snapshot must not hide unpublished state changes.
-                for note in pending_comments(notes, events, self.publisher, self.bot_user_id, self.config["since"]):
-                    commenter = (note.get("author") or {}).get("username")
-                    author = (issue.get("author") or {}).get("username")
-                    mentions = self._attention(
-                        project_id,
-                        [*attention_candidates("gitlab.assignees", fact["assignees"], exclude=[commenter]),
-                         *attention_candidates("gitlab.author", [author] if isinstance(author, str) else [],
-                                               exclude=[commenter])], note=note,
-                    )[0]
-                    content = render_comment_message(fact, note)
-                    if mentions:
-                        content = with_notified_line(
-                            content, notified_tokens(list(mentions), self.people, self._member_display_names()))
-                    payload = {"content": content, "reply_to": root, "mentions": list(mentions), "project_id": None}
-                    self._independent_comment_id = delivery_change_id(self.channel, "buzz_message", payload)
-                    try:
-                        self._deliver("buzz_message", payload,
-                                      lambda: self.buzz.send(content, reply_to=root, mentions=mentions))
-                    finally:
-                        self._independent_comment_id = None
-                    summary["activity"] += 1
-                    self._link(summary, root)
 
     def _with_stalled(self, project_id: int, object_kind: str, listed: list[dict[str, Any]],
                       previously_stalled: list[tuple[int, str, int]]) -> list[dict[str, Any]]:
@@ -4726,8 +4890,14 @@ class Syncer:
         for (project, kind, iid), saved in self._previous_groups.items():
             if (project, kind) != (project_id, object_kind):
                 continue
+            saved = [record for record in saved if not self._held_pipeline_record(
+                record, project_id, mr_iid=iid if object_kind == "mr" else None)]
             keys = {record["key"] for record in saved}
-            by_iid[iid] = [*saved, *(record for record in by_iid.get(iid, []) if record["key"] not in keys)]
+            merged = [*saved, *(record for record in by_iid.get(iid, []) if record["key"] not in keys)]
+            if merged:
+                by_iid[iid] = merged
+            else:
+                by_iid.pop(iid, None)
 
     def _run_group(self, summary: dict[str, Any], project_id: int, object_kind: str, iid: int,
                    group: list[dict[str, Any]], function: Any, dry_run: bool) -> None:
@@ -4853,6 +5023,9 @@ class Syncer:
         # Persist the edit and every required continuation together. If the process
         # dies after the edit reaches Buzz, restart can still recover its reaction
         # and will fail closed (rather than silently lose) an unproven p-tag notice.
+        if self._held_pipeline_scopes():
+            for delivery_kind, delivery_payload in deliveries:
+                self._check_outbox_start(delivery_kind, delivery_payload)
         change_ids = self._queue_deliveries(deliveries)
         try:
             edit_id = self._deliver(
@@ -5065,6 +5238,12 @@ class Syncer:
         return events
 
     def _sync_issue(self, project_id: int, issue: dict[str, Any], summary: dict[str, Any], dry_run: bool) -> None:
+        self._sync_issue_content(project_id, issue, summary, dry_run)
+        if self.config.get("stage_review"):
+            import gitlab_stage_review_dispatch as stage_review
+            stage_review.dispatch(self, project_id, issue["iid"], summary, dry_run)
+
+    def _sync_issue_content(self, project_id: int, issue: dict[str, Any], summary: dict[str, Any], dry_run: bool) -> None:
         selected, reason = _object_data(issue_selected, issue, self.config)
         if not selected:
             summary["skipped"][reason] += 1
@@ -5129,6 +5308,10 @@ class Syncer:
         changed_at: Any = None,
     ) -> bool:
         iid = fact["issue"]
+        held = self._held_pipeline_scopes()
+        if held and any(self._independent_target(dest, held, project_id, issue_iid=iid) is None
+                        for dest in destinations):
+            raise SyncError("durable outbox topic remains blocked: destination scope is unproven")
         posted = False
         for dest in destinations:
             # people are tagged in the bound (first) thread only, like the MR rules
@@ -5656,6 +5839,10 @@ class Syncer:
         crash never repeats one. A thread that cannot take a reply (full, unreadable) is skipped and counted, never
         a stall. Nothing else is ever posted there: no fact, no Diff, no mention."""
 
+        held = self._held_pipeline_scopes()
+        if held and any(self._independent_target(dest, held, project_id) is None
+                        for dest in dict.fromkeys([primary, *others])):
+            raise SyncError("durable outbox topic remains blocked: xref dependency is unproven")
         link = buzz_message_link(self.channel, primary)
         for dest in dict.fromkeys(others):
             if dest == primary:
@@ -5740,6 +5927,8 @@ class Syncer:
 
     def _sync_mr_group(self, project_id: int, mr_iid: int, group: list[dict[str, Any]],
                        summary: dict[str, Any], dry_run: bool) -> None:
+        if not group:
+            return  # A filtered source cannot authorize root/binding/reaction work.
         listed = self._mr_snapshots.get((project_id, mr_iid))
         if listed is not None and excluded_by_rules(listed, self.config):
             return  # _sync_mr already counted it
@@ -6527,6 +6716,38 @@ class Syncer:
         self._link(summary, root)
         return True
 
+    def _held_pipeline_record(self, record: dict[str, Any], project_id: int,
+                              *, mr_iid: int | None = None) -> bool:
+        held = self._held_pipeline_scopes()
+        if not held:
+            return False
+        # Cached records are data, not authority. Prove a finite source identity
+        # before a retained group can materialize roots, bindings or reactions.
+        if not _positive_int(record.get("project")) or record["project"] != project_id:
+            return True
+        if mr_iid is not None and record.get("mr_iid") != mr_iid:
+            return True
+        key = str(record.get("key") or "")
+        kind, event, placement = record.get("object"), record.get("event"), record.get("placement")
+        if kind == "mr":
+            return not (re.fullmatch(r"event-[1-9][0-9]*", key) and event == "approved"
+                        and placement == "mr_thread" and _positive_int(record.get("mr_iid"))
+                        and record.get("source_id") is None)
+        if kind != "pipeline":
+            return True
+        match = re.fullmatch(r"pipeline-([1-9][0-9]*)-([a-z_]+)", key)
+        source = record.get("source_id")
+        if (not match or not _positive_int(source) or source != int(match[1])
+                or event != match[2] or event not in TERMINAL_PIPELINE_STATUSES):
+            return True
+        if placement == "mr_thread":
+            ref = MR_REF_RE.fullmatch(str(record.get("ref") or ""))
+            if not _positive_int(record.get("mr_iid")) or not ref or int(ref[1]) != record["mr_iid"]:
+                return True
+        elif placement != "instant" or event != "failed" or record.get("mr_iid") is not None:
+            return True
+        return (project_id, source) in held
+
     def _sync_top_level(self, project_id: int, project: dict[str, Any], cursor: str,
                         summary: dict[str, Any], dry_run: bool) -> None:
         web_url = str(project.get("web_url") or "")
@@ -6560,7 +6781,7 @@ class Syncer:
             records.extend(record_from_access_token(item, project_id, web_url, self._scan_date) for item in tokens)
         unique: dict[str, dict[str, Any]] = {}
         for record in records:
-            if not record or record["key"] in unique:  # offset pages can list one item twice
+            if not record or self._held_pipeline_record(record, project_id) or record["key"] in unique:
                 continue
             if record["placement"] == "instant" and is_muted(record, self.config):
                 continue  # mute_events silences top-level notices only; thread facts always flow
@@ -6570,7 +6791,7 @@ class Syncer:
         self._sync_milestone_records(
             project_id, [r for r in records if r["placement"] == "milestone_thread"], summary, dry_run)
         records = [record for record in records if record["placement"] in ("instant", "digest")]
-        records.extend(self._stalled_records.pop(project_id, []))
+        records.extend(r for r in self._stalled_records.pop(project_id, []) if not self._held_pipeline_record(r, project_id))
         if not records:
             return
         # Policy 2026-09-18 (#77): live records no longer carry placement "digest", so the

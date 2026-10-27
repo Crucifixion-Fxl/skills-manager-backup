@@ -45,6 +45,25 @@ git push → glab mr create --target-branch staging
 # → 又得改一轮、再 push、再等 CI  ← 应该在 Step 2.9 就修掉
 ```
 
+### Bad — 用 merge 给功能分支换目标分支
+
+```
+# 分支基于 release/20261015，要改投 release/20261022
+git merge origin/release/20261022
+git checkout origin/release/20261022 -- .    # 文件树换成 1022，只留自己的文件
+git commit                                    # 历史带上 1015，内容却没有
+# → 合入后再做 1015→1022 合流，6 个 MR 的 140 个文件静默保留旧版本，没有冲突提示
+#   check_merge_integrity.py：该合并 B/C FAIL；预合并的合流分支 A/C FAIL（inside 合流合并）；1022→master A/B/C/D FAIL
+```
+
+### Good — 在新目标上重建分支并验证完整性
+
+```
+git switch -c feat/x-rel-20261022 origin/release/20261022
+git cherry-pick $(git rev-list --reverse --no-merges feat/x-rel-20261015 ^origin/release/20261015 ^origin/release/20261022)
+uv run <skill-path>/scripts/check_merge_integrity.py origin/release/20261022 HEAD   # exit 0
+```
+
 ### Good — push 前先过 code-review，CI 一次过
 
 ```

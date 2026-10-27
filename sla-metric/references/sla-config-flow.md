@@ -31,6 +31,7 @@
 [Step 0] 权限校验
   → [Step 1] 确认/创建指标图表（Superset）
   → [Step 2] 自定义过滤条件（可选）
+  → [Step 2.5] 发现并校验上游数据依赖（必做）
   → [Step 3] 创建 SLA 指标（dapp API）
   → [Step 4] 确认并后续操作
 ```
@@ -58,6 +59,15 @@
 4. 在 dapp 配置时使用此链接的过滤条件作为快照
 ```
 
+### Step 2.5: 发现并校验上游数据依赖（必做）
+
+执行 [上游依赖发现与校验](upstream-dependencies.md)。先确定 `time_grain` 及最终 `metric_config`（包括 `query_index`、`metric_id`、过滤快照），再生成 SQL、解析物理表并只读匹配同区域、同环境的 Dagster 资产。
+
+- 输出源表 → 完整 asset key、上游分区窗口、SLA 时间窗口和排除原因。
+- `deps` 保存去重后的完整资产 key 列表，禁止用表名、图表 ID、应用绑定代替。
+- SQL 解析失败、资产未匹配/有歧义、权限不足或窗口不兼容时，停止创建，说明具体缺口。已查明无适用依赖时，说明依据并让用户在 Step 3 的摘要中确认空依赖。
+- Step 3 确认前如指标配置或时间粒度变化，必须重新执行本步骤。
+
 ### Step 3: 创建 SLA 指标（dapp API）
 
 通过后端 API 完成 SLA 指标创建：
@@ -78,8 +88,11 @@
     - biz_domain_id / biz_process_id: 用户选择的分类
       → 无匹配分类时，提示用户前往 dapp Web UI 新增
     - app_domain_id: 可选，建议填写
+    - deps: Step 2.5 校验后的完整资产 key 列表，JSON 序列化为字符串
+      → 禁止省略或默认填 "[]"；空依赖必须有查证依据和用户确认
 
 3.3 展示配置摘要，获得用户确认
+    - 包含源表、deps、上游分区粒度、排除项及原因
 
 3.4 调用 POST /api/v1/sla_metric/create 创建指标
 ```
@@ -87,12 +100,16 @@
 ### Step 4: 确认并后续操作
 
 ```
-1. 创建成功后，可选配置飞书通知群：
+1. 调用 GET /api/v1/sla_metric/get?name={name} 回读完整配置：
+   - 解析 deps，核对与 Step 3 确认的依赖集合一致，同时核对 metric_config 和 time_grain
+   - 缺字段、回读失败或集合不一致时，报告“配置未验证”，停止后续操作
+   - POST 超时/结果未知时先按 name 查询对账，不能重复创建
+2. 回读一致后，可选配置飞书通知群：
    - 调用 GET /api/v1/sla_metric/feishu_group_chats 获取可用群列表
    - 调用 POST /api/v1/sla_metric/update 设置 feishu_group_chats 字段
    - 不设置则使用业务域默认群
-2. 输出详情页链接：https://dapp.addx.live/sla_metric?sub=metric&id={Id}&action=view
-3. 提示用户在详情页点击【构建 Grafana 资源】生成监控看板和告警规则
+3. 输出详情页链接：https://dapp.addx.live/sla_metric?sub=metric&id={Id}&action=view
+4. 提示用户在详情页点击【构建 Grafana 资源】生成监控看板和告警规则
 ```
 
 ---
@@ -123,10 +140,16 @@
 
 3. 更新指标
    - 构建更新 payload（仅包含需要修改的字段）
+   - 修改 metric_config（含查询、指标、过滤条件）或 time_grain 时，按 Step 2.5 重新计算 deps
+   - 补齐历史缺失依赖时也执行 Step 2.5，不直接照抄其他指标的 deps
+   - 展示原有、发现、新增、移除的依赖；原有手工依赖须核实用途，不能被自动结果静默覆盖
+   - 仅改阈值、标题、分类或通知群时不传 deps，保留已有依赖
    - 展示修改前后的差异摘要
    - 用户确认后调用 POST /api/v1/sla_metric/update
 
 4. 后续操作
+   - 调用 GET /get 回读；依赖变更必须核对 deps 集合、metric_config 和 time_grain
+   - 回读失败或不一致时不能报告完成，不盲目重试写入
    - 输出详情页链接：https://dapp.addx.live/sla_metric?sub=metric&id={Id}&action=view
    - **修改了 metric_config 或 threshold_config 时，必须提示用户重新构建 Grafana 资源**（幂等操作）
    - 仅修改 title、分类等非核心字段时无需重新构建
@@ -164,6 +187,7 @@
    - 查看内容：
      • 基础信息（名称、应用域、业务域）
      • 阈值配置
+     • 上游数据依赖（deps）
      • 监控维度设置
      • 指标趋势看板（指标看板、版本看板、灰度看板）
      • Grafana 面板链接
@@ -192,7 +216,9 @@
   ├── Superset 操作：使用 Superset MCP 工具查询/创建图表
   ├── 权限校验：调用 auth API 获取 Token
   ├── 分类查询：调用 GET /biz_domains、/biz_processes、/app_domains
+  ├── 依赖发现：用最终 Superset SQL 匹配 Dagster 完整资产 key，校验分区粒度
   ├── 指标管理：调用 POST /create 或 POST /update
+  ├── 保存验证：调用 GET /get 回读并核对 deps
   └── 飞书群配置：调用 GET /feishu_group_chats + POST /update
 ```
 

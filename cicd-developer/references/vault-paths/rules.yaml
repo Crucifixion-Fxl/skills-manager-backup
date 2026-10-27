@@ -46,14 +46,14 @@ rules:
       Crossplane / Platform Admin 代签发给 app 的平台资源凭据：RDS / Aurora /
       Redis / MongoDB(DocumentDB) / Kafka(MSK) / ScyllaDB / ClickHouse / Qdrant / Nacos / Elasticsearch /
       Sentry DSN / OIDC client secret / 公网外部 MySQL / Feishu / Payload CMS /
-      GrowthBook / AWS IAM key / Linode Object Storage key。人员访问仅由 vault-policies 的平台管理员/超级管理员策略授权；
+      GrowthBook / AWS IAM key / Tencent COS CAM key / Linode Object Storage key。人员访问仅由 vault-policies 的平台管理员/超级管理员策略授权；
       GitLab 应用 Maintainer+/Developer+ 不因项目身份获得该路径读写，ESO 使用独立机器策略。
       共享中间件（dev/staging 默认多 app 共用一个实例）在该实例上为每个 app 签发
       **独立的 per-app database/user 或连接凭据**，凭据同样落这里——**没有**单独的 shared-middleware
       Vault 命名空间。申请流程见 workflows/add-rds.md / add-redis.md（kind: Database）和
       references/shared-middleware/README.md（KafkaScramCredential）。
     output_template: "secret/{env}/{platform}/application/{app}/{key}"
-    regex: "^secret/(dev|staging|pre|prod)/(aws|oci|linode|auth|rds|aurora|redis|mongodb|kafka|scylla|nacos|elasticsearch|clickhouse|mysql|qdrant|sentry|feishu|payload|growthbook|zitadel)/application/[a-z0-9_-]+/.+$"
+    regex: "^secret/(dev|staging|pre|prod)/(aws|cos|oci|linode|auth|rds|aurora|redis|mongodb|kafka|scylla|nacos|elasticsearch|clickhouse|mysql|qdrant|sentry|feishu|payload|growthbook|zitadel)/application/[a-z0-9_-]+/.+$"
     legacy: false
     notes: |
       <platform> 必须取自 vault-paths/platforms.yaml 的 platforms{} 枚举；workflow 不
@@ -137,6 +137,7 @@ rules:
 # 校对样本：resolver 跑一遍这张表的 input 必须能复现 output 字段。
 # =============================================================================
 examples:
+  - { env: prod, kind: cos, app: resourcespace, key: cn-tech-service/credentials, output: "secret/prod/cos/application/resourcespace/cn-tech-service/credentials" }
   - { env: staging, kind: linode, app: collect-gateway, key: credentials, output: "secret/staging/linode/application/collect-gateway/credentials" }
   - { env: prod, kind: linode, app: addx-rerun-hub, key: credentials, output: "secret/prod/linode/application/addx-rerun-hub/credentials" }
   - { env: prod, kind: oci, app: naturehood, key: species-correction-video-copy, output: "secret/prod/oci/application/naturehood/species-correction-video-copy" }

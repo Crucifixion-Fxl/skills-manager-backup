@@ -383,7 +383,13 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="require generic scrapes to match exactly one rendered Service or workload",
     )
+    parser.add_argument("--vm-scrape-profile", choices=("eu-prod-vm-stack-v1",))
+    parser.add_argument("--vm-scrape-source-revision")
+    parser.add_argument("--vm-scrape-cluster")
     args = parser.parse_args(argv)
+    if not args.vm_scrape_profile and (args.vm_scrape_source_revision or args.vm_scrape_cluster):
+        print("FAIL: platform source context requires an explicit VM scrape profile", file=sys.stderr)
+        return 2
     if not args.directory.is_dir():
         print(f"FAIL: directory not found: {args.directory}", file=sys.stderr)
         return 2
@@ -391,11 +397,26 @@ def main(argv: list[str] | None = None) -> int:
     parsed: list[tuple[Path, dict[str, Any]]] = []
     for path, document in iter_docs(args.directory):
         if isinstance(document, ParseError):
-            print(f"FAIL: {path}: {document.message}", file=sys.stderr)
+            if args.vm_scrape_profile:
+                print("FAIL: EUVM-SOURCE-001: source is not valid YAML", file=sys.stderr)
+            else:
+                print(f"FAIL: {path}: {document.message}", file=sys.stderr)
             return 2
         if isinstance(document, dict):
             parsed.append((path, document))
     docs = [document for _, document in parsed]
+    if args.vm_scrape_profile:
+        from _eu_prod_vm_platform import check
+
+        code, findings = check(
+            args.directory, docs, args.vm_scrape_source_revision,
+            args.vm_scrape_cluster, args.repo_context, args.require_target_match,
+        )
+        for finding in findings:
+            print("FAIL: " + finding)
+        if code == 0:
+            print("PASS: exact EU-prod platform configuration; static check only, not runtime or deployment authorization")
+        return code
     scrapes = [
         (path, document)
         for path, document in parsed

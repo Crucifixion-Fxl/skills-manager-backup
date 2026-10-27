@@ -53,7 +53,7 @@
 | `VAULT_K8S_MOUNT` | `jwt-eks-prod` / `jwt-eks-tech-service` 等 | `jwt-tke-cn-main` |
 | `VAULT_K8S_TOKEN_PATH` | `/var/run/secrets/vault/token` | `/var/run/secrets/vault/token` |
 | Job container `image` | `<local-harbor>/base/sentry-onboard:<immutable-tag>`（统一 base/，每集群自己的 Harbor host） | `harbor-cn.addx.live/base/sentry-onboard:<immutable-tag>`（同一条 base/ 规则） |
-| Job `nodeSelector` | 当前 EKS 按已验证内网路径；旧 AWS CN 配置仅供历史排障 | 只设 `kubernetes.io/arch=amd64`；**不设 AWS CN NAT NodePool** |
+| Job placement | 按[应用 NodePool 接入](../nodepool-placement.md)核验目标池及 NAT；旧 AWS CN 配置仅供历史排障 | 保留 `kubernetes.io/arch=amd64` 兼容性约束，并补目标已核验的 TKE 原生池/网络约束；**不设 AWS CN NAT NodePool** |
 | Job `volumes: vault-token` projected SA token + `volumeMounts` | 必须设 | 必须设（audience `https://kubernetes.default.svc`） |
 | `imagePullSecrets` | **必须显式** `harbor-registry-secret`（hard rule #24 对 hook Job pod 同样适用；EKS 虽有 Kyverno mutate 兜底，模板与 add-sentry [validate] 仍要求显式写） | **必须显式**（TKE 无 mutation webhook） |
 

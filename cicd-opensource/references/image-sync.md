@@ -13,7 +13,7 @@
 CN Tencent jobs / replication（按当前 DEV/base-images pipeline 与 Harbor 复制规则核验）
   prod: 100014919455 → harbor-cn.addx.live
   staging: 100052802231 → harbor-02231-cn-staging-pub.addx.live（SG/外部同步入口）
-  tech-service 目标（待切换）: 100052802231 → harbor-02231-cn-tech-service-pub.addx.live（SG/外部入口）
+  tech-service: 100052802231 → harbor-02231-cn-tech-service-pub.addx.live（已核验外部入口；同步任务另验）
   旧 AWS CN / 旧腾讯账号 job 不是当前目标证明
 ```
 
@@ -23,7 +23,7 @@ CN staging 的内网域名 `harbor-02231-cn-staging.addx.live` 和外部域名 `
 
 旧 `harbor-cn-staging.addx.live` 是同一实例的兼容入口，保留兼容（当前 runner `HARBOR_REGISTRY` 与 Image Updater 仍使用它）。AWS `harbor-80144-cn-staging` / `harbor-80144-cn-dev` 已退役，不再作为扇出目标。切换前核验实际 runner `HARBOR_REGISTRY`、同步目的端及精确 hostname 凭据；内网 pull secret 必须有内网域名的 auth key，由平台同步机制补齐并验证后再采用。技能默认值不自动迁移现存镜像或 Secret，也不证明当前 pipeline 已更新；历史 runner 快照和新部署回执见 [CN 迁移证据](../../cicd-developer/references/cn-tencent-migration.md)。
 
-CN tech-service 的外部同步目标为 `harbor-02231-cn-tech-service-pub.addx.live`，集群镜像目标为 `harbor-02231-cn-tech-service.addx.live`。这是同一实例双入口的目标命名，尚未切换；不得声称当前 base-images job、Harbor replication、token realm、PrivateDNS 或 pull secret 已使用这些入口。先按 [Harbor tech-service 目标说明](../../harbor/SKILL.md) 核验并完成迁移，不能把私网域名直接填到 SG 公网同步端。
+CN tech-service 的外部同步入口为 `harbor-02231-cn-tech-service-pub.addx.live`，集群镜像入口为 `harbor-02231-cn-tech-service.addx.live`。同一实例双入口已于 2026-10-19 核验 TLS、registry challenge 与按 host 返回的 token realm，Runner 已使用私网 registry 和对应 auth key，见 [准入回执](../../cicd-developer/references/cn-tech-service-admission-2026-10-19.md)。这不证明所有 base-images job、Harbor replication 或业务消费者已完成验收；精确镜像和同步权限仍单独检查。按 [Harbor 访问说明](../../harbor/SKILL.md) 核验调用方网络；`-pub` 在目标 VPC 内也解析公网，不能照搬 staging 的 split DNS，也不能把私网域名填到 SG 公网同步端。
 
 ## images.yaml 格式
 

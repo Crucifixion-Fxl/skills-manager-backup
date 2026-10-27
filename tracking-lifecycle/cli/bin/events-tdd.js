@@ -46,16 +46,18 @@ function writeOutput(value, args, format = 'json') {
   } else process.stdout.write(encoded);
 }
 
-function changesFrom(args) {
+function changesFrom(args, allowEmpty = false) {
   const files = [...args.change];
   if (args['change-list']) {
     const list = readYaml(args['change-list']);
-    if (!Array.isArray(list.changes) || !list.changes.length || files.length) {
+    if (!Array.isArray(list.changes) || (!list.changes.length && !allowEmpty) || files.length) {
       throw new ContractError('INVALID_CHANGE_LIST', 'change-list must contain changes and cannot be combined with --change');
     }
     files.push(...list.changes.map(file => path.resolve(path.dirname(args['change-list']), file)));
   }
-  if (!files.length) throw new ContractError('MISSING_ARG', '--change or --change-list is required');
+  if (!files.length && !(allowEmpty && args['change-list'])) {
+    throw new ContractError('MISSING_ARG', '--change or --change-list is required');
+  }
   return files.map(readYaml);
 }
 function metricsFrom(args) {
@@ -137,7 +139,7 @@ async function runCommand(command, args, env, browser) {
     writeOutput(result, args);
   } else if (command === 'check-contract') {
     const baseline = readYaml(requireArg(args, 'baseline'));
-    const candidate = project(baseline, changesFrom(args));
+    const candidate = project(baseline, changesFrom(args, baseline.kind === 'baseline'));
     writeOutput({ status: 'PASS', baseDigest: candidate.baseDigest, candidateDigest: digest(candidate.events),
       selectedIssues: candidate.selectedIssues }, args);
   } else if (command === 'build-candidate') {
@@ -150,7 +152,8 @@ async function runCommand(command, args, env, browser) {
     verifyUsage(candidate, readJson(requireArg(args, 'usage')));
     writeOutput(candidate, args, 'yaml');
   } else if (command === 'verify-local') {
-    const contract = project(readYaml(requireArg(args, 'baseline')), changesFrom(args));
+    const baseline = readYaml(requireArg(args, 'baseline'));
+    const contract = project(baseline, changesFrom(args, baseline.kind === 'baseline'));
     const result = verifyLocal(readYaml(requireArg(args, 'scenario')), readJson(requireArg(args, 'capture')), contract);
     writeOutput(bindReport('local', result, reportBinding('local', contract, args, env)), args);
   } else if (command === 'verify-sandbox') {
@@ -179,6 +182,22 @@ async function runCommand(command, args, env, browser) {
     const result = verifyMetrics(metricsFrom(args), readJson(requireArg(args, 'evidence')),
       readJson(requireArg(args, 'staging-report')), candidate, readYaml(requireArg(args, 'target')));
     writeOutput(result, args);
+  } else if (command === 'pull-published-baseline') {
+    const { verifyPublishedSnapshot, ProductionSchemaReader } = require('../src/published-release');
+    const expected = readJson(requireArg(args, 'expected'));
+    const snapshot = await platformFrom(env, browser).readPublishedRelease(expected);
+    // argsFrom collects every --prod-schema-base into an array, including a single value.
+    const baseUrls = requireArg(args, 'prod-schema-base');
+    if (!Array.isArray(baseUrls)) {
+      throw new ContractError('INVALID_ARG', '--prod-schema-base must be supplied by argsFrom');
+    }
+    const verification = await verifyPublishedSnapshot({ expected, snapshot,
+      schemaReader: new ProductionSchemaReader({ baseUrls }) });
+    writeOutput({ schemaVersion: 1, kind: 'baseline', host: requireArg(args, 'host'),
+      application: expected.application, applicationId: expected.applicationId,
+      release: { id: expected.releaseId, version: expected.version, status: 3 },
+      events: normalizeEvents(snapshot.events, expected.application),
+      publishedVerification: verification }, args, 'yaml');
   } else if (command === 'pull-baseline') {
     const application = requireArg(args, 'application'), applicationId = Number(requireArg(args, 'application-id'));
     const client = platformFrom(env, browser);

@@ -14,8 +14,10 @@ description: 从零部署一个有状态服务（PVC + StatefulSet 或单节点 
 
 ## CN 迁移能力门禁
 
-当前 CN 路由见 `references/cn-tencent-migration.md`：prod 为 `cn-k8s`（100014919455），
-staging/tech-service 为 `cn-tke-staging` / `cn-tke-tech-service`（100052802231）。
+当前 CN 路由见 `references/cn-tencent-migration.md`：`prod-cn` / `prod-cn-tke` 仍到
+`cn-k8s`（100014919455/cn-main）；AWS prod-cn 迁入专用 `prod-cn-tke-2231` 到
+`cn-tke-prod`（100052802231/cn-prod）。staging/tech-service 为
+`cn-tke-staging` / `cn-tke-tech-service`（100052802231）；能力按精确集群核验。
 AWS CN 已退役。下文 AWS shared-middleware 的已上线证明不能覆盖新 TKE；生成 `Database` /
 `KafkaScramCredential` 前必须核验精确目标的 served API、Composition/ProviderConfig、共享实例、
 Vault writer/reader 和 per-app 凭据交付，缺任一证据则 STOP + Ops Todo。消费策略仍适用，
@@ -78,7 +80,7 @@ AWS 托管资源 recipe 仅用于 `cloud=aws`；腾讯云请求转对应原生�
       明确标注的 legacy/迁移/第三方派生例外。这些 target 不生成 StatefulSet / PVC / ArgoCD Application；
       改为按 `references/shared-middleware/README.md` 的 `kind: Database` 流程申请 per-app 凭证
       （per-app 路径 `secret/{env}/{platform}/application/{app}/{key}`），就绪门禁未过则产 Ops Todo。
-    - `$managed_targets[]`：**非 shared-middleware 集群 target（真 prod `*-eks-prod`/`*-prod-data`/cn-k8s（TKE prod）；
+    - `$managed_targets[]`：**非 shared-middleware 集群 target（真 prod `*-eks-prod`/`*-prod-data`/cn-k8s / cn-tke-prod（TKE prod）；
       tech-service 不在此列）**，或明确允许的 shared-middleware/legacy/第三方派生例外
       （#30 软约定，cd-requirements.md 已写明理由 + 备份/HA/升级方案），继续 Step 2 之后的 StatefulSet/PVC 流程。
   - 如果 `$managed_targets[]` 为空：STOP 在 shared-middleware 输出/Ops Todo 后结束；
@@ -160,6 +162,8 @@ AWS 托管资源 recipe 仅用于 `cloud=aws`；腾讯云请求转对应原生�
   - Step 3 完成
 
 [action]
+  - 生成 Pod env label 前运行 `python3 "$skill_root/validators/check_logging_target.py" --env-keyword <target-keyword>`；失败则 STOP + Ops Todo，candidate 阶段也不得延期已知映射阻塞。
+  - 记录 `$target.runtime_source_path=k8s/overlays/{$target.env_keyword}`、`$target.runtime_env_label=$target.env_keyword`；仅用于本次新建候选，不能套用存量应用。
   - 用 `recipes/clickhouse/kustomization-overlay.yaml.tmpl` 写
     `k8s/overlays/{$target.env_keyword}/kustomization.yaml`，填：
     `{{namespace}}=$target.namespace`、`{{app}}=$app`、`{{env}}=$target.env_keyword`、

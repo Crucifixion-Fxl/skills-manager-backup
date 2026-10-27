@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "capability": "runner-selector/v1",
+  "tool": "read_review_source",
+  "operation": "runner-selector",
+  "flag": "CODE_REVIEW_RUNNER_SELECTOR_ENABLED"
+}

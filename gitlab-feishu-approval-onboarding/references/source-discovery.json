@@ -11,8 +11,10 @@
         "internal/server/login.go",
         "internal/server/gitlab_login.go",
         "internal/authn/session.go",
-        "internal/server/web/native-login.js",
-        "internal/server/server.go"
+        "internal/server/web/client-login.js",
+        "internal/server/server.go",
+        "internal/server/enrollment.go",
+        "internal/server/web/projects.js"
       ],
       "status": "source-verified"
     }
@@ -20,13 +22,13 @@
   "contractEntrypoints": [
     "SKILL.md"
   ],
-  "sourcePolicy": "../../platform-onboarding/references/source-policy.md",
+  "sourcePolicy": "../../../agent-harness/platform-onboarding/references/source-policy.md",
   "deployment": {
     "instances": [
       "https://gitlab-feishu-approval.addx.live/projects"
     ],
-    "commit": null,
-    "match": "unknown"
+    "commit": "2437e67",
+    "match": "verified 2026-10-12 (read-only image tag)"
   },
   "verification": {
     "source": "source-verified",
@@ -38,5 +40,7 @@
     "Match research commit/OpenAPI revision to target deployment before adopting candidate routes.",
     "Identity does not prove operation/resource permission; enforce owner business approvals and readback."
   ],
-  "pending": []
+  "pending": [
+    "Prefill links, disable, withdraw, editable author-first and related form hints ship with DEV/gitlab-feishu-approval MR !42; verify the live page controls before relying on them."
+  ]
 }

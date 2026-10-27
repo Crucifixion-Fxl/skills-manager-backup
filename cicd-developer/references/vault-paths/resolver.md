@@ -11,7 +11,7 @@ Vault 路径规则、platform 枚举、regex pattern、forbidden pattern、示�
 
 ```
 references/vault-paths/rules.yaml         7 条 rule + forbidden_patterns + examples
-references/vault-paths/platforms.yaml     16 platform 枚举 + typical_keys
+references/vault-paths/platforms.yaml     platform 枚举 + typical_keys
 references/vault-paths/cross-app-credential.yaml   跨 app 共享方案
 references/vault-paths/instances.yaml              Vault 实例清单
 references/data/clusters.yaml                      目标集群 vault_css
@@ -76,6 +76,18 @@ ExternalSecret `remoteRef.key` / `extract.key` 和 PushSecret / ClusterPushSecre
 - **DB / 中间件凭据永不走 `app-owned-business-credential`** —— 哪怕"是我们自己的"也走 `platform-resource-credential` 对应 platform。`app-owned-business-credential` 只给凭据"主人是 app 自己"的（Stripe webhook secret、第三方 API token）。
 - **共享中间件凭据也是 per-app，不是共享 root 契约** —— dev/staging 多 app 共用一个实例时，仍在该实例上为每个 app 建独立 `database` + `user` 或连接凭据，凭据落 `secret/{env}/{platform}/application/{app}/{key}`，**没有** `shared-middleware/` 命名空间、**绝不带 region**。组件映射：共享 RDS→`rds`、Redis→`redis`、DocumentDB→`mongodb`、MSK→`kafka`、ScyllaDB→`scylla`、ClickHouse→`clickhouse`。申请流程：RDS/Redis/Postgres 走 `kind: Database`（见 workflows/add-rds.md / add-redis.md）。PostgreSQL primary key 固定为 `postgres`；optional lower_snake purpose 通过 `shared-middleware/README.md` 的目标能力门禁后，只派生 secondary role/database/schema 和 kebab key `postgres-<purpose.replace('_', '-')>`，所以 canonical path 是 `secret/{env}/rds/application/{owner-spec.app}/postgres-<purpose-as-kebab>`，owner app 路径段不变。MSK SCRAM 走 `KafkaScramCredential`（见 references/shared-middleware/README.md，key 固定为 `sasl`，同一路径包含 `username`/`password`/`bootstrap_brokers_sasl_scram`，app ExternalSecret 将 broker 字段映射为 `KAFKA_BROKERS`；`kafka-brokers.yaml` / live MSK status 仅供平台校验）。
 - **CI-only vs runtime 不是判据** —— 判据是"凭据主人是谁"，不是"什么时候用"。Runner 拉 Harbor 镜像的凭据 = `cicd-tooling`（cicd/harbor）。CI job 里 app 用的 Sentry upload token = `app-owned-business-credential`（app 自己用，只是触发点在 CI）。
+
+## 腾讯云 COS 凭据
+
+已有或经平台批准采用 CAM AK/SK 的 COS 消费使用 `kind=cos`，字段通常为
+`secret_id`、`secret_key`、`bucket`、`region`。例如 ResourceSpace 已交付路径：
+`secret/prod/cos/application/resourcespace/cn-tech-service/credentials`。
+ESO `remoteRef.key` 使用 `prod/cos/application/resourcespace/cn-tech-service/credentials`，
+保留现有路径，不改放 `aws` 或应用业务凭据目录。
+
+本分类仅补齐路径解析与检查，不创建凭据、修改人员或 ESO 权限，也不验证 CAM 策略、
+对象操作或应用 SDK。使用临时身份的 COS 工作负载仍遵循 `add-tencent-cos` 工作流，
+不因新增分类而改为长期密钥。凭据值不进入 Git、日志或聊天。
 
 ## 平台凭据人员权限
 

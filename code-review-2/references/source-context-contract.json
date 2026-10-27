@@ -1,0 +1,5 @@
+{
+  "schema_version": 1,
+  "capability": "fixed-source-context/v1",
+  "tool": "read_review_source"
+}

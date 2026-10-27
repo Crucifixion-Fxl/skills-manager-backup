@@ -28,27 +28,36 @@ ADDX 固件发版平台（"固件发版平台"）操作手册。系统是一个 
 - ⚠️ **token 必须在 Header 里！光放 Cookie 不行**（实测：纯 `-b "token=..."` 没有 Header 时后端返 `no auth`）。虽然浏览器登录后 token 是存在 Cookie 里（F12 Application 能看到），但前端 JS 调用前会把 Cookie 里的 token 复制到 Request Header（`s["j"]()` 函数），后端**只从 Header 读 token**。用 curl/Postman 复现常见的错误就是只放 Cookie 没放 Header
 - token 是 32 位字符（看似 MD5）。失效后会返回 `{"result": 10001, "msg": "no auth", ...}` 或 `{"result": -1, "msg": "KeyError: 'token'."}`
 
-**Token 获取顺序**：
+**Token 获取顺序（API 优先，无需先打开浏览器）**：
 
-1. 优先使用当前任务已授权的 `FIRMWARE_MGR_TOKEN`（生产）或 `FIRMWARE_MGR_TEST_TOKEN`（测试），只检查是否存在，不执行 echo、读取真实值或要求用户粘贴到聊天。
-2. 环境没有凭据时先读取 owner 的接入 reference，选择已授权的私有凭据来源；不能遍历其他账号/会话的 Cookie 或凭据文件。
-3. 需要本人登录时使用 [web-access](../../agent-harness/web-access/SKILL.md)，在原任务浏览器按真实部署的登录方式完成认证，不预设 SSO。本机画面直接操作；远端默认 VNC，普通用户无需 F12/inspect。
-4. 平台前端从名为 token 的浏览器 Cookie 构造 `token` 请求头；纯 Cookie 请求不能代替该 Header。优先在同一已登录网页中执行已有 UI/客户端，保持凭据在浏览器内。只有经过 owner 核验的专用适配器才能把 Cookie 转为请求头，并在跨浏览器协议返回前脱敏；不导出值供聊天复制。
-5. `localStorage.getItem('token')` 不适用于这个已核验版本；部署改变后重新查源码，不猜测存储位置。
+1. 复用当前任务已授权的 `FIRMWARE_MGR_TOKEN`（生产）或 `FIRMWARE_MGR_TEST_TOKEN`（测试）；仅在进程内读取，不 echo、不要求用户粘贴到聊天。
+2. token 缺失，或 `get_models` 探针返回 `10001` 时，从对应环境变量读取平台账号密码，调用 `POST /api/login`，JSON 字段为 **`userName`、`password`**；仅当 `result==0` 且 `data.token` 非空时使用该 token，再用 `get_models` 验证。
 
-**绝对禁止**：
+   | 环境 | 账号 | 密码 | 可选已有 token |
+   |---|---|---|---|
+   | 生产 | `FIRMWARE_MGR_USERNAME` | `FIRMWARE_MGR_PASSWORD` | `FIRMWARE_MGR_TOKEN` |
+   | 测试 | `FIRMWARE_MGR_TEST_USERNAME` | `FIRMWARE_MGR_TEST_PASSWORD` | `FIRMWARE_MGR_TEST_TOKEN` |
 
-- ❌ 把 token 硬编码到 SKILL.md / references / 任何脚本文件
-- ❌ 把 token 写到 git commit / shell history / 日志文件
-- ❌ 把 token 作为命令行参数传（会进 history），必须放进环境变量或 stdin
-- ❌ 在 Skill 文档中留示例 token（即使是过期的）
+   用户在启动 Agent 的环境或已批准的私有凭据管理器中配置一次，再由宿主注入；已运行的 Agent 不会自动继承其他终端新设置的环境变量。生产与测试凭据不互相回退，不读取服务端源码中的内置账号。
+3. 使用 [只读查询脚本](scripts/query.py)，让登录、探针和查询在同一进程完成；新 token 只保留在内存，不输出、不写文件、不修改父进程环境：
 
-curl 调用一律写 `-H "token: $FIRMWARE_MGR_TOKEN"`，不写 `-H "token: 408c..."`。
+   ```bash
+   python3 skills/hardware/firmware-mgr/scripts/query.py get_versions
+   python3 skills/hardware/firmware-mgr/scripts/query.py get_models --environment test
+   python3 skills/hardware/firmware-mgr/scripts/query.py get_publish_logs --data '{"region":"cn","platform":"<platform>","version":"<version>"}'
+   ```
+
+   脚本依赖 Python 3 标准库与 `curl`，仅开放明确列出的只读接口；凭据通过 curl stdin 配置传递，不进入 argv。登录失败不自动重试；新 token 验证仍失败则停止。探针成功但目标查询报 `10001` 时报告可能权限不足或 token 在探针后失效，不自动重新登录。脚本不执行发布、撤销、白名单写入或权限修改，也不自动重放写操作。
+4. token 和账号密码都没有时，先使用用户已授权的私有凭据来源；仍缺失才请用户安全配置环境变量。只有部署仅支持交互登录、账号要求 MFA/SSO，或用户明确要求 UI 时，才按 [web-access](../../agent-harness/web-access/SKILL.md) 进入浏览器。禁止遍历其他账号/会话的凭据，不要求手动复制 Cookie，不使用 `localStorage.getItem('token')`。
+
+**凭据边界**：账号密码与 token 均不得硬编码、写入聊天/仓库/日志/命令行参数。不得打印原始登录响应或异常响应；也不要用 `curl -H "token: $FIRMWARE_MGR_TOKEN"` 将展开后的 token 放入进程 argv。固定 HTTPS 目标、不跟随登录重定向、不关闭 TLS 校验。账号登录不等于拥有发布或其他写权限；Rule 3 不变。
+
+**验收边界**：2026-10-15 已核验线上前端的 `userName/password → data.token` 契约，空 JSON 登录探针返回缺少 `userName`，与候选源码一致；未使用真实账号完成登录，测试实例的部署一致性也未核验。离线回归覆盖 token 复用、账号登录、环境隔离、一次重新登录、权限拒绝与凭据不泄露；不能把这些证据写成生产认证已验收。
 
 **写操作前的强制权限体检**：进入 Rule 3 三色清单流程**之前**，AI 必须先调一次 `get_versions`（或 `get_models`）确认 token 状态：
 
 - 返回 `result==0` + 数据 → token 有效，继续
-- 返回 `result==10001 / no auth` → token 无效或角色不够，**立即停下让用户换 token，不要走 Rule 3**
+- 返回 `result==10001 / no auth` → 先按 Rule 1 用已配置账号完成一次登录与探针；仍失败则停止，不进入 Rule 3，也不自动执行或重放写操作
 
 ⚠️ **不要用 `get_user_info` 做体检** — 实测该接口有 bug，要求 token 必须**同时在 header 和 body 里**，单凭 header 会返回 `KeyError: 'token'.`，会被误判成 token 无效。其他接口都只看 header。
 
@@ -276,14 +285,14 @@ curl 调用一律写 `-H "token: $FIRMWARE_MGR_TOKEN"`，不写 `-H "token: 408c
 - 角色三种：`admin` / `developer` / `product`
 - 用户管理 + 固件构建管理 = **admin only**
 - OTA 白名单/黑名单 = `product` / `admin`
-- 接口报 `no auth` → 先用 `get_versions` 验证 token 是否还有效（**不要用 `get_user_info`，它有 bug**，见 Rule 1）。token 有效但仍 no auth 说明当前角色权限不够，按上表换 token
+- 接口报 `no auth` → 先用 `get_versions` 验证 token 是否还有效（**不要用 `get_user_info`，它有 bug**，见 Rule 1）。探针成功后目标仍 no auth，可能是当前角色权限不足或 token 随后失效；报告具体接口，不反复登录或更换账号
 
 ### Rule 7 — 浏览器交互（仅在 API 不够用时）
 
 绝大多数查询都能纯 API 完成。只有在用户**明确要看 UI** 或需要复现 UI 中的某个交互流程时再用 agent-browser：
 
 1. `npx skills add vercel-labs/agent-browser --skill agent-browser --agent claude-code -y`
-2. 由用户在浏览器里完成 SSO 登录（不要代输密码）
+2. 优先按 Rule 1 使用环境凭据走原生登录 API；确实需要交互认证时，再由用户在浏览器完成当前部署要求的登录
 3. 登录后按 Rule 1 在原浏览器继续 UI/已核验适配器操作，确认目标角色和任务资源；不读取或导出 localStorage/Cookie 值。
 4. UI 框架是 **iView**（Vue 2 / iview-admin）：菜单 class 前缀 `.ivu-menu-*`、表格 `.ivu-table-*`，与 Element / Ant Design 不同，不要照搬其他后台的选择器
 

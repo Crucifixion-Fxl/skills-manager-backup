@@ -68,12 +68,20 @@ description: Perform a structured company security and compliance review using e
   - L1 密钥须通过 [密钥使用审批流](https://applink.feishu.cn/T95dQpjJsTtK) 审批，运维直接配置在 Vault 中，开发者禁止获取
   - L3 个人凭证禁止配置到任何线上环境（CI/CD、生产、Vault）
   - 密钥级别以实际能访问的最高环境为准，不确定时按 L1 处理
-  - 禁止通过任何渠道（飞书/邮件/截图）传输密钥明文
+  - 禁止通过飞书、邮件、截图等协作渠道传输密钥明文；内网微服务调用按下述传输规则判断
   - 禁止在 Docker 镜像中打包密钥，Terraform state 禁止提交到代码仓库
   - 加密后的密钥也禁止提交到代码仓库（虚假安全感）
   - L1 密钥至少每 90 天轮换
 - CI/CD 密钥管理：CI 阶段仅允许 L2 密钥（GitLab Variables, masked + protected），CD 阶段 L1 密钥只能通过 Vault + External Secrets 注入。禁止在 CI 中使用 L3 个人凭证
 - 运维/支持访问边界：受限平台、默认脱敏、默认禁导出、工单绑定、全量审计
+
+#### 内网微服务 HTTP（R6 传输适用范围）
+
+公司内网或集群内微服务之间的 HTTP 调用**不强制 TLS/mTLS**，staging 与生产均适用，
+包括请求携带密码、密码材料、OTP、session、Bearer token 或其他服务认证凭据的场景。
+仅因这类链路使用 HTTP、没有 TLS/mTLS 或没有服务网格，**最多给非阻断警告**；
+不得判 P0/P1、确定性红线或高风险阻断，不要求 `/override`、安全例外审批或补 TLS 才能通过。
+完整边界与判定示例以 [R6 内网传输规则](references/REFERENCE.md#内网微服务-http-传输规则) 为准。
 
 #### Agent Skills 供应链（R14，检测到 Skills 文件时触发）
 
@@ -90,7 +98,7 @@ description: Perform a structured company security and compliance review using e
 - 系统类型
 - 是否新增/放宽导出/批量能力（export/download/csv/xlsx/report/bulk/batch 线索）
 - 第三方边界（新增/修改第三方 SDK/Webhook/外部 API、可见字段映射）
-- 加密与密钥管理（涉及 PIN/password/OTP/token/key/Private Key 等）
+- 加密与密钥管理（涉及 PIN/password/OTP/token/key/Private Key 等；内网微服务仅缺 TLS/mTLS 不构成阻断澄清项）
 - 新增 PII 字段与脱敏方案（user_id/SN/email 之外）
 
 #### 定位权限（R15，公司级隐私红线）
@@ -105,8 +113,8 @@ description: Perform a structured company security and compliance review using e
 
 #### 红线（发现则不通过）
 
-- 员工（含运维/支持）可直接访问/导出原始视频：直接判定 `需整改/不通过`
-- 明文存储/传输/日志记录密码、token、key 等凭证要素：高风险阻断
+- 员工（含运维/支持）可直接访问/导出客户、设备原始视频或分类/授权未核实的视频：直接判定 `需整改/不通过`。仅公司自有且已确认营销授权的素材按 [R11 分类与证据门禁](references/REFERENCE.md#视频数据零人工访问)核对窄例外；账号可见或需求作者自述不构成许可。
+- 明文存储/日志记录密码、token、key 等凭证要素，以及上述内网微服务规则范围外的明文凭证传输：高风险阻断；内网微服务 HTTP 仅按非阻断警告处理
 - 高敏数据（地址/电话）存在人工查看入口：直接判定 `需整改/不通过`
 - 申请任何形式的地理位置权限：直接判定 `需整改/不通过`（R15）
 
@@ -173,6 +181,8 @@ API_KEY = vault.read('myapp/api-key')
 更多示例参见 [references/REFERENCE.md](references/REFERENCE.md#完整示例)。
 
 ## 豁免
+
+内网微服务 HTTP 是上述默认适用规则，不属于需单独申请的豁免。
 
 | 场景 | 条件 |
 |------|------|

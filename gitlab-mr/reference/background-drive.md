@@ -57,6 +57,8 @@ Driver / Supervisor / Auditor 的完整提示词契约、状态文件规范、�
     "checked_at": "2026-04-15T10:00:00Z"
   },
   "no_change_streak": 0,
+  "merge_integrity_waivers": [],
+  "merge_integrity_rejections": {"fingerprint": "", "count": 0},
   "history": [
     { "round": 1, "status": "awaiting_confirmation", "pending_count": 2, "ts": "2026-04-15T09:40:00Z" },
     { "round": 2, "status": "done", "ts": "2026-04-15T10:15:00Z" }
@@ -70,6 +72,8 @@ Driver / Supervisor / Auditor 的完整提示词契约、状态文件规范、�
 - 每次 Supervisor liveness 醒来，更新 `last_snapshot`、`no_change_streak`
 - 每次 Driver 返回，append 一条 `history`
 - 父会话按 [Issue 同步流程](issue-sync.md) 回写并回读关联 Issue，在 history 追加 `kind=issue_sync` receipt
+- 用户确认某条完整性 FAIL 是有意为之后，父会话按 [豁免格式](merge-integrity.md#豁免) 追加 `merge_integrity_waivers`；Driver / Auditor 不得写入
+- Auditor 因完整性 FAIL 被拒时，父会话用 `<head_sha>:<target_sha>:<FAIL 检查与文件>` 作为 `merge_integrity_rejections.fingerprint`：与上次相同则 `count + 1`，否则重置为 1；`count >= 2` 时停止重派，按 `stuck` 交给用户
 - Auditor 结构化结果通过 `validate_drive_audit.py` 且当前 HEAD 的 Issue 提交 receipt 已回读后设 `completed: true`；它只表示可合并审计，不代表 merged 或 Issue closed
 
 ---
@@ -197,14 +201,15 @@ Nexus 操作引用 `addx:addx-nexus-usage`；不得把制品迁移、上传或�
 | Bot finding，`behavior-sensitive` / `critical-boundary` | 控制流、事务、数据源、鉴权、API、配置、缓存/MQ、并发等 | 攒进 pending_items，不动 |
 | 人工 reviewer 评论 | author_type != bot | 用 `face-review-repair` 形成 disposition/修复建议，攒进 pending_items，不动 |
 | 业务逻辑/删代码/改公开 API/force push rebase | 语义风险不低 | 攒进 pending_items，不动 |
-| merge conflict | has_conflicts=true | `git fetch origin {{TARGET_BRANCH}} && git rebase origin/{{TARGET_BRANCH}}`；干净且非 promotion→push；冲突或 promotion→攒清单 |
+| merge conflict | has_conflicts=true | source 为 `main`/`master`/`staging`/`release/*`/`hotfix/*` 等共享分支时**不 rebase**，攒清单；否则 `git fetch origin {{TARGET_BRANCH}} && git rebase origin/{{TARGET_BRANCH}}`，干净、非 promotion 且主 skill Step 2.87 exit 0→push；冲突、promotion 或完整性检查非 0→攒清单 |
+| 合流 / retarget / 手工冲突 | 主 skill Rule 14 适用 | 每次 push 前跑 Step 2.87，A–E 任一 FAIL 或 exit 2 原样攒进 pending_items；Driver 只做校验，不做手工合并、不改 target、不替换文件树 |
 
 如果 `{{RESUME_DECISIONS}}` 非空，先按第 5 节规则重新处理上一轮 discussion，再进入
 正常循环。用户决议不能跳过 `face-review-repair` 的风险判断、保护测试和验证。
 
 # 退出条件（任一即返回）
 
-1. **done**: 最新 pipeline 全部 success + 所有 discussion resolved + detailed_merge_status == "mergeable" 且 has_conflicts=false + 当前 MR 的 reviewers 数组恰好一位；目标分支与 `mr_mode` 必须一致，production promotion 还要求当前 HEAD 的 deterministic code parity PASS，production non-promotion 要求 staging 流程不存在的证据和不适用原因可核查，staging writer cleanup 要求当前 HEAD 的 deterministic cleanup attestation PASS，emergency hotfix 要求批准和回补信息完整。contract 声明的外部 gate 只能标记为待 Auditor 实时核验，Driver 不得根据 contract 自报值宣称通过
+1. **done**: 最新 pipeline 全部 success + 所有 discussion resolved + detailed_merge_status == "mergeable" 且 has_conflicts=false + 当前 MR 的 reviewers 数组恰好一位；目标分支与 `mr_mode` 必须一致，production promotion 还要求当前 HEAD 的 deterministic code parity PASS，production non-promotion 要求 staging 流程不存在的证据和不适用原因可核查，staging writer cleanup 要求当前 HEAD 的 deterministic cleanup attestation PASS，emergency hotfix 要求批准和回补信息完整；主 skill Rule 14 适用时，当前 HEAD 对当前目标 SHA 的 Step 2.87 必须 exit 0（exit 1 只有 state 中已有匹配豁免才可视为满足）。contract 声明的外部 gate 只能标记为待 Auditor 实时核验，Driver 不得根据 contract 自报值宣称通过
 2. **awaiting_confirmation**: pending_items 非空时，把该轮低风险的都处理完，返回
 3. **stuck**: 连续 3 轮低风险改完 push 后，新 pipeline 仍有 failed job（且不是之前修过的）
 4. **timeout**: 累计运行 60 分钟
@@ -311,6 +316,21 @@ print(c)"
 
 同一次 MR API 回读中的 `reviewers` 必须为恰好包含一位 reviewer 的数组，否则返回 `rejected`；指定 reviewer 不代表已获得 approval。
 
+3.5. 合并内容完整性（主 skill Rule 14 适用时必做）：
+   - 在 MR 所在仓库内执行
+     `git fetch origin "+refs/heads/<target_branch>:refs/remotes/origin/<target_branch>" "+refs/merge-requests/{{MR_IID}}/head:refs/tmp/mr-{{MR_IID}}"`，
+     分别 `git rev-parse` 两个 ref 得到 `target_sha` / `head_sha`（不用 `FETCH_HEAD`，它的第一行是目标分支）；
+     `head_sha` 必须等于 MR API `diff_refs.head_sha`。
+   - `uv run <skill-path>/scripts/check_merge_integrity.py <target_sha> <head_sha> --json > /tmp/gitlab-mr-integrity-<project 斜杠换成 ->-{{MR_IID}}-<head_sha 前 12 位>.json`，
+     记录退出码与报告 SHA-256，写入返回 JSON 的 `merge_integrity`。
+   - 按 [merge-integrity.md](merge-integrity.md) 的 refspec 只 fetch 长期分支后运行
+     `check_merge_integrity.py <target_sha> <head_sha> --sync-parents`；对列出的每个提交 P 再跑
+     `<target_sha> <P> --json`，按同样方式写入 `merge_integrity.sync_reports[]`（`merged_sha` /
+     `exit_code` / `report_sha256` / `evidence_file`）。没有列出时写空数组。
+   - exit 0 → 通过；exit 1 仅在 state 的 `merge_integrity_waivers` 中存在绑定同一 `head_sha` /
+     `target_sha`、覆盖全部 FAIL 检查与文件、带用户签字（`approved_by` / `approved_at_utc` / `reason`）的
+     豁免时通过，否则 `rejected` 并附 FAIL 行；exit 2 视为未完成检查，`rejected`。
+
 4. 从 `{{PROMOTION_CONTEXT}}` JSON 读取 `promotion.enabled`。如果为 true：
    - 按 `reference/release-parity-check.md` 重跑 GitLab-aware deterministic checker；
      `promotion.parity_mode=branch-promotion` 时传 `--branch-promotion`、
@@ -384,9 +404,25 @@ Verified Issue context JSON: {{ISSUE_SYNC_CONTEXT}}
     "cleanup_evidence": [],
     "workflow_evidence": null,
     "non_promotion_attestation_sha256": "<branch-present non-promotion attestation SHA-256 when applicable>"
+  },
+  "merge_integrity": {
+    "applicable": true,
+    "target_sha": "<origin/<target_branch> SHA used for the check>",
+    "source_sha": "<same as head_sha>",
+    "exit_code": 0,
+    "report_sha256": "<SHA-256 of the --json report file>",
+    "evidence_file": "/tmp/gitlab-mr-integrity-engineering-skills-1234-abc123def456.json",
+    "sync_reports": []
   }
 }
 ```
+
+`merge_integrity` 始终必填。目标为 `main`/`master`/`staging`/`release/*`/`hotfix/*` 时
+`validate_drive_audit.py` 强制 `applicable: true`；其他目标只要 `target..head` 含合并提交也强制。它不信任自报值：
+用 `git ls-remote origin` 核对 `target_sha` 是当前目标分支，要求两个提交在本地可用，核对报告 hash、
+SHA 绑定、A–E 齐全、退出码与 FAIL / UNVERIFIED 一致，并对同一对 SHA 重跑检查、逐条比较结论；
+自行重算 `--sync-parents`，要求 `sync_reports` 恰好覆盖这些提交，并同样校验和重跑每份报告；
+exit 1 只接受 state 中匹配的签字豁免。因此必须在 MR 所在仓库内运行它。
 
 失败时返回相同结构，但 `status: rejected` 并增加 `failures` 数组。对于
 `production-non-promotion`，`workflow_evidence` 使用同一 observation 结构，name 固定为
@@ -400,7 +436,7 @@ GitLab API 原始 JSON；它们分别绑定 pipeline、contract jobs 与 force-p
 `expected_contains` 都真实出现在文件中；Auditor 不能自行填写摘要冒充原始响应。
 ```
 
-父会话把结果写入 `/tmp/gitlab-mr-audit-<iid>.json`，然后运行：
+父会话把结果写入 `/tmp/gitlab-mr-audit-<iid>.json`，然后**在 MR 所在仓库内**（已按 3.5 fetch）运行：
 
 ```bash
 uv run <skill-path>/scripts/validate_drive_audit.py \
@@ -479,7 +515,7 @@ Issue 同步待办使用 `pending_items` 中的 `kind=issue_sync`，另带 Issue
 |---|---|---|
 | `validate:skills` | SKILL.md 格式错 | 本地 `uv run python scripts/validate.py --skills` 看具体错误，修，push |
 | `validate:security` | 安全扫描告警 | 本地 `uv run python scripts/validate.py --security`，按提示处理或加豁免注释，push |
-| Merge conflict | 与目标分支有冲突 | `git fetch origin <target> && git rebase origin/<target>`；普通 MR 干净时 push，生产晋级需重跑 parity；冲突则升级 |
+| Merge conflict | 与目标分支有冲突 | source 为共享长期分支（`main`/`master`/`staging`/`release/*`/`hotfix/*`）时不 rebase，升级；否则 `git fetch origin <target> && git rebase origin/<target>`，普通 MR 干净且合并完整性检查 exit 0 时 push，生产晋级需重跑 parity；冲突或检查非 0 则升级 |
 
 Retry 命令：`glab ci retry <job-id>`（只用于 MR 描述修改后重跑检查；代码改动一律 push 触发新 pipeline）。
 

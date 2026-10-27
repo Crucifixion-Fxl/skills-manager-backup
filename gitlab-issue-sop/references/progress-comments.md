@@ -50,6 +50,7 @@ AI 使用下列任一模板或示例时，都须附上 [Agent 操作与恢复信
 | MR 更新（HEAD、目标分支或交付范围变化） | **是**（刷新同一条 issue-sync 回执，不另写空 note） |
 | MR 合并 | **是**（说明合并到哪个分支 / 是否已部署） |
 | 部署验证完成 | **是**（说明生产环境验证通过 → 可 close） |
+| 已部署批次的验收结果或明确免验决定 | **是**（按 [统一验收契约](deployment-acceptance.md) 调用 `acceptance.py report`，回读 Issue 回执与 MR 引用；partial/blocked/N/A 不冒充测试通过） |
 | 阻塞发生 | **是**（说明阻塞原因 + 预期解除时间） |
 | 阻塞解除 | **是**（说明怎么解除的） |
 | scope 变化 | **是**（已确认的变化追加 requirement revision；需要新的 source snapshot 时新建 Attempt，不覆盖原始描述） |

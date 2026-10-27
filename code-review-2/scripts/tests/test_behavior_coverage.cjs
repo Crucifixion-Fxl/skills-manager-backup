@@ -127,6 +127,27 @@ test('extra cross-repository evidence needs its own pinned revision', () => {
   assert.equal(validateCoverage(report, expected).status, 'incomplete');
 });
 
+test('new entry can use fixed base tree absence as before evidence', () => {
+  const report = fixture();
+  Object.assign(report.entries[0], {
+    entry: 'src/new-route.js:16',
+    before: 'No route exists in the base tree',
+    after: 'The new route returns the intended destination',
+    before_evidence: [{ revision: BASE, locator: 'base-tree-index: src/new-route.js absent' }],
+    after_evidence: [{ revision: HEAD, locator: 'src/new-route.js:16' }],
+  });
+  // The validator checks the fixed revision and locator shape; the reviewer must verify the claim.
+  assert.equal(validateCoverage(report, expected).status, 'complete');
+});
+
+test('pinned external evidence cannot replace required local base and head evidence', () => {
+  const report = fixture();
+  const externalOnly = [{ repository: 'app/bridge', revision: 'd'.repeat(40), locator: 'bridge.js:3' }];
+  report.entries[0].before_evidence = externalOnly;
+  report.entries[0].after_evidence = externalOnly;
+  assert.equal(validateCoverage(report, expected).status, 'incomplete');
+});
+
 test('invalid top-level and expected revisions fail closed without throwing', () => {
   for (const report of [null, [], 'pass', {}]) {
     assert.equal(validateCoverage(report, expected).status, 'incomplete');
@@ -145,4 +166,50 @@ test('CLI validates stdin and communicates success, gaps and bad input by exit c
   assert.equal(JSON.parse(incomplete.stdout).status, 'incomplete');
   assert.equal(run('{invalid json').status, 2);
   assert.equal(run('{}', [BASE]).status, 2);
+});
+
+// Diff-scoped review scenarios: the checker validates evidence records, not LLM relevance.
+test('unavailable necessary CI context stays incomplete without inventing a regression', () => {
+  const report = fixture();
+  report.entries = [report.entries[0]];
+  report.audit.required_entry_ids = [report.entries[0].id];
+  Object.assign(report.entries[0], {
+    entry: '.gitlab-ci.yml image consumer', intent: 'use the upgraded build image',
+    status: 'unverified', reason: 'Relevant override semantics unavailable from safe projection',
+  });
+  delete report.entries[0].outcome;
+  const result = validateCoverage(report, expected);
+  assert.equal(result.status, 'incomplete');
+  assert.equal(report.entries.some((entry) => entry.finding), false);
+});
+
+test('verified affected entry needs no unrelated CI job in its coverage set', () => {
+  const report = fixture();
+  report.entries = [report.entries[0]];
+  report.audit.required_entry_ids = [report.entries[0].id];
+  const result = validateCoverage(report, expected);
+  assert.equal(result.status, 'complete');
+  assert.equal(result.checked_entries, 1);
+  // Completeness is relative to the justified set; relevance requires scenario evaluation.
+  assert.equal(result.approved, undefined);
+});
+
+test('tiny authorization change with unavailable caller cannot use not-applicable escape', () => {
+  const report = fixture();
+  report.entries[0].status = 'unverified';
+  report.entries[0].reason = 'Tenant authorization caller unavailable';
+  assert.equal(validateCoverage(report, expected).status, 'incomplete');
+});
+
+test('diff-scoped capability is a separate versioned contract from source access', () => {
+  const fs = require('node:fs');
+  const refs = path.resolve(__dirname, '../../references');
+  const extra = JSON.parse(fs.readFileSync(path.join(refs, 'diff-context-contract.json')));
+  const original = JSON.parse(fs.readFileSync(path.join(refs, 'source-context-contract.json')));
+  assert.deepEqual(extra, {
+    schema_version: 1, capability: 'diff-scoped-context/v1', tool: 'read_review_source',
+  });
+  assert.deepEqual(original, {
+    schema_version: 1, capability: 'fixed-source-context/v1', tool: 'read_review_source',
+  });
 });

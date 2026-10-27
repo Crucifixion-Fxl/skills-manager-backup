@@ -23,9 +23,9 @@ argument-hint: "--target=<目标分支> [--from=stage1-6] [--type=android|ios|ba
 
 ## Stage 0.25：Issue binding 门禁
 
-提交项目变更前按 [`gitlab-issue-sop` 生命周期契约](../../collaboration/gitlab-issue-sop/references/lifecycle-binding.md) 实时验证 Root Issue 与当前仓 Work Item。要求 Issue open、有 assignee、Work Item 属于当前仓；分支名、commit message 和裸 `#IID` 仅是线索。缺失或无法核验时停止，不进入 lint、暂存、commit 或 push。
+提交项目变更前按 [`gitlab-issue-sop` 生命周期契约](../../collaboration/gitlab-issue-sop/references/lifecycle-binding.md) 实时验证关联 Issue（一个即可，可跨项目）。要求 Issue open、有 assignee；分支名、commit message 和裸 `#IID` 仅是线索。缺失或无法核验时停止，不进入 lint、暂存、commit 或 push。
 
-记录完整 Root/Work Item URL，Stage 6 的 MR 描述必须各写一次 `Root Issue:` 与 `Work Item:`。跨仓时还必须验证两者已建立原生 Issue link。
+记录完整 Issue URL，Stage 6 的 MR 描述写一行 `Issue: <URL>`。跨仓改动时各仓 MR 关联同一个 Issue，不需要为每个仓单独建 Work Item。
 
 ---
 
@@ -414,6 +414,10 @@ git rebase "origin/$TARGET_BRANCH"
 
 **注意**：rebase 后不自动 force push，后续 Stage 6 统一推送。
 
+rebase 完成后、Stage 6 推送前：目标为 `main` / `master` / `staging` / `release/*` / `hotfix/*`，或候选含合并提交
+（`git rev-list --merges origin/<target>..HEAD` 非空）时，对 rebase 后的 HEAD 执行
+[`gitlab-mr` Step 2.87 合并内容完整性检查](../gitlab-mr/reference/merge-integrity.md)；exit 非 0 停止推送并交给用户。
+
 ### 5b. 生成 Changelog
 
 ```bash
@@ -498,7 +502,7 @@ git push -u origin "$(git branch --show-current)" --force-with-lease
 
 使用 `--force-with-lease`（因为 Stage 5 做了 rebase），比 `--force` 更安全。
 
-推送只证明远端分支存在，不证明生命周期回链完成。若本次 diff 含技术方案，必须先完成 6b 的方案提交，再用稳定 marker 向 Work Item 追加 branch、HEAD SHA 与固定 blob URL，回读内容一致后才能创建/更新 MR；写入未知时先查询，禁止盲目重试。没有技术方案时记录 `design_link=NOT_APPLICABLE`，不得制造空文档过门禁。
+推送只证明远端分支存在，不证明生命周期回链完成。若本次 diff 含技术方案，必须先完成 6b 的方案提交，再用稳定 marker 向关联 Issue 追加 branch、HEAD SHA 与固定 blob URL，回读内容一致后才能创建/更新 MR；写入未知时先查询，禁止盲目重试。没有技术方案时记录 `design_link=NOT_APPLICABLE`，不得制造空文档过门禁。
 
 ### 6b. 准备 MR 文档
 
@@ -532,8 +536,7 @@ glab mr create \
 
 ## 关联 Issue
 
-Work Item: <当前仓完整 Issue URL>
-Root Issue: <Root Issue 完整 URL>
+Issue: <完整 Issue URL，可跨项目>
 
 ## 变更类型
 
@@ -556,7 +559,7 @@ glab ci status
 
 | 失败 Job | 修复方式 |
 |----------|---------|
-| Merge conflict | `git fetch && git rebase && git push --force-with-lease` |
+| Merge conflict | `git fetch && git rebase`，通过 Step 2.87 合并内容完整性检查后再 `git push --force-with-lease`（源分支为共享长期分支时不 rebase，交给用户） |
 | 其他 | 展示失败 job 日志，提供修复建议 |
 
 循环检查直到 CI 全绿 + 无冲突，或报告无法自动修复的问题。

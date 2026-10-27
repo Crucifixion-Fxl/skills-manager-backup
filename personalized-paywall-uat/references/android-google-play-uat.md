@@ -1,8 +1,13 @@
 # Android Google Play UAT lessons
 
+Use the authoritative CMS or instance source defined in `../SKILL.md`; the UAT
+runner freezes the actual collected evidence in this run, not in Skill text.
+Instance offer intent comes from deployed config; product facts come from live
+runtime metadata. Missing repository policy/gate support is a contract gap.
+
 Read this reference before Android Google Play P5-P9 work. It captures failure
 modes that are easy to misclassify when a remote H5, an Android host adapter,
-Google Play Billing, live CMS metadata, and an account-specific offer catalog are
+Google Play Billing, live source metadata, and an account-specific offer catalog are
 tested together.
 
 ## 1. Freeze three independent identities
@@ -12,7 +17,7 @@ Record these independently:
 1. current Android repository and host/SDK SHAs;
 2. installed APK package, version name/code, build fingerprint or commit, APK
    SHA-256, signing identity, and installer source;
-3. remote H5 URL plus a deployment/content identity and live CMS response hash.
+3. remote H5 URL, deployment/copy identity and source-evidence response/config hashes.
 
 Fetching or fast-forwarding the checkout after installation does not update the
 APK. Deploying H5 does not update the APK either. Never report the current branch
@@ -52,7 +57,7 @@ Google productId + basePlanId + offerId (or an offerToken hash)
 The same base-plan string can exist under more than one Google subscription
 product. A host field named `subscriptionGroupId` may be passed to Billing as the
 Google `productId`; verify the outgoing request and returned ProductDetails rather
-than trusting the field name. Join live CMS runtime metadata and typed quotes with
+than trusting the field name. Join live source runtime metadata and typed quotes with
 the same complete identity.
 
 For every unique purchasable tuple, retain a sanitized summary of:
@@ -66,9 +71,9 @@ Never retain raw purchase tokens or complete provider payloads. ProductDetails
 logs may also expose account identifiers and long offer tokens; sanitize them and
 store only the fields or hashes needed by the gate.
 
-## 4. Separate CMS intent from current-account eligibility
+## 4. Separate configured intent from current-account eligibility
 
-`freeTrialDays > 0` in live CMS expresses product intent; it does not manufacture
+`freeTrialDays > 0` in live source metadata expresses product intent; it does not manufacture
 a Google trial. The current tester's ProductDetails response is the price truth for
 that checkout. A missing zero-price phase can mean:
 
@@ -80,12 +85,12 @@ that checkout. A missing zero-price phase can mean:
 
 Therefore, do not immediately blame H5 or assert “not configured.” Compare the
 live runtime product, outgoing tuple, current-account typed quote, and Play sheet.
-If CMS expects a trial but Google returns only a recurring phase, classify a
+If source metadata expects a trial but Google returns only a recurring phase, classify a
 Play configuration/eligibility mismatch and ask the Play owner to inspect the
 exact tuple. Re-query after the external repair.
 
-For a CMS `PROMOTIONAL` subscription, distinguish the requested offer from the
-offer Google actually resolves. Record `requestedOfferId` from live CMS and
+For a configured `PROMOTIONAL` subscription, distinguish the requested offer from the
+offer Google actually resolves. Record `requestedOfferId` from the frozen offer configuration and
 derive `resolvedOfferId` from the selected ProductDetails offer; never populate
 the latter by echoing the request. Require the complete Google tuple to match,
 the discounted phase to precede the recurring phase, and both H5 and the Play

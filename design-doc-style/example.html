@@ -187,6 +187,20 @@ pre code { color: #d7efe7; background: none; border: 0; }
 .hero-note span { display: block; margin-top: 8px; color: var(--atlas-ink); font-size: 15px; line-height: 1.65; }
 .hero-note.hot { border-top-color: var(--atlas-orange); }
 .hero-note.hot b { color: var(--atlas-orange); }
+.atlas-page .hero { row-gap: 40px; }
+.hero-pillars { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; align-self: stretch; }
+.pillar { display: flex; flex-direction: column; gap: 10px; padding: 22px 24px; border: 1px solid var(--atlas-line); border-top: 3px solid var(--atlas-mint); background: var(--atlas-panel-2); }
+.pillar.why { border-top-color: var(--atlas-orange); }
+.pillar.idea { background: linear-gradient(rgba(102, 215, 178, .07), rgba(102, 215, 178, .07)), var(--atlas-panel-2); border-color: var(--atlas-mint); }
+.pillar > b { color: var(--atlas-mint); font: 700 11px/1.3 var(--atlas-mono); letter-spacing: .12em; text-transform: uppercase; }
+.pillar.why > b { color: var(--atlas-orange); }
+.atlas-page .pillar h2 { margin: 0; padding: 0; border: 0; color: var(--atlas-ink); font: 500 26px/1.2 var(--atlas-display); }
+.pillar ul, .pillar ol { margin: 0; padding-left: 1.15em; display: grid; gap: 9px; color: var(--atlas-ink); font-size: 14.5px; line-height: 1.7; }
+.pillar li strong { color: var(--atlas-ink); }
+.pillar.why li::marker { color: var(--atlas-orange); }
+.pillar.goal li::marker, .pillar.idea li::marker { color: var(--atlas-mint); font-family: var(--atlas-mono); }
+.pillar-foot { margin-top: auto; padding-top: 6px; color: var(--atlas-muted); font: 12px/1.5 var(--atlas-mono); }
+@media (max-width: 1180px) { .hero-pillars { grid-template-columns: minmax(0, 1fr); } }
 .status-line { display: flex; flex-wrap: wrap; gap: 7px; }
 .status-line span, .doc-chip {
   padding: 5px 9px; border: 1px solid var(--atlas-line); color: var(--atlas-muted);
@@ -289,6 +303,7 @@ footer.doc-foot { padding: 28px 0 0; border-color: var(--atlas-line); color: var
   .page.atlas-page { display: block; max-width: none; }
   .hero { min-height: auto; }
   .hero-note, .table-wrap, .boundary, .part-divider, .plate, .node-detail { background: #fff; break-inside: avoid; }
+  .pillar, .pillar.idea { background: #fff; break-inside: avoid; }
   .plate { border-color: #d9deea; } .part-divider { border-block-color: #d9deea; } .node-detail { border-color: #d9deea; }
   .hero .dek { color: #5d6678; }
   .callout, .callout.info, .callout.warn, .callout.risk { color: #172033; background: #fff; border-color: #d9deea; }
@@ -389,15 +404,48 @@ footer.doc-foot { padding: 28px 0 0; border-color: var(--atlas-line); color: var
 
       <header class="hero">
         <div>
-          <p class="eyebrow">Example · design-doc-style · 单文件、全内联</p>
-          <h1>这是一份示例，<br><em>不是真实项目。</em></h1>
-          <p class="dek">本页演示 <code>design-doc-style</code> skill 的完整视觉语言：hero、决策表格、可交互的 SVG 流程图（点节点展开细节、选中路径高亮）、以及一屏 UX 模拟界面。全部内容和样式都写在这一个 <code>.html</code> 文件里，没有任何外部资源引用。</p>
+          <p class="eyebrow">示例 · 管理后台 + 发布服务 · 技术方案 · 虚构项目</p>
+          <h1>内容发布链路<br><em>技术方案</em></h1>
+          <p class="dek">覆盖一条内容从管理后台提交、发布服务校验与发布，到失败后回到后台人工处理的整条链路。发布服务把散在三处的校验收敛成一个 <code>validate</code> 节点；管理后台直接展示失败原因和下一步；两端共用同一份状态契约。项目与数字均为虚构，只用来演示 hero 结构。</p>
         </div>
-        <aside class="hero-side" aria-label="阅读指引">
-          <div class="hero-note hot"><b>全部内联</b><span>三层 <code>&lt;style&gt;</code>（基座 / atlas 皮肤 / mockup 组件）+ 一段 <code>&lt;script&gt;</code>，零外链，VS Code 内置预览可以直接打开。</span></div>
-          <div class="hero-note"><b>交互水准参考 Archify</b><span>点击流程图节点展开细节、选中路径动效追踪；但整份文档不是"一张可探索大图"，图只是嵌在正文里的一个组件。</span></div>
-          <div class="status-line"><span class="live">Example</span><span>Static-first</span><span>Interactive optional</span></div>
+        <aside class="hero-side" aria-label="文档信息">
+          <div class="hero-note hot"><b>状态 · 示例</b><span>虚构项目，演示 <code>design-doc-style</code> 的单文件全内联结构，不是任何真实系统的方案。</span></div>
+          <div class="hero-note"><b>基线 · 日期</b><span>示例占位：<code>publisher</code> <code>abc1234</code> · <code>admin</code> <code>def5678</code> · 2026-10-23。</span></div>
+          <div class="status-line"><span class="live">Example</span><span>Draft</span><span>Single file</span></div>
         </aside>
+
+        <div class="hero-pillars">
+          <article class="pillar why" aria-labelledby="pillar-why">
+            <b>01 · Motivation</b>
+            <h2 id="pillar-why">为什么要改</h2>
+            <ul>
+              <li><strong>发布服务：校验写了三遍。</strong>格式、权限、配额分散在 3 个 handler 里，规则互不一致；每周约 40 条内容在后台显示通过、发布时被拒。</li>
+              <li><strong>管理后台：失败原因看不到。</strong>详情页只显示“发布失败”，62% 的失败要找研发查服务端日志才知道原因。</li>
+              <li><strong>两端之间：状态契约没人看守。</strong>后台读取的状态字段改过 2 次名，没有一条契约测试拦截。</li>
+            </ul>
+          </article>
+          <article class="pillar goal" aria-labelledby="pillar-goal">
+            <b>02 · Goal</b>
+            <h2 id="pillar-goal">要达到什么</h2>
+            <ul>
+              <li><strong>校验只在一处</strong>：后台预检与发布使用同一套规则，“通过后被拒”从每周约 40 条降到 0。</li>
+              <li><strong>失败自助处理</strong>：后台展示错误码、原因和下一步，需要研发查日志的失败比例 62% → 10% 以下。</li>
+              <li><strong>两端契约零漂移</strong>：状态枚举由同一份 schema 生成，契约测试覆盖每个状态值。</li>
+            </ul>
+            <p class="pillar-foot">范围与边界见 <a href="#scope">§01</a></p>
+          </article>
+          <article class="pillar idea" aria-labelledby="pillar-idea">
+            <b>03 · Key ideas</b>
+            <h2 id="pillar-idea">怎么做</h2>
+            <ol>
+              <li><strong>单一校验入口。</strong>发布服务的 <code>validate</code> 节点集中格式、权限、配额检查，后台预检调用同一接口。</li>
+              <li><strong>失败是一等状态。</strong>失败带错误码与原因写回内容记录，后台详情页直接展示（见 §04）。</li>
+              <li><strong>契约先行，两端同源。</strong>后台与发布服务的状态类型从同一份 schema 生成。</li>
+              <li><strong>人工分支显式化。</strong>失败只能人工处理后重新提交，不设自动跳过（决策 D1）。</li>
+            </ol>
+            <p class="pillar-foot">全景见 <a href="#flow">§02</a> · 待定项见 <a href="#decide">§03</a></p>
+          </article>
+        </div>
       </header>
 
       <div class="part-divider">

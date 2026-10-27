@@ -38,6 +38,7 @@ Exit codes:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
 import re
 import subprocess
@@ -52,11 +53,19 @@ except ImportError:
     sys.exit(2)
 
 from _scan import ParseError, iter_files
+from check_repo_boundary import (
+    STREAMPARK_PULL_PATH, has_reviewed_streampark_pull_bytes, is_reviewed_streampark_pull,
+)
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 VAULT_RULES_YAML = SCRIPT_DIR.parent / "references" / "vault-paths" / "rules.yaml"
 VAULT_MOUNT_PREFIX = "secret/"
+# Closed platform consumer; authority and live prerequisites are documented in
+# references/approved-exceptions/cn-staging-shared-pg-platform.md. No CLI override.
+CN_STAGING_PLATFORM_PATH = Path("clusters/tencent-100052802231-cn-staging/cicd/crossplane/post-install/shared-postgres-platform-connection.yaml")
+CN_STAGING_PLATFORM_SHA256 = "c8c040f6ab710190ccdf6e23114eb85aa9d590cd72defd529ffd437f201f1125"
+CN_STAGING_PLATFORM_FIXTURE = SCRIPT_DIR.parent / "references/approved-exceptions/cn-staging-shared-pg-platform.yaml"
 
 
 def load_patterns() -> list[tuple[str, re.Pattern[str]]]:
@@ -527,11 +536,89 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     return parser.parse_args(argv[1:])
 
 
+def _approved_streampark_pull_context(path: Path, git_root: Path | None) -> bool:
+    """One exact reviewed source or its authoritative non-deployable skill fixture.
+
+    No path string, platform enum or caller flag can enable this exception.
+    Both contexts require the complete fixed five-object bytes.
+    """
+    fixture_parts = ('references', 'approved-exceptions', 'streampark-stage-pull.yaml')
+    fixture = SCRIPT_DIR.parent.joinpath(*fixture_parts)
+    if (path.absolute() == fixture.absolute()
+            and path.resolve() == SCRIPT_DIR.parent.resolve().joinpath(*fixture_parts)):
+        return has_reviewed_streampark_pull_bytes(path)
+    if git_root is None:
+        return False
+    candidate = path.absolute()
+    try:
+        if not is_reviewed_streampark_pull(candidate, git_root):
+            return False
+    except ValueError:
+        return False
+    return bool(_git_output(git_root, 'ls-files', '--error-unmatch', '--',
+                            Path(*STREAMPARK_PULL_PATH).as_posix()))
+
+
+def _has_cn_staging_platform_bytes(path: Path) -> bool:
+    try:
+        return (path.is_file() and not path.is_symlink()
+                and path.absolute() == path.resolve()
+                and hashlib.sha256(path.read_bytes()).hexdigest() == CN_STAGING_PLATFORM_SHA256)
+    except OSError:
+        return False
+
+
+def _approved_cn_staging_platform_context(path: Path, git_root: Path | None) -> bool:
+    if path.absolute() == CN_STAGING_PLATFORM_FIXTURE.absolute():
+        return _has_cn_staging_platform_bytes(path)
+    if git_root is None or path.absolute() != git_root / CN_STAGING_PLATFORM_PATH:
+        return False
+    return (_has_cn_staging_platform_bytes(path)
+            and bool(_git_output(git_root, "ls-files", "--error-unmatch", "--", CN_STAGING_PLATFORM_PATH.as_posix())))
+
+
+def _scope_contains(path: Path, root: Path) -> bool:
+    # Lexical scope catches a reserved directory itself replaced by a symlink;
+    # physical scope catches a harmless-looking alias into that reserved slot.
+    scopes = (root.absolute(), root.resolve())
+    if any(path.absolute().is_relative_to(scope) for scope in scopes):
+        return True
+    try:
+        try:
+            # Non-strict resolve can silently retain a symlink loop on Python
+            # 3.13+. Resolve existing reservations strictly before scoping them.
+            physical_path = path.resolve(strict=True)
+        except FileNotFoundError:
+            # A genuinely missing path can still have a known physical parent
+            # outside this scan. Preserve narrow scans of unrelated content.
+            physical_path = path.resolve()
+    except (OSError, RuntimeError):
+        # Rejection context only: an unresolved reservation is not proven
+        # outside the scan. Its integrity must still be checked below.
+        return True
+    return any(physical_path.is_relative_to(scope) for scope in scopes)
+
+
+def _reserved_rejection_roots(root: Path, positive_git_root: Path | None) -> set[Path]:
+    roots = {positive_git_root} if positive_git_root is not None else set()
+    if root.absolute() != root.resolve():
+        for ancestor in root.parents:
+            trusted = _trusted_k8s_root(ancestor)
+            if trusted is not None and ancestor.absolute().is_relative_to(trusted):
+                roots.add(trusted)
+                break
+    # These extra lexical ancestors are rejection context ONLY. They never
+    # replace the positive origin/context used to authorize a platform source.
+    return roots
+
+
 def _validate_file(
     path: Path,
     docs,
     platform_component: str | None,
     patterns: list[tuple[str, re.Pattern[str]]],
+    *,
+    approved_cn_staging_platform: bool = False,
 ) -> tuple[int, int]:
     if isinstance(docs, ParseError):
         print(f"FAIL: {path}: {docs.message}")
@@ -555,6 +642,10 @@ def _validate_file(
             bad += 1
         for field_path, vault_path in collected:
             total += 1
+            if approved_cn_staging_platform:
+                # walk() uses the legacy default prefix. Only the complete fixed
+                # source above may resolve through the previously accepted Store.
+                vault_path = "shared-db/" + vault_path.removeprefix(VAULT_MOUNT_PREFIX)
             if not any(pattern.match(vault_path) for _, pattern in patterns):
                 print(
                     f"FAIL: {path}: {vault_path} (at {field_path}; "
@@ -566,7 +657,14 @@ def _validate_file(
 
 def main(argv: list[str]) -> int:
     args = _parse_args(argv)
-    root = args.directory
+    root = Path(os.path.abspath(args.directory))
+    try:
+        if args.directory.resolve() != root.resolve():
+            print("FAIL: directory changes target under lexical normalization", file=sys.stderr)
+            return 2
+    except (OSError, RuntimeError):
+        print("FAIL: directory target cannot be resolved unambiguously", file=sys.stderr)
+        return 2
     if not root.is_dir():
         print(f"FAIL: directory not found: {root}", file=sys.stderr)
         return 2
@@ -590,6 +688,24 @@ def main(argv: list[str]) -> int:
 
     bad = 0
     total = 0
+    approved_pull_files = 0
+    approved_platform_files = 0
+    if _scope_contains(CN_STAGING_PLATFORM_FIXTURE, root):
+        # The installed contract fixture must exist intact, even if rglob
+        # would omit an empty/missing/symlinked input or generic rules accept it.
+        if not _approved_cn_staging_platform_context(CN_STAGING_PLATFORM_FIXTURE, None):
+            print(f"FAIL: {CN_STAGING_PLATFORM_FIXTURE}: authoritative CN staging platform fixture differs from its exact reviewed source")
+            return 1
+    for rejection_root in sorted(_reserved_rejection_roots(root, scan_git_root)):
+        reserved = rejection_root / CN_STAGING_PLATFORM_PATH
+        if _scope_contains(reserved, root):
+            # Check before traversal: an empty file or a symlinked directory
+            # must not disappear from rglob or fall back to generic path rules.
+            tracked = bool(_git_output(rejection_root, "ls-files", "--error-unmatch", "--", CN_STAGING_PLATFORM_PATH.as_posix()))
+            if ((tracked or reserved.exists() or reserved.is_symlink())
+                    and not _approved_cn_staging_platform_context(reserved, rejection_root)):
+                print(f"FAIL: {reserved}: reserved CN staging platform consumer differs from its exact reviewed source")
+                return 1
 
     for f, docs in iter_files(root):
         platform_component = (
@@ -604,16 +720,33 @@ def main(argv: list[str]) -> int:
                 scan_crossplane_git_root,
             )
         )
+        file_patterns = patterns
+        if _approved_streampark_pull_context(f, scan_git_root):
+            # The added canonical path is scoped to this exact complete file;
+            # it must not leak to a neighbouring file or generic rule inventory.
+            file_patterns = patterns + [('reviewed-streampark-stage-pull', re.compile(
+                r'^secret/prod/docker-builder/application/streampark/registry-pull/us-staging$'))]
+            approved_pull_files += 1
+        approved_platform = _approved_cn_staging_platform_context(f, scan_git_root)
+        if approved_platform:
+            file_patterns = file_patterns + [("reviewed-cn-staging-platform", re.compile(
+                r"^shared-db/platform/cn-staging/postgres$"))]
+            approved_platform_files += 1
         file_bad, file_total = _validate_file(
             f,
             docs,
             platform_component,
-            patterns,
+            file_patterns,
+            approved_cn_staging_platform=approved_platform,
         )
         bad += file_bad
         total += file_total
 
     rule_summary = ",".join(name for name, _ in patterns)
+    if approved_pull_files:
+        rule_summary += f"; reviewed-streampark-stage-pull exact files={approved_pull_files}"
+    if approved_platform_files:
+        rule_summary += f"; reviewed-cn-staging-platform exact files={approved_platform_files}"
     if bad:
         print(f"FAIL: {bad} vault-path violation(s) out of {total} checked "
               f"(rules: {rule_summary})")

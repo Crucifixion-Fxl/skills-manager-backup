@@ -1,0 +1,6 @@
+{
+  "baseline_commit": "c2e169f23140dc40a7d6ab090a99ac533077fcb4",
+  "cases_sha256": "df31f8d03622869dbee1770fc2c91a3dcdb45cda1c8db27d6d87a76c060cc358",
+  "rubric_sha256": "0aadf3dd06b28ef0b8a282c36f620dfa5350892ada3062c05452945befa23174",
+  "note": "Synthetic, generic cases. Artifact statements are supplied evaluation observations, not actual PDF/native application execution."
+}

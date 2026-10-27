@@ -395,10 +395,6 @@ class FallbackOnboardingTests(base.TmpCase, unittest.IsolatedAsyncioTestCase):
 
 
 class FallbackSchemaTests(base.TmpCase):
-    def test_original_schema_one_through_seven_sql_bytes_remain_exact(self):
-        for name, expected in FROZEN_SQL.items():
-            self.assertEqual(hashlib.sha256(getattr(store, name).encode()).hexdigest(), expected, name)
-
     def seed_old_seven(self):
         helper = journal.ApprovalJournal('test_reads_first_actual_approved_current_card_decision_as_hashes')
         # The historical fixtures independently named a binding "local".

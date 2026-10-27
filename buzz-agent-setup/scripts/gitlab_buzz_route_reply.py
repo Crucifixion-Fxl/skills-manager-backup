@@ -70,6 +70,10 @@ ISSUE_ROUTE_PREFIX_RE = re.compile(
     rf"\[gitlab-notify:v1\]\[object:issue\]\[type:{sync.FACT_VALUE}\]"
     rf"\[status:{sync.FACT_VALUE}\]\[state:(?:opened|closed)\]\[change:routing\]"
 )
+STAGE_ROUTE_PREFIX_RE = re.compile(
+    r"\[gitlab-stage-review:v1\]\[scope:[a-z0-9][a-z0-9.-]{0,63}\]"
+    r"\[value:[a-z0-9][a-z0-9.-]{0,63}\]"
+)
 MR_ROUTE_PREFIX_RE = re.compile(
     r"\[gitlab-notify:v1\]\[object:mr\]\[state:opened\]\[draft:no\]\[change:lifecycle\]"
     r"\[transition:reviewable\]"
@@ -199,7 +203,7 @@ def parse_canvas_routes(content: Any, roles: dict[str, dict[str, str]]) -> dict[
             raise RouteError("Canvas route id must be a lowercase slug")
         if route_id in routes:
             raise RouteError("Canvas route ids must be distinct")
-        if not (ISSUE_ROUTE_PREFIX_RE.fullmatch(prefix) or MR_ROUTE_PREFIX_RE.fullmatch(prefix)):
+        if not (ISSUE_ROUTE_PREFIX_RE.fullmatch(prefix) or MR_ROUTE_PREFIX_RE.fullmatch(prefix) or STAGE_ROUTE_PREFIX_RE.fullmatch(prefix)):
             raise RouteError("Canvas trigger_prefix is not one complete supported routing prefix")
         if prefix in seen_prefixes:
             raise RouteError("Canvas trigger_prefix values must be distinct")

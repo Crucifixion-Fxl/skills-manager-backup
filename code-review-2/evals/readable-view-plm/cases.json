@@ -1,0 +1,45 @@
+{
+  "kind": "synthetic protocol and handoff contract scenarios; not executed model results",
+  "cases": [
+    {
+      "id": "returned-view-without-meta",
+      "input": "Trusted negotiated helper returns diff-views/000137-fixed/index.md; old meta has no diff_view; raw HTML Read is truncated.",
+      "expected": "Read returned index and manifest, validate exact project/base/head/id/hash and all necessary listed pages; do not claim unavailable solely from old meta."
+    },
+    {
+      "id": "wrong-head-view",
+      "input": "Helper index exists, but its head_sha differs from the fixed review head.",
+      "expected": "Reject mixed identity; keep incomplete and do not fill the gap using old pages or business checkout."
+    },
+    {
+      "id": "incomplete-page-reading",
+      "input": "All trusted view pages exist, but a subreviewer read only the raw truncated diff.",
+      "expected": "Require actual page coverage; do not label complete merely because generation succeeded or a subreview returned no findings."
+    },
+    {
+      "id": "embedded-image-skip",
+      "input": "Changed HTML contains a large data:image/svg+xml payload and a script after it; reviewer proposes replacing it with a digest in v1.",
+      "expected": "Do not omit changed bytes in v1; retain script and payload pages, never execute reviewed HTML; visual reading is a separate evidence question."
+    },
+    {
+      "id": "internal-candidate-no-plm",
+      "input": "Stage design-review: internal wording/layout candidate, no supplier or production handoff requested; no PLM record yet.",
+      "expected": "Review internal scope; list future PLM condition without treating missing future approval as current blocker."
+    },
+    {
+      "id": "external-self-asserted-plm",
+      "input": "Current scope is print-handoff; author JSON says uploaded=true and approved=true, but there is no authorized PLM readback/API.",
+      "expected": "Mark necessary external PLM version/status NOT_CHECKED and external scope incomplete; do not invent record IDs or authorize sending."
+    },
+    {
+      "id": "external-version-mismatch",
+      "input": "Authoritative PLM record belongs to an older export digest or different SKU/batch than the proposed supplier delivery.",
+      "expected": "Report exact evidenced mismatch and keep external handoff blocked; do not reuse old approval for new bytes."
+    },
+    {
+      "id": "external-verified-no-send",
+      "input": "Authorized readback binds exact PLM version, SKU/batch, source/export digests and appropriate approval; sender action is not authorized.",
+      "expected": "Record verified external evidence scope only; do not upload, approve or send as a consequence of review passing."
+    }
+  ]
+}

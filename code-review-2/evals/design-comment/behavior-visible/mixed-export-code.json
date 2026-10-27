@@ -1,0 +1,6 @@
+{
+  "id": "mixed-export-code",
+  "mode": "synthetic controlled evidence review; no external actions",
+  "trusted_task": "MR changes production packaging PDF plus export.py. Brief requires CA English and French variants. Final leaflets actual read p1 match required copy and layout. Source/export/version match and design-stage approval verified. Changed export.py:12 silently maps unknown locales to English instead of raising as contract requires; branch reproduced with xx-YY. This can ship wrong-language PDFs. Review design plus actual code defect, show distinct relevant technical appendix.",
+  "output": "Return final review-result JSON supported by the supplied skill. Do not read oracle or other runs. All observations above are synthetic caller-supplied fixtures; do not claim tool operations. Use real local skill instructions, with caller capability design-review-report/v1 only when that skill supports it."
+}

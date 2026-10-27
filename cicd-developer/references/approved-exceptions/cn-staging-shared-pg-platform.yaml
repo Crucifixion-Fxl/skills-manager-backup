@@ -1,0 +1,48 @@
+# Work Item: DEV/k8s#141. Platform credential consumer; no tenant resources or SQL identity.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: shared-postgres-platform-connection
+  namespace: crossplane-system
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+    argocd.argoproj.io/sync-options: Prune=false,Delete=false
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: SecretStore
+    name: shared-postgres-platform
+  target:
+    name: shared-postgres-platform-connection
+    creationPolicy: Owner
+    deletionPolicy: Retain
+    template:
+      engineVersion: v2
+      mergePolicy: Replace
+      type: Opaque
+      data:
+        endpoint: '{{ if ne .endpoint "172.17.3.6" }}{{ fail "platform endpoint differs" }}{{ end }}{{ .endpoint }}'
+        port: '{{ if ne .port "5432" }}{{ fail "platform port differs" }}{{ end }}{{ .port }}'
+        username: '{{ if ne .username "shared_mw_cn_staging" }}{{ fail "platform username differs" }}{{ end }}{{ .username }}'
+        password: '{{ if not (regexMatch "^[A-Za-z0-9!_+-]{32}$" .password) }}{{ fail "platform credential shape differs" }}{{ end }}{{ .password }}'
+  data:
+    - secretKey: endpoint
+      remoteRef:
+        key: platform/cn-staging/postgres
+        property: endpoint
+        version: "1"
+    - secretKey: port
+      remoteRef:
+        key: platform/cn-staging/postgres
+        property: port
+        version: "1"
+    - secretKey: username
+      remoteRef:
+        key: platform/cn-staging/postgres
+        property: username
+        version: "1"
+    - secretKey: password
+      remoteRef:
+        key: platform/cn-staging/postgres
+        property: password
+        version: "1"

@@ -43,7 +43,7 @@
 
 ### 1. 读 issue，取出 PRD
 
-用 MR 描述里的 `Closes #N` / `Relates to #N`，或分支名 `issue-<iid>`，打开该 issue，读描述和回链 PRD 的 comment。PRD 从这里拿，不按固定路径去仓库里猜。
+用 MR 描述里的 `Closes #N` / `Relates to #N`，或分支名 `issue-<iid>`，打开该 issue，读描述和回链 PRD 的 comment。PRD 从这里拿，不按固定路径去仓库里猜。CI 中先读 `$REVIEW_DATA_DIR/issue-evidence.json`（Step 0.0 绑定 Issue 的描述与最近人工评论）；所需 issue 不是绑定的那一个，或 PRD 只在快照未包含的较早评论里时，按 `PRD_UNREADABLE` 记录来源限制。
 
 issue 给出的载体不固定，下面三种都要打开并阅读：
 

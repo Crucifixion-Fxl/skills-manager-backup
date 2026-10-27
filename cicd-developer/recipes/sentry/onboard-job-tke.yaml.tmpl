@@ -4,13 +4,14 @@
 # Sentry 自助 Job —— **TKE cn-main 专用**。
 # 跟 onboard-job-eks.yaml.tmpl 的差异（references/sentry/README.md TKE 差异表）：
 #   - image 固定 `harbor-cn.addx.live/base/sentry-onboard:<tag>`（base/ 不是 cicd/）
-#   - nodeSelector 仅 kubernetes.io/arch=amd64（无 AWS CN NAT egress NodePool）
+#   - arch=amd64 仅是兼容性约束；须按 references/nodepool-placement.md 补充
+#     已核验的 TKE 原生池/网络 placement，不套用 AWS CN NAT NodePool。
 #   - imagePullSecrets 显式（TKE 无 mutation webhook 不自动注入）
 #
 # 必填槽位：
 #   {{app}}                       kebab-case；用于 app-scoped Job / ServiceAccount / ConfigMap 名
 #   {{sentry_onboard_image_tag}}  平台批准的不可变 tag / commit SHA；禁止 `latest`
-# 其他字段固定 —— TKE cn-main 集群一种部署形态。
+# 非 placement 字段保持 cn-main 契约；placement 采用 reference 的目标变体，不能只设 arch。
 
 apiVersion: batch/v1
 kind: Job

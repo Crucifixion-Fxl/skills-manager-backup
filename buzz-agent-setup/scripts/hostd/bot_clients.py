@@ -36,6 +36,64 @@ except ImportError:
     from scheduler import AdmissionError
     from cli_runtime import RuntimePaths, RuntimePathError, default_paths, NOTICE as RUNTIME_NOTICE, NODE_ENV, ENTRY_ENV
 
+_RECORDING_TITLES = frozenset(('会议录制已完成', 'Meeting recording completed', '会議のレコーディングが完了しました'))
+_MARKDOWN_LINK = re.compile(r'\[[^\]\r\n]*\]\((https://[^\s<>"()]+)\)')
+
+
+def recording_card_text(raw):
+    """Only visible minute links in a human recording-completed card.
+
+    Both native card JSON and Feishu's rendered title/elements form are supported.
+    Buttons, hidden action values and other cards never become task instructions.
+    """
+    if not isinstance(raw, dict) or len(json.dumps(raw)) > 65536:
+        raise ValueError
+    title = raw.get('title')
+    if title is None:
+        header = raw.get('header', {})
+        title_node = header.get('title', {}) if isinstance(header, dict) else {}
+        title = title_node.get('content') if isinstance(title_node, dict) and title_node.get('tag') == 'plain_text' else None
+    if not isinstance(title, str) or title not in _RECORDING_TITLES:
+        raise ValueError
+    elements = raw.get('elements')
+    if not isinstance(elements, list) or len(elements) > 64:
+        raise ValueError
+    visible = []
+    for element in elements:
+        if isinstance(element, list):
+            if len(element) > 64: raise ValueError
+            for item in element:
+                if not isinstance(item, dict): raise ValueError
+                if item.get('tag') == 'a' and isinstance(item.get('href'), str): visible.append(('href', item['href']))
+        elif isinstance(element, dict) and element.get('tag') == 'div':
+            fields = element.get('fields', [])
+            if not isinstance(fields, list) or len(fields) > 64: raise ValueError
+            for field in fields:
+                node = field.get('text') if isinstance(field, dict) else None
+                if isinstance(node, dict) and node.get('tag') == 'lark_md' and isinstance(node.get('content'), str):
+                    visible.append(('markdown', node['content']))
+        # Unknown/action elements are not read or executed.
+    links = set()
+    for kind, text in visible:
+        # A rendered href is an entire URI, never prose to scan or truncate.
+        values = [text] if kind == 'href' else [match.group(1) for match in _MARKDOWN_LINK.finditer(text)]
+        for value in values:
+            if re.search(r'[\x00-\x20\x7f]', value):
+                continue
+            try:
+                parts = urlsplit(value)
+                valid = (parts.scheme == 'https' and not parts.username and not parts.password and not parts.port
+                         and re.fullmatch(r'[a-z0-9][a-z0-9-]*\.feishu\.cn', parts.netloc)
+                         and re.fullmatch(r'/minutes/[A-Za-z0-9]+', parts.path))
+            except ValueError:
+                continue
+            if valid:
+                links.add('https://' + parts.netloc + parts.path)
+    if len(links) != 1:
+        raise ValueError
+    return title + '\n' + next(iter(links))
+
+
 @dataclass(frozen=True)
 class MessagePage:
     rows: tuple[dict, ...]
@@ -465,6 +523,8 @@ class BotLarkCli(gs.LarkCli):
             content = '\n'.join(lines).strip()
         elif kind == 'interactive' and sender.get('sender_type') in ('app', 'bot'):
             content = ''  # Raw card retained; bot messages are not human sources.
+        elif kind == 'interactive' and sender.get('sender_type') == 'user':
+            content = recording_card_text(raw)
         elif row.get('deleted') is True or kind == 'system': content = ''
         else: raise ValueError  # Never mark unsupported attachments delivered.
         for mention in mentions:
@@ -613,6 +673,36 @@ class BotLarkCli(gs.LarkCli):
         payload = self._read_call('chat messages', ['im', '+chat-messages-list', '--chat-id', chat_id, '--order', order,
             '--no-reactions', '--page-all', '--page-limit', str(page_limit), '--start', start.isoformat()], full=True)
         return self._read_page(payload)
+
+    def mapping_messages(self, chat_id, start, *, end, page_limit=150):
+        """Complete native metadata for mapping discovery, without body routing.
+
+        Every candidate still needs an exact same-bot GET and the signed
+        footer/sender checks. Unsupported bodies do not imply a missing page.
+        """
+        if (type(page_limit) is not int or not 1 <= page_limit <= 150
+                or not isinstance(start, datetime) or not isinstance(end, datetime)
+                or start.tzinfo is None or end.tzinfo is None):
+            raise failure('对应关系历史查询范围无效', '使用固定时间窗与有限分页')
+        low, high = int(start.timestamp()), int(end.timestamp())
+        rows, ids, tokens, token = [], set(), set(), ''
+        for _ in range(page_limit):
+            page = self.message_page(chat_id, low, high, token=token)
+            for row in page.rows:
+                if row['message_id'] in ids:
+                    self._partial()
+                    raise failure('对应关系历史分页重复', '保留原投递，重新核验完整历史')
+                ids.add(row['message_id'])
+                rows.append(row)
+            if not page.has_more:
+                return rows, False
+            if page.next_token in tokens:
+                self._partial()
+                raise failure('对应关系历史分页循环', '保留原投递，重新核验完整历史')
+            tokens.add(page.next_token)
+            token = page.next_token
+        self._partial()
+        return rows, True
 
     def thread_messages(self, root_message_id):
         try:

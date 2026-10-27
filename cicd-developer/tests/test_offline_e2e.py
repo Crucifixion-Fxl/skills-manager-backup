@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import hashlib
 import io
 import importlib
 import importlib.util
@@ -21,6 +22,7 @@ import yaml
 
 # Keep the registered-alert contract in this existing CI entry point.
 from test_vmalert_rules import RuleTests as TestRegisteredVMAlertRules  # noqa: F401
+from test_vm_platform_profile import PlatformProfileTests as TestEUVMPlatformProfile  # noqa: F401
 
 
 SKILL_ROOT = Path(__file__).resolve().parents[1]
@@ -93,6 +95,7 @@ EXPECTED_REFERENCE_ROOTS = {
     },
     "cost-tiering/redis.yaml": {"notes", "immutable", "dev", "staging", "pre", "prod"},
     "cost-tiering/s3.yaml": {"notes", "immutable", "dev", "staging", "pre", "prod"},
+    "logging/target-compatibility.yaml": {"targets"},
     "data/clusters.yaml": {"clusters"},
     "data/sentry-instances.yaml": {"regions", "environments", "ingest", "image"},
     "data/domain-classification.yaml": {
@@ -6226,12 +6229,51 @@ def test_grafana_scripts_never_handle_local_grafana_credentials_or_api() -> None
 
 
 def test_reference_yaml_inventory_and_roots_stay_expected() -> None:
-    actual = {
-        path.relative_to(REFERENCE_ROOT).as_posix(): set(load_yaml(path))
-        for path in sorted(REFERENCE_ROOT.rglob("*.yaml"))
-    }
+    actual = {}
+    approved = 'approved-exceptions/streampark-stage-pull.yaml'
+    approved_kinds = {'ServiceAccount', 'Role', 'RoleBinding', 'SecretStore', 'ExternalSecret'}
+    for path in sorted(REFERENCE_ROOT.rglob("*.yaml")):
+        relative = path.relative_to(REFERENCE_ROOT).as_posix()
+        if relative == approved:
+            assert hashlib.sha256(path.read_bytes()).hexdigest() == (
+                '63431c97819e39e6e52fdb119797a4245c962f11d1515f0bae5442457b8844b7')
+            documents = list(yaml.safe_load_all(path.read_text(encoding='utf-8')))
+            assert len(documents) == 5
+            actual[relative] = {doc['kind'] for doc in documents}
+        elif relative in {'approved-exceptions/streampark-stage-tls-server.yaml',
+                           'approved-exceptions/streampark-stage-tls-client.yaml'}:
+            import importlib.util
+            spec = importlib.util.spec_from_file_location('tls_contract', VALIDATOR_ROOT / '_streampark_tls_contract.py')
+            contract = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(contract)
+            TLS_FILES = contract.TLS_FILES
+            side = Path(relative).stem.removeprefix('streampark-stage-tls-')
+            key = f'clusters/aws-390709477306-us-staging/streampark-builder/readers/{side}.yaml'
+            assert hashlib.sha256(path.read_bytes()).hexdigest() == TLS_FILES[key]
+            documents = list(yaml.safe_load_all(path.read_text(encoding='utf-8')))
+            assert len(documents) == 4
+            actual[relative] = {doc['kind'] for doc in documents}
+        elif relative == 'approved-exceptions/us-prod-qdrant-monitoring-key.yaml':
+            assert hashlib.sha256(path.read_bytes()).hexdigest() == (
+                '3c01a87c18a5e89819c82c11483b99636bfb3c76581484277d96c73ac54ed2a1')
+            documents = list(yaml.safe_load_all(path.read_text(encoding='utf-8')))
+            assert len(documents) == 1
+            actual[relative] = {doc['kind'] for doc in documents}
+        elif relative == 'approved-exceptions/cn-staging-shared-pg-platform.yaml':
+            assert hashlib.sha256(path.read_bytes()).hexdigest() == (
+                'c8c040f6ab710190ccdf6e23114eb85aa9d590cd72defd529ffd437f201f1125')
+            documents = list(yaml.safe_load_all(path.read_text(encoding='utf-8')))
+            assert len(documents) == 1
+            actual[relative] = {doc['kind'] for doc in documents}
+        else:
+            actual[relative] = set(load_yaml(path))
 
-    assert actual == EXPECTED_REFERENCE_ROOTS
+    assert actual == {**EXPECTED_REFERENCE_ROOTS, approved: approved_kinds,
+                      'approved-exceptions/cn-staging-shared-pg-platform.yaml': {'ExternalSecret'},
+                      'approved-exceptions/us-prod-qdrant-monitoring-key.yaml': {'ExternalSecret'},
+                      **{f'approved-exceptions/streampark-stage-tls-{side}.yaml':
+                         {'ServiceAccount', 'Role', 'RoleBinding', 'SecretStore'}
+                         for side in ['server', 'client']}}
 
 
 def test_control_plane_project_classification_stays_explicit() -> None:
@@ -6329,7 +6371,7 @@ def test_cluster_env_and_vault_facts_are_consistent() -> None:
     vaults = load_yaml(REFERENCE_ROOT / "vault-paths/instances.yaml")["vaults"]
 
     cluster_by_name = {cluster["name"]: cluster for cluster in clusters}
-    assert len(cluster_by_name) == 18
+    assert len(cluster_by_name) == 19
     assert len(cluster_by_name) == len(clusters)
 
     tech_service_clusters = [
@@ -6776,6 +6818,41 @@ def test_vault_rule_examples_pass_validator(tmp_path: Path) -> None:
     result = run_validator("check_vault_paths.py", tmp_path)
 
     assert result.returncode == 0, result.stdout
+
+
+@pytest.mark.parametrize("env", ["dev", "staging", "pre", "prod"])
+def test_vault_validator_accepts_cos_external_secret_path(tmp_path: Path, env: str) -> None:
+    write_yaml(tmp_path / "cos.yaml", [{
+        "apiVersion": "external-secrets.io/v1",
+        "kind": "ExternalSecret",
+        "metadata": {"name": "resourcespace-cos-secret", "namespace": "prod-resourcespace"},
+        "spec": {"data": [{
+            "secretKey": field,
+            "remoteRef": {
+                "key": f"{env}/cos/application/resourcespace/cn-tech-service/credentials",
+                "property": field,
+            },
+        } for field in ["secret_id", "secret_key", "bucket", "region"]]},
+    }])
+    result = run_validator("check_vault_paths.py", tmp_path)
+    assert result.returncode == 0, result.stdout
+
+
+@pytest.mark.parametrize("path", [
+    "secret/prod/cos/application/resourcespace/cn-tech-service/credentials",
+    "prod-cn/cos/application/resourcespace/credentials",
+    "prod/unknown-cloud/application/resourcespace/credentials",
+    "prod/cos/resourcespace/credentials",
+])
+def test_vault_validator_rejects_invalid_cos_and_unknown_platform_paths(tmp_path: Path, path: str) -> None:
+    write_yaml(tmp_path / "invalid.yaml", [{
+        "apiVersion": "external-secrets.io/v1",
+        "kind": "ExternalSecret",
+        "metadata": {"name": "cos", "namespace": "prod-resourcespace"},
+        "spec": {"data": [{"secretKey": "secret_id", "remoteRef": {"key": path, "property": "secret_id"}}]},
+    }])
+    result = run_validator("check_vault_paths.py", tmp_path)
+    assert result.returncode == 1, result.stdout
 
 
 def test_vault_validator_accepts_relative_legacy_external_secret_paths(tmp_path: Path) -> None:

@@ -37,18 +37,34 @@ function parseContract(source) {
 function eventKey(application, event) {
   if (!application || !event || !['PAGE', 'MODULE', 'COMPONENT', 'SELF_DEFINE'].includes(event.type) ||
       !['BASE', 'CLK', 'EXP'].includes(event.trackerType) || !Array.isArray(event.spm) ||
-      !event.spm.every(x => typeof x === 'string' && /^[a-z][a-z0-9_]*$/.test(x))) {
+      !event.spm.every(x => typeof x === 'string' && /^[a-z0-9][a-z0-9_]*$/.test(x))) {
     throw new ContractError('INVALID_EVENT_IDENTITY', 'application, type, trackerType and full spm are required');
   }
   const validHierarchy = (event.type === 'PAGE' && event.trackerType === 'BASE' && event.spm.length === 1) ||
     (event.type === 'MODULE' && ['CLK', 'EXP'].includes(event.trackerType) && event.spm.length === 2) ||
     (event.type === 'COMPONENT' && ['CLK', 'EXP'].includes(event.trackerType) && event.spm.length === 3) ||
     (event.type === 'SELF_DEFINE' && event.trackerType === 'BASE' && event.spm.length === 1 &&
-      typeof event.eventName === 'string' && /^[a-z][a-z0-9_]*$/.test(event.eventName));
+      typeof event.eventName === 'string' && /^[a-z0-9][a-z0-9_]*$/.test(event.eventName));
   if (!validHierarchy) {
     throw new ContractError('INVALID_EVENT_IDENTITY', 'event hierarchy or tracker type does not match platform schema');
   }
   return JSON.stringify([application, event.type, event.trackerType, event.spm, event.eventName || '']);
+}
+
+function eventSchemaName(event) {
+  let name;
+  if (event.type === 'PAGE' && event.trackerType === 'BASE' && event.spm.length === 1) {
+    name = `${event.spm[0]}_pv`;
+  } else if (['MODULE', 'COMPONENT'].includes(event.type) &&
+      ['CLK', 'EXP'].includes(event.trackerType) && event.spm.length === (event.type === 'MODULE' ? 2 : 3)) {
+    name = `${event.spm.join('_')}_${event.trackerType.toLowerCase()}`;
+  } else if (event.type === 'SELF_DEFINE' && event.trackerType === 'BASE' && event.spm.length === 1) {
+    name = event.point;
+  } else {
+    throw new ContractError('INVALID_SCHEMA_ID', 'event hierarchy or tracker type does not match platform schema path');
+  }
+  if (!/^[a-z0-9][a-z0-9_]*$/.test(name)) throw new ContractError('INVALID_SCHEMA_ID', `invalid schema name ${name}`);
+  return name;
 }
 
 function normalizeEvent(event) {
@@ -82,11 +98,18 @@ function normalizeEvent(event) {
 function normalizeEvents(events, application = '_') {
   if (!Array.isArray(events)) throw new ContractError('INVALID_EVENTS', 'events must be a list');
   const seen = new Set();
+  const schemaOwners = new Map();
   return events.map(event => {
     const normalized = normalizeEvent(event);
     const key = eventKey(application, normalized);
     if (seen.has(key)) throw new ContractError('DUPLICATE_EVENT', `duplicate event ${key}`);
     seen.add(key);
+    const schemaName = eventSchemaName(normalized);
+    if (schemaOwners.has(schemaName)) {
+      throw new ContractError('DUPLICATE_SCHEMA', `events map to the same schema name: ${schemaName}`,
+        { schemaName, eventKeys: [schemaOwners.get(schemaName), key] });
+    }
+    schemaOwners.set(schemaName, key);
     return normalized;
   }).sort((a, b) => eventKey(application, a).localeCompare(eventKey(application, b)));
 }
@@ -178,6 +201,10 @@ function project(baseline, changes) {
     for (const operation of change.operations) {
       const key = eventKey(baseline.application, operation.event);
       const baseEvent = baselineByKey.get(key);
+      // Catalog reads preserve legacy names; only released identities inherit that compatibility.
+      if (!baseEvent && !operation.event.spm.every(part => /^[a-z][a-z0-9_]*$/.test(part))) {
+        throw new ContractError('INVALID_EVENT_IDENTITY', 'new event names must start with a lowercase letter');
+      }
       validateOperation(baseEvent, operation);
       const fieldKey = `${key}:${operation.field}`;
       if (intents.has(fieldKey) && !equal(intents.get(fieldKey), operation.after)) {
@@ -196,8 +223,15 @@ function project(baseline, changes) {
       }
     }
   }
+  const projectedEvents = normalizeEvents([...byKey.values()], baseline.application);
+  for (const event of projectedEvents) {
+    if (!baselineByKey.has(eventKey(baseline.application, event)) &&
+        !event.spm.every(part => /^[a-z][a-z0-9_]*$/.test(part))) {
+      throw new ContractError('INVALID_EVENT_IDENTITY', 'new event names must start with a lowercase letter');
+    }
+  }
   return { ...baseline, kind: 'candidate', selectedIssues: changes.map(c => String(c.issue)),
-    baseDigest, events: normalizeEvents([...byKey.values()], baseline.application) };
+    baseDigest, events: projectedEvents };
 }
 
 function planAgainstCurrent(baseline, current, changes, previous = null, requireExactPrevious = true) {
@@ -250,5 +284,5 @@ function planAgainstCurrent(baseline, current, changes, previous = null, require
     complete: digest(current.events) === digest(target.events) };
 }
 
-module.exports = { ContractError, parseContract, eventKey, normalizeEvent, normalizeEvents,
+module.exports = { ContractError, parseContract, eventKey, eventSchemaName, normalizeEvent, normalizeEvents,
   digest, equal, project, planAgainstCurrent, assertBaseline };

@@ -1,6 +1,6 @@
 ---
 name: personalized-paywall-uat
-description: Quantitatively execute and certify Personalized Paywall UAT for Never, Lapsed, and future audience segments. Use when creating or validating UAT accounts, running staging evaluate-to-CMS checks, comparing H5 with design, testing physical iOS/Android banner and real prices, exercising Apple IAP, Google Play Billing, Stripe, or Airwallex cancellation and sandbox/test payment, verifying order/subscription/VIP/segment changes, collecting evidence, deciding API/UI/Native/Full UAT status, or repairing a failed UAT gate. Partial runs, mock prices, missing evidence, and self-reported PASS never count as certification.
+description: Quantitatively execute and certify Personalized Paywall UAT for Never, Lapsed, and future audience segments. Use when creating or validating UAT accounts, preparing a dedicated staging account through a query-first fatigue reset, running staging evaluate and content/runtime checks, comparing H5 with design, testing physical iOS/Android banner and real prices, exercising Apple IAP, Google Play Billing, Stripe, or Airwallex cancellation and sandbox/test payment, verifying order/subscription/VIP/segment changes, collecting evidence, deciding API/UI/Native/Full UAT status, or repairing a failed UAT gate. Partial runs, mock prices, missing evidence, and self-reported PASS never count as certification.
 ---
 
 # Personalized Paywall UAT
@@ -32,6 +32,15 @@ fixture preparation, provider-specific checkpoints, and evidence. Read
 `references/owner-routing.md` after a failure or whenever payment is in scope.
 For Android Google Play work, also read
 `references/android-google-play-uat.md` before build or provider diagnosis.
+For any UI, native, or full UAT claim, also read
+`references/localization-runbook.md`. Localization is a measured UI requirement;
+payment/API success cannot substitute for it.
+
+Read `references/fatigue-reset.md` only when the scenario declares a clean
+fatigue-state precondition or the fixture lifecycle explicitly permits cleanup
+of a dedicated staging account left by a prior UAT run in cooldown,
+impression-capped, dismissed, or permanently suppressed state. A fatigue reset
+is fixture preparation, never evaluation evidence.
 
 ## Certification Profiles
 
@@ -50,10 +59,10 @@ Phases are cumulative:
 |---|---|
 | P0 Contract | schema, manifest expansion, legacy-field rejection |
 | P1 Fixture | one account per case and exact targeting-fact readback |
-| P2 Staging API | evaluate, expected experiment/paywall, CMS matrix |
-| P3 Mock H5 | deterministic content, cards, CTA, payload, visual checks |
-| P4 Real-CMS H5 | complete live CMS payload rendered without fixture substitution |
-| P5 Native | physical iOS/Android banner, navigation, host context, strict real prices |
+| P2 Staging API | evaluate, expected experiment/paywall, frozen source matrix |
+| P3 Mock H5 | deterministic content, cards, CTA, payload, visual checks, locale resources/placeholders and localized billing copy |
+| P4 Live H5 | complete live CMS payload or deployed instance plus runtime response rendered without fixture substitution; localized whole-page checks |
+| P5 Native | physical iOS/Android banner, navigation, host language/resource loading, localized whole pages and strict real prices |
 | P6 Cancellation | every required channel, correct cancel semantics, zero backend mutation |
 | P7 Payment | successful sandbox payments for the policy matrix |
 | P8 Entitlement | order/subscription/VIP/profile/segment/restart/idempotency |
@@ -99,6 +108,13 @@ Expand every family and boundary before creating accounts. The computed counts
 must equal `policy.coverage`. A new audience requires the manifest, policy
 denominator, checks, and a gate regression in one reviewed change.
 
+Freeze supported/target locales, locale aliases, copy sources, layouts, device
+tiers and page/state coverage. Unless deployment explicitly limits locales, use
+all repository-supported locales. Include localization checks and evidence in
+the machine-readable policy/manifest/gate denominator before claiming UI/native/
+full certification. If the current gate does not measure them, update it and its
+regression tests; a prose checklist or a green payment gate does not certify UI.
+
 ### 2. Prepare fixtures idempotently
 
 Use one unique account per scenario. Keep credentials outside Git and evidence.
@@ -122,6 +138,24 @@ fixture or silently replace the expected password.
 Require finite, exact readback for every targeting fact. HTTP 2xx alone is not
 success. Refuse to overwrite ambiguous paid history.
 
+When the declared scenario requires clean fatigue state, or the fixture
+lifecycle explicitly permits cleanup of a prior run's dedicated staging
+account, follow `references/fatigue-reset.md`: query first, resolve one exact
+persistence candidate, show a sanitized mutation preview, obtain explicit
+authorization for that reset, call the staging Admin reset API, then query
+again. The human may complete Admin SSO/login; the AI performs the query/reset
+API calls and must not click the reset UI. Never export a browser cookie, use a
+CLI Bearer token against the cookie-only fatigue routes, call the regional HMAC
+endpoints directly, or reset production through this skill. If an authenticated
+same-origin API context is unavailable, stop with a capability blocker instead
+of falling back to UI.
+
+Do not reset merely to turn an unexpected result green. If neither precondition
+above applies, preserve the observed state and classify the result against the
+policy. `STALE_SELECTION` requires a new query, preview, and authorization.
+`RESET_OUTCOME_UNKNOWN` or `RESET_APPLIED_AUDIT_FAILED` requires read-only
+reconciliation and must never be retried blindly.
+
 Use this state machine:
 
 ```text
@@ -144,9 +178,30 @@ first-bind or paid-history facts locally.
 - P5-P9 run from a connected-device Mac or dedicated device host.
 - GitLab may verify an uploaded P5-P9 evidence bundle; it does not execute Apple
   IAP, Google Play Billing, Stripe, or Airwallex payment.
-- API order is `evaluate -> asserted paywallId -> cms-content -> asserted matrix`.
+- API order is `evaluate -> asserted paywallId -> asserted data source/matrix`:
+  use live `cms-content` for CMS pages, or the deployed instance config and live
+  `paywall-runtime` for independent H5 instances.
+- Freeze the authoritative data source in the policy: live CMS content for CMS
+  pages; deployed instance config (offer intent/identity) plus live runtime
+  metadata for independent instances. Below, `source evidence` means that frozen
+  combination. Use an instance path only when the repository policy/manifest/gate
+  supports it; missing support is a contract gap, not a passing CMS substitute.
+- The UAT runner collects and freezes source snapshots in the run manifest and
+  evidence bundle using the repository schema: collector/stage/time, environment,
+  source kind, asserted paywall ID, deployed config/copy identity, artifact paths
+  and SHA-256 hashes, and the expanded product/offer matrix. Retain complete,
+  sanitized source responses and join runtime metadata to config by identity.
+  Skill text defines collection rules; it is not a collected source snapshot.
 - Mock prices are valid only in P3 and must be labeled.
-- P4 must retain the complete live CMS response; a repo fixture is not evidence.
+- P4 must retain the complete live response and the deployed copy/config identity
+  for the actual data source; a repo fixture is not live evidence.
+- Run `references/localization-runbook.md` at P3-P5. Check every target locale's
+  keys/placeholders and actual loading; retain non-English whole-page evidence
+  for affected layouts, tiers and secondary pages. Missing supported-locale
+  translations, accidental English fallback, mixed billing units, unresolved
+  placeholders and clipped copy fail UI/native/full claims. Keep API-only status
+  separate. Use lightweight static/unit/component checks and focused visual
+  rendering; do not duplicate secure payment E2E for every locale/template.
 - P5 requires physical iOS and Android devices plus strict typed real-price quotes.
 - Approved design and the repository policy define which fields belong on each
   surface. Do not invent a card-price requirement when the approved design shows
@@ -197,12 +252,12 @@ first-bind or paid-history facts locally.
   from the app state, dialog, and telemetry. The repository policy owns whether
   deliberate cancellation shows no dialog or the policy-required attributable
   dialog exposure(s); no successful payment or entitlement mutation is invariant.
-- Derive each scenario's expected offer policy from the manifest and live CMS.
-  For a selected subscription whose CMS offer type is `PROMOTIONAL`, require a
+- Derive each scenario's expected offer policy from the manifest and source evidence.
+  For a selected subscription whose configured offer type is `PROMOTIONAL`, require a
   non-empty requested offer ID, visible H5 discount/original-or-renewal pricing,
   and exact provider resolution of that offer on every policy-required Apple
   IAP, Google Play, Stripe, or other supported channel. A real price alone is not
-  proof that the promotion was applied. Keep CMS `requestedOfferId` separate from
+  proof that the promotion was applied. Keep configured `requestedOfferId` separate from
   the provider-derived `resolvedOfferId`; an H5 echo of the request is not
   provider evidence. If checkout safely falls back to the regular/base price,
   classify it as `PROMOTIONAL_OFFER_FALLBACK` and fail the promotional scenario.
@@ -222,9 +277,20 @@ numeric `actual`, artifact IDs, relative artifact paths, and SHA-256 hashes. The
 gate recomputes status; it never trusts an evidence `status` field.
 
 Never persist passwords, tokens, JWTs, cookies, authorization headers, receipts,
-payment secrets, full transaction identifiers, or raw device IDs. Filtered runs
+payment secrets, full payment transaction identifiers, or raw device IDs. Filtered runs
 set `selection.isFullGate=false`, use run-scoped paths, and never overwrite the
 canonical certification artifact.
+
+When fatigue preparation is used, retain only the opaque account reference,
+scenario/run ID, `staging` environment, region, key type, exact selected
+dimension/business identity, sanitized before/after counter summary, reset
+result, request ID, and re-query verdict. Never retain the raw user ID, browser
+session, signing material, complete state document, or request body. Record the
+applicable interaction-attribution source and `statePreserved` /
+`convertedAtPreserved` for experiment queries. Direct feature queries mark
+attribution preservation `not_applicable` and must not manufacture successful
+booleans from absent values. A reset is invalid if applicable interaction
+attribution changed.
 
 Historical evidence is immutable. A later design clarification, policy update,
 or provider-console repair requires a new run-scoped artifact; never rewrite an
@@ -281,3 +347,7 @@ Lead with exact certification or failure. Include profile, policy version,
 environment, run ID, repository/app SHA, every phase numerator/denominator,
 artifact paths and hashes, consumed accounts, failure owner, repair attempts, and
 what the result does not prove. Never summarize a partial green run as UAT passed.
+Include localization numerator/denominator, tested/requested/resolved locales,
+affected paywall/layout/state coverage, missing/fallback keys, billing-copy
+results and whole-page screenshot references. Report professional copy approval
+separately from resource completeness and functional verification.

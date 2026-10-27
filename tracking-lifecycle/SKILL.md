@@ -17,11 +17,14 @@ description: 当用户需要埋点审计、设计、代码注入、点位管理�
 
 API 操作优先用已核验的 REST 能力，无需全部通过浏览器。完整路由与请求模型见 [Controller 清单](references/platform-api-catalog.md)，鉴权见 [平台鉴权](references/platform-auth.md)，公共字段注册与独立产物见 [Base/Context API](references/base-context-api.md)。查询用 Project Token，写入用有权限的 PAT；当前源码没有 JWT 登录。新增 reference 不代表 Base/Context 已有专用 CLI 命令。
 
+新增事件时，`isAppOwner=false` 或 `isAdmin=false` 只是角色诊断，不能据此拒绝已授权的 PAT 新增请求，也不能直接要求用户提权。先核验实际请求进程使用的凭据与身份，再按既有契约、工单和回读流程执行，以目标接口的当前结果判定权限；不外推编辑、删除或发布权限。缺工单、网络错误与明确权限拒绝分别处理，见 [新增事件权限判定](references/platform-auth.md#新增事件权限判定)。
+
 ## Rules
 
 - 先审计平台全量点位与业务触点，再写设计 HTML 和独立 change YAML；设计未审定时不提交平台。
 - 本地、sandbox、staging、指标数值与生产发布报告分别记录，不能用较低层 PASS 替代较高层证据。
 - 平台共享主表出现未选任务变更、字段冲突或结果不明时停止；不自动覆盖他人点位，也不盲重试发布。
+- 历史名称按已发布基线继承，不按“操作前已存在”放行。已发布且未改名的数字开头名称可原样保留，新增名称仍须字母开头；重复事件或不同事件生成同一 Schema 路径均阻断，不因历史来源豁免、不静默去重。判定与证据见 [历史名称兼容与冲突](references/tdd-contracts.md#历史名称兼容与-schema-冲突)。
 - 生产发布只在业务项目配置的受保护发行分支和受限 CI 身份执行，回读成功后才允许同一 artifact 部署。
 
 ## 先定范围
@@ -67,7 +70,7 @@ node cli/bin/events-tdd.js verify-local --baseline=events/baseline.yaml --change
 
 ### 平台工单与 L3 sandbox TDD
 
-1. 用只读 prod Iglu URL 和平台最新 RELEASED 工单核对 B；存在活跃工单、当前树漂移或生产 schema 无法回读时停止导入。`TMT_TOKEN` 由应用 owner 的环境变量提供，绝不写入仓库。
+1. 用只读 prod Iglu URL 和平台最新 RELEASED 工单核对 B；存在活跃工单、当前树漂移或生产 schema 无法回读时停止导入。`TMT_TOKEN` 由已核验身份且获本次操作授权的 PAT 环境变量提供，绝不写入仓库；不将应用 owner 探针作为新增事件的硬前置条件。
 2. 本地 PASS 后运行 `create-workorder`，或核对已存在的本次唯一活跃工单。`post` 逐个物理点位取完整详情、组装全量参数、写现有点位 API、每次回读，并生成 L。平台更新会同步 Micro/staging schema；L3/L4 不等于工单发布。
 3. 使用真实 SDK 指向 sandbox collector，以本次唯一 namespace 和事件 ID 上报。`verify-sandbox` 要求证据 namespace 与命令请求完全相同，报告也绑定该 namespace；CI 发布只接受本次 project/pipeline 前缀。验证器查 Micro good/bad、Iglu URI、schema version、事件 data 字段及数量；达到查询上限视为不完整，不调用全局 `/micro/reset`。若点位关联 `baseSchemas`，须验证合入事件 data 的公共字段、类型和必填性。若业务 SDK 另外发送独立 Snowplow Context，须单独断言其 URI 和 payload，并回读独立 resolver 文件；Base Schema ID 不代表 Context 证据，当前通用验证器不解析 Context 内容，不能把 L3/L4 PASS 当作这项断言已通过。
 4. sandbox RED 且需改契约时先修改 `change.yaml`，重跑 L1/L2，再用 `post --previous-lock=<上一轮L>`；只有上一轮全量 lock 与当前平台树一致且改动仍属于本 issue 的字段时才继续。每次写后重新生成 L、换 namespace，重做 L3。
@@ -83,6 +86,8 @@ node cli/bin/events-tdd.js verify-sandbox --candidate=.tracking/release-candidat
 `TRACKING_PLATFORM_BASE_URL` 必须填写本次实际埋点管理 API 的 HTTPS origin；`TRACKING_SANDBOX_BASE_URL` 必须填写当前 Micro 查询服务的 HTTPS origin。`--prod-schema-base` 必须填写真实、只读、HTTPS 的生产 Iglu resolver；三者是不同入口，占位符不能运行。`saveOrUpdateEventInfo` 的 `valueType` 必须使用 JSON Schema 类型名称；数字码回读视为不确定数据并阻断自动 round-trip。平台 API 返回结构尚需在目标环境验证。写入或发布超时后先回读，不盲目重试。
 
 ### L4 staging 技术 TDD
+
+人工回读与项目数仓适配器遵循 [Staging 入仓查询](references/staging-event-query.md)：通过 Superset REST API → SQL Lab → Athena 只读查询，优先事件专属视图；身份认证及 API 契约由 Superset Skill 维护。查询证据不能替代下述绑定 runId、目标和构建产物的自动化报告。
 
 先由环境负责人确认实际 staging Collector、区域、数仓身份和物理源表，提交 `events/staging-target.yaml`；区域可以是 `us`、`cn` 或其他实际部署标识，Skill 不预设站点。项目 hook 用同一构建 artifact 部署该 staging 环境，真实业务流程通过 Snowplow SDK 发往配置中的 Collector。项目数仓适配器按唯一 `runId` 查询该环境的事件与 bad，输出查询 ID、发送时间、当前时间、分区水位、版本和行数据。`verify-staging --target=events/staging-target.yaml` 校验目标、物理表、水位和 bad，再断言事件身份、数量、字段；目标文件摘要写入报告并由 `publish` 复核。水位未到是 `WAREHOUSE_DELAY`，不能报告零事件 PASS。点位契约 RED 回到 L1；代码 RED 重部署并用新 runId 重测。工单仍无需发布。生产表或其他区域的表不能冒充 staging 表；若当前没有可审定的 staging 链路，应记录依赖，不能用生产查询代替 L4。
 
@@ -107,3 +112,34 @@ AI 再按 PRD 和 observability design 逐个决策问题审查事件与字段�
 ## 验证状态与旧能力
 
 本次 Skill 的 Node 单测和 synthetic demo 只验证逻辑与格式。平台实际 PAT 权限、API 返回、Micro 部署形状、数仓/Superset 实际查询、Naturehood/Lattice 真实 SDK 和 GitLab 发布流水线仍需项目接入后逐层验证。旧 `tracking-spec-validator.js`、`yaml-to-batch-payload.js`、`sandbox-check.js`、`tracker-publish-check.js` 使用旧数据格式或较窄匹配能力，不得作为此方案的 full-tree gate。
+
+### 指定已发布版本的安装包门禁
+
+安装包可继续使用指定且仍可读的已发布版本，不要求它是平台最新工单。使用
+`PlatformClient.readPublishedRelease(expected)` 与
+`verifyPublishedSnapshot({ expected, snapshot, schemaReader })`，生产读取器为
+`ProductionSchemaReader({ baseUrls: [reviewedProductionSchemaBase] })`。
+`expected` 必须绑定 application、applicationId、releaseId、version、eventDigest。
+平台只读接口 `GET /api/release/{releaseId}/snapshot?applicationId={applicationId}`
+必须提供同一工单的完整历史事件、历史参数与冻结 Schema；缺少历史或接口未部署时阻断，不能退回当前共享树。
+
+生产 Schema base 必须由部署配置明确提供 HTTPS origin/path；不根据 collector 推测。
+每个配置的生产地址都读取并逐字段比较全部 JSON Schema（包括 constraints、自描述与引用闭包），对象键顺序忽略，数组顺序保留。
+Schema 读取不发送平台 PAT、不跟随重定向。仅支持可解析的本地 JSON Pointer 和清单内 `iglu:` 引用；未解析引用、缺失/重复/多余 Schema 均阻断。
+闭包遍历识别标准子 Schema 位置（如 `properties`、`items`、组合关键字及 `contentSchema`）；遇到不支持的引用、解析作用域或未知 Schema 关键字时直接阻断。`default`、`enum`、`examples` 中的业务数据不作为 Schema 遍历，除非被显式引用。
+本入口验证事件及其引用闭包。独立 Context 不在覆盖声明内：若调用者声明非空 `schemaDependencies`，当前版本明确阻断，待提供独立冻结完整契约后扩展，不能用当前 Context 数据替代历史。
+
+发布后导出指定版本基线（必须先验证其摘要和生产 Schema）：
+
+```bash
+node "$TRACKING_SKILL_DIR/cli/bin/events-tdd.js" pull-published-baseline \
+  --expected=events/published-release.json \
+  --host=device-cloud-host \
+  --prod-schema-base="$TRACKING_PROD_SCHEMA_BASE" \
+  --out=events/baseline.yaml
+```
+
+`TMT_TOKEN` 仅用于平台读取，`TRACKING_PLATFORM_BASE_URL` 为经审阅的平台地址。
+有多个生产 resolver 时可重复传入 `--prod-schema-base=https://...`；命令读取并比对每个地址，任一不一致即阻断，且保留旧基线文件。
+新命令不创建工单、不发布、不改变活跃工单校验；原 `pull-baseline` 的清洁最新发布边界语义保持不变。
+迁移旧包前必须先核验历史快照，不能将当前树摘要写回旧发布版本。历史缺少旧契约包含的字段时保持阻断并调查。

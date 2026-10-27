@@ -65,7 +65,7 @@ Last verified: **2026-04-28** (during setting-override evaluation). Re-query bef
 > CN's iot-consumer rate exceeding EU's is anomalous; possibly a different MQTT topology or a different message-emission rate per device. Don't assume CN < EU < US blindly.
 
 ## 4. kiss — anchors (prod, US-only Thanos data for now)
-## 4. kiss — 锚点（prod，目前仅 US Thanos 数据）
+## 4. kiss — 锚点（prod，目前仅 US prod 数据）
 
 | Signal | US | EU | CN |
 |---|---|---|---|

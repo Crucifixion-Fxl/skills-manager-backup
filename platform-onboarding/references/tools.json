@@ -1337,6 +1337,21 @@
         "argocd-fleet.addx.live",
         "gitlab.addx.ai"
       ]
+    },
+    {
+      "id": "incident-create",
+      "label": "线上事故管理（CS Portal）",
+      "owner": "incident-create",
+      "reference": "skills/observability/incident-create/references/saas-access.md",
+      "strategy": "existing-native-or-api",
+      "verification": "source-verified",
+      "runtimeVerification": "pending",
+      "sourceDigest": "290cabc4597bbe588aec3f8e558eadab4b50cf5c6356caecaef9b2c1672932bf",
+      "domainCandidates": [
+        "a4x-paas.feishu.cn",
+        "gitlab.addx.ai",
+        "release-orchestrator.addx.live"
+      ]
     }
   ],
   "unclassifiedReferences": [

@@ -1,0 +1,18 @@
+{
+  "schemaVersion": "micro-app-admission/1",
+  "application": "example-next-app",
+  "environment": "staging-us",
+  "sdk": "nextjs",
+  "profile": "platform-online",
+  "requiredCapabilities": ["authn", "facade"],
+  "credentials": [
+    {
+      "purpose": "facade-signing",
+      "bindingRef": "example:workload/facade-signing"
+    },
+    {
+      "purpose": "next-context-signing",
+      "bindingRef": "example:workload/next-context-signing"
+    }
+  ]
+}

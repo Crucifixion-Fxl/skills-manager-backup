@@ -1,5 +1,7 @@
 # Issue Template — 5 段落标准模板
 
+开发者向运维提协作需求时，优先使用 [运维协作需求模板](../../ops-collaboration-request/references/request-template.md)，按目标和行为验收，不照搬下方通用模板的代码合并/部署 checklist。运维接单先执行该 Skill 的 [接单评估](../../ops-collaboration-request/references/ops-intake.md)。
+
 ## 预研 Issue 模板
 
 预研的交付物是证据和决策，不能预设实现、合并或部署。保留用户原始问题及完整来源链接；未知字段写“待确认”，不补造结论。

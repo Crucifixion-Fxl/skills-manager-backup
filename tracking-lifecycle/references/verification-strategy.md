@@ -10,7 +10,7 @@
 | L1 单测 | SDK 调用逻辑正确 | 本地，无网络 | 秒级 | 是 |
 | L2 集成测试 | 事件数据结构正确 | 本地，无网络 | 秒级 | 是 |
 | L3 沙盒验证 | 上报格式正确，collector 能收到 | 沙盒 collector | 分钟级 | 是 |
-| 发布前确认 | 全链路数据管道跑通 | Staging | 5-10 分钟 | 否（有延迟） |
+| L4 入仓验证 | 真实数据入仓、数量与字段正确 | Staging | 取决于实际水位 | 是（项目 hook + verify-staging） |
 
 ## 层级递进关系
 
@@ -21,9 +21,9 @@
 | L1 | 我调 SDK 的方式对不对 | 信任 SDK 本身 |
 | L2 | UI 交互后产出的事件数据对不对 | 信任数据管道 |
 | L3 | 上报格式和 collector 对接对不对 | 信任数仓管道 |
-| 发布前确认 | Snowplow → Athena → MySQL 全链路对不对 | 不信任任何东西 |
+| L4 | 指定 Staging Collector 到实际数仓源表的链路、数量与字段是否正确 | 不以平台状态代替本次样本入仓证据 |
 
-失败时定位清晰：L1 挂了是调用逻辑错，L2 挂了是事件组装错，L3 挂了是上报格式/schema 错，发布前确认挂了是管道/部署问题。
+失败时按层定位：L1 检查调用逻辑，L2 检查事件组装，L3 检查上报格式/schema，L4 核对环境、查询、数据水位及实际入仓结果；不能把查询失败直接判成丢点。
 
 ## L1 — 单元测试（mock SDK）
 
@@ -96,30 +96,30 @@
 - 验证数仓落库（沙盒没有完整的 Athena → MySQL 链路）
 - 本地快速反馈（有网络延迟，应先通过 L1/L2）
 
-## 发布前确认 — Staging 全链路验证
+## L4 — Staging 入仓验证
 
 **目标**：确认数据在真实管道中完整落库。
 
-**环境**：Staging（Snowplow → Kinesis → S3 → Athena → MySQL）
+**环境**：`events/staging-target.yaml` 中经核实的 Collector、区域、数仓身份和实际源表，不假定所有部署都有相同管道。
 
 **方式**：
-1. 代码部署到 staging 环境
-2. E2E 测试执行用户流程，触发埋点上报
-3. 等待数据同步（5-10 分钟）
-4. 调用平台 `GET /api/release/getPublishedEvents?application={name}&version={ver}` 查询发布状态
-5. 在平台 UI `/check/dashboard/` 页面确认事件验证状态
+1. 同一构建产物部署到目标 staging，通过真实 SDK 和业务流程触发事件；记录 runId、事件 ID、版本与操作时间。
+2. 按 [Staging 入仓查询](staging-event-query.md) 通过 Superset REST API → SQL Lab → Athena 查询，优先事件视图，确认物理源表、分区和水位。
+3. 同时核对 good/bad、去重前后条数、预期次数、公共字段和业务字段。日志、Micro 结果及平台汇总状态不能替代本次样本的数仓证据。
+4. 自动门禁由项目 hook 输出证据，`verify-staging` 校验 runId、目标、构建和结果；缺少绑定证据的人工查询只报告其实际核对范围，不冒充自动 PASS。
 
 **验证内容**：
-- `event_version_status` 中 `goods_latest_dvce_created_tstamp` > `bad_latest_dvce_created_tstamp`
-- `goods_latest_dvce_created_tstamp` > 事件创建/更新时间
+- 以本次场景预期核对完整事件身份、次数、字段及 bad，保留查询 ID、时间窗、分区、水位和结果。
+- 水位未到为 `WAREHOUSE_DELAY`；权限、查询或来源未确认时保留未确认，不记作零事件或验收通过。
+- 平台发布状态和 `event_version_status` 可作辅助诊断，但“最新 good 晚于 bad”不能证明本次所有事件都正确。
 
 **适用场景**：
 - 发布前最终确认
 - 验证数仓管道完整性
 
 **不适用**：
-- CI 自动化卡控（有 5-10 分钟延迟，不适合）
 - 开发阶段快速反馈
+- 用生产表替代 Staging 验收
 
 ## 选择决策树
 
@@ -134,9 +134,9 @@ CI 中跑 L3 沙盒验证（真实上报，sandbox-check.js）
   ↓ 通过
 代码合并部署到 staging
   ↓
-发布前确认（平台 validate API）
+L4 入仓验证（实际数仓 good/bad + verify-staging）
   ↓ 通过
-可以发布
+执行工单校验与发布门禁（按 Skill 主流程）
 ```
 
 任何一层失败，在当前层修复后重跑，不跳到下一层。

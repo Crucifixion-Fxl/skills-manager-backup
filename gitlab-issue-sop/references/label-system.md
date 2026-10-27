@@ -243,9 +243,42 @@ differ, split independently scheduled Tasks and give each its own Milestone.
 
 ### Optional business domain: `domain::*`
 
-This mutually exclusive family is not currently enabled. A stable business domain may be added only
-at the Business Group shared by at least two consumers and only through the new-label gate. Never use
-it for product names or short-lived features.
+This optional, mutually exclusive family classifies the stable business domain, independently of
+work type (`type::*`), workflow status, and stage labels such as `brief::*`. It does not imply
+business approval or completion. Never use it for product names or short-lived features.
+
+Approved namespace activation:
+
+| Label | Owning namespace | Meaning and consumers | Maintenance owner | Retirement condition |
+|---|---|---|---|---|
+| `domain::packaging` | `marketing` Business Group (3361) | Packaging work-item filtering shared by NeoPace (project 2048) and KiwiBit (project 2053) | jchen (GitLab user 400), authorized by the business owner | Retire only after no active Issue, filter, or automation references the value and a reviewed replacement mapping is preserved |
+
+Only `domain::packaging` is enabled in this namespace; do not infer or create other domain values.
+Create it once at Group 3361 after checking existing and inherited labels, then verify inheritance
+and the scoped work-item update by readback. Preserve unrelated type, status, and stage labels.
+Other Business Groups and future values still require the placement and new-label gate below.
+
+### Agent capability intake: `agent::dev` (Project label exception)
+
+This single project label marks an open Issue as an Agent capability request for the `agent-dev`
+Buzz Agent. It is one of three OR-combined admission sources; Issues filed by zlin or a current
+human member of the `agent-dev` channel, or carrying an `agent-dev: take` admission comment from
+them, are admitted without it. The label only requests intake; it does not imply an accepted
+Requirement, a Gate decision, priority, or deployment authorization.
+
+| Field | Value |
+|---|---|
+| Projects | `engineering/skills` (1021), `zlin/buzz-gitlab-webhook-adapter` (1785), `zlin/buzz-deploy` (1791) only |
+| Cardinality | Presence flag; `agent::` has no other values |
+| Consumers | Adapter `gitlab-issue-intake.yaml` `agent-dev` route; `agent-dev` S0 admission; the `agent-dev` GitLab writer's per-write admission recheck |
+| Owner | zlin (GitLab user 22) |
+| Retirement | Remove when `agent-dev` is retired or admission moves to another field, after no open Issue or intake route references it |
+
+Project placement passes the exception gate below: the three projects have no common Group
+(`engineering` Group and the `zlin` personal namespace), the meaning is specific to `agent-dev`, the intake route and writer consume it,
+and no native field expresses an intake request. Do not create it in any other project. Create it
+once per project after checking project and inherited labels, then read it back. The design source
+is `docs/agent-harness/design/agent-dev/design.md` §3 (S0 admission, G2 amendment A1).
 
 ### Blocking: `flag/blocked`
 

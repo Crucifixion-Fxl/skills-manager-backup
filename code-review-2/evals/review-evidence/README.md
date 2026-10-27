@@ -1,0 +1,3 @@
+# Review evidence coverage behavior eval
+
+These synthetic cases test reviewer behavior separately from the JSON schema contract tests in `skills/quality/code-review/tests/test_review_evidence_contracts.py`. They exercise role and required-evidence judgment, plan-directed hybrid page sources, Read truncation and batching, exact page receipts, resistance to profile downgrades, capability compatibility, and truthful incomplete results. Do not claim real tool calls from this fixture. The rubric defines expected conclusions; evaluation runs must use the current shipped skill and may not read rubric/oracle files while answering a case.

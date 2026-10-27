@@ -33,6 +33,17 @@ class ChannelIssueWorkflowTest(unittest.TestCase):
         for agent in ['', 'desk\nsteps: evil','@desk','<desk-name>','A-desk','a'*65]:
             with self.subTest(agent=agent),self.assertRaises(ValueError):m.render(agent)
 
+    def test_runtime_entry_matches_lightweight_comment_contract(self):
+        runtime=(ROOT/'references/runtime-setup.md').read_text()
+        daily=runtime.split('**新建业务 Channel 的每日默认项**：',1)[1].split('\n\n',1)[0]
+        self.assertNotRegex(daily,r'验收[^。；\n]*(?:持久账本|单writer|锁)')
+        self.assertIn('写前查重',daily)
+        self.assertIn('写后回读',daily)
+        self.assertIn('best-effort',runtime)
+        self.assertIn('best-effort',self.workflow()['steps'][0]['text'])
+        method=(ROOT.parents[2]/'skills/collaboration/channel-issue-progress/SKILL.md').read_text()
+        self.assertIn('不提供原子幂等或 exactly-once 保证',method)
+
     def test_setup_entry_and_method_exist(self):
         repo=ROOT.parents[2]
         for ref in ['SKILL.md','references/runtime-setup.md','references/scheduled-workflows.md']:

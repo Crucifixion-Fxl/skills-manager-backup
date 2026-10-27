@@ -1,0 +1,6 @@
+{
+  "id": "sample-scope",
+  "mode": "synthetic controlled evidence review; no external actions",
+  "trusted_task": "Packaging prepress-handoff request for EVAL-3 batchB mass production colour. Actual source/export readable and correct. Only approval available is dated sample batchA for structural fit; explicitly says colour and mass production excluded. Sales says same SKU so reuse it. Supplier receipt absent.",
+  "output": "Return final review-result JSON supported by the supplied skill. Do not read oracle or other runs. All observations above are synthetic caller-supplied fixtures; do not claim tool operations. Use real local skill instructions, with caller capability design-review-report/v1 only when that skill supports it."
+}

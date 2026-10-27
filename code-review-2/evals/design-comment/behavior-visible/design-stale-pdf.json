@@ -1,0 +1,6 @@
+{
+  "id": "design-stale-pdf",
+  "mode": "synthetic controlled evidence review; no external actions",
+  "trusted_task": "This MR delivers a CA EN/FR setup leaflet for design-review only. Brief v2 requires 3 seconds in both languages. The actual final PDF page 2 text independently read is EN Hold for 10 seconds; FR Maintenez pendant 10 secondes. CSV v2 says 3 seconds. Source/export identity verified. All pages visually read; no cropping. Manufacturing approval is outside scope. Review the delivered PDF and give a designer-useful comment.",
+  "output": "Return final review-result JSON supported by the supplied skill. Do not read oracle or other runs. All observations above are synthetic caller-supplied fixtures; do not claim tool operations. Use real local skill instructions, with caller capability design-review-report/v1 only when that skill supports it."
+}

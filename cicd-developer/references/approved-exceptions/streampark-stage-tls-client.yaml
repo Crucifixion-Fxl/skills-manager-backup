@@ -1,0 +1,96 @@
+# Source candidate only; no active Application owns this directory.
+{
+  "apiVersion": "v1",
+  "kind": "ServiceAccount",
+  "metadata": {
+    "name": "eso-vault-reader-builder-client",
+    "namespace": "staging-streampark-staging"
+  },
+  "automountServiceAccountToken": false
+}
+---
+{
+  "apiVersion": "rbac.authorization.k8s.io/v1",
+  "kind": "Role",
+  "metadata": {
+    "name": "eso-vault-reader-builder-client-tokenrequest",
+    "namespace": "staging-streampark-staging"
+  },
+  "rules": [
+    {
+      "apiGroups": [
+        ""
+      ],
+      "resources": [
+        "serviceaccounts/token"
+      ],
+      "resourceNames": [
+        "eso-vault-reader-builder-client"
+      ],
+      "verbs": [
+        "create"
+      ]
+    }
+  ]
+}
+---
+{
+  "apiVersion": "rbac.authorization.k8s.io/v1",
+  "kind": "RoleBinding",
+  "metadata": {
+    "name": "eso-vault-reader-builder-client-tokenrequest",
+    "namespace": "staging-streampark-staging"
+  },
+  "roleRef": {
+    "apiGroup": "rbac.authorization.k8s.io",
+    "kind": "Role",
+    "name": "eso-vault-reader-builder-client-tokenrequest"
+  },
+  "subjects": [
+    {
+      "kind": "ServiceAccount",
+      "name": "external-secrets",
+      "namespace": "external-secrets"
+    }
+  ]
+}
+---
+{
+  "apiVersion": "external-secrets.io/v1",
+  "kind": "SecretStore",
+  "metadata": {
+    "name": "vault-streampark-staging-builder-client-reader",
+    "namespace": "staging-streampark-staging",
+    "labels": {
+      "security.addx.io/managed-by": "streampark-staging-builder",
+      "security.addx.io/reader-type": "platform",
+      "security.addx.io/cluster": "aws-390709477306-us-staging",
+      "security.addx.io/vault-domain": "ops",
+      "security.addx.io/vault-region": "us"
+    }
+  },
+  "spec": {
+    "provider": {
+      "vault": {
+        "server": "https://vault-us-new.addx.live",
+        "path": "secret",
+        "version": "v2",
+        "auth": {
+          "jwt": {
+            "path": "jwt-eks-us-staging",
+            "role": "eso-platform-streampark-staging-builder-client-reader",
+            "kubernetesServiceAccountToken": {
+              "audiences": [
+                "https://vault-us-new.addx.live"
+              ],
+              "expirationSeconds": 600,
+              "serviceAccountRef": {
+                "name": "eso-vault-reader-builder-client"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

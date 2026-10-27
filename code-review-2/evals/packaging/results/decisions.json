@@ -1,0 +1,161 @@
+{
+  "kind": "exact-status-comparison-only",
+  "runs": {
+    "baseline": {
+      "matched": 11,
+      "total": 12,
+      "decisions": [
+        {
+          "id": "ordinary-code",
+          "expected": "NOT_APPLICABLE",
+          "actual": "NOT_APPLICABLE",
+          "match": true
+        },
+        {
+          "id": "bilingual-parameter",
+          "expected": "FAIL",
+          "actual": "FAIL",
+          "match": true
+        },
+        {
+          "id": "pointer-only",
+          "expected": "NOT_CHECKED",
+          "actual": "NOT_CHECKED",
+          "match": true
+        },
+        {
+          "id": "stale-approval",
+          "expected": "FAIL",
+          "actual": "FAIL",
+          "match": true
+        },
+        {
+          "id": "concept",
+          "expected": "PASS",
+          "actual": "PASS",
+          "match": true
+        },
+        {
+          "id": "outlined",
+          "expected": "NOT_CHECKED",
+          "actual": "NEEDS_HUMAN",
+          "match": false
+        },
+        {
+          "id": "preflight-mismatch",
+          "expected": "FAIL",
+          "actual": "FAIL",
+          "match": true
+        },
+        {
+          "id": "undeclared-native",
+          "expected": "NOT_CHECKED",
+          "actual": "NOT_CHECKED",
+          "match": true
+        },
+        {
+          "id": "complete-copy-review",
+          "expected": "PASS",
+          "actual": "PASS",
+          "match": true
+        },
+        {
+          "id": "injection",
+          "expected": "FAIL",
+          "actual": "FAIL",
+          "match": true
+        },
+        {
+          "id": "cross-product",
+          "expected": "FAIL",
+          "actual": "FAIL",
+          "match": true
+        },
+        {
+          "id": "trusted-mismatch",
+          "expected": "NOT_CHECKED",
+          "actual": "NOT_CHECKED",
+          "match": true
+        }
+      ]
+    },
+    "candidate": {
+      "matched": 12,
+      "total": 12,
+      "decisions": [
+        {
+          "id": "ordinary-code",
+          "expected": "NOT_APPLICABLE",
+          "actual": "NOT_APPLICABLE",
+          "match": true
+        },
+        {
+          "id": "bilingual-parameter",
+          "expected": "FAIL",
+          "actual": "FAIL",
+          "match": true
+        },
+        {
+          "id": "pointer-only",
+          "expected": "NOT_CHECKED",
+          "actual": "NOT_CHECKED",
+          "match": true
+        },
+        {
+          "id": "stale-approval",
+          "expected": "FAIL",
+          "actual": "FAIL",
+          "match": true
+        },
+        {
+          "id": "concept",
+          "expected": "PASS",
+          "actual": "PASS",
+          "match": true
+        },
+        {
+          "id": "outlined",
+          "expected": "NOT_CHECKED",
+          "actual": "NOT_CHECKED",
+          "match": true
+        },
+        {
+          "id": "preflight-mismatch",
+          "expected": "FAIL",
+          "actual": "FAIL",
+          "match": true
+        },
+        {
+          "id": "undeclared-native",
+          "expected": "NOT_CHECKED",
+          "actual": "NOT_CHECKED",
+          "match": true
+        },
+        {
+          "id": "complete-copy-review",
+          "expected": "PASS",
+          "actual": "PASS",
+          "match": true
+        },
+        {
+          "id": "injection",
+          "expected": "FAIL",
+          "actual": "FAIL",
+          "match": true
+        },
+        {
+          "id": "cross-product",
+          "expected": "FAIL",
+          "actual": "FAIL",
+          "match": true
+        },
+        {
+          "id": "trusted-mismatch",
+          "expected": "NOT_CHECKED",
+          "actual": "NOT_CHECKED",
+          "match": true
+        }
+      ]
+    }
+  }
+}

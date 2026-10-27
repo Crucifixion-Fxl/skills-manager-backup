@@ -84,4 +84,5 @@ https://superset-us.addx.live/explore/?slice_id={chart_id}&form_data_key={key}
 
 ## 注意事项
 
+- 创建 SLA 前，必须按 [上游依赖发现与校验](upstream-dependencies.md) 获取与最终指标、查询索引、过滤快照和时间粒度一致的生成 SQL，再匹配 Dagster 依赖。数据集显示名称或原始 SQL 不能替代最终查询 SQL；SQL 获取或解析失败时停止创建。
 - 如需自定义过滤条件但不修改图表已保存状态，使用 "Update chart" 后通过链接中的 `form_data_key` 快照

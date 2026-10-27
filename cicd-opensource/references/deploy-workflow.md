@@ -6,7 +6,8 @@
 
 先按 `cicd-developer/references/data/{clusters,env-keywords}.yaml` 解析目标并运行
 `check_deployment_target.py`。当前 CN prod=100014919455；staging/tech-service=100052802231，
-AWS CN 不再接受 Build。新 tech-service 的业务部署准入尚 blocked；目录存在不代表允许部署。
+AWS CN 不再接受 Build。cn-tke-tech-service 已于 2026-10-19 获得目录准入，见
+[准入回执](../../cicd-developer/references/cn-tech-service-admission-2026-10-19.md)；PASS 只允许进入逐应用核验，不代表应用已获上线许可。
 核验精确 Application/AppProject、Harbor 分发、Vault CSS 与云厂商 recipe；不可沿用旧 AWS ARN、
 ALB 或 builder Vault 配置。存量按 Application 追踪，不按新 keyword 静默迁移。
 

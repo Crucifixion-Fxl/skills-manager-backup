@@ -1,0 +1,5 @@
+{
+  "schema_version": 1,
+  "capability": "packaging-evidence/v1",
+  "artifact": "design-evidence.json"
+}

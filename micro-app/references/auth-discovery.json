@@ -8,11 +8,11 @@
   "nativeRoute": "Micro App Platform native login / versioned packages/sdk",
   "loginFlow": {
     "reuseFirst": true,
-    "steps": "内嵌应用复用主应用 api/getUserInfo；独立可信 Web 先核实部署的授权码桥/OIDC、redirect 注册和 SDK；后台/MCP 用已部署专用 PAT 或服务身份支持，不复制浏览器 JWT。",
+    "steps": "内嵌应用优先复用主应用 utils.api，通过已核验的完整 user-info URL 验证会话；调用 getUserInfo 前须确认目标实现不会记录原始用户，不能仅凭 props 存在就调用。独立可信 Web 核实已部署授权码桥/OIDC、redirect 注册和 SDK。新 MCP 仅使用清单支持的 mcp-online-user 与显式 auth_profile=mcp-online-v1 的专用 online 用户 token，prepare 签名继承、confirm 拒绝 chat，fresh introspect；不得降级 PAT/legacy/chat/普通 session/Feishu fallback 或取 legacy config。后台服务身份按独立 profile 核验，不复制浏览器 JWT；候选源码不证明上述能力已部署。",
     "authorization": "Login, token creation/rotation/revocation and business writes require the current task scope; this discovery performs none."
   },
   "tokenMechanism": "平台用户 JWT、PAT、短时服务 JWT、SpiceDB secret 各自独立；Secret 只由后端注入链路提供。",
-  "subjectPermission": "所选 SDK 认证可信上下文；/auth/me 的部署 context path 必须与 SDK resolved URL 一致；permission metadata 和允许/拒绝探针分别验收。",
+  "subjectPermission": "SDK trusted authn context and an explicit versioned subject mapping; metadata describes schema/static capabilities, not effective caller scopes, resource registration or SDK support. Verify resolved URLs and real allow/deny separately.",
   "expiryRevoke": "依据已部署的 authentication/PAT OpenAPI；未证明上线的 capabilities/create/rotate/revoke 路由不得按候选源码直接使用。",
   "officialRefs": [],
   "sources": [
@@ -32,6 +32,11 @@
         "packages/sdk"
       ],
       "status": "source-verified"
+    },
+    {
+      "kind": "owner-contract",
+      "path": "sdk-admission.md",
+      "status": "contract-recorded"
     }
   ],
   "versionPolicy": {
@@ -51,5 +56,5 @@
     "runtime": "not-attempted",
     "scope": "Read-only documentation/repository discovery; no login, token issuance, credential inspection or business API execution."
   },
-  "referenceBase": "owner-skill-root for SKILL.md/contractEntrypoints/referenceSources paths; contract field resolves from this JSON directory; upstream repository entrypoints stay repository-relative"
+  "referenceBase": "owner-skill-root for SKILL.md/contractEntrypoints/referenceSources paths; contract field resolves from this JSON directory; upstream repository entrypoints stay repository-relative; sources.path resolves from this JSON directory"
 }

@@ -6,15 +6,15 @@
     "https://firmware-mgr.addx.live",
     "https://firmware-mgr-test.addx.live"
   ],
-  "nativeRoute": "Firmware native SSO browser cookie token → token HTTP header",
+  "nativeRoute": "Reuse injected token, otherwise native POST /api/login with environment-injected userName/password → token HTTP header; browser only for interactive-only deployments",
   "loginFlow": {
     "reuseFirst": true,
-    "steps": "复用 FIRMWARE_MGR_TOKEN/FIRMWARE_MGR_TEST_TOKEN；缺失由用户在正确域网页 SSO 登录，宿主安全注入 token cookie 到进程变量，禁止 echo/聊天索要明文。现有契约没有证明 IdP 是 Casdoor。",
+    "steps": "复用环境对应 token；缺失或 get_models 探针 result=10001 时，使用 FIRMWARE_MGR_USERNAME/PASSWORD（测试加 TEST_ 前缀）调用原生登录 API，取 data.token 并重新探针。脚本 scripts/query.py 仅在进程内保留 token，凭据不进入 argv/stdout/日志。失败不循环登录，探针成功但目标拒绝报告可能权限不足或 token 随后失效。只有缺少非交互认证能力或用户明确需要 UI 时才浏览器登录。",
     "authorization": "Login, token creation/rotation/revocation and business writes require the current task scope; this discovery performs none."
   },
   "tokenMechanism": "token header（不是 Authorization Bearer）；Cookie 本身不足 API 认证；所有业务 POST JSON {}。",
   "subjectPermission": "POST /api/get_models 或 get_versions，result=0 是有效凭据/该读取权限；不能当稳定 subject 证明。get_user_info 既有 header/body bug 不能直接作探针。admin/developer/product 权限单独核验。",
-  "expiryRevoke": "result 10001/no auth 失效或权限不足；不盲重试；expiry/revoke 与稳定 subject 字段待源码/部署确认。",
+  "expiryRevoke": "get_models result=10001 可在已有账号凭据下重新登录一次；新 token 探针失败即停止；探针成功后的接口拒绝不触发重新登录。expiry/revoke 和稳定 subject 待部署验证。",
   "officialRefs": [],
   "sources": [
     {
@@ -27,11 +27,19 @@
       "repository": "https://gitlab.addx.ai/DEV/firmware-mgr-server",
       "researchCommit": "ac2c999b5e68540330d9c8f2544697636a2cf6c0",
       "entries": [
+        "api.py:769-782",
+        "user.py:23-80",
         "app.py",
         "service_auth.py",
         "tests/test_service_auth.py"
       ],
       "status": "source-verified"
+    },
+    {
+      "kind": "deployed-frontend",
+      "url": "https://firmware-mgr.addx.live/js/app.0d266c99.js",
+      "checkedOn": "2026-10-15",
+      "contract": "POST login JSON userName/password; success data.token; empty JSON API probe confirms missing userName; no real credential login"
     }
   ],
   "versionPolicy": {
@@ -47,8 +55,8 @@
   },
   "verification": {
     "source": "source-verified",
-    "fixture": "not-run-in-this-discovery",
-    "runtime": "not-attempted",
-    "scope": "Read-only documentation/repository discovery; no login, token issuance, credential inspection or business API execution."
+    "fixture": "scripts/query.py offline unittest fixtures; not a real account login",
+    "runtime": "production frontend and unauthenticated empty-body route probe only; authenticated login and test deployment not verified",
+    "scope": "Authentication contract and helper fixtures only; no credential inspection, successful token issuance or business writes."
   }
 }

@@ -201,18 +201,57 @@ class Worker:
                  [hashlib.sha256(read_owned(path)).hexdigest() for path in paths]]
         return hashlib.sha256(json.dumps(value,sort_keys=True).encode()).hexdigest()
 
-    def outlet_readiness(self, pub, store):
-        """Last real success only; unrelated rounds never renew its checked_at."""
+    def _orphan_wait_scope(self, pub, store):
+        """Bind a verified wait to its exact retained work, not a pending count."""
+        args = (self.binding_id, pub)
+        work = [dict(row) for row in store.conn.execute(
+            'SELECT * FROM outlet_work WHERE binding_id=? AND agent_id=? ORDER BY source_id', args)]
+        channel = json.loads(read_owned(self.config))['channel_id']
+        if (not work or any(row['kind'] != 5 or row['channel_id'] != channel for row in work)
+                or store.conn.execute('SELECT 1 FROM outlet_pending WHERE binding_id=? AND agent_id=? LIMIT 1', args).fetchone()):
+            raise ValueError('outlet work is not an orphan-only wait')
+        retained = [dict(row) for row in store.conn.execute(
+            'SELECT * FROM reaction_inbox WHERE binding_id=? AND agent_id=? ORDER BY source_id', args)]
+        sources = {row['source_id'] for row in work}
+        if not sources.issubset({row['source_id'] for row in retained}):
+            raise ValueError('orphan source is no longer retained')
+        targets = set(sources)
+        for row in retained:
+            event = json.loads(row['event_json'])
+            targets.update(tag[1] for tag in event['tags'] if len(tag) > 1 and tag[0] == 'e')
+        receipts = [tuple(row) for source in sorted(targets) for row in store.conn.execute(
+            'SELECT source_id,direction,status FROM delivery WHERE binding_id=? AND agent_id=? AND source_id=? ORDER BY direction',
+            (*args, source))]
+        return hashlib.sha256(json.dumps([work,retained,receipts],sort_keys=True).encode()).hexdigest()
+
+    def _readiness(self, pub, store, *, registration):
         saved = self._outlet_readiness.get(pub)
         if saved is None:
             return {}
         try:
             if self.verdict not in ('won','off') or saved[0] != self._outlet_scope(pub,store):
                 raise ValueError('outlet authority changed')
+            if saved[1].get('registration_only'):
+                if len(saved) != 3 or saved[2] != self._orphan_wait_scope(pub,store):
+                    raise ValueError('orphan work changed')
+                if not registration:
+                    return {}  # Business delivery still has retained pending work.
             return dict(saved[1]) if self._outlet_readiness.get(pub) is saved else {}
         except Exception:
             self._outlet_readiness.pop(pub,None)
             return {}
+
+    def outlet_readiness(self, pub, store):
+        """Business success only; unrelated rounds never renew checked_at."""
+        return self._readiness(pub,store,registration=False)
+
+    def registration_readiness(self, pub, store):
+        """Fresh own identity may be ready while orphan withdrawals still wait.
+
+        The registrar also enforces the 300-second observation lifetime. No
+        work, receipt, ACK, or business-pending status changes on this read.
+        """
+        return self._readiness(pub,store,registration=True)
 
     def _failure_metadata(self, stage, error):
         if self.failure_formatter is not None:
@@ -287,6 +326,7 @@ class Worker:
         """
         specs = self.outlet_specs
         results = {}
+        orphan_verified = {}
         expected = (set(self.outlet_responsibilities) | set(run.cfg['agents'])) - {
             run.cfg['desk_pubkey'], run.cfg['mirror_pubkey']} - run.other_mirrors
         if not isinstance(specs, dict):
@@ -333,6 +373,7 @@ class Worker:
             results[pub] = result
             spec = specs.get(pub)
             adapter = None
+            verified_before = None
             if spec is None: continue
             try:
                 if (not isinstance(pub,str) or not gs.HEX64_RE.fullmatch(pub)
@@ -418,6 +459,11 @@ class Worker:
                         result.update(status='verified', reason='', pending=0)
                         self.outlet_sweep_pending.discard(pub)
                         continue
+                try:
+                    authority_before = self._outlet_scope(pub,run.mapping_store)
+                except Exception:
+                    authority_before = None
+                verified_before = adapter._verification_count
                 result['scanned']=adapter.catch_up(max_events=1)
                 rows = run.mapping_store.conn.execute("SELECT status,count(*) AS n FROM delivery WHERE binding_id=? AND agent_id=? GROUP BY status",
                     (run.binding_id,pub)).fetchall()
@@ -435,6 +481,14 @@ class Worker:
                 if isinstance(error,ao.OutletWaiting):
                     result['reason']='orphan_withdrawal_wait'
                     result['retry_at']=error.retry_at
+                    if adapter is not None and verified_before is not None and adapter._verification_count > verified_before:
+                        try:
+                            authority = self._outlet_scope(pub,run.mapping_store)
+                            work = self._orphan_wait_scope(pub,run.mapping_store)
+                            if authority == authority_before:
+                                orphan_verified[pub] = (authority,work)
+                        except Exception:
+                            pass
                     continue  # Pending outlet, but no failed business operation.
                 if isinstance(error,ao.OutletDeferred):
                     result['reason']='own_outlet_deferred'
@@ -455,6 +509,14 @@ class Worker:
                     self._outlet_readiness[pub] = (self._outlet_scope(pub,run.mapping_store), dict(result))
                 except Exception:
                     pass  # Missing local proof cannot create a readiness observation.
+            elif pub in orphan_verified and self.verdict in ('won','off'):
+                try:
+                    authority,work = orphan_verified[pub]
+                    if (authority == self._outlet_scope(pub,run.mapping_store)
+                            and work == self._orphan_wait_scope(pub,run.mapping_store)):
+                        self._outlet_readiness[pub] = (authority,dict(result,registration_only=True),work)
+                except Exception:
+                    pass  # A changed workset cannot borrow an earlier verification.
         return results
 
     async def _notice_pass(self, run, storage, observe_hints):
@@ -609,7 +671,10 @@ class Worker:
                             target['message_id'], target['event_type'])
                     except Exception:
                         report['errors'] += 1
-            for phase in ("members", "buzz", "feishu"):
+            # An observed Feishu event must not wait behind unrelated outlet
+            # history. Each phase keeps its own checkpoint and causal gates.
+            phases = ("members", "feishu", "buzz") if 'feishu' in dirty else ("members", "buzz", "feishu")
+            for phase in phases:
                 if phase not in dirty or (phase == "members" and self.verdict == "unreadable"):
                     continue
                 trace(phase + '_started')

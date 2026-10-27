@@ -33,7 +33,9 @@ spec:
         env: <env-keyword>  # 如 staging-us / prod-us-restricted-admin
 ```
 
-`env` 用路由表中的完整 keyword。Rollout 是 CRD，统一用显式 patch 写入
+新建应用的 `env` 默认使用路由表中的完整 keyword，生成前必须通过下方目标映射门禁。
+存量应用按 `references/runtime-target.md` 核验并保留其准确运行 env 身份，不能因路由
+keyword 新增后缀而重写合法历史标签。Rollout 是 CRD，统一用显式 patch 写入
 `spec.template.metadata.labels`；不要假定 Kustomize 顶层 `labels:` 会处理
 Rollout。StatefulSet / Deployment 是内置资源，并非 CRD；本 workflow 仍优先
 使用显式 pod-template patch，避免同时改变 selector。已有标签只需验证渲染结果，
@@ -43,6 +45,30 @@ Rollout。StatefulSet / Deployment 是内置资源，并非 CRD；本 workflow �
 `spec.template.metadata.labels`；不要用 `grep -A2 "kind: Rollout"` 查找远处的
 嵌套 label。可运行 `validators/validate.sh` 并使用 `workflows/add-logging.md`
 的结构化标签检查。
+
+## CN prod 日志映射门禁
+
+机器可读的已知映射在 [target-compatibility.yaml](target-compatibility.yaml)，
+`validators/check_logging_target.py` 在生成/修复标签前核验 catalog 准入及该映射。
+未登记的其他目标仅表示没有记录的 blocker，仍须核验实际 topology 和 live 日志。
+
+`cn-tke-prod` 的新路由 keyword `prod-cn-tke-2231` **当前 blocked**：实际 collector
+使用 `^(.+)-(%a+)$`，数字后缀不能匹配，产出
+`addx-uncategorized-prod-cn-tke-2231-<app>`；Vector 只消费
+`addx-cn-{prod,staging,pre,test,canary}-`，因此默认生成的新标签不兼容。
+`candidate` 阶段也必须在生成/改写前 STOP + Ops Todo，不能把已知不兼容延期成待验收。
+平台须在 GitOps 中交付并验收精确 producer/consumer mapping 或明确批准的 topic override，
+再以新 skill MR 更新该状态；workflow 不能自行改状态、平台配置或擅自切换环境标签。
+
+已迁入应用经准确 Application + render 证明仍使用 `env=prod-cn` 时，现有配置映射为
+`addx-cn-prod-<app>`，只读验收或维护时保留该身份；这是配置兼容，不是入库 PASS，
+也不豁免 namespace 和其他部署门禁。其他 runtime label 不继承此映射。
+
+固定配置证据：
+[Fluent Bit parser](https://gitlab.addx.ai/DEV/k8s/-/blob/1489d4d04cc60855be1bc951a632cd64e309f5d6/clusters/tencent-100052802231-cn-prod/fluent-bit-universal/values-override.yaml#L107)、
+[Vector subscriptions](https://gitlab.addx.ai/DEV/k8s/-/blob/1489d4d04cc60855be1bc951a632cd64e309f5d6/clusters/tencent-100052802231-cn-prod/vector/values/values-override.yaml#L90)；
+[argocd-apps source/valueFiles](https://gitlab.addx.ai/DEV/argocd-apps/-/tree/7daa17dc17dc7a0270c23b0062ee8605b1ec8fec/tencent-100052802231-cn-prod)
+绑定上述 collector/consumer。快照不替代执行时重新核验。
 
 ## 共享 Lua business namespace gate
 

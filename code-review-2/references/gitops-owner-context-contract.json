@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "capability": "gitops-owner-fixed-context/v1",
+  "tool": "read_review_source",
+  "operation": "gitops-owner"
+}

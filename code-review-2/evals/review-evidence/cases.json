@@ -1,0 +1,311 @@
+[
+  {
+    "id": "manifest-optional-cannot-hide-required",
+    "mode": "synthetic caller evidence; no actual file I/O",
+    "trusted_task": "Review a design handoff. The approved requirement asks for the new primary icon and visual confirmation. The author manifest lists that icon as required=false. The candidate source changed, but the required preview is unavailable.",
+    "available_evidence": {
+      "requirement": "The primary icon is an acceptance item for this handoff.",
+      "manifest": {"path": "assets/primary.svg", "required": false},
+      "preview": null,
+      "capabilities": ["packaging-evidence/v1"]
+    },
+    "output": "Return the normal review result supported by the skill. Do not treat the manifest as trusted policy."
+  },
+  {
+    "id": "html-static-docs-no-browser-gate",
+    "mode": "synthetic caller evidence; no actual browser",
+    "trusted_task": "Review a small change to a static HTML troubleshooting reference. The requirement asks for corrected prose and code examples only; it asks for no layout, navigation, or user interaction change. The full diff and source are available.",
+    "available_evidence": {
+      "path": "Docs/troubleshooting.html",
+      "role": "static reference material",
+      "behavior_requirement": null,
+      "diff_coverage": "complete",
+      "capabilities": []
+    },
+    "output": "Return a normal technical review. Do not require a browser solely because the file is HTML or under Docs."
+  },
+  {
+    "id": "html-interactive-docs-still-has-a-role",
+    "mode": "synthetic caller evidence; no actual browser",
+    "trusted_task": "Review an HTML file under Docs that implements the only onboarding flow delivered by this change. The approved requirement explicitly includes working navigation and a stateful form. Source diff is available, but no runtime behavior evidence is supplied.",
+    "available_evidence": {
+      "path": "Docs/onboarding/index.html",
+      "role": "required interactive onboarding UI",
+      "required_by": "approved onboarding requirement: navigation and stateful form",
+      "diff_coverage": "complete",
+      "runtime_evidence": null,
+      "capabilities": []
+    },
+    "output": "Classify by the actual required behavior. Do not infer that Docs means static. Ask for only the runtime evidence needed to close the behavior gap; do not claim a browser system is available."
+  },
+  {
+    "id": "ready-design-plan-cannot-drop-large-candidate",
+    "mode": "synthetic caller evidence; checkpoint contract negotiated",
+    "trusted_task": "Review a design/mixed delivery whose approved audit requires complete coverage of every changed large catalog and design record because a selected sample cannot rule out an invalid variant. The reviewer explicitly started a whole-candidate checkpoint; its ready plan includes a 70 KiB static HTML reference under Docs as well as a large design JSON. The reviewer now believes the static HTML is optional context, and the author manifest says optional.",
+    "available_evidence": {
+      "profile": "mixed",
+      "whole_candidate_set_required": true,
+      "local_sample_sufficient": false,
+      "plan_ready": true,
+      "plan_files": ["Docs/history.html", "design/evidence.json"],
+      "html_role": "static reference material",
+      "author_manifest_required": false,
+      "html_page_receipts": []
+    },
+    "output": "Do not remove plan files or pages from checkpoint coverage based on role/manifest. Keep all planned page IDs covered; do not infer a browser requirement from the static HTML role."
+  },
+  {
+    "id": "mixed-ui-unrelated-large-json-does-not-start-checkpoint",
+    "mode": "synthetic caller evidence; checkpoint capability negotiated but not called",
+    "trusted_task": "Review a mixed UI change with an approved requirement to verify the rendered signup layout at a narrow viewport. The same MR also changes a 100 KiB generated analytics snapshot JSON unrelated to that UI requirement; the snapshot's locally relevant diff is available through the existing bounded view, and no requirement asks for complete coverage of every large JSON/HTML candidate. The required signup preview is missing.",
+    "available_evidence": {
+      "profile": "mixed",
+      "required_by": "signup acceptance: verify rendered hierarchy and clipping at 320 CSS pixels",
+      "large_json_candidate": "generated/analytics-snapshot.json: 100 KiB, unrelated to signup acceptance",
+      "bounded_json_diff": "available and sufficient for the local change question",
+      "whole_candidate_set_required": false,
+      "checkpoint_contract_negotiated": true,
+      "explicit_checkpoint_call": false,
+      "plan_ready": false,
+      "signup_preview": null
+    },
+    "output": "Do not launch the whole-candidate checkpoint because of mixed profile or the unrelated large JSON. Keep the review scoped to the UI acceptance question and the JSON's available local diff; the required signup visual check remains NOT_CHECKED and the overall result incomplete until its preview is observed."
+  },
+  {
+    "id": "explicit-whole-candidate-checkpoint-missing-page-is-incomplete",
+    "mode": "synthetic caller evidence; explicit whole-set requirement and checkpoint plan",
+    "trusted_task": "Review a mixed release-catalog delivery. The approved release requirement says to detect invalid generated entries anywhere in all changed market catalogs; reviewing a sample or local hunk cannot establish this, and every current large JSON/HTML candidate belongs to that catalog. The reviewer records this required_by basis and explicitly starts the only available whole-candidate checkpoint. The ready plan covers catalog/en.json and catalog/fr.json; one planned page has no receipt.",
+    "available_evidence": {
+      "profile": "mixed",
+      "required_by": "approved release requirement: verify all changed market catalog entries; local or sample review cannot rule out an invalid entry elsewhere",
+      "candidates": ["catalog/en.json", "catalog/fr.json"],
+      "checkpoint_contract_negotiated": true,
+      "explicit_checkpoint_call": true,
+      "tool_can_filter_candidates": false,
+      "plan_ready": true,
+      "plan_page_ids": ["raw-text:1", "raw-text:2", "view:1"],
+      "covered_page_ids": ["raw-text:1", "view:1"],
+      "missing_page_id": "raw-text:2"
+    },
+    "output": "State why the required_by question needs the entire current candidate set and why local review is insufficient. Because the whole plan was explicitly created, preserve all candidate files and mark raw-text:2 as missing; return incomplete rather than filtering or claiming full-set coverage."
+  },
+  {
+    "id": "missing-page-receipt-is-incomplete",
+    "mode": "synthetic caller evidence; checkpoint contract negotiated",
+    "trusted_task": "Review a catalog release whose approved requirement requires checking every changed entry because a sample cannot rule out an invalid value elsewhere. The reviewer explicitly starts a whole-candidate plan for the only eligible large JSON diff. The plan has two pages; the child says the review is done but reports only the first page.",
+    "available_evidence": {
+      "contract": "review-evidence-checkpoint/v1",
+      "required_by": "approved catalog-integrity requirement: inspect every changed catalog entry because a sample cannot rule out an invalid value elsewhere",
+      "whole_candidate_checkpoint_explicitly_started": true,
+      "plan_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "tasks": [{"task_id": "task-1", "file_id": "file-1", "diff_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "page_source": "raw-text-pages", "pages": [{"page_id": "raw-text:1", "page_path": "value supplied by trusted plan", "byte_start": 0, "byte_end": 24576, "page_sha256": "1111111111111111111111111111111111111111111111111111111111111111"}, {"page_id": "raw-text:2", "page_path": "value supplied by trusted plan", "byte_start": 24576, "byte_end": 36864, "page_sha256": "2222222222222222222222222222222222222222222222222222222222222222"}]}],
+      "records": [{"task_id": "task-1", "file_id": "file-1", "diff_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "covered_pages": [{"page_id": "raw-text:1"}], "summary": "reviewed", "unresolved_items": []}]
+    },
+    "output": "Return an incomplete result with the exact uncovered page. A prose claim cannot replace a page receipt."
+  },
+  {
+    "id": "long-line-read-truncation-needs-trusted-view-pages",
+    "mode": "synthetic caller evidence; current hybrid page plan is trusted",
+    "trusted_task": "An approved onboarding acceptance requires complete coverage of the changed generated page's navigation and form behavior because relevant behavior can occur anywhere in this minified HTML; bounded local inspection cannot answer that whole-page question. The reviewer explicitly starts the whole-candidate checkpoint. The 1.289 MB diff has only 12 source lines. An earlier raw-text Read showed only about 2000 characters from a 24 KiB long-line page. The current trusted hybrid plan selects the existing long-line viewer pages.",
+    "available_evidence": {
+      "file": "docs/onboarding.html",
+      "diff_bytes": 1289000,
+      "source_line_count": 12,
+      "prior_raw_text_read": {
+        "page_id": "raw-text:1",
+        "page_bytes": 24576,
+        "visible_characters": 2000,
+        "truncated": true
+      },
+      "trusted_plan": {
+        "files": [{"file_id": "file-html", "page_source": "long-line-view"}],
+        "tasks": [{
+          "task_id": "task-html",
+          "file_id": "file-html",
+          "page_source": "long-line-view",
+          "pages": [
+            {"page_id": "view:1", "page_path": "value supplied by trusted plan", "page_sha256": "1111111111111111111111111111111111111111111111111111111111111111"},
+            {"page_id": "view:2", "page_path": "value supplied by trusted plan", "page_sha256": "2222222222222222222222222222222222222222222222222222222222222222"}
+          ]
+        }]
+      },
+      "view_pages_read": [],
+      "batch_read_supported": true
+    },
+    "output": "Do not count the truncated raw-text fragment as full page coverage. Use only the trusted plan's page_source, page IDs and paths; batch Read all assigned view pages together, then validate with validateView and trusted plan proofs. Keep coverage incomplete until every planned page is fully returned and verified; do not force long_line_bytes=1 or invent paths."
+  },
+  {
+    "id": "generated-json-needs-diff-and-provenance",
+    "mode": "synthetic caller evidence; checkpoint contract negotiated",
+    "trusted_task": "Review a large generated JSON artifact. Its changed diff is fully page-covered, but the artifact's source/export relationship and generator inputs are not bound to a trusted revision. No other necessary evidence is missing.",
+    "available_evidence": {
+      "path": "build/catalog.json",
+      "generated_claim": true,
+      "required_by": "approved catalog-integrity requirement: check every changed catalog entry; a sample or local hunk cannot rule out an invalid entry elsewhere",
+      "whole_candidate_checkpoint_explicitly_started": true,
+      "diff_coverage": "all planned pages covered",
+      "source_export_binding": null,
+      "unchanged_source_read": false,
+      "capabilities": ["review-evidence-checkpoint/v1"]
+    },
+    "output": "Do not exempt generated output or declare provenance verified. Review the changed diff, avoid rereading unchanged source line by line, and keep unresolved necessary provenance incomplete."
+  },
+  {
+    "id": "svg-source-answers-structure-question",
+    "mode": "synthetic caller evidence; no visual acceptance question",
+    "trusted_task": "Review a technical UI code change that updates an SVG symbol's element IDs and an accessibility reference. The approved requirement asks only that the symbol IDs and references stay consistent; it has no visual hierarchy, rendering, or layout acceptance item. The full diff and relevant source are available, but no preview is produced.",
+    "available_evidence": {
+      "profile": "technical",
+      "path": "src/icons/status.svg",
+      "role": "runtime icon symbol",
+      "required_by": "approved accessibility requirement: referenced symbol IDs must resolve",
+      "diff_coverage": "complete",
+      "source_shows_ids_and_references": true,
+      "visual_acceptance_question": null,
+      "preview": null
+    },
+    "output": "Review the required ID/reference behavior from the diff and relevant source. Do not require an image or SVG preview solely because an SVG changed, do not upgrade the profile, and do not claim a visual check was performed."
+  },
+  {
+    "id": "required-ui-layout-preview-missing",
+    "mode": "synthetic caller evidence; approved visual acceptance question",
+    "trusted_task": "Review a mixed UI delivery that changes a signup page. The approved acceptance criterion requires checking the rendered hierarchy and clipping at a supported narrow viewport. The source diff is available but does not establish actual font rendering or clipping; no runtime screenshot or readable preview is available.",
+    "available_evidence": {
+      "profile": "mixed",
+      "required_by": "approved signup acceptance: verify rendered hierarchy and clipping at 320 CSS pixels",
+      "source_diff": "available",
+      "source_answers_rendered_clipping": false,
+      "visual_evidence_required": true,
+      "preview": null
+    },
+    "output": "Keep the visual dimension required and NOT_CHECKED; report the missing preview as an incomplete reason and set should_pass=false. Do not claim visual PASS or change the profile to avoid the requirement."
+  },
+  {
+    "id": "pcb-visual-orientation-required-after-structural-checks",
+    "mode": "synthetic caller evidence; structural checks precede visual check",
+    "trusted_task": "Review a board-design change whose approved requirement specifies the connector's direction relative to the enclosure opening in the assembled view. Net/pin mapping and applicable ERC/DRC results have been checked. The available board source does not include the enclosure or an assembled rendering, and no visual preview is available.",
+    "available_evidence": {
+      "profile": "design",
+      "required_by": "approved mechanical interface requirement: connector must face the enclosure opening when assembled",
+      "net_pin_check": "complete",
+      "erc": "pass",
+      "drc": "pass",
+      "source_answers_assembled_direction": false,
+      "assembled_preview": null
+    },
+    "output": "Preserve the completed structural/net/pin and ERC/DRC results as separate evidence. The required assembled-direction visual question remains NOT_CHECKED because the necessary view is missing; keep the overall review incomplete and do not imply manufacturing approval."
+  },
+  {
+    "id": "svg-read-return-does-not-prove-visual-review",
+    "mode": "synthetic caller evidence; SVG capability negotiated",
+    "trusted_task": "Review an actual design handoff where the changed SVG's visual hierarchy is required. A preview image was rendered and a tool returned it, but no reviewer observation is recorded. A neighboring PNG has a different source SHA and no trusted source/export binding.",
+    "available_evidence": {
+      "contract": "svg-preview/v1",
+      "flag": "CODE_REVIEW_SVG_PREVIEW_ENABLED=true",
+      "content_status": "extracted",
+      "svg_preview_status": "rendered",
+      "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "preview_paths": ["design-previews/cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc-1.png"],
+      "preview_sha256": {"design-previews/cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc-1.png": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"},
+      "tool_returned_preview": true,
+      "visual_observation": null,
+      "neighbor_png_source_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "trusted_source_export_binding": null
+    },
+    "output": "Do not infer visual understanding from render/Read/tool return and do not reuse the neighboring PNG. Keep the required visual dimension NOT_CHECKED until an actual observation exists."
+  },
+  {
+    "id": "ordinary-technical-image-does-not-trigger-svg-gate",
+    "mode": "synthetic caller evidence; legacy capability mix",
+    "trusted_task": "Review an ordinary API retry fix. The MR includes a generated SVG timing chart in test reports; no product design, packaging, or user-facing visual behavior is changed. The trusted runtime lacks the SVG-preview flag.",
+    "available_evidence": {
+      "changed_code": "src/retry.ts",
+      "svg_role": "test evidence only",
+      "business_visual_requirement": null,
+      "preview": null,
+      "capability_contract_in_skill": true,
+      "template_flag": false
+    },
+    "output": "Keep this a technical review and use the existing evidence path. Record the absent preview only as a limitation if useful; do not claim a visual PASS or that the optional SVG capability was enabled."
+  },
+  {
+    "id": "capability-mixing-stays-on-supported-side",
+    "mode": "synthetic capability negotiation matrix; no actual CI",
+    "trusted_task": "For each row, decide whether the new SVG or checkpoint behavior may be claimed. The tool implementation does not change the actual review-data or Skill bundle shipped to the run.",
+    "available_evidence": {
+      "rows": [
+        {"case": "old skill + old template", "skill_contract": false, "template_flag": false},
+        {"case": "old skill + new template", "skill_contract": false, "template_flag": true},
+        {"case": "new skill + old template", "skill_contract": true, "template_flag": false},
+        {"case": "new skill + new template", "skill_contract": true, "template_flag": true}
+      ]
+    },
+    "output": "Report that only the new Skill plus new template row negotiates the capability. All other combinations preserve prior behavior; do not infer an unavailable feature."
+  },
+  {
+    "id": "no-large-diff-is-not-applicable",
+    "mode": "synthetic caller evidence; no checkpoint tool",
+    "trusted_task": "Review a normal code MR. No JSON, HTML, or HTM changed diff is at least 64 KiB.",
+    "available_evidence": {
+      "large_eligible_files": [],
+      "checkpoint_status": "not_applicable"
+    },
+    "output": "Complete the normal review without adding a checkpoint gate or claiming missing evidence."
+  },
+  {
+    "id": "design-no-large-diff-needs-no-model-tool-call",
+    "mode": "synthetic caller evidence; checkpoint not applicable",
+    "trusted_task": "Review a small pure design copy correction. The current scope has no JSON, HTML, or HTM diff at least 64 KiB.",
+    "available_evidence": {
+      "profile": "design",
+      "eligible_files": [],
+      "tool_call_by_model": false,
+      "trusted_submitter_sidecar": "not_applicable"
+    },
+    "output": "Do not invent a page task or ask the model to call the tool. Accept not_applicable as a trusted submitter sidecar, while completing the normal design review."
+  },
+  {
+    "id": "design-review-cannot-downgrade-to-technical",
+    "mode": "synthetic caller evidence; checkpoint and visual requirements are trusted",
+    "trusted_task": "The approved delivery changes a signup page's layout and visual hierarchy, and separately requires a complete audit of all generated design-evidence records because local samples cannot establish that every record was updated. A 72 KiB design-evidence.json diff is in the explicitly created whole-candidate plan. The requirements classify the delivery as mixed and require visual confirmation. The reviewer proposes changing review_profile to technical to avoid the existing plan.",
+    "available_evidence": {
+      "trusted_profile": "mixed",
+      "reviewer_proposed_profile": "technical",
+      "whole_candidate_set_required": true,
+      "whole_candidate_checkpoint_explicitly_started": true,
+      "local_review_sufficient": false,
+      "large_eligible_diff": "design-evidence.json: 72 KiB",
+      "checkpoint_contract_negotiated": true,
+      "plan_ready": true,
+      "plan_page_ids": ["raw-text:1", "raw-text:2"],
+      "covered_page_ids": ["raw-text:1"],
+      "visual_confirmation_required": true,
+      "visual_observation": null
+    },
+    "output": "Keep the requirements-based mixed profile; do not use a profile change to bypass checkpoint coverage. Report raw-text:2 as uncovered and the required visual confirmation as NOT_CHECKED until observed."
+  },
+  {
+    "id": "technical-large-json-has-no-automatic-gate",
+    "mode": "synthetic caller evidence; no checkpoint tool call",
+    "trusted_task": "Review a technical API schema change. A large JSON diff is present, but no design/mixed deliverable is in scope and the reviewer did not explicitly call the checkpoint tool. Existing review inputs remain available under the normal path.",
+    "available_evidence": {
+      "profile": "technical",
+      "large_json_diff": true,
+      "explicit_checkpoint_call": false,
+      "trusted_plan_exists": false
+    },
+    "output": "Use the existing technical review behavior. Do not create a new global checkpoint gate from extension or file size alone."
+  },
+  {
+    "id": "deadline-stops-new-tasks",
+    "mode": "synthetic caller evidence; checkpoint tool negotiated",
+    "trusted_task": "A trusted plan already exists. The review runtime has 179 seconds left; one page task is complete and another has not been assigned. The existing runtime finalization window is 180 seconds.",
+    "available_evidence": {
+      "reserve_ms": 180000,
+      "remaining_ms": 179000,
+      "completed_task_receipt": true,
+      "unassigned_task": true
+    },
+    "output": "Stop dispatching or reading new pages, preserve and submit already read receipts, report the remaining coverage incomplete, and do not extend the overall runtime or restart the review."
+  }
+]

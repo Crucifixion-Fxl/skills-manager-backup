@@ -1,215 +1,224 @@
 ---
 name: device-cloud-test-management
-description: 通过一次飞书/Casdoor SSO 查询并运行 kb-tests 云测用例，管理 TestPlan/Job，并按固定流程查询日志、时间线、截图、XML 和录像。用于用户要求创建 Device Cloud 测试计划、运行单条/批量用例、停止任务、分析失败或下载附件时；从 App 链接和用例元数据自动推导普通参数，不索要 API Key。
+description: 通过飞书/Casdoor SSO 在 Device Cloud 上预检、执行和诊断任意业务测试仓库中的 Behave 自动化用例，支持云端 Host 或本地 device-cloud-client、App 可选、手机及通用硬件资源。用户要查询 UID、按模块批量执行、创建/停止 TestPlan/Job 或诊断失败时使用。
 ---
 
-# Device Cloud 测试计划与诊断
+# Device Cloud 测试管理
 
 ## 描述
 
-本 Skill 负责查询用例、创建和停止 Device Cloud 测试计划，以及获取日志和附件并完成失败分类。所有业务密钥由平台托管，用户身份只通过飞书/Casdoor SSO 获取。
+负责 App、固件/嵌入式和硬件自动化用例的查询、执行、任务管理与日志诊断。
 
-只使用本 Skill 自带入口，不依赖 `DEVT/device-cloud` checkout：
+## 边界
+
+本 Skill 只在执行测试用例时申请资源，不提供脱离用例的独立 Client/资源会话。测试代码来源、运行位置和 App 制品彼此独立：
+
+- 测试仓库可以是任意可读 Git 仓库，也可以先从本地 checkout 查询。
+- 云端 `run` 由 Host 执行；`run-local` 由本地 `device-cloud-client` 执行并使用云端资源。
+- App 下载链接是可选运行制品，不决定自动化类型、测试仓库或资源类型。
+- 无 App、无手机、无相机的固件/硬件用例是合法输入。
+- 本地 `run-local` 执行时，业务测试仓不得提供 `features/environment.py`；Behave 生命周期和资源绑定由 Client 托管。
+
+统一入口：
 
 ```text
 skills/quality/device-cloud-test-management/scripts/device_cloud.py
 ```
 
-## 使用前提：AI 必须能读取用例定义
+## 完整工作流与职责
 
-飞书/Casdoor SSO 只负责 Device Cloud 身份认证，不会自动授予 GitLab 仓库权限。AI 要知道有哪些用例、UID 和资源依赖，必须满足以下任一条件：
+1. 先明确自动化类型、执行位置、测试仓库和用例范围，再收集所需固件及 App 输入。
+2. 查询 Feature/Scenario，核对 UID、资源声明和来源提交；执行入口校验固件后通过 SSO 查询实时资源容量，形成完整预检。
+3. 展示用例、资源、并发、版本及来源，取得当前预检的确认 token 后才创建 TestPlan 和 Job。
+4. Skill 将两种固件分别写入 Job 的 `metadata.env`，同时记录版本和来源；它们不是 TestPlan 创建请求的顶层字段，不要求用户手改配置文件。
+5. 云端由执行平台交付参数给 Client；本地由 Skill 创建唯一受管 Job、生成包含资源和 Plan/Job 身份的临时执行配置，并将版本传入 Client 子进程环境。
+6. Client 把环境参数解析为资源配置，业务 Steps 再读取配置执行 Background 和 Scenario。参数传出、配置可读取和实际使用版本是三项不同证据。
+7. 运行结束或异常后核验 Job 终态和资源释放；失败时继续使用诊断入口获取报告、时间线、日志及附件。
 
-- 本机已有可读取的 `kb-tests` 仓库，通过 `--cases-root <PATH>` 或 `KB_TESTS_ROOT` 指定；
-- 本机 Git 凭据拥有 `https://gitlab.addx.ai/DEVT/kb-tests.git` 的只读权限，脚本可自动缓存克隆。
-
-首次使用先运行一次用例查询作为前置检查：
-
-```bash
-python skills/quality/device-cloud-test-management/scripts/device_cloud.py search-cases \
-  --text '<用例关键词>'
-```
-
-查询失败且本地没有仓库时，停止创建 TestPlan，并提示用户申请 `DEVT/kb-tests` 只读权限。禁止要求用户在聊天或命令行提供 GitLab Token。云端真正执行用例时，Host 仍使用平台托管凭据下载仓库，不依赖个人 GitLab 权限。
-
-## 用户只需提供两类输入
-
-1. App 下载链接。
-2. 跑什么：UID、模块/功能描述或用例关键词。
-
-不要询问仓库、分支、App 名、包名、版本、App 环境、Host、机房、机柜、设备 ID 或任何密钥。App 链接映射见 [App 链接映射](references/app-link-mapping.md)。创建前仍必须把自动生成的资源与并发计划展示给用户，获得明确确认；这是执行确认，不是新增输入。
-
-## 环境边界
-
-- Device Cloud 默认是 `prod-cn`。只有用户明确说 Host2、staging 或迁移验收时才用 `staging-cn`。
-- App 包中的 `_prod_`、`_test_`、`_pre_` 是 App 服务环境，只生成 `DEVIUM_ENV`。
-- 两种环境互不推导。
+Skill 负责取参、预检、建单传参和任务闭环；Client 负责配置解析与用例执行。仅更新 Skill 即可创建携带版本的 Job，但执行端读取配测版本还需要包含对应配置支持的 Client；OTA 步骤是否使用配测版本必须另行核实。
 
 ## 规则
 
-- 创建前必须展示实际匹配场景、最终资源组、实时容量快照和计划并发，并获得明确确认。
-- 创建前必须确认本地能读取 `kb-tests` 用例定义；飞书 SSO 不能替代 GitLab 只读权限。
-- “一条用例”只能执行唯一 UID；匹配数量不是 1 时不得创建。
-- 从用例步骤和显式资源表识别逻辑资源别名；`config/resources.yml` 只是运行模板，不是调度事实。
-- 相机类型不能从空闲池反推；用例未显式声明时必须让用户选择资源档案。
-- 批量用例按 Feature 拆成独立 Job；每个 Job 内保留该 Feature 的逻辑资源别名，并按实时空闲容量限制并发。
-- 诊断必须完成报告、时间线、日志、证据下载和失败分类全链路。
-- 不接收、不读取、不输出业务运行密钥。
+开始前需要确定：
 
-## 强制执行流程
+1. 自动化类型：App、固件/嵌入式或硬件/厂测。
+2. 执行位置：云端 Host 或本地 Client。
+3. 测试仓库：Git URL，或本地仓库目录。查询本地目录可无 `origin`；执行本地 checkout 时必须有可访问的 `origin`，显式 `--tests-repo` 须指向同一仓库，不能替代它。
+4. 用例范围：优先 UID，也可用模块、二级模块、标签或关键词。
+5. 用例资源：来自 Feature/Scenario 中的显式资源表，或用户明确给出的 `--resource-json`。
+6. 固件/嵌入式的待测版本：必填固件版本，必须是可输出调试日志的 `-d` 版本；配测版本可选，默认等于待测版本；显式提供时同样要求 `-d`。
+7. App URL：仅当用例确实需要安装/使用 App 时提供。App 版本、包名和业务环境均从用户下载链接解析，不另行索要。
 
-### 1. 解析 App
+自动化类型由用户明确意图、测试仓库或经核实的 UID 确定，并记录判断来源。只有 App URL 或模糊任务、仍无法判定类型时，先询问是 App、固件/嵌入式还是硬件自动化；已有依据时不重复询问。不得因为链接是 Kiwibit/VicoHome 就擅自选择 `kb-tests`。
+
+待测版本用于 Background 默认固件升级；配测版本用于 OTA 等需要另一份固件的步骤，两者都是固件。设备当前实际固件由运行时读取，不向用户索要第三个固件版本。App URL 解析器通过集中身份表支持 Kiwibit、VicoHome、VicoNature、Guard Android APK，兼容品牌目录与文件名两种形式；目录与文件名中的显式品牌/平台声明必须全部一致，暂未适配品牌也参与冲突检测；未知或混合品牌/平台、非 APK、版本缺失/不唯一及未知业务环境应明确拒绝，不默认套用 Kiwibit 参数。文件名或目录没有业务环境时拒绝解析，不能猜为 prod。根据使用方反馈，Safemo、Golf 的 staging 包下载 URL 存在缺少 staging 标识的情况，无法仅凭 URL 安全识别环境，本轮暂不适配这两个 App。iOS IPA 与 Android AAB 也暂不适配。App 身份不改变测试仓库，账号地区仍由资源或 `--country` 明确提供。
+
+不要向用户索要 GitLab Token、Device Cloud API Key、Host/设备 ID 或业务运行密钥。SSO 只处理 Device Cloud 身份；查询私有测试仓仍需用户本机已有 Git 凭据。云端 Host 使用平台托管凭据拉取仓库。
+
+## 测试仓库契约
+
+详见 [测试仓库契约](references/test-repository-contract.md)。关键规则：
+
+- 仓库根目录包含 `features/**/*.feature`。
+- 每个可执行 Scenario 必须有自己的唯一 `@uid=<value>`。
+- 模块使用有效标签 `@testCase_modules=<module>`，二级模块使用 `@testCase_submodule=<submodule>`；标签可位于 Feature、Rule 或 Scenario。
+- 资源表至少包含逻辑名和类型，例如 `| robot | ROBOT_ARM |`。资源类型不限制为手机/相机。
+- 云端执行必须使用已推送且可从远端获取的不可变提交；本地目录、远端仓库、提交 SHA 和目录摘要都进入预检。
+
+固件/嵌入式任务未指定测试仓库时，交互明确选用 `https://gitlab.addx.ai/DEVT/test-suite/firmware-tests.git`；用户明确指定其他仓库时尊重该来源。旧 CLI 的 `DEVT/kb-tests` 回退只用于兼容，新交互必须明确展示最终仓库、模块和自动化类型，不因 App URL 改选仓库。
+
+`--tests-ref` 的公开输入是远端分支或轻量标签名，默认 `main`。执行预检解析并绑定该来源的提交 SHA，再将 SHA 交给 Host；当前不支持直接输入裸 SHA 或附注标签。
+
+## 查询用例
 
 ```bash
-python skills/quality/device-cloud-test-management/scripts/device_cloud.py inspect-app \
-  --app-url '<APP_URL>'
+python skills/quality/device-cloud-test-management/scripts/device_cloud.py search-cases \
+  --tests-repo 'https://gitlab.addx.ai/DEVT/test-suite/hardware-tests.git' \
+  --module 'factory'
 ```
 
-链接无法唯一识别 App、版本或业务环境时停止，不猜测。
-
-### 2. 先查询用例，再执行
-
-用户没有给 UID 时，先搜索：
+已有本地 checkout：
 
 ```bash
 python skills/quality/device-cloud-test-management/scripts/device_cloud.py search-cases \
-  --module '直播'
-
-python skills/quality/device-cloud-test-management/scripts/device_cloud.py search-cases \
-  --module '设备设置' \
-  --submodule 'video'
-
-python skills/quality/device-cloud-test-management/scripts/device_cloud.py search-cases \
-  --text '快速进入直播'
+  --cases-root '<LOCAL_TEST_REPO>' \
+  --module 'factory'
 ```
 
-查询结果必须输出 UID、名称、匹配数量、是否引用 camera、相机类型和资源来源。
+必须展示仓库、提交/分支、匹配数量以及每条 Scenario 的 UID、名称、文件和资源。如果用户指定模块，自动枚举该模块下的全部 Scenario UID：
 
-当用户说“一条用例”时：
+- 只有 1 条时可收窄为该 UID。
+- 多条时先完整展示 UID 清单；只有用户明确同意批量执行才添加 `--allow-multiple`。
+- 任一 Scenario 缺少 UID，或 UID 在选择范围内重复，停止批量执行。
+- `--submodule` 必须和 `--module` 同时使用。
 
-- 匹配 1 条：直接使用该 UID，不再追问。
-- 匹配 0 条：停止并说明没有候选。
-- 匹配多条：列出候选 UID/名称，让用户选择；不得直接用 `--module` 创建任务。
-- 只有用户明确允许批量时才使用 `--allow-multiple`。
+## 资源预检
 
-`--submodule` 只能与 `--module` 一起使用，等价于同时匹配 `@testCase_modules=<module>` 与 `@testCase_submodule=<submodule>`。本地目录按 Gherkin 语义合并 Feature、Rule 和 Scenario 标签；Scenario 的执行 UID 仍只取 Scenario 自身的 `@uid`，不会误用 Feature UID。
+优先使用用例中的显式资源表。支持平台已注册的任意资源类型，例如 `PHONE`、`BATTERYCAM`、`PLUGINCAM`、`ROBOT_ARM`、`TEMPERATURE_CONTROLLER`、`FIXTURE`、`SMART_PDU` 等。不得强制添加 `PHONE`，也不得从 App 链接或空闲池猜测业务资源。
 
-### 3. 创建前资源预检
+无 App 用例没有显式资源表时，要求用户确认资源 JSON；禁止默认申请手机：
 
-默认 `--resource-profile auto`。脚本先查询 Device Cloud 实时在线、未占用资源，再从以下真实来源推导每个 Feature 的逻辑资源：
+```json
+[
+  {"name": "robot", "type": "ROBOT_ARM", "conditions": {}},
+  {"name": "chamber", "type": "TEMPERATURE_CONTROLLER", "conditions": {}}
+]
+```
 
-1. Feature `Background` 或 Scenario 内的显式资源表；
-2. 实际设备操作步骤中的手机别名，例如 `on admin`、`on sharer`；
-3. 步骤中对 `camera` 的引用。
+创建前展示每个 Job 的逻辑资源组、按类型/型号汇总的实时空闲容量、计划并发，以及将创建的 Plan/Job/Scenario 数。不要展示设备 ID、序列号、Host、IP、端口或连接信息。
 
-账号角色名不等于物理手机别名；只有出现在设备操作语义中的名称才计入资源。不得从 `@deviceType` 或 `config/resources.yml` 推断调度资源。
+### 嵌入式任务：建单前同机柜优先
 
-`auto` 仅在用例显式指定唯一相机类型时自动选择。用例没有类型或存在多种候选时停止，让用户选择 `phone+battery-camera` 或 `phone+plugin-camera`；空闲池只有一种类型也不能替代业务需求。用例引用 camera 而最终资源没有相机时，必须在创建 TestPlan 前报错。
+仅对 `automationType=embedded` 且至少有两个资源别名的 Job，统一入口使用实时空闲快照检查全部资源需求：有同柜完整可行组合时，增加覆盖全部别名的原生同柜 AFFINITY；没有时，保留原有硬约束并允许跨柜。不为 App、普通硬件或单资源任务新增默认偏好。不能只找到 phone/camera 配对就忽略其他资源；相关拓扑不完整且无法证明存在完整同柜组合时停止，不把未知当作无同柜资源。
 
-批量选择按 Feature 拆分 Job，同一 Feature 的 Scenario 用 UID 精确组合，避免模块标签变化造成误跑。预检必须展示：UID、名称、匹配数量、每个 Job 的逻辑资源别名、最终资源组、实时空闲容量、计划并发，以及将创建的 Plan/Job/Scenario 数量。只展示按类型和型号汇总的容量，不展示设备 ID、序列号、Host、IP、端口或连接信息。
+预检的每个 `resourceGroups[].placement` 展示策略、模式和原因；模式为 `same_cabinet` 或 `cross_cabinet_allowed`。模式及最终约束进入 token，执行前重新查询；同柜模式变为跨柜模式或反向变化时必须重新确认。Feature/用户显式硬约束始终保留，不能因默认偏好而降级；多资源别名目前均要求 `count=1`。
 
-### 4. 执行
+这是 Skill 建单前选择，不是 Server 动态软亲和调度，也不是资源预留。建单后资源被占用时不自动删除约束、放宽要求或重建任务；依照原有终态/释放流程处理后重新预检。新增同柜约束沿用原生持久化、实际绑定回读与异常清理能力；带约束的 `run-local` 仍按既有能力边界在建单前拒绝。
 
-先生成预检，不创建 TestPlan：
+### 同 Host / 同机柜亲和性
+
+用户要求资源同 Host 或同机柜时，必须使用统一入口的 `--resource-constraints` JSON 数组。仅支持 `AFFINITY`，拓扑键为 `belong_to_host` / `belong_to_cabinet`；`resources` 是同一 Job 中至少两个不同的逻辑资源名。需要同时满足两者时传两条约束，不能把“同机柜”当作“同 Host”。
+
+例如 phone 与 camera 同 Host、同机柜：
+
+```json
+[
+  {"type":"AFFINITY","topologyKey":"belong_to_host","resources":["phone","camera"]},
+  {"type":"AFFINITY","topologyKey":"belong_to_cabinet","resources":["phone","camera"]}
+]
+```
+
+将该数组作为 `--resource-constraints` 的值，并保留原用例、固件、App、资源和并发参数先执行 `--dry-run`。Feature 顶部已有的 `# @firmware.affinity=belong_to_cabinet` 也会生成 phone/camera 约束；CLI 约束与其合并，不覆盖或削弱声明。
+
+入口在内部查询资源所属 Host/机柜，验证整组资源及并发；拓扑缺失、资源列表截断或没有完整同域组合时不创建任务。预检逐 Job 展示约束，约束进入确认 token，变化必须重新确认。有亲和约束的 Job 中每个资源别名仅支持 `count=1`，其他 count 明确拒绝，不静默降级。
+
+亲和性执行当前仅支持云端 `run`。带 Feature/CLI 亲和约束的 `run-local` 在建单前拒绝；不能在 legacy Client 建连之前等待资源分配，否则形成循环等待。无约束本地执行保持原流程。
+
+正式建单将约束写到 `CreateJobInput.constraints`，并读回 Job 确认持久化；创建后及运行轮询中核验实际绑定的逻辑名和拓扑。约束丢失、跨域、缺拓扑或确认仍运行但绑定不全时，进入取消、终态与资源释放闭环；状态与绑定分次读取产生冲突时先复核终态。未观测到完整正确分配不能报告通过。带约束的内部 `--no-wait` 同样在建单前拒绝。云端结果仅输出每 Job 的 `affinityVerification` 验证状态，不输出实际拓扑 ID。
+
+此能力不等于已完成生产部署验收，也不修复 Server 的独立 `$in` 查询问题；离线自测不能描述为实际云测通过。禁止绕过统一入口或靠反复建单碰运气。
+
+## 云端执行
+
+先只生成预检：
 
 ```bash
 python skills/quality/device-cloud-test-management/scripts/device_cloud.py run \
-  --app-url '<APP_URL>' \
+  --automation-type embedded \
+  --tests-repo 'https://gitlab.addx.ai/DEVT/test-suite/firmware-tests.git' \
+  --tests-ref '<REMOTE_BRANCH>' \
   --uid '<UID>' \
+  --firmware-version '1.19.35-d' \
   --dry-run
 ```
 
-把完整预检结果及其中的 `confirmation.token`、`planName` 展示给用户。只有用户明确确认该资源分组和并发计划后，才原样携带该摘要和计划名执行：
+示例省略配测版本，最终配测固件为 `1.19.35-d`；用例需要另一版本时添加 `--companion-firmware-version '<FIRMWARE_VERSION>'`。需要 App 时添加 `--app-url '<APP_URL>'`；链接只解析 App 运行参数，不改变测试来源或两种固件版本。
+
+当前入口将待测版本传为 `DEVIUM_FIRMWARE_VERSION`，由 Client 读取为 `firmware_version`。配测版本传为 `DEVIUM_COMPANION_FIRMWARE_VERSION`，配套 Client 配置读取支持将其解析为 `companion_firmware_version`，未提供时使用有效待测版本；旧 Client 缺少这一字段和映射，不能仅凭 Job 已带参数就声称配置已生效。Background 升级还依赖 App 产品、环境、国家和手机，缺项时当前 Client 会跳过或中止；提供固件参数不等于已刷入。`companionVersionConsumer: null` 表示当前尚无业务 OTA Step 消费配测字段，配置解析支持也不代表 OTA 已实现。如配测步骤尚无匹配实现，停止并报告能力缺口，不随机替换版本或宣称 OTA 已执行。详细字段见 [CLI 契约](references/cli-contract.md)。
+
+向用户展示完整预检，包含自动化类型及来源、待测/配测固件及来源、`planName` 和 `confirmation.token`。只有用户明确确认该用例、固件、资源和并发快照后，才保留全部预检参数，并用原样的计划名和 token 创建：
 
 ```bash
 python skills/quality/device-cloud-test-management/scripts/device_cloud.py run \
-  --app-url '<APP_URL>' \
+  --automation-type embedded \
+  --tests-repo 'https://gitlab.addx.ai/DEVT/test-suite/firmware-tests.git' \
+  --tests-ref '<REMOTE_BRANCH>' \
   --uid '<UID>' \
+  --firmware-version '1.19.35-d' \
   --plan-name '<PREFLIGHT_PLAN_NAME>' \
   --confirm '<PREFLIGHT_SHA256>'
 ```
 
-执行命令会重新预检；不可变用例提交、用例内容、国家、优先级、超时、场景、资源容量、资源分组或并发任一变化都会导致摘要不匹配并拒绝创建，必须展示新预检后重新确认。云端 Job 使用远端可达的提交 SHA，避免确认后分支前移；本地 Feature 有未提交改动时禁止执行。批量时同时使用 `--allow-multiple`；默认最多并发 4 个 Job，可用 `--max-concurrency` 下调。实时容量不足时不得创建 TestPlan；多 Job 不允许 `--no-wait`，避免绕过并发窗口。
+真实执行前会重新预检；自动化类型、两种固件及来源、仓库提交、用例内容、资源需求与约束、有效并发、国家、优先级或超时变化都会使确认失效。`capacitySnapshot` 仅用于实时容量展示，不把全局空闲数量绑定到 token：无关资源变化，或容量数量变化但仍满足原需求、约束及有效并发时，无需重复确认。容量不足、缺失拓扑或无法满足完整亲和组合时仍在建单前拒绝，不因 token 有效而放行；有效并发变化必须重新确认。这不是资源预留，也不固定某台物理设备。统一入口禁止 `--no-wait`，因为返回结果前必须完成 Job 终态和资源释放核验。
 
-上面是默认的云端 Host 容器执行。用户明确要求“本地 Client 使用云端资源”时，必须使用受控入口：
+验证 Client 分支镜像时，给 `run` 追加 `--client-image '<TAG>'`（如 `test-<短SHA>`）。它写入 Job `metadata.image`，预检显示 `clientImage` 并参与确认 token，不传则使用 Host 默认镜像；只接受标签，`run-local` 不支持。详见 [CLI 契约](references/cli-contract.md)。
+
+## 本地 Client 执行
 
 ```bash
 python skills/quality/device-cloud-test-management/scripts/device_cloud.py run-local \
-  --app-url '<APP_URL>' \
+  --automation-type embedded \
+  --cases-root '<LOCAL_FIRMWARE_TEST_REPO>' \
+  --tests-repo 'https://gitlab.addx.ai/DEVT/test-suite/firmware-tests.git' \
   --uid '<UID>' \
+  --firmware-version '1.19.35-d' \
   --client-root '<DEVICE_CLOUD_CLIENT_ROOT>' \
-  --plan-name '<PREFLIGHT_PLAN_NAME>' \
-  --confirm '<PREFLIGHT_SHA256>'
+  --dry-run
 ```
 
-禁止直接调用 `device-cloud-client/run_tests.py`。`run-local` 会把干净的 Client 提交、内容摘要和路径纳入确认摘要，再由 Skill/Server 按预检结果
-创建唯一的 TestPlan/Job，再让本地 Client 绑定并执行这一个既有 Job。Client 不得从
-`kb-tests/config/resources.yml` 重新生成资源需求或创建第二个 Job。Skill 会在创建计划前验证
-Client 和 `kb-tests` 是否包含既有 Job 绑定、飞书 SSO 邮箱和平台托管运行凭据能力；版本过旧时直接终止。
-真实执行前还会用当前 Python 检查 Behave、Pillow 和 GraphQL HTTP 依赖；依赖不兼容时在
-打开 SSO 或创建 TestPlan 前失败。Client 即使错误地以零退出码结束，只要输出包含致命导入/
-初始化异常，Skill 也必须返回失败，禁止报告“执行成功”。
-本地执行的计划名与云端执行统一为 `ai-<app>-*`；`<app>` 从 App 链接识别出的正式应用名映射生成（例如 `Kiwibit_Android → Kiwibit → kb`）。`kb` 只属于 Kiwibit，不能对其他 App 硬编码复用，也不能使用运行时类型 `BAPP` 代替应用名。负责人必须是本次 SSO 返回的邮箱，
-不得回退为 Windows/macOS 系统用户名或显示为“未知用户”。
+本地与云端使用同一套自动化类型、固件、仓库、UID 和资源预检；App 和配测版本仍按用例需要添加。`run-local` 只能绑定一个 Job；先由 Skill 创建唯一的受管 Plan/Job，再让本地 Client 绑定该 Job。禁止直接运行 `device-cloud-client/run_tests.py`。Client 版本必须包含 Client 自有 Behave runner/hooks 和 managed-local 协议；业务仓存在 `features/environment.py` 时立即停止。
 
-只预览时加 `--dry-run`；确认执行时把预检摘要传给 `--confirm`；明确批量时加 `--allow-multiple`；`--no-wait` 仅限单 Job。
+`trigger_cloud_job.py` 是内部兼容助手，不是用户执行入口。`run-local` 内部用其 `--no-wait` 创建唯一 Plan/Job 后，才由统一入口启动 Client 并负责终态及释放；这只是生命周期交接，不是测试已完成。不得直接调用底层脚本绕过统一入口。
 
-不得通过命令行、聊天、`--env-file`、`--inject-env` 或 Job metadata 主动提交 `GITLAB_TOKEN`、`CLIENT_GITLAB_TOKEN`、`PIR_SIGN_SECRET`、`RP_API_KEY`、`LITELLM_API_KEY`、`LANGCHAIN_API_KEY`、`REDIS_PASSWORD`。Skill 不扫描、不删除也不限制用户电脑已有的环境变量；运行凭据由 Server/Host/Vault 托管。
+## 环境
 
-### 5. 停止
+- Device Cloud 默认 `prod-cn`。只有用户明确要求 Host2、staging 或迁移验收时才使用 `staging-cn`。
+- App 包中的 `prod/staging/pre` 是 App 服务环境，与 Device Cloud 环境正交；旧 `_test_` 标记和其他未知环境不受支持。
+- 不接受、不读取、不输出业务运行密钥；凭据由 Server/Host/Vault 托管。
+
+## 停止与诊断
 
 ```bash
-python skills/quality/device-cloud-test-management/scripts/device_cloud.py cancel job \
-  --job-id <JOB_ID>
+python skills/quality/device-cloud-test-management/scripts/device_cloud.py cancel job --job-id <JOB_ID>
+python skills/quality/device-cloud-test-management/scripts/device_cloud.py cancel plan --plan-id <PLAN_ID>
 
-python skills/quality/device-cloud-test-management/scripts/device_cloud.py cancel plan \
-  --plan-id <PLAN_ID>
-```
-
-停止后必须查询并确认 Job 已到终态。平台没有 `cancelTestPlan` mutation；`cancel plan` 会取消并核验计划内全部未结束 Job，不删除历史记录。
-
-### 6. 失败诊断必须走完整 SOP
-
-禁止只看页面错误文本就下结论。默认运行：
-
-```bash
 python skills/quality/device-cloud-test-management/scripts/device_cloud.py diagnose \
   full --job-id <JOB_ID> --output-dir '<OUTPUT_DIR>'
 ```
 
-该命令固定执行：
+### 强制终态与资源释放闭环
 
-```text
-job-report
-→ 首个失败步骤
-→ timeline
-→ 失败时间窗口 logs
-→ evidence
-→ 下载并检查截图/XML
-→ 失败分类
-```
+`run` 和 `run-local` 在取得 Plan/Job 标识后的所有退出路径都必须执行清理，包括成功、用例失败、排队/执行超时、初始化异常、Client/Host 中断和用户中断：
 
-需要单独查询时再使用 [CLI 契约](references/cli-contract.md) 中的低层诊断命令。
+1. 正常结束时，等待并确认每个 Job 已进入终态。
+2. 非正常结束立即执行 fallback cancel；正常路径未在清理时限内进入终态时也 fallback cancel。
+3. Job 终态后查询手机和通用设备连接，确认没有资源仍绑定该 Job。
+4. 只有“Job 已终态且资源绑定数为 0”才算清理成功；不得因 Client 零退出码或测试本身通过而跳过核验。
+5. 清理失败必须让本次执行返回失败，并在 `[RESULT_JSON]` 的 `cleanup` 中保留 Plan ID、Job ID、最终状态、是否请求取消、终态/释放核验结果和错误原因，供后续人工清理。
 
-失败分类只能是：产品功能失败、业务断言失败、用例脚本过时、元素/导航不兼容、资源申请错误、平台或基础设施失败。
+本地建单助手已输出有效 Plan/Job 标识后再非零退出时，入口保留标识并清理，不启动 Client；即使清理成功，本次执行仍失败。若未获得可验证的标识，明确报告无法核验释放，不按可能重复的计划名猜测并取消任务。
 
-## SSO
-
-每次认证会在标准错误明确输出一种状态：
-
-```text
-SSO: reused cached refresh token
-SSO: browser launched at HH:MM:SS
-```
-
-- access token 只存在当前进程内存。
-- refresh token 存在操作系统安全凭据存储。
-- 云端 Host `run` 的同一次 CLI 操作必须复用一个已认证会话；查询资源、创建计划和轮询 Job 不得重复读取系统凭据。
-- refresh token 轮换时必须原地更新已有系统凭据，保留用户授予的访问控制；不得通过删除再新建覆盖已有条目。
-- 服务端返回的 refresh token 未变化时不得重复写入系统凭据。
-- Windows 使用系统 Credential Manager；macOS/Linux 必须预先安装 Python `keyring` 并配置可用的系统安全存储后端。缺少安全后端时认证会明确失败，禁止降级为明文文件。
-- 没有有效会话时只允许一个进程打开系统默认浏览器。
-- Server 校验 token 并使用登录邮箱写入真实 `launchedBy`。
-- 不输出任何 token 或 Secret 值。
+手动停止后同样确认全部目标 Job 已到终态并释放资源。失败诊断必须依次完成报告、首个失败步骤、时间线、失败窗口日志、证据下载与分类；不得只根据页面错误文本下结论。低层命令见 [CLI 契约](references/cli-contract.md)。
 
 ## 只读登录与资源验收
 
@@ -221,23 +230,4 @@ SSO: browser launched at HH:MM:SS
 
 ## 终态输出
 
-无论成功或失败，都必须明确输出：
-
-- Device Cloud 环境和 App 业务环境；
-- Plan ID、Job ID；
-- 最终资源组和场景数；
-- 最终状态；
-- 首个失败原因及失败分类；
-- 已下载附件的绝对路径。
-
-CLI 的结构化终态以 `[RESULT_JSON]` 开头。非零退出码表示测试或诊断失败，不等于 TestPlan/Job 没有创建。
-
-## 示例
-
-### Good Example
-
-用户说：“用这个 App 链接跑一条快速直播用例。”先用 `search-cases --module 直播 --text 快速` 查询；若唯一匹配，则以该 UID 生成预检。预检显示一个 Scenario、同组 `PHONE + PLUGINCAM`、实时容量和并发 1；用户确认后以 `--confirm` 创建，并最终返回 Plan ID、Job ID、状态和附件路径。
-
-### Bad Example
-
-用户说“一条直播用例”，却直接运行 `--module 直播`，在未显示匹配数量、未解析 camera 依赖的情况下创建包含多条 Scenario 的 Job；或者向用户索要 GitLab Token、RP Key、Host/设备 ID。以上做法均禁止。
+无论成功或失败，都明确输出：Device Cloud 环境、自动化类型及来源、测试仓库及解析提交、待测/配测固件及来源、App（有则输出，无则标明未提供）、Plan ID、Job ID、Scenario/UID、资源组、最终状态、首个失败原因和分类、终态与资源释放核验结果、附件绝对路径。结构化结果以 `[RESULT_JSON]` 开头；非零退出码或 `cleanup.verified=false` 必须如实视为失败。

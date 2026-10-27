@@ -131,6 +131,11 @@ def inventory(manifest: dict[str, Any]) -> list[dict[str, Any]]:
             sync.validate_config(config)
         except sync.SyncError as exc:
             raise RunnerError(f"sync[{index}] config is invalid: {exc}") from None
+        if config.get("stage_review"):
+            for dependency in ("gitlab_stage_review_dispatch.py", "gitlab_label_review.py"):
+                _release_script(manifest["release_dir"], dependency)
+            if Path(config["stage_review"]["route_config"]) != manifest["route"]["config"]:
+                raise RunnerError("stage review must reuse the owner manifest route config")
         channel_id = config["channel_id"]
         channels.add(channel_id)
         for project_id in config["gitlab"]["projects"]:

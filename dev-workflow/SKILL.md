@@ -26,6 +26,13 @@ description: Guide feature development or resume an approved implementation plan
 
 每次进入任务先扫描全部 10 步的状态与适用性；已完成且未受本次变更影响的步骤复用，不重做。后续只更新发生变化的步骤，保留可观测性、测试覆盖和部署验收的缺口。
 
+会话已绑定 Issue/MR 时，验收执行结束或用户明确确认通过、免验、部分完成、阻塞，AI 应在当前会话主动回写并回读，
+不等用户再次要求评论。按
+[统一验收契约](../../collaboration/gitlab-issue-sop/references/deployment-acceptance.md)
+直接调用 `acceptance.py report --issue ...`，恢复相关任务用 `pending --issue ...`。
+负责人回写不依赖 release-agent 或发布批次；缺少阶段/环境/版本信息列为待核实，保留已知结论和来源。
+只有 `REPORT_VERIFIED` 才报告同步完成。记录验收事实与发布侧判断版本适用性分开，不把信息缺口补造成部署或放行通过。
+
 ---
 
 ## Rules
@@ -44,7 +51,7 @@ description: Guide feature development or resume an approved implementation plan
    Markdown 另外保留给 GitLab comment、skill 内部 reference、`CLAUDE.md` / `AGENTS.md` 等 agent 指令文件。
 10. **Requirements exact-hash 门禁**：任何需求类工作必须先 invoke `requirements-analysis-agent`。`REQUIREMENTS_READY_FOR_PO_REVIEW` 仅是传输 marker；ready 唯一以结构化产物的权威 envelope 字段 `status_or_verdict: READY_FOR_PO_REVIEW` 判定，并要求 `content.readiness` 同值作为契约镜像，needs-input 唯一以 `outcome_kind: ATTEMPT_NEEDS_INPUT` 判定；字段冲突、marker 与 payload 不一致或只有 marker 时必须拒绝。只有 ready 产物经 PO 对精确 `artifact_id + artifact_hash` ACCEPT 后，才可进入 Step 2；`ATTEMPT_NEEDS_INPUT`、缺少 Artifact/hash 或未接受均停止。`dev-workflow` 不自行重建一份较弱的需求契约。
 11. **Producer 与 Gate 分权**：Requirements Agent 只产出 Artifact 或 ATTEMPT_NEEDS_INPUT，不得执行、签署或记录 ACCEPT。Coordinator 请求并验证独立 PO Gate；验收角色、独立身份和 exact-hash 证据以 `requirements-analysis-agent/references/requirements-contract.md` 为准。
-12. **全流程 Issue identity 不漂移**：Step 1 前按 [`gitlab-issue-sop` 生命周期契约](../../collaboration/gitlab-issue-sop/references/lifecycle-binding.md) 实时验证 Root Issue 和当前仓 Work Item。Requirements、设计、测试、开发分支、MR、CI/CD、部署、验收与最终关闭均复用该 binding；跨仓时每仓各有 Work Item，并原生关联 Root Issue。
+12. **全流程 Issue identity 不漂移**：Step 1 前按 [`gitlab-issue-sop` 生命周期契约](../../collaboration/gitlab-issue-sop/references/lifecycle-binding.md) 实时验证关联 Issue。Requirements、设计、测试、开发分支、MR、CI/CD、部署、验收与最终关闭均复用该 binding；跨仓时各仓 MR 关联同一个 Issue，并在该 Issue 中记录各仓 MR。
 
 ## 执行模式与真实门禁
 
@@ -791,7 +798,7 @@ DEV_TEST_REPORT → 独立 QA 报告 Review → 人工报告 Gate；本地自测
 
 **完成标准**：MR 创建成功 + CI 全绿 + 无 merge conflict + `code-review` 结论为"通过"或"有条件通过" + 敏感变更的 `security-compliance-review` 无红线问题。
 
-**Issue 回执**：记录 MR URL、exact head SHA、verified Issue association 与 review 结论并回读。MR 可合并或 CI 全绿均不关闭 Root Issue。
+**Issue 回执**：记录 MR URL、exact head SHA、verified Issue association 与 review 结论并回读。MR 可合并或 CI 全绿均不关闭 Issue。
 
 **阶段汇报**：MR + review 完成，进入 Step 8（CI 配置）；有效门禁与依赖满足后继续，逐步指导模式才询问下一步。
 
@@ -852,7 +859,7 @@ DEV_TEST_REPORT → 独立 QA 报告 Review → 人工报告 Gate；本地自测
 
 **完成标准**：定时流水线首次跑通绿色，故障可在飞书群收到告警，ReportPortal 能看到历史结果。
 
-**完成**：巡检、运行态/业务验收和所需观察窗口完成后，把证据边界写回并读回；仅当所有 required child Tasks terminal 且 final receipt 完整时才关闭 Root Issue。否则保留 open，写明 owner 与 next gate。
+**完成**：巡检、运行态/业务验收和所需观察窗口完成后，把证据边界写回并读回；仅当所有 required child Tasks terminal 且 final receipt 完整时才关闭 Issue。否则保留 open，写明 owner 与 next gate。
 
 ---
 

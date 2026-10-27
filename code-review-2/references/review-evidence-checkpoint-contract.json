@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "capability": "review-evidence-checkpoint/v1",
+  "artifact": "evidence-coverage.json",
+  "tool": "review_evidence_checkpoint"
+}

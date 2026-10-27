@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import importlib.util
 import re
 import shutil
 import subprocess
@@ -17,7 +18,8 @@ WORKFLOW = SKILL_ROOT / "workflows/add-logging.md"
 KINDS = ("Deployment", "StatefulSet", "Rollout")
 
 
-def example(marker: str, kind: str) -> dict:
+def example(marker: str, kind: str, *, routing_keyword: str = "staging-us",
+            runtime_env: str = "staging-us") -> dict:
     text = WORKFLOW.read_text(encoding="utf-8")
     match = re.search(r"```yaml\n\s*# " + re.escape(marker) + r"\n(.*?)```", text, re.S)
     assert match, f"missing executable workflow example: {marker}"
@@ -25,7 +27,8 @@ def example(marker: str, kind: str) -> dict:
     for before, after in {
         "<workload-kind>": kind,
         "<workload-name>": "orders",
-        "<env-keyword>": "staging-us",
+        "<env-keyword>": routing_keyword,
+        "<runtime-env-label>": runtime_env,
     }.items():
         source = source.replace(before, after)
     return yaml.safe_load(source)
@@ -142,6 +145,51 @@ def test_logging_source_repair_survives_transformer_order(
     # Full render equality preserves selectors, metadata, unrelated labels,
     # Service selectors and all non-label workload configuration.
     assert after == expected
+
+
+@pytest.mark.parametrize("kind", KINDS)
+def test_migrated_route_preserves_runtime_env_in_documented_patch(tmp_path: Path, kind: str) -> None:
+    def load(name, relative):
+        spec = importlib.util.spec_from_file_location(name, SKILL_ROOT / relative)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    resolver = load("logging_runtime", "validators/resolve_existing_runtime.py")
+    guard = load("logging_guard", "validators/check_logging_target.py")
+    app_root = tmp_path / "application"
+    source_path = "backend/k8s/overlays/prod-cn-tke"
+    runtime = app_root / source_path
+    runtime.mkdir(parents=True)
+    config = fixture(runtime, kind)
+    config["namespace"] = "prod-orders"
+    write_yaml(runtime / "kustomization.yaml", config)
+    before = render(runtime)
+    argocd_root = tmp_path / "argocd-apps"
+    application_file = argocd_root / "tencent-100052802231-cn-prod/orders-prod-cn.yaml"
+    application_file.parent.mkdir(parents=True)
+    repo_url = "https://gitlab.addx.ai/services/orders.git"
+    write_yaml(application_file, {
+        "apiVersion": "argoproj.io/v1alpha1", "kind": "Application",
+        "metadata": {"name": "orders-prod-cn", "labels": {"app": "orders", "env": "prod-cn"}},
+        "spec": {
+            "source": {"repoURL": repo_url, "path": source_path},
+            "destination": {"server": "https://kubernetes.default.svc", "namespace": "prod-orders"},
+        },
+    })
+    identity = dict(application_file=application_file, argocd_root=argocd_root,
+                    app_root=app_root, expected_repo_url=repo_url, app="orders",
+                    env_keyword="prod-cn-tke-2231")
+    target = resolver.resolve_existing_runtime(**identity, rendered=list(before.values()), allow_label_repair=True)
+    assert guard.check_logging_target(env_keyword=target["env_keyword"], runtime_env=target["runtime_env_label"]).startswith("compatible-config;")
+    config.update(example("logging-env-pod-patch", kind, routing_keyword=target["env_keyword"],
+                          runtime_env=target["runtime_env_label"]))
+    write_yaml(runtime / "kustomization.yaml", config)
+    after = render(runtime)
+    expected = copy.deepcopy(before)
+    expected[(kind, "orders")]["spec"]["template"]["metadata"]["labels"]["env"] = "prod-cn"
+    assert after == expected
+    assert resolver.resolve_existing_runtime(**identity, rendered=list(after.values()))["label_repair_required"] is False
 
 
 def test_commonlabels_env_requires_selector_migration(tmp_path: Path) -> None:

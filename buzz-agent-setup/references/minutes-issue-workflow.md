@@ -1,6 +1,6 @@
 # 建频道默认项：飞书妙记 → 已有 Issue
 
-这是新建业务 Channel 的默认配置项：生成候选 Workflow、给默认 `-desk`（或用户指定且已注册的其它 agent）加载 `meeting-issue-notes`，在接入清单中逐项验收。**默认准备不等于默认放行**；缺权限/来源验证/幂等 writer 时保留 disabled 或 draft 并记录 owner/恢复条件，不能把模板说成现网已配置。本次只分发 Skill/模板与 how-to，不创建线上 Workflow、不写生产 Issue、不向同事发消息。
+这是新建业务 Channel 的默认配置项：生成候选 Workflow、给默认 `-desk`（或用户指定且已注册的其它 agent）加载 `meeting-issue-notes`，在接入清单中逐项验收。**默认准备不等于默认放行**；缺基础读取/评论权限或固定项目范围时保留 disabled 或 draft 并记录 owner/恢复条件，不能把模板说成现网已配置。本次只分发 Skill/模板与 how-to，不创建线上 Workflow、不写生产 Issue、不向同事发消息。
 
 业务入口是**会后人把妙记链接发到已绑定飞书群**。不邀请 bot 参会、不订阅日程。也接受当前授权范围内、正文或 notes 含妙记链接的 GitLab Issue URL。已有自然语言任务可直接 @ agent 调用专用 Skill；纯链接自动唤醒需完成下方接入。裸 `#110` 不在原生自动 filter 范围，需完整链接或明确 @ agent 并提供唯一项目上下文。
 
@@ -30,9 +30,9 @@ Buzz 源码检查点：`bfc201b15736eb5a005999d3ff3e7d4ea244812b`（本机 `/hom
 
 ## 新建频道接入步骤
 
-1. 沿用已确认的 Channel/群/受众与 Canvas repo 清单；默认目标取本频道已注册 `-desk`，如用户选择其它 agent，回读 bot membership、kind:0/30177 和当前 worker 订阅。配置中记录精确 name/pubkey；不存在则 pending，不能捏造名字。加入 `meeting-issue-notes` 与已有 `gitlab-issue-sop`，刷新真实加载 revision 后验收。
-2. owner 固定批准的 GitLab host/project id/path、动作预算（默认自有证据 note；正文受管区另有授权才写）、会议资料披露出口、唯一 writer/ledger 路径；以当前可信 Canvas repo 清单取交集，缺/变更/多义 fail closed。Canvas 不存 token、不自行授予新增 repo 权限。
-3. 读能力预检：以**该 agent 已批准的身份**读取一条获准样例 metadata+原始 transcript，并确认原消息回读身份、群/Channel 绑定与 sender_type。用户身份实测不替代 agent 验收；缺 scope、资源共享或原消息安全回读时保留 draft，owner 负责恢复。不借个人 profile/其它 bot，不自动申请/扩权。
+1. 沿用已确认的 Channel/群/受众与 Canvas repo 清单；默认目标取本频道已注册 `-desk`，如用户选择其它 agent，回读 bot membership、kind:0/30177 和当前 worker 订阅。配置中记录精确 name/pubkey；不存在则 pending，不能捏造名字。加入 `meeting-issue-notes` 与已有 `gitlab-issue-sop`，刷新真实加载 revision 后验收。为执行者显式注入本应用的独立 Lark config/data namespace 和 Node/CLI 入口；验证运行 PID 实际加载环境，而不只检查磁盘 env 文件。
+2. owner 固定批准的 GitLab host/project id/path、动作预算（默认自有证据 note；正文受管区另有授权才写）、会议资料披露出口；日常评论使用现有 Agent 工具查重和回读；以当前可信 Canvas repo 清单取交集，缺/变更/多义 fail closed。Canvas 不存 token、不自行授予新增 repo 权限。
+3. 读能力检查：使用**该 agent 已批准的身份**及已有工具；每次实际触发读取该条 metadata+原始 transcript，并确认原消息回读身份、群/Channel 绑定与 sender_type。不要求为启用预先准备一条会议样例；该条缺 scope、资源共享或原消息安全回读时只暂停该条，owner 负责恢复。不借个人 profile/其它 bot，不自行批准/扩权。缺权限时按 [读取诊断与获批恢复](../../../collaboration/meeting-issue-notes/references/access-recovery.md) 准备最小申请、沿用已授权审批入口；保留原 source，获批后同身份探针并继续，不要求用户重发。
 4. 回读实际入站事件，收集允许的 human signer 和本绑定镜像 signer；记录 signer provenance。Workflow filter 的 publisher allowlist 仅缩小候选面。使用镜像时必须另外能从精确原消息确认 user sender，并拒绝 bot/同步回流。原群的人发同链接可触发；Agent/Workflow/GitLab sync 消息不能写回。
 5. 使用 [模板](workflows/minutes-issue-wake.yaml) 和 renderer 生成 **disabled** YAML。`issue-project` 来自受保护配置与可信 Canvas 交集；不能从待处理正文填入。模板将 source event id 传给 Skill，不把不可信正文插入指令；wake 不回显输入链接，所有结果带结果 marker，sync marker 排除再加原消息身份检查，阻断循环。字符串 prefix 筛选不是 URL 校验，Skill 仍做完整 URL parser 校验。示例只生成本地文件：
 
@@ -44,8 +44,8 @@ Buzz 源码检查点：`bfc201b15736eb5a005999d3ff3e7d4ea244812b`（本机 `/hom
      --issue-project gitlab.addx.ai/<group>/<project> > minutes-issue-wake.rendered.yaml
    ```
 
-6. 持有现有授权时才在隔离 Channel 或批准的目标 Channel 下发，复用 runtime-setup 的 `workflows create/update --channel` 路线及原作者身份；读回完整定义、owner、channel、enabled。启用前按下表验收；缺前提就保留 disabled，并将默认项记为 pending。不要为了验收增加权限/创建业务 Issue。无测试写授权时只跑 dry-run 并标明写回未验收。
-7. 启用需持久 ledger、跨进程锁和单 writer 的实际实现可用，并验证未知写结果只读对账。当前离线 helper 不提供这些机制。启用后使用说明由 setup 正常既有步骤发送一次：发直链或容器 Issue、更新范围与来源格式、如何补齐权限/唯一目标；无发群授权时只交付文字草稿。分享材料：[单文件 HTML how-to](../../../../docs/agent-harness/how-to/meeting-to-issue.html)。
+6. 持有现有授权时才在隔离 Channel 或批准的目标 Channel 下发，复用 runtime-setup 的 `workflows create/update --channel` 路线及原作者身份；读回完整定义、owner、channel、enabled。按基础读取/评论权限与固定项目范围启用；下表是实际触发的质量检查，缺基础前提才保留 disabled，并将默认项记为 pending。不要为了验收增加权限/创建业务 Issue。无测试写授权时只跑 dry-run 并标明写回未验收。
+7. 普通 Issue 评论不以持久 ledger、跨进程锁、独立 writer 或专项完整 L4 为启用前提。用 Agent 自己的已有身份，唯一目标、完整查重、最小写入及 GET 回读即可；未知结果先对账，歧义或资料无权只暂停该条。启用后使用说明由 setup 正常既有步骤发送一次：发直链或容器 Issue、更新范围与来源格式、如何补齐权限/唯一目标；无发群授权时只交付文字草稿。分享材料：[单文件 HTML how-to](../../../../docs/agent-harness/how-to/meeting-to-issue.html)。
 
 ## 验收矩阵与回执
 
@@ -58,8 +58,16 @@ Buzz 源码检查点：`bfc201b15736eb5a005999d3ff3e7d4ea244812b`（本机 `/hom
 | repo 越界 / Canvas 不可信 / 恶意指令 / 同名 agent | 不写、不扩权；说明可恢复条件 |
 | bot/Workflow 输出 / GitLab 同步包含同链接 | 不回写、不形成二次唤醒链；原 sender 核验是硬前提 |
 | 缺转写权限 / 仅摘要 / 姓名或时间缺失 | 缺口或降级纪要；未知明确未知，不造发言归属 |
-| 请求超时但服务器写成功 / ledger pending 重启 | 只读对账找到同 operation；不二次 POST/PUT |
-| 并发 / 分页不完整 / 多个自有 marker | 单 writer/锁生效或停止；不能把部分扫描当不存在 |
+| 请求超时但服务器写成功 / 任务重启 | 只读对账找到同 operation；不二次 POST/PUT |
+| 并发 / 分页不完整 / 多个自有 marker | 重读并发变化，不覆盖或重复；不能把部分扫描当不存在 |
 | 结果回读 | project/IID、note id/author、source hash、operation id 和内容 hash 匹配 |
 
-回执不含逐字稿/密钥：candidate SHA、配置 hash、channel/agent 绑定、read identity、原消息/event/workflow id、源版本 hash、目标 project/IID、note id、no-op 与负向结果、writer/锁/ledger 能力和恢复条件。分别写 `template=prepared`、`local_contract=pass/fail`、`live=pending/pass`；不能从离线测试推断真实平台成功。
+回执不含逐字稿/密钥：candidate SHA、配置 hash、channel/agent 绑定、read identity、原消息/event/workflow id、源版本 hash、目标 project/IID、note id、no-op 与负向结果、查重/回读结果和待处理项。分别写 `template=prepared`、`local_contract=pass/fail`、`live=pending/pass`；不能从离线测试推断真实平台成功。
+
+普通评论查重为 best-effort，不承诺原子去重；并发时可能重复，发现后读回核对、报告并更正自有重复评论。配置启用与已写入的唯一性分别记录。需要严格原子幂等的任务另行配置机制，不作为普通评论默认门槛。
+
+## 更新完成通知
+
+全部目标处理结束后，在原授权群/Channel 发送一条简短批次摘要，列出每个已写后 GET 读回确认的 Issue 链接和变化摘要，分别计数 no-op、待确认与失败；没有实际更新时明确说明。保留来源 Thread 的结果回执，但不重复转发同一批摘要。不扩大收件人或复制逐字稿/受限原文。通知带对应结果 marker 和稳定批次键，普通原 Thread 回执写前查重、发送后同身份读回；已有独立广播发送器时写入其发送账本并读回；结果未知先对账，不自动重发。只有 Issue 写入与完成摘要均读回成功，才宣称该批次已闭环。
+
+通知合并与事务：原 Thread 的结果回执已经包含同批次完整完成摘要时，复用该消息，不另发第二条同内容群消息。通知稳定键取频道 + 固定计划窗口（每日）或meeting_key（canonical host + minute_token）+ 会议源版本 + 精确目标集合（GitLab host/project/IID，妙记），不取随机 run ID 或生成措辞。原 Thread 回执沿用上述 best-effort 查重，不要求新建发送账本、writer或锁，也不承诺并发只发一次。下述强事务只适用于已经配置的独立广播发送器，不是普通评论或 Thread 回执的启用前提：单 writer/跨进程锁覆盖核验、发送、读回；发送前持久化 pending，记录 destination、预期 sender 和内容 hash，发送后同身份核对消息 ID、sender、destination 和内容 hash 再记 applied。崩溃或发送结果未知只读对账；无法唯一对账保持 pending，不换键重发。

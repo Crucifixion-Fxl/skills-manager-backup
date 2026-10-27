@@ -12,7 +12,6 @@ import argparse
 import json
 import mimetypes
 import re
-import sys
 import time
 import urllib.error
 import urllib.parse

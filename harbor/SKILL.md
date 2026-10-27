@@ -24,8 +24,8 @@ description: 通过 Harbor API 管理镜像仓库项目和 Robot Account。为�
 | CN Prod TKE | `harbor-cn.addx.live` | `tencent-100014919455-cn-main` |
 | CN Staging TKE 内网 | `harbor-02231-cn-staging.addx.live` | `tencent-100052802231-cn-staging`；集群内镜像引用的默认入口 |
 | CN Staging TKE 受限公网 | `harbor-02231-cn-staging-pub.addx.live` | 同一 Harbor 的外部入口；SG 镜像同步、获准来源的外部 API / 推拉访问 |
-| CN Tech Service TKE 内网目标（待切换） | `harbor-02231-cn-tech-service.addx.live` | `tencent-100052802231-cn-tech-service`；切换验收后的集群默认入口 |
-| CN Tech Service TKE 受限公网目标（待切换） | `harbor-02231-cn-tech-service-pub.addx.live` | 同一 Harbor 的外部同步/API 入口目标 |
+| CN Tech Service TKE 内网（2026-10-19 已核验） | `harbor-02231-cn-tech-service.addx.live` | `tencent-100052802231-cn-tech-service`；已核验的集群默认入口 |
+| CN Tech Service TKE 受限公网（2026-10-19 已核验） | `harbor-02231-cn-tech-service-pub.addx.live` | 同一 Harbor 的受限外部/API 入口 |
 
 CN 当前全部在腾讯云；`harbor-74192-cn-prod` / `harbor-80144-cn-staging` / `harbor-80144-cn-dev` 属于已弃用 AWS CN 集群的历史地址，不能作为新增项目目标；旧腾讯 staging 集群 `cls-i860hdh9` 上的 Harbor 已无流量，同样不可使用。从 TKE runner 也无法推送到 `harbor-80144-cn-staging`。实际 registry 与 pull secret 从目标 Application、Image Updater 和 Harbor values 核对，见 [CN 腾讯云环境事实与核验入口](../../infrastructure/k8s-ops/references/cn-tencent-inventory.md)。
 
@@ -51,22 +51,23 @@ CN 当前全部在腾讯云；`harbor-74192-cn-prod` / `harbor-80144-cn-staging`
 依据：[私网部署与认证验收回执](https://gitlab.addx.ai/DEV/k8s/-/blob/ce9e51334789c5accac3cb580e44cbb1685214c5/clusters/tencent-100052802231-cn-staging/harbor/private-entry/README.md)。
 这是固定版本的运维回执；后续执行仍须核对当前声明与实际调用方，不把回执当成本轮在线复测。
 
-### CN tech-service 双入口目标（待切换）
+### CN tech-service 双入口（2026-10-19 已核验）
 
-用户于 2026-09-28 确认先修订 skill，实际域名切换后续实施。新账号为 `100052802231`，
-域名编号为 `02231`；完整目标与迁移前 Git 声明见 [CN 集群清单](../../infrastructure/k8s-ops/references/cn-tencent-inventory.md)。
+账号 `100052802231`、北京 TKE `cls-o0gwzdpz`；完整
+[准入回执](../cicd-developer/references/cn-tech-service-admission-2026-10-19.md)记录 live 来源与限制。
 
-- 集群内部镜像目标使用 `harbor-02231-cn-tech-service.addx.live`；SG 等获准外部调用方
-  使用 `harbor-02231-cn-tech-service-pub.addx.live`。设计为同一实例双入口，不是两个同步副本。
-- **当前尚未完成切换**：不要据此修改现有镜像、复制规则或删除旧认证项，也不要把内网失败
-  当作自动切公网的依据。执行 API / 推拉前，从当前目标集群的 GitOps 和 live 入口确认可用 host。
-- 切换验收须包括 registry、`externalURL` 和 `/service/token` 的实际认证 realm、TLS、
-  私网/公网解析及来源限制。tech-service 尚无该双入口部署回执，不能照搬 staging 的
-  “公网 token 域在 VPC 内解析私网”结论；由实际部署确定并验证完整认证链。
-- runner 的 `HARBOR_REGISTRY`、base-images fanout/replication、Image Updater api_url/prefix、
-  平台/业务镜像及 Docker `auths` 必须对应正确入口。新私网 host 要有精确 auth key；
-  同一有效 robot 可复用，但凭据条目与权限仍须核验。密钥源同步、Kyverno 分发及
-  `harbor-registry-pull` 的消费关系也需核对，不能仅改文档就认为全链已迁移。
+- 集群默认私网 registry 为 `harbor-02231-cn-tech-service.addx.live` → `10.2.0.6`；
+  获准的外部 API / 推拉使用 `harbor-02231-cn-tech-service-pub.addx.live` → `62.234.5.152`。
+  本轮在目标 TKE 中 `-pub` 也解析公网，不具有 staging 的 split DNS 合同。
+- 两入口 HTTPS `/v2/` 均返回 401 Bearer challenge，TLS 校验通过；realm **随请求 host**
+  返回同域 `/service/token`，core `EXT_ENDPOINT` 为私网域。不能强制改成 staging 的 token realm。
+- Runner 4942 已使用私网 `HARBOR_REGISTRY`，manager/helper/实际作业镜像已运行；
+  私网 hostname 的 auth key 存在，`-pub` auth key 尚未配置到该 Runner pull secret。
+  对新增公网消费者、业务 push 路径和 Image Updater 仍逐项核验，不批量迁移既有消费者。
+- 使用现有 Runner 凭据核验 token HTTP 200；ResourceSpace 原要求的 Ubuntu digest 在
+  `base/ubuntu` 路径返回 404。该精确镜像尚未通过，不能以平台入口可达替代它的镜像门禁。
+- 本机对私网 registry 超时不代表目标 TKE 不可用；不要因此将部署默认值切成公网。
+  本回执没有重新验收全部 fanout/replication、业务 push 权限或最终应用拉取。
 
 ## 认证
 
@@ -95,8 +96,8 @@ export HARBOR_PASSWORD="<admin-password>"
 | CN prod TKE 项目 | `harbor-cn.addx.live` |
 | CN staging TKE 项目（100052802231，集群内） | `harbor-02231-cn-staging.addx.live` |
 | CN staging TKE 外部 API / 推拉（获准来源） | `harbor-02231-cn-staging-pub.addx.live` |
-| CN tech-service TKE 集群内项目（目标待切换） | `harbor-02231-cn-tech-service.addx.live` |
-| CN tech-service TKE 外部 API / 推拉（目标待切换） | `harbor-02231-cn-tech-service-pub.addx.live` |
+| CN tech-service TKE 集群内项目 | `harbor-02231-cn-tech-service.addx.live` |
+| CN tech-service TKE 外部 API / 推拉 | `harbor-02231-cn-tech-service-pub.addx.live` |
 
 设置基础 URL：
 

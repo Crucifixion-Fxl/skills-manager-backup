@@ -8,27 +8,9 @@
 
 ### 认证
 
-使用 `troubleshooting` skill 的 `get_token.mjs` 获取 JWT token：
+复用宿主注入的 `TROUBLESHOOTING_TOKEN`，可为个人 PAT（`tmt_`）或已有 JWT；请求统一使用 Bearer。Python 查询脚本从进程环境读取它，bash/zsh 调用子进程前需 `export TROUBLESHOOTING_TOKEN`（只导出变量名，不打印值）。
 
-```bash
-# SKILL_DIR 指向 troubleshooting skill Base directory（会话启动时由 Skill 工具注入）
-# macOS / Linux (bash/zsh)
-SKILL_DIR="<troubleshooting skill Base directory>"
-node "$SKILL_DIR/references/get_token.mjs"
-export TROUBLESHOOTING_TOKEN="<token>"
-
-# Windows PowerShell
-$SKILL_DIR="<troubleshooting skill Base directory>"
-node "$SKILL_DIR\references\get_token.mjs"
-$env:TROUBLESHOOTING_TOKEN="<token>"
-
-# Windows CMD
-set SKILL_DIR=<troubleshooting skill Base directory>
-node "%SKILL_DIR%\references\get_token.mjs"
-set TROUBLESHOOTING_TOKEN=<token>
-```
-
-所有请求需包含 `Authorization: Bearer $TROUBLESHOOTING_TOKEN`（Windows CMD 中引用该变量请使用 `%TROUBLESHOOTING_TOKEN%`）。
+没有凭据时按 [认证流程](../references/auth_flow.md) 选择 PAT 或交互 JWT；`get_token.mjs` 不创建 PAT。不要裸运行登录脚本、打印或手工把 Token 明文拼进命令。PAT 401 停止并核对有效期/状态/环境支持，不自动换 JWT；403 与 503 按认证流程分别处理。US 与 EU 查询分别验证权限，认证失败不能当作“设备未绑定”。
 
 ### API 信息
 

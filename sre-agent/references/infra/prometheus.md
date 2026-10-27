@@ -2,7 +2,7 @@
 
 | 账户/项目 | 环境 | 端点 | 类型 |
 |-----------|------|------|------|
-| aws-302571458622 | us-prod | `http://thanos-prod-us.addx.live` | Thanos |
+| aws-302571458622 | us-prod | `https://victoria-metrics-us-prod.addx.live/select/0/prometheus` | VictoriaMetrics 集群；API base 含租户路径，保留 60 天 |
 | aws-002497567426 | us-tech-service | `http://thanos-us.addx.live` | Thanos |
 | aws-740315635167 | eu-prod | `http://thanos-prod-eu.addx.live` | Thanos |
 | aws-769494896000 | eu-data | `http://prometheus-eu-data.addx.live` | Prometheus |
@@ -12,15 +12,15 @@
 | tencent-100014919455 | cn-prod（cn-main） | `http://thanos-cn.addx.live` | 存量 Thanos；与 VictoriaMetrics 迁移共存，先验证 job/时间范围 |
 | tencent-100014919455 | cn-prod（cn-main） | `http://victoria-metrics-cn.addx.live/select/0/prometheus` | VictoriaMetrics 集群；API base 含租户路径 |
 | tencent-100052802231 | cn-staging | 先查集群 `victoria-metrics` namespace 的 vmsingle Service，再 port-forward；API base 为本地转发地址 | VictoriaMetrics 单机；不假设 prod Thanos 已聚合 |
-| tencent-100052802231 | cn-tech-service | **目标，待切换**：`https://victoria-metrics-cn-tech-service-tke.addx.live/select/0/prometheus` | VictoriaMetrics 集群；API base 含租户路径，尚非可用性证明 |
+| tencent-100052802231 | cn-tech-service | `https://victoria-metrics-cn-tech-service-tke.addx.live/select/0/prometheus` | VictoriaMetrics 集群；2026-10-19 查询 HTTP 200，API base 保留租户路径 |
 
-CN 账户/集群来源见 [CN 清单](../../../k8s-ops/references/cn-tencent-inventory.md)。监控声明来源：`argocd-apps/tencent-100052802231-cn-staging/victoria-metrics-k8s-stack-application.yaml` 与 `k8s/clusters/tencent-100014919455-cn-main/victoria-metrics-config/`；tech-service 目标及固定版本旧声明见 [域名切换清单](../../../k8s-ops/references/cn-tencent-inventory.md#cn-tech-service-目标域名待切换)。实际查询前核对 Ingress/Service、租户、认证与可用性；目标清单不证明已经部署。
+CN 账户/集群来源见 [CN 清单](../../../k8s-ops/references/cn-tencent-inventory.md)。监控声明来源：`argocd-apps/tencent-100052802231-cn-staging/victoria-metrics-k8s-stack-application.yaml` 与 `k8s/clusters/tencent-100014919455-cn-main/victoria-metrics-config/`；tech-service 入口核验见 [2026-10-19 准入回执](../../../../delivery/cicd-developer/references/cn-tech-service-admission-2026-10-19.md)及 [入口与边界](../../../k8s-ops/references/cn-tencent-inventory.md#cn-tech-service-入口已核验2026-10-19)。实际查询前仍核对 Ingress/Service、租户、调用方权限与采集范围；回执不证明全部业务指标已被采集。
 
 tech-service 使用 [query helper](../../../../quality/performance-preflight/references/query-helpers.py) 时，必须显式设置 `PROMETHEUS_CN_TECH_SERVICE_URL` 为现场核验的 API base（可以是经核验的现有入口或 port-forward）。缺失时 helper 不发请求，也不回退旧域名、新目标或 prod。
 
 ### CN tech-service VMAlert
 
-**目标，待切换**：`https://vm-alert-cn-tech-service-tke.addx.live`。VMAlert 负责评估规则并向 Alertmanager 发送告警，不能替代上表 vmselect 的 PromQL 查询 base。排查规则加载/评估和通知时，先核对实际 VMAlert 的 namespace/rule selector、数据源和 Alertmanager 路由，再访问经核验的入口；目标域名的认证和可用性尚待验证。规则归属和通知链路见 [VM 告警说明](../../../../delivery/cicd-developer/references/victoriametrics/alerting.md)。域名命名调整不修改现有 cluster/job 标签。
+入口 `https://vm-alert-cn-tech-service-tke.addx.live` 的 `/-/healthy` 已于 2026-10-19 通过 TLS / HTTP 200 核验。VMAlert 负责评估规则并向 Alertmanager 发送告警，不能替代上表 vmselect 的 PromQL 查询 base。健康检查不证明告警通知已送达；排查前仍核对访问权限、实际 VMAlert 的 namespace/rule selector、数据源和 Alertmanager 路由。规则归属和通知链路见 [VM 告警说明](../../../../delivery/cicd-developer/references/victoriametrics/alerting.md)。域名命名调整不修改现有 cluster/job 标签。
 
 ### VM 级监控组件
 
@@ -57,14 +57,14 @@ GCP 旧 prod 集群 (gcp-a4xcloud-p)      GCP 新 prod 集群 (gcp-a4xcloud-p-us
 ### 端点选择规则
 
 告警 labels 中的 `prometheus_group` 或 `job` 前缀只提供环境线索，查询前还要核验采集实例和资源归属：
-- `us-prod-*` → thanos-prod-us
+- `us-prod-*` / `prod-us-*` → US prod VictoriaMetrics
 - `us-staging-*` / `staging-us-*` → thanos-us
 - `eu-prod-*` → thanos-prod-eu
 - `eu-data-*` → prometheus-eu-data
 - `us-data-*` → prometheus-us-data
 - `cn-prod-*` / `prod-cn-*` → CN prod：按 job 实际采集位置选择同账户 Thanos 或 VictoriaMetrics
 - `cn-staging-*` / `staging-cn-*` → 必须显式核验采集目标；cn-main 配置仍有 `cn-staging-kiss` 和 `cn-staging-kafka-metrics`，不能仅凭前缀改查新 staging vmsingle，也不能默认查 prod
-- `cn-tech-service*` → CN tech-service 逻辑环境；核验资源与采集实例后，显式选择实际 VictoriaMetrics API base，不能自动连接待切换域名
+- `cn-tech-service*` → CN tech-service 逻辑环境；核验资源与采集实例后，显式选择实际 VictoriaMetrics API base，不根据 job 前缀自动选择域名
 
 `cluster`、scrape 配置与 Application destination 优先于模糊 job 前缀。Dispatcher 提取的 `cn-staging` 只是逻辑环境，不能代替现场目标核验。使用 query helper 时，这类 job 必须传明确 target：`cn` 表示已核验的 cn-main 存量指标，`cn-staging` 表示新集群，并配置目标实际 API base。缺少目标证据时先解析资源归属。VictoriaMetrics 集群在 `/select/0/prometheus` 后追加 `/api/v1/query`；单机模式不追加租户路径。
 

@@ -45,11 +45,11 @@ After hitting the admin API, you **must** close the loop with three data sources
 | `staging-us` | `http://thanos-staging-us.addx.live` |
 | `staging-eu` | `http://thanos-staging-eu.addx.live` |
 | `staging-cn` | `http://thanos-cn.addx.live` |
-| `prod-us` | `http://thanos-prod-us.addx.live` |
+| `prod-us` | `https://victoria-metrics-us-prod.addx.live/select/0/prometheus`（VictoriaMetrics） |
 | `prod-eu` | `http://thanos-prod-eu.addx.live` |
 | `prod-cn` | `http://thanos-cn.addx.live` (CN 不带 `prod-` 前缀) |
 
-> Thanos 不需要鉴权,直接 `curl` 即可。
+> Thanos / VictoriaMetrics 均不需要鉴权,直接 `curl` 即可。
 
 ## 3. 必备 PromQL 查询 / Required PromQL queries
 

@@ -30,6 +30,14 @@ An attempt receives a durable retry lease before its exact read (30 seconds, exp
 
 The report's `hostd.feishu_ingest` exposes only pending count, scan completion, scan failure and capacity wait. Tokens and message bodies are not reported. This wave covers ascending chat/root discovery, including inline replies; descending thread-history pagination retains its prior limits and is not claimed complete.
 
+Recovery of an old Buzz-to-Feishu mapping reads native root-history metadata in a fixed interval, with at most 150 pages. File, todo, forwarded and human-card bodies do not make that metadata traversal incomplete. Discovery itself neither routes these bodies nor authorizes a send: every candidate still requires a fresh same-bot message GET, a matching signed Buzz source, actual sender and root checks. Truncation, duplicate IDs, token cycles, invalid scope or timestamps remain failures; no partial traversal proves absence. Ordinary body ingestion and thread-history limits are unchanged.
+
+## Human recording-completed cards
+
+A freshly read human `interactive` message can carry a Feishu meeting recording-completed card. The normalizer recognizes the exact supported Chinese/English/Japanese recording title and one unique HTTPS Feishu `/minutes/<token>` link from visible native card fields or rendered link elements. It emits only the recording title and canonical minute URL, while retaining the original source ID, sender, body, chat and millisecond creation evidence. Query parameters are not task identity. Hidden action values and buttons are not executed or used as source links; foreign hosts, non-minute paths, multiple distinct minutes and other human cards remain unsupported pending sources.
+
+App/bot cards remain non-human sources. Parsing does not grant transcript access, change Workflow authors, expand GitLab scope or claim an Issue update. A card discovered before this upgrade is retried through its original retained ID and native GET; no queue clearing or synthetic repost is needed. Actual Workflow wake, the agent's own minute/Canvas access, Issue readback and meeting deduplication require separate live acceptance.
+
 ## Offline acceptance
 
 `tests/test_hostd_feishu_ingest.py` exercises actual temporary SQL, Worker restarts and the low-level fake Feishu/relay transport. It covers dense timestamp pages, atomic capacity failure, query scope changes, token failure/cycles, source deletion or malformed fresh reads, ACK/UNKNOWN handling, signed-write crash recovery, budget retention, old unattempted sources, root dependency restoration, context dependencies across batches, and v17 migration preserving existing business rows. Existing hostd mapping/recovery/pause and legacy common-round suites supply the surrounding regression gates.

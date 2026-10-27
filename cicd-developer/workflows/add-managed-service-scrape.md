@@ -27,6 +27,7 @@ TencentDB/CKafka）接入指标采集。这类资源没有可直接抓的集群�
 - `references/victoriametrics/README.md`（VMServiceScrape 契约）
 - `references/vault-paths/resolver.md` + `references/vault-paths/instances.yaml`（凭据路径与 Vault 实例）
 - `references/data/clusters.yaml`（目标集群、`vault_css`、Harbor、argocd 目录）
+- [application NodePool placement](../references/nodepool-placement.md)（普通共享池、架构与 NAT 证据）
 
 ## 进入条件
 
@@ -48,10 +49,22 @@ TencentDB/CKafka）接入指标采集。这类资源没有可直接抓的集群�
     白名单，只列 prod 实例 id，明确排除 staging/pre/test。
   - 只读清点目标资源确认有东西可采（如 `aws rds describe-db-instances`、`gcloud sql instances
     list`、`tccli cdb DescribeDBInstances`）。0 个实例则无需部署。
+  - 生成 exporter 前按 NodePool placement reference 解析准确目标的池合同与
+    默认 private subnet/NAT 或已确认网络例外的证据。`metrics-collector` namespace、只读 IAM 或 observability
+    Project 均不使 exporter 成为平台控制器；不得放到 `cicd-system` / `crossplane-providers`
+    专用池。普通 exporter 默认共享，例外按 reference 记录明确的能力/隔离依据。
+    所有 provider 默认私有子网 + 稳定 NAT；特殊网络要求须按 reference 明确确认，不能因能力池而豁免。
+    EKS 使用已核验的 nodepool、架构、容量和目标已提供的网络约束；NodeClass 通过
+    `nodeClassRef` 及运行证据核验，不向 Pod selector/required affinity 注入
+    `karpenter.k8s.aws/ec2nodeclass`。network 标签仅在 live 合同提供时使用。TKE/GKE 沿用各自已核验的
+    原生池合同。默认保留 amd64，只有 exporter 镜像及目标池架构均核验后才可调整。
+    placement 或 reference 第 4 节对应网络路径的证据不足则 STOP + Ops Todo。
 
 [validate]
   - provider/engine 与 exporter 对得上；目标集群就是该云的集群，不是别的云。
   - 腾讯云白名单里没有非 prod 实例。
+  - exporter 的目标池身份、架构/容量、必要 tolerations 与默认 NAT/已确认替代路径证据均已记录；
+    默认共享池之外的例外有 reference 要求的明确依据。
 
 [output]
   - provider、exporter、目标集群（含 argocd 目录 / Harbor / vault_css）、采集范围与实例清单
@@ -89,8 +102,9 @@ TencentDB/CKafka）接入指标采集。这类资源没有可直接抓的集群�
 [action]
   - 在 `controllers/metrics-collector/config/prod/<cluster>/` 建 overlay：
     - `namespace.yaml`（`metrics-collector` namespace）
-    - adapter：ExternalSecret(vault-backend) + exporter Deployment（`nodeSelector:
-      kubernetes.io/arch: amd64`，镜像用目标集群 Harbor 路径，readonly rootfs、drop ALL cap、
+    - adapter：ExternalSecret(vault-backend) + exporter Deployment（按 reference 的单池
+      AND / 显式多池 OR 变体写完整 placement，默认含 `kubernetes.io/arch: amd64`；
+      arch 不能替代已批准的目标池身份。镜像用目标集群 Harbor 路径，readonly rootfs、drop ALL cap、
       非 root）+ Service（命名 port `metrics`）+ VMServiceScrape
     - `network-policies.yaml`：ingress 仅 vmagent 抓 metrics 端口；egress 仅 DNS + 443 到云 API
     - `kustomization.yaml` 显式列全部文件
@@ -106,6 +120,9 @@ TencentDB/CKafka）接入指标采集。这类资源没有可直接抓的集群�
 [validate]
   - 本地 `kustomize build`（或 `kubectl kustomize`）通过，不 apply 集群。
   - 无裸 Secret 承载凭据；exporter 只读、无 webhook/finalizer。
+  - 最终 Deployment render 仅允许 Step 1 已核验的共享池或有明确依据的能力例外；
+    每个 OR term 的池、架构/容量和适用网络约束完整，无 ec2nodeclass Pod 约束，
+    镜像支持所有允许架构，未增加平台池 toleration。
 
 [output]
   - overlay 文件路径、exporter 配置、scrape 参数
@@ -167,6 +184,8 @@ TencentDB/CKafka）接入指标采集。这类资源没有可直接抓的集群�
   - 按各仓 GitOps 规范推进合并；Application targetRevision advance 到含全部改动的 SHA。
   - Argo sync 后（AppProject wave -1 先，Application 后）确认 adapter pod Running、ExternalSecret
     SecretSynced、YACE/exporter `/metrics` 产出 raw、raw 进 VM。
+  - 读回实际 Pod/Node 的目标池身份、架构/容量，另核对 NodeClass 供给配置及运行证据，
+    按 reference 第 4 节核对默认 NAT 出口或已确认替代路径，完成运行态 placement 验收。
   - 等一个 scrape 周期 + 一个 recording rule group interval 后，用 **vmalert 同款 datasource
     `vmselect-victoria-metrics`（headless，不是 -public）** 查 `managed_*{provider="..."}`
     确认产出。

@@ -1155,7 +1155,34 @@ def test_non_promotion_requires_exact_work_item_url(tmp_path: Path) -> None:
     result, output = run_overlay_init(tmp_path, repo, env, sha)
     assert result.returncode == 2
     assert not output.exists()
-    assert "issue plan path does not match MR Work Item" in result.stderr
+    assert "issue plan path does not match MR Issue" in result.stderr
+
+
+def test_non_promotion_accepts_issue_label_for_plan_url(tmp_path: Path) -> None:
+    repo, env, sha = setup_production_overlay_repo(tmp_path)
+    responses_path = Path(env["FAKE_GLAB_RESPONSES"])
+    responses = json.loads(responses_path.read_text(encoding="utf-8"))
+    mr = responses[f"projects/{quote(PROJECT_PATH, safe='')}/merge_requests/42"]
+    mr["description"] = mr["description"].replace("Work Item: ", "Issue: ")
+    responses_path.write_text(json.dumps(responses), encoding="utf-8")
+
+    result, output = run_overlay_init(tmp_path, repo, env, sha)
+    assert result.returncode == 0, result.stderr
+    assert output.exists()
+
+
+def test_non_promotion_rejects_cross_project_issue_for_local_plan(tmp_path: Path) -> None:
+    repo, env, sha = setup_production_overlay_repo(tmp_path)
+    responses_path = Path(env["FAKE_GLAB_RESPONSES"])
+    responses = json.loads(responses_path.read_text(encoding="utf-8"))
+    mr = responses[f"projects/{quote(PROJECT_PATH, safe='')}/merge_requests/42"]
+    mr["description"] = "Issue: https://gitlab.addx.ai/other/program/-/issues/170"
+    responses_path.write_text(json.dumps(responses), encoding="utf-8")
+
+    result, output = run_overlay_init(tmp_path, repo, env, sha)
+    assert result.returncode == 2
+    assert not output.exists()
+    assert "issue plan path does not match MR Issue" in result.stderr
 
 
 def test_non_promotion_rejects_business_code_with_overlay(tmp_path: Path) -> None:
@@ -1236,6 +1263,21 @@ def test_non_promotion_rejects_fabricated_evidence_url(tmp_path: Path) -> None:
     assert "must be a DEV/argocd-apps main blob URL" in result.stderr
 
 
+def merge_integrity_evidence(tmp_path: Path, repo: Path, env: dict[str, str], head_sha: str) -> dict:
+    """Real check_merge_integrity.py report against origin/main, as the Auditor saves it (gitlab-mr Rule 14)."""
+    import hashlib
+
+    target_sha = git(repo, "ls-remote", "origin", "refs/heads/main").split()[0]
+    checker = Path(__file__).parents[1] / "scripts" / "check_merge_integrity.py"
+    result = subprocess.run([sys.executable, str(checker), target_sha, head_sha, "--json"], cwd=repo, env=env,
+                            text=True, capture_output=True, check=False)
+    assert result.returncode == 0, result.stdout + result.stderr
+    report = tmp_path / "merge-integrity.json"
+    report.write_text(result.stdout, encoding="utf-8")
+    return {"applicable": True, "target_sha": target_sha, "source_sha": head_sha, "exit_code": 0,
+            "report_sha256": hashlib.sha256(report.read_bytes()).hexdigest(), "evidence_file": str(report)}
+
+
 def test_non_promotion_audit_rechecks_live_attestation(tmp_path: Path) -> None:
     repo, env, sha = setup_production_overlay_repo(tmp_path)
     result, state_file = run_overlay_init(tmp_path, repo, env, sha)
@@ -1253,6 +1295,7 @@ def test_non_promotion_audit_rechecks_live_attestation(tmp_path: Path) -> None:
         "unresolved_discussions": 0,
         "mergeable": True,
         "audited_at_utc": datetime.now(UTC).isoformat(),
+        "merge_integrity": merge_integrity_evidence(tmp_path, repo, env, sha),
         "release": {
             "workflow_evidence": {
                 "name": "staging-flow-not-applicable",

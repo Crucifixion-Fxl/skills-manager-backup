@@ -1,17 +1,13 @@
 # firmware-mgr：认证与源码入口
 
-日常认证正本：[auth-discovery.json](auth-discovery.json)；执行配置：[auth-profile.json](auth-profile.json)；源码、候选版本与部署缺口：[source-discovery.json](source-discovery.json)。原业务契约：[SKILL.md](../SKILL.md)。
+认证正本：[SKILL.md Rule 1](../SKILL.md)；证据：[auth-discovery.json](auth-discovery.json)；执行配置：[auth-profile.json](auth-profile.json)；源码版本：[source-discovery.json](source-discovery.json)。
 
-认证路由：Firmware native SSO browser cookie token → token HTTP header。
+优先复用环境对应的 `FIRMWARE_MGR_TOKEN` / `FIRMWARE_MGR_TEST_TOKEN`。没有可用 token 时，从 `FIRMWARE_MGR_USERNAME` / `FIRMWARE_MGR_PASSWORD`（测试使用 `FIRMWARE_MGR_TEST_USERNAME` / `FIRMWARE_MGR_TEST_PASSWORD`）读取平台账号密码，调用 `POST /api/login`，JSON 字段为 `userName`、`password`，成功读取 `data.token`。生产、测试凭据不交叉使用。
 
-复用 FIRMWARE_MGR_TOKEN/FIRMWARE_MGR_TEST_TOKEN；缺失由用户在正确域网页 SSO 登录，宿主安全注入 token cookie 到进程变量，禁止 echo/聊天索要明文。现有契约没有证明 IdP 是 Casdoor。
+[只读查询脚本](../scripts/query.py) 在同一进程内执行登录、`get_models` 探针和目标查询。token 只在内存使用；curl 通过 stdin 接收凭据，不在 argv、stdout、文件或日志暴露。缺少凭据时让用户在宿主环境安全配置，不索要明文到聊天，不默认去浏览器复制 Cookie。
 
-token header（不是 Authorization Bearer）；Cookie 本身不足 API 认证；所有业务 POST JSON {}。
+所有业务请求携带 `token` Header（不是 Bearer，Cookie 不能代替），POST JSON 对象。探针失败最多尝试一次账号登录；登录失败或新 token 不可用时停止。探针成功后的目标接口拒绝可能是权限不足或 token 随后失效，不循环登录。`get_user_info` 不是探针，稳定 subject 与 token 生命周期仍待核验。
 
-身份与权限：POST /api/get_models 或 get_versions，result=0 是有效凭据/该读取权限；不能当稳定 subject 证明。get_user_info 既有 header/body bug 不能直接作探针。admin/developer/product 权限单独核验。
+源码 `DEV/firmware-mgr-server@ac2c999b5e68540330d9c8f2544697636a2cf6c0` 的 `api.py:769–782`、`user.py:23–80` 与 2026-10-15 生产前端登录契约一致；空 JSON 探针确认路由存在。未提供真实凭据，未完成生产账号登录；测试实例部署匹配未知。因此 auth-profile 仍为 delegated、runtimeVerification=pending，不把离线测试升级成线上验收。
 
-失效与撤销：result 10001/no auth 失效或权限不足；不盲重试；expiry/revoke 与稳定 subject 字段待源码/部署确认。
-
-本轮仅文档/源码只读发现，未登录、创建 Token 或调用业务 API；研究 commit 不证明当前部署。已有 runtime profile/fixture 的验收边界保留，新的发现不自动使 delegated profile 可执行。
-
-人工网页登录使用 [web-access](../../../agent-harness/web-access/SKILL.md)；首次接入或漂移使用 [platform-onboarding](../../../agent-harness/platform-onboarding/SKILL.md)，按 [source-policy](../../../agent-harness/platform-onboarding/references/source-policy.md) 分别记录 source/fixture/runtime。凭据只经宿主安全注入，不打印、不写聊天、仓库或命令行；本次扫描不读取私人凭据。业务写入继续服从原 owner 审批/发布/回读门禁。
+浏览器仅作交互登录要求或明确 UI 请求的备选，按 [web-access](../../../agent-harness/web-access/SKILL.md) 操作。固件发布、撤销、白名单和权限修改仍遵守原 Skill 的授权与执行后回读规则，本次不改变业务写入门禁。

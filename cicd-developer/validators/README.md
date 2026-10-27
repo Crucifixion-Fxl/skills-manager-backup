@@ -111,3 +111,10 @@ python3 "$skill_root/validators/validate_delta.py" \
 
 - Python 3.8+
 - PyYAML（`python3 -c "import yaml"` 成功）
+
+## 生成日志标签前的目标门禁
+
+`check_logging_target.py --env-keyword <keyword> [--runtime-env <verified-runtime-label>]`
+先检查 catalog 准入，再拒绝 `references/logging/target-compatibility.yaml` 中的已知不兼容映射。
+新建服务默认使用 keyword；存量维护只使用已核实的 runtime label。该门禁不替代完整
+manifest validators 或 live 日志验收，也不在目录扫描中从旧 overlay 名猜目标。

@@ -58,14 +58,14 @@ DockerHub 镜像 → base-images/images.yaml MR → 全集群 Harbor base/ 同�
 | us-staging | US | argocd-us-staging.addx.live | harbor-39070-us-staging.addx.live | `us-staging-amd64`, `us-staging-arm64` |
 | eu-staging | EU | argocd-eu-staging.addx.live | harbor-39070-eu-staging.addx.live | `eu-staging-amd64`, `eu-staging-arm64` |
 | cn-tke-staging (100052802231 / cls-riukakjb；CN 唯一 dev/staging) | CN | argocd-cn-staging.addx.live | harbor-02231-cn-staging.addx.live（内网） | `tke-cn-staging-amd64`（兼容 `cn-staging-amd64`，无 arm64） |
-| cn-tke-tech-service (100052802231，目标域名待切换，业务准入 blocked) | CN | argocd-cn-tech-service-tke.addx.live | harbor-02231-cn-tech-service.addx.live | 待核验，禁止复用旧 cn-tech tag |
+| cn-tke-tech-service (100052802231 / cls-o0gwzdpz；目录准入 allowed) | CN | argocd-cn-tech-service-tke.addx.live | harbor-02231-cn-tech-service.addx.live | `cn-tech-amd64`（Runner 4942，仅 amd64） |
 | cn-k8s (TKE prod，100014919455) | CN | argocd-cn-k8s.addx.live | harbor-cn.addx.live | `tke-amd64` |
 | us-tech-service-gke | US | argocd-us-tech-service-gke.addx.live | harbor-a4xt-us-tech.addx.live | `gcp-tech-amd64` |
 | us-prod-gke | US | argocd-us-prod-gke.addx.live | harbor-a4xp-us-prod.addx.live | `gcp-prod-amd64` |
 
 CN staging 部署镜像默认用表中的内网域名；SG 同步和获准的外部访问用 `harbor-02231-cn-staging-pub.addx.live`，两者是同一 registry。采用内网域名前核验精确 auth key，现存镜像和 Secret 不自动迁移；DNS、token realm 与兼容规则见 [Harbor 双入口合同](../harbor/SKILL.md)。
 
-CN tech-service 表中为目标命名，尚未切换；外部同步目标为 `harbor-02231-cn-tech-service-pub.addx.live`。使用前核对实际 GitOps、DNS/TLS、认证 realm、精确 auth key 和 runner。Builder Vault 服务入口目标为 `vault-cn.builder.addx.live`，不改变该集群现有 Ops `vault-backend`；完整七入口与迁移状态见 [CN 清单](../../infrastructure/k8s-ops/references/cn-tencent-inventory.md)。
+CN tech-service 的平台入口与实例 Runner 已于 2026-10-19 核验，目录为 allowed / verified，见 [准入回执](../cicd-developer/references/cn-tech-service-admission-2026-10-19.md)。外部同步使用 `harbor-02231-cn-tech-service-pub.addx.live`；每个项目仍须核验精确 AppProject source/destination/kind、镜像、push/pull 权限和实际作业。Builder Vault 服务入口 `vault-cn.builder.addx.live` 的健康检查通过，不改变该集群现有 Ops `vault-backend`，也不证明 Builder 认证与消费链路已验收；各入口边界见 [CN 清单](../../infrastructure/k8s-ops/references/cn-tencent-inventory.md)。
 
 ## Vault 实例
 

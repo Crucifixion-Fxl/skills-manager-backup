@@ -1,11 +1,8 @@
 # Buzz Channel ↔ 飞书群：绑定、agent 进群与双向同步（本地 CLI 路线）
 
-需求 engineering/skills#110。可行性验证与方案见 infra/buzz-deploy 的
-[`local-cli-feasibility.html`](https://gitlab.addx.ai/infra/buzz-deploy/-/blob/9-local-cli-feasibility/docs/product/agent-identity/local-cli-feasibility.html)，
-下文的 LCV-NN 编号都指那份实测证据。
+需求 engineering/skills#110。可行性验证与方案见 infra/buzz-deploy 的 [`local-cli-feasibility.html`](https://gitlab.addx.ai/infra/buzz-deploy/-/blob/9-local-cli-feasibility/docs/product/agent-identity/local-cli-feasibility.html)， 下文的 LCV-NN 编号都指那份实测证据。
 
-这条路线**只用 owner 本机已经登录的个人 lark-cli 和 buzz CLI**，不经过 feishu-bridge 服务，也不引入新的中心服务。它只覆盖 owner
-显式登记的自管频道。「所有频道默认建群」属于平台路线 infra/buzz-deploy#29，不在这里做。
+这条路线**只用 owner 本机已经登录的个人 lark-cli 和 buzz CLI**，不经过 feishu-bridge 服务，也不引入新的中心服务。它只覆盖 owner 显式登记的自管频道。「所有频道默认建群」属于平台路线 infra/buzz-deploy#29，不在这里做。
 
 ## 何时使用
 
@@ -66,11 +63,7 @@
 
 飞书的消息**列表**接口忽略 `user_id_type`，发信人和 `mentions[].id` 永远是本应用的 open_id；只有**单条消息**接口 `GET /open-apis/im/v1/messages/{id}?user_id_type=union_id` 会把 `sender.id` 和 `mentions[].id` 换成 union_id，`mentions[].key`（`@_user_1`）两边一一对应。所以：
 
-1. 对要镜像的消息，发信人或被 @ 的人（bot 和 @所有人除外）不在 `idmap` 里时，对**这一条消息**取一次单条视图（owner 的 user 身份），发信人与视图的发信人配对，被 @ 的人按 `mentions[].key` 配对——只按 key，key 在任一边不唯一就不算，**不看名字，也不看顺序**。配对结果存进 `idmap`（只有 id）。
-2. 已经在 `idmap` 里的人不再取；本来就要跳过的消息（已删除、系统消息、app 发的、空内容、绑定之前的）不取。每条消息最多取一次。
-3. 配对不上一律不映射：发信人配不上（视图里没有这条消息、发信人的 `id_type` 不是 `union_id`、id 不是 `on_…`、发信人类型不是 user……）→ 这条消息不镜像，计 `sender_unpaired`；被 @ 的人配不上 → 不产生 @，计 `mention_unpaired`，消息照发。这些都不算错误。
-4. 取单条消息的调用本身失败了（网络错误、接口报错）：这条消息还没发到 Buzz，按「确定没发出」处理——记一次 `errors`，留在重试里，下一轮再取，连续 3 次失败记 `failed`。
-5. 缓存里的旧配对被新证据推翻（同一个 open_id 对着别的 union_id，同一个 union_id 对着别的 open_id，或同一份答案自相矛盾）：**两边都不信**——矛盾的缓存项删掉、这次答案也不采信，这条消息本轮不镜像（`identity_conflict`），`identity_conflicts` 加一（需要关注，退出码 3）；下一轮重新配对，消息还在重读窗口里就照常镜像。
+1. 对要镜像的消息，发信人或被 @ 的人（bot 和 @所有人除外）不在 `idmap` 里时，对**这一条消息**取一次单条视图（owner 的 user 身份），发信人与视图的发信人配对，被 @ 的人按 `mentions[].key` 配对——只按 key，key 在任一边不唯一就不算，**不看名字，也不看顺序**。配对结果存进 `idmap`（只有 id）。 2. 已经在 `idmap` 里的人不再取；本来就要跳过的消息（已删除、系统消息、app 发的、空内容、绑定之前的）不取。每条消息最多取一次。 3. 配对不上一律不映射：发信人配不上（视图里没有这条消息、发信人的 `id_type` 不是 `union_id`、id 不是 `on_…`、发信人类型不是 user……）→ 这条消息不镜像，计 `sender_unpaired`；被 @ 的人配不上 → 不产生 @，计 `mention_unpaired`，消息照发。这些都不算错误。 4. 取单条消息的调用本身失败了（网络错误、接口报错）：这条消息还没发到 Buzz，按「确定没发出」处理——记一次 `errors`，留在重试里，下一轮再取，连续 3 次失败记 `failed`。 5. 缓存里的旧配对被新证据推翻（同一个 open_id 对着别的 union_id，同一个 union_id 对着别的 open_id，或同一份答案自相矛盾）：**两边都不信**——矛盾的缓存项删掉、这次答案也不采信，这条消息本轮不镜像（`identity_conflict`），`identity_conflicts` 加一（需要关注，退出码 3）；下一轮重新配对，消息还在重读窗口里就照常镜像。
 
 **email 模式怎么换邮箱**
 
@@ -84,9 +77,7 @@
 
 ### 1. 一次问齐这些问题
 
-1. 哪个频道？给出 channel UUID。必须是 owner 自己是 owner 或 admin 的 stream/forum 频道。
-2. **新建飞书群，还是关联一个已有群？**关联已有群时，要给出群的 `chat_id`（`lark-cli im +chat-search --as user --query <群名>` 可以查到）。
-3. 群里有、但不在频道里的人，要不要移出？
+1. 哪个频道？给出 channel UUID。必须是 owner 自己是 owner 或 admin 的 stream/forum 频道。 2. **新建飞书群，还是关联一个已有群？**关联已有群时，要给出群的 `chat_id`（`lark-cli im +chat-search --as user --query <群名>` 可以查到）。 3. 群里有、但不在频道里的人，要不要移出？
    - 私有频道的消息会被群里所有人看到，所以默认**移出**（`remove_extras: true`）。
    - 只有在 owner 明确接受「这些人会看到频道消息」时，才选只加不减。
 4. 频道里哪些 agent 要进群？每个 agent 都需要已经注册好自己的 PersonalAgent，见下文「agent 的飞书身份」。
@@ -204,7 +195,7 @@ python3 scripts/buzz_feishu_group_sync.py round --config <cfg.json> --state-dir 
 - 卡片相关：`cards_sent`（发成卡片的条数）、`cards_fallback_text`（卡片被飞书拒绝、改发文字的条数）；这两个只是计数，**不会**让退出码变成 3；
 - 代发：`relayed_agents`（本机没有凭据、由本频道 Desk bot 代发的 agent 消息条数，见「本机没有凭据的 agent（Desk 代发）」；也计入 `to_feishu`）；只是计数，**不会**让退出码变成 3；
 - agent 目录（ADR-0019）：`directory_agents`（这一轮从 relay 查到公开了飞书 app_id 的外来 agent 个数）、`directory_failed`（查询失败的次数，0 或 1：连不上、非 200、应答不是事件数组；这一轮不用目录，外来 agent 照样代发；双向成员同步会在频道和群的状态消息中说明本轮没有拉取远端 agent bot、下一轮自动重试）、`directory_conflicts`（被弃用的 app_id 个数：两个 agent 声称同一个，或和本机配置的 agent / owner 应用撞了）；三个都只是计数，**不会**让退出码变成 3，见「别人的 agent 的飞书应用（kind:30177 目录）」；
-- 成员双向同步（ADR-0020）：`members_to_buzz`（因为在飞书里被拉进群而加进频道的人 / agent 个数）、`members_removed_from_buzz`（因为被移出群而移出频道的个数）、`members_refused`（agent 的 `channel_add_policy` 不让加的次数，群里提示一次）、`members_protected`（在飞书被移出、但频道里不移出的 owner / 同步签名身份，群里提示一次）、`members_unresolved`（被拉进群、但认不出 Buzz 账号的人数，群里提示一次去绑定）、`people_cache_failed`（`people_cache_file` 读写失败的次数）、`member_events_blocked`（为避免重复 9000/9001 而暂停的原因 → 次数）；前六个只是计数，最后一个同时计入 `member_failures` 与 `errors`，令退出码变成 3。双向模式会把目录失败、列表不完整、安全上限、未绑定、bot 名额不足和成员写入失败汇总到同一条频道 / 群状态消息，后续失败与恢复都原地更新；Buzz 暂时不可写时先直接提示飞书，恢复后补建 Buzz 根事件而不重复发群消息。见「成员双向同步」；
+- 成员双向同步（ADR-0020）：`members_to_buzz`（因为在飞书里被拉进群而加进频道的人 / agent 个数）、`members_removed_from_buzz`（因为被移出群而移出频道的个数）、`members_refused`（agent 的 `channel_add_policy` 不让加的次数，群里提示一次）、`members_protected`（在飞书被移出、但频道里不移出的 owner / 同步签名身份，群里提示一次）、`members_unresolved`（被拉进群、但认不出 Buzz 账号的人数，不发群内提醒，Desk 私信绑定入口与频道 deep link）、`member_notices_private_sent`（Desk 同身份读回确认的私信数）、`member_notices_private_unconfirmed`（缺私信身份、不可达或读回未确认的次数，只记后台诊断，不发群内提醒）、`people_cache_failed`（`people_cache_file` 读写失败的次数）、`member_events_blocked`（为避免重复 9000/9001 而暂停的原因 → 次数）；成员数量与私信诊断只是计数，最后一个同时计入 `member_failures` 与 `errors`，令退出码变成 3。双向模式会把目录失败、列表不完整、安全上限、频道成员无法映射到飞书而暂停移人、bot 名额不足和成员写入失败汇总到同一条频道 / 群状态消息，后续失败与恢复都原地更新；Buzz 暂时不可写时先直接提示飞书，恢复后补建 Buzz 根事件而不重复发群消息。见「成员双向同步」；
 - Agent 入群介绍：`agent_intros_sent`（本轮成功）、`agent_intros_relayed`（其中由群助手按公开资料透明代发）、`agent_intro_failures`（本轮公开资料或发送失败）、`agent_intro_unknown`（超过幂等重试窗口仍无法确认结果）、`agent_intro_stopped`（连续明确失败后停止重试）。后三项会计入 `errors` 并进入同一条成员同步状态消息；正文与状态只使用公开资料，不包含 prompt / instruction。见 [feishu-two-way-sync.md](feishu-two-way-sync.md)「Agent 入群后的自我介绍」；
 - 表情相关：`reactions_added`、`reactions_removed`、`reactions_failed`（放弃的次数）；双向（ADR-0020）另有 `reactions_to_buzz`（镜像把飞书里人打的表情打到 Buzz 的次数）、`reactions_withdrawn_in_buzz`（飞书里撤回、镜像在 Buzz 也撤回的次数）、`approvals_to_buzz`（飞书里的 `/approve` / `/deny JOIN-<id>` 转成镜像在申请上打的 ✅ / ❌ 的次数）；这六个只是计数，**不会**让退出码变成 3；
 - 绑定认领（ADR-0022）：`claim_conflict`（本轮被别的有效认领挡下时是 `{"reason", "mirror", "name"}`，`reason` 为 `same_channel` / `same_chat` / `taken_over`；没有冲突是 `null`；非空需要关注）、`claims_unreadable`（读不到认领，0 或 1：消息和表情照常、成员同步暂停这一轮）、`claim_published`（本轮写了认领或心跳，0 或 1）、`claim_publish_failed`（写认领失败，0 或 1，下一轮重试）、`claim_takeovers`（第一次见到的已过期对手认领个数）；后四个只是计数。见 [feishu-two-way-sync.md](feishu-two-way-sync.md)「跨机绑定认领」；
@@ -258,6 +249,7 @@ python3 scripts/buzz_feishu_group_sync.py round --config <cfg.json> --state-dir 
 
 - 用 owner 的 lark-cli 读群里最近的消息，确认说明在、格式对（`+chat-messages-list` 或 `api GET /open-apis/im/v1/messages`）；下一轮 `round` 的报告里 `to_buzz` 不应该多出一条（bot 消息不回流）。
 - 把「已发」和发的是哪一版写进这个群的配置记录（记忆 / 运维文档），换绑或废弃时要用（见「换绑到另一个飞书群」）。
+- **默认交付 Buzz Channel 标签页**：按 [标签页流程](feishu-channel-tab.md) 在绑定授权内添加 HTTPS 入口、先查重、外部打开、写后读回；缺权限或真实消息锚点时记录待完成项。存量群按授权补齐，指定首群先验收。这是 Agent 步骤，非 hostd 自动维护能力；仅补标签页不重发使用说明。
 - **废弃一个群**时反过来：先发一条废弃通知（指向新群），再把 bot 移出，最后撤回同步发进去的消息（bot 只能撤回自己发的：用各自的 profile `DELETE /open-apis/im/v1/messages/<id> --as bot`）；群被禁言时通知改用群主身份发。
 
 ## 消息卡片：Buzz → 飞书默认发成卡片
@@ -293,9 +285,7 @@ python3 scripts/buzz_feishu_group_sync.py round --config <cfg.json> --state-dir 
 
 存量旧格式的消息不迁移（同步对存量 Thread 不变），约 2500 条；每个旧话题第一次有新回复时，它的根会被补发成卡片（`thread_roots_backfilled`），就是上面的旧格式，所以这条规则要长期在。
 
-**「在 Buzz 中打开」链接只能是 https**。飞书桌面端会吞掉 `buzz://` 这类自定义协议（2026-09-17 在 Mac 上实测：点了没反应），所以卡片里不用它——用户自己在正文里写的 `buzz://` 也会被中和成「buzz：//」，整张卡片里没有 `buzz://`。链接指向 bridge 的 `/bind/open` 页面：`<people_api.base_url>/bind/open?e=<事件 id>&c=<频道 UUID>[&t=<话题根事件 id>]`。页面在浏览器里打开，再唤起 Buzz Desktop 定位到这条消息。`t` 只在这条消息在话题里且 e tag 标了 root 时才有（取法与 bridge 的 `threadRoot` 一致：有 root 标记就是它；没有任何标记取第一个；只有 reply / mention 标记就没有）。id 必须是 64 位小写 hex / 小写 UUID，`base_url` 是校验过的 `https://主机[:端口]`；不合法就不放链接，卡片照发，不算失败。
-
-**为什么链接不带签名也可以**：bridge 给自己的通知卡片链接带 `s`（HMAC）和 `n`（频道名），但这个签名只保护「频道名」这个显示文字——页面验不过签名就丢掉 `n`，仍然用 `e` / `c` / `t` 打开（生产实测不带签名是 HTTP 200，页面就是「在 Buzz 中打开」）。所以这里不需要 bridge 的任何密钥，链接里也不带频道名和签名；**不要**去拿或猜那把 HMAC key。
+**「在 Buzz 中打开」链接只能是 HTTPS**，复用 Bridge 的 `/bind/open?e=<事件 id>&c=<频道 UUID>[&t=<话题根事件 id>]`；飞书会拦截直接 `buzz://`。参数与消息/话题归属、无签名链接的边界和页面验证见 [HTTP 入口规则](feishu-channel-tab.md#选择可用的-http-入口)；卡片构造仍按真实事件生成链接，不依赖标签页。
 
 **@ 的三种形式**：p tag 里的每个人（发言人自己和重复的不算，一行最多 20 个），按优先级：
 
@@ -448,12 +438,13 @@ WantedBy=timers.target
 
 ## 首轮之后怎么验收
 
-首轮（`round` 第一次跑）会**真的改群**：把映射得到的同事拉进飞书群、把 agent 的 bot 拉进群，并给被拉的人发入群通知。所以先用只读方式预览再让频道 owner 确认：要拉几个人、几个 bot、多少人映射不到（没有绑定）、群里原有的外人会不会被移出（`remove_extras`）。确认后再跑，然后按下面四步验收：
+首轮（`round` 第一次跑）会**真的改群**：把映射得到的同事拉进飞书群、把 agent 的 bot 拉进群，并给被拉的人发入群通知。所以先用只读方式预览再让频道 owner 确认：要拉几个人、几个 bot、多少人映射不到（没有绑定）、群里原有的外人会不会被移出（`remove_extras`）。确认后再跑，然后按下面五步验收：
 
 1. **飞书 → Buzz**：在飞书群里 @ 一个 agent 说一句话。下一轮之后，Buzz 频道里出现一条 `[飞书] <你的名字>：…`，发信人是镜像身份、被 @ 的是那个 agent；agent 的回复会由它自己的 bot 作为**话题回复**挂在你那条飞书消息下（主列表里看不到，要点开话题）。
 2. **reaction**：agent 收到请求会在 Buzz 上打 👀、💬，它们会在那条飞书消息上变成 `GLANCE`、`Typing`；agent 处理完撤销后飞书上的表情随之消失。表情往往只存在几分钟，同步间隔长的话肉眼容易错过——用报告里的 `reactions_added` / `reactions_removed`（`reactions_failed` 应为 0）核对。
 3. **Buzz → 飞书**：在 Buzz 频道里说一句话（再 @ 一个人试试）。下一轮之后，飞书群里出现一张卡片：标题是这句话的第一行、下面一行灰字「你的名字 · #频道名」，比标题多出内容的话有收起的「展开全文」，没有底部按钮；点灰字旁边的「在 Buzz 中打开」会在浏览器里打开一个 https 页面并唤起 Buzz Desktop。报告里 `cards_sent` 加一、`cards_fallback_text` 应为 0（不是 0 就说明飞书拒绝了卡片，看下文「飞书拒绝卡片时」）。
 4. **报告**：`unmapped_members` 等于频道里没有绑定的人数、`identity_conflicts` 为 0、`errors` / `failed` / `unknown` 为 0。
+5. **频道标签页**：按 [标签页验收](feishu-channel-tab.md#验收与回执) 确认名称、HTTPS 目标与外部打开配置，保存标签页 ID 和读回证据；客户端唤起未实测时单独标为未验证。
 
 几个上线后会看到的现象，不是故障：
 - **频道里其他机器人发的消息也会镜像进飞书群**：比如 GitLab 通知（流水线通过、评论、状态变更）是用 agent 的身份发到频道的，会由该 agent 的 bot 转到飞书群，量大时群里会比较吵；不想要就不要把该频道绑到飞书群，或者等过滤功能。
@@ -533,22 +524,15 @@ content，Buzz Desktop 解析时忽略它不认识的字段）。用 `scripts/bu
 每个要进群的 agent 都需要一个自己的 PersonalAgent 应用：
 
 1. 在 agent 自己的目录下，设置 `LARKSUITE_CLI_CONFIG_DIR` 和 `LARKSUITE_CLI_DATA_DIR`，然后运行 `lark-cli config init --new`。
-   - **这一步由你自己跑，不要做成待办交给 owner。**这条命令就是给 agent 用的：它阻塞等待，验证 URL 打在输出里。放后台跑，从输出里取 `https://open.feishu.cn/page/cli?user_code=…`，把这个链接交给 owner 点一下确认即可；确认完命令自己返回。一次起一个，确认完再起下一个。
-   - **两种交给 owner 的方式，按现场选：** 浏览器必须跑在人看不见的远程开发机上时，使用 `web-access` skill；人就在这台机器前时仍用下面两条。
-     - **owner 在自己已登录飞书的浏览器里点链接**：最直接。给他 URL，并说清应用要叫什么名字（见第 2 条）。
-     - **agent 用无头浏览器代做，owner 只扫一次码**：适合一次要建好几个（naturehood 一口气建了 5 个）。飞书登录页只给扫码一种方式（没有账号密码 / 短信），所以 owner 要扫一次登录二维码，之后的建应用、填名字全部由 agent 在同一个浏览器 profile 里完成。
-   - 用无头浏览器时的要点（2026-09-20 实测，2026-09-21 补充）：
-     - **二维码有效期很短（约 2 分钟）**，而且刷新一次旧码立刻作废。用 `feishu_login_qr_retry.py` 监测同一个浏览器会话的 `ready.txt` + `state.txt`，只把真正进入 CLI 应用确认页视为登录成功；未成功时等当前码约 95 秒后刷新，发送新码给 owner，并用同一身份回读消息。最多发 10 张，成功立即停止，不能只根据「用户说扫了」或公开 open.feishu.cn 页面判断成功。应用注册全程复用这一次登录态，不为每个 agent 重新扫码。调用时显式传 `--browser-dir`、`--node`、`--cli-entry`、`--profile` 和 `--recipient-user-id`；只使用已授权的 owner user profile。每张二维码的文字与图片分别有发送回执，并用同一 profile 的 `im +messages-mget` 回读。首次启动要先让 `feishu_browser.js` 打开**当前** `config init --new` 的验证 URL；进程打印 `LOGIN_OK` 后，再顺次运行 `feishu_register_agent_apps.sh` 注册所有 agent，期间保持浏览器进程和 profile 不变。二维码达到 10 张仍未登录就停止并报告，不能换身份或默默无限重试；可改由 owner 在自己已登录的浏览器逐个打开验证链接，同一个浏览器会话可复用，但每个应用仍须核对 `app_id` 与准确名称。
-     - **发码前先确认 owner 在飞书前**：码约 2 分钟就过期，owner 不在就是白发一张、还得重发（2026-09-21 第一张码发出时 owner 不在，没人扫）。先问一句「现在能扫吗」，等到答复再刷新、发码。**发码前后各配一条文字**（用途、扫哪张、有效期），别让 owner 对着一张没有说明的图猜。
-     - **两种发码方式都给**：飞书私聊和终端。私聊用 `cd <二维码所在目录> && lark-cli im +messages-send --as bot --user-id <owner> --image ./qr.png`：`--image` 的路径必须是**当前目录内的相对路径**，绝对路径（以及带 `..` 的路径）会失败（返回 `ok:false`），和图片同步里 `--image` 只收相对路径是同一个限制（见「边界」）。终端要把二维码渲染成半块字符（`▀▄█`），**直接贴在回复正文里，不要折叠在工具输出里**。
-     - 无头浏览器用 `playwright-core` + 本机已装的 chromium，`launchPersistentContext` 保持登录态；表单名称框是 `input.ud__native-input`，提交是 `button[type="submit"]`，创建完页面显示「创建成功」。
-     - 偶发「创建失败」是常态，别当异常处理：2026-09-21 那一批约三分之一次（两次都是重跑一次即成功），skills#124 记的另一批是每 5–7 个 1 个。手工操作时设备码仍然有效，重新加载同一个 URL、重填、再提交即可（nh-bi 第一次失败，第二次成功）；用脚本时，脚本带着 `创建失败` 非零退出并收掉 lark-cli，**没有自带重试**，重跑同一个 agent 即可（会新起一个 `config init --new`、拿新的 user_code）。
-     - **用完就收**：本批次所有 agent 应用都注册并回读后，结束浏览器进程并删掉登录态目录（`~/.cache/feishu-agent-browser*`），不要在本机长期留着 owner 的飞书会话。
-     - **用脚本，别手工拼**：`FEISHU_BROWSER_DIR=<0700 目录> feishu_register_agent_apps.sh <agent 名>`（先让 `feishu_browser.js` 在那个目录里登录好）。脚本只在 app_id 合法、且回读的 `app_name` 与 agent 名逐字相等时才退出 0 并打印成功行；否则非零退出，`stderr` 里有原因（例如「app_name mismatch: expected 'nh-desk', got '陈敬敏的飞书 CLI'」）。**退出码不是 0 就是没成功**，不要凭输出里看到 app_id 就当成功。
-     - **符号链接检查的边界**（jchen 已接受这个残余竞态，不再改逻辑，skills#117）：威胁模型：单用户、0700 目录；符号链接检查是检查前 + 创建后复核，不防同 uid 的进程。同一个用户下的其他进程本来就能读写这些目录，脚本不试图防它。
-     - **浏览器会话的两个边界**：`quit.txt`（让会话退出的信号，用完不删）启动时先清掉上一次留下的，否则新会话一登录就退出、owner 得重新扫码；`cmd.txt` 不是合法 JSON 只算这一步失败——`result.txt` 写 `ERR <短原因>`（不回显命令内容），会话继续、浏览器不关、`ready.txt` 保留、不用重新扫码，脚本把非 `OK` 的答复一律当失败。
-   - 设备码本身也会过期。owner 隔了十几分钟才去点时，先重起一次命令拿新码，别让他对着旧链接干等。
-2. **给 URL 的时候一并说清应用叫什么名字。**确认页上可以直接改应用名称和头像，owner 在那里填掉，比事后补救省一次发版。**名字必须逐个不同**，就用 Buzz 里的 agent 名（`nh-desk`、`nh-dev`…）：群里 bot 显示的就是应用名称，不填的话每个 agent 都叫「<owner> 的飞书 CLI」，谁是谁分不出来。
+   - **这一步由你自己跑，不要做成待办交给 owner。**这条命令阻塞等待应用注册。放后台跑，私有捕获当前验证 URL，交给 `web-access` 打开本任务浏览器；用户仅完成需要本人确认的步骤，AI 完成填表与注册。一次起一个，核验成功后再起下一个。
+   - **网页登录统一交给 [web-access](../../web-access/SKILL.md)。**先根据当前会话确认用户是在运行浏览器的本机前，还是从另一台电脑访问远程开发机；已有明确上下文直接沿用，未知时只询问一次。不能把 CLI 在本机运行等同于用户能看到该机浏览器。
+   - 由 `web-access` 核验站点、预期 owner 身份、可复用的本任务浏览器和接管通道。新浏览器会话询问 `once/save`，已有选择直接沿用；保存网页登录态与保存 agent 原生应用凭据分别记录。复用登录态须验证账号及当前真实应用注册页面，不借用他人的 profile。
+   - 本机使用用户可见的本任务浏览器与协议控制；远程沿用用户已授权的可用接管工具，不默认安装 VNC/noVNC。二维码、MFA 或本人确认前，把本任务页面置前并说明动作；无置前能力明确说明并提供真实入口。用户操作期间暂停该页面的点击、填充与导航，不要求用户发送密码、验证码或 Cookie。
+   - 登录状态按 `web-access` 的有界状态检查判断。登录完成后由 AI 填应用名称并执行创建，再以当前应用回读 `app_id` 与准确 `app_name`；登录成功、CLI 返回或拿到 app_id 均不能单独作为注册完成证据。操作结果未知先对账，不盲目再次创建。
+   - 旧 `feishu_browser.js`、`feishu_login_qr_retry.py` 和 `feishu_register_agent_apps.sh` 是历史实现，**不再作为默认登录/注册路线**；不得先启动旧浏览器或扫码循环，再补问本机/远程与保存策略。需要底层能力时由 `web-access` 按当前身份、私有 profile、浏览器 sandbox 与页面接管契约核验后选择，不能绕过统一流程。
+   - 完成后停止本任务创建的浏览器、检测与隧道；`once` 清理本次 profile，`save` 保留私有且绑定站点/账号的 profile；共享资源保持不变。网页会话、agent 应用凭据及本机执行回执不得写入 plugin 或仓库。
+   - `config init --new` 的确认流程有时限；到期先核验当前注册状态，再启动新的确认流程，不让用户打开已失效链接。验证 URL 仅经任务私有通道进入本任务浏览器，不输出 device_code、Cookie、Token 或浏览器控制凭据。
+2. **由 AI 设置准确应用名称。**登录完成后在本任务确认页把名称填成 Buzz agent 名（例如 `rerun-ingest`），需要头像时按已授权素材设置；用户只完成平台要求的本人确认，不代填或代做注册。**名字必须逐个不同**：群里 bot 显示的就是应用名称，不填会使多个 agent 都叫「<owner> 的飞书 CLI」。
    - 确认完回读一次，核对名字真的生效了（不打印任何 secret）：
      ```bash
      LARKSUITE_CLI_CONFIG_DIR=… LARKSUITE_CLI_DATA_DIR=… \

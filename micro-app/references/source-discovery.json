@@ -17,9 +17,10 @@
     }
   ],
   "contractEntrypoints": [
-    "../micro-app-auth-integration/SKILL.md"
+    "../micro-app-auth-integration/SKILL.md",
+    "references/sdk-admission.md"
   ],
-  "sourcePolicy": "../../platform-onboarding/references/source-policy.md",
+  "sourcePolicy": "../../agent-harness/platform-onboarding/references/source-policy.md",
   "deployment": {
     "instances": [
       "https://micro-app-platform-us.addx.live"
@@ -37,6 +38,9 @@
     "Match research commit/OpenAPI revision to target deployment before adopting candidate routes.",
     "Identity does not prove operation/resource permission; enforce owner business approvals and readback."
   ],
-  "pending": [],
+  "pending": [
+    "Resolve target revision SDK support catalog and admission tool; entrypoint documentation does not establish deployment support.",
+    "Read back target application/caller registration, isolated credential injection references and authorized test identity before runtime acceptance."
+  ],
   "referenceBase": "owner-skill-root for SKILL.md/contractEntrypoints/referenceSources paths; contract field resolves from this JSON directory; upstream repository entrypoints stay repository-relative"
 }

@@ -3,6 +3,9 @@
 `references/` 保存 workflow、playbook 和 recipe 共用的稳定事实、约束和 resolver。
 它不保存可直接生成的 YAML（放 `recipes/`），也不保存一步步执行程序（放 `workflows/`）。
 
+存量 Application 的 source path / namespace / Pod env 解析见 [runtime-target.md](runtime-target.md)；
+路由 keyword 不能充当运行身份。
+
 ## 权威来源
 
 | 位置 | 用途 |

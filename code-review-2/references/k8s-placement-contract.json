@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "capability": "k8s-placement/v1",
+  "tool": "read_review_source",
+  "operation": "k8s-placement",
+  "flag": "CODE_REVIEW_K8S_PLACEMENT_ENABLED"
+}

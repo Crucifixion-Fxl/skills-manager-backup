@@ -1,5 +1,10 @@
 # Payment channel UAT runbook
 
+Use the authoritative CMS or instance source defined in `../SKILL.md`; the UAT
+runner freezes the actual collected evidence in this run, not in Skill text.
+Instance offer intent comes from deployed config; product facts come from live
+runtime metadata. Missing repository policy/gate support is a contract gap.
+
 Read this reference for P6-P9. It defines how to select and prove Apple IAP,
 Google Play, Stripe, and Airwallex journeys. It supplements, but never replaces,
 the repository policy or `device-payment-runbook.md`.
@@ -80,7 +85,7 @@ outcome; reconcile provider, order, subscription, VIP, and profile first.
 
 ### Promotional offer evidence
 
-Read the scenario manifest and live CMS before quote collection. Do not hard-code
+Read the scenario manifest and frozen source evidence before quote collection. Do not hard-code
 lapse buckets or promotional denominators in this runbook; the repository policy
 owns which scenarios expect `PROMOTIONAL` and which explicitly expect no offer.
 For the current Lapsed business model, first assert that the frozen policy marks
@@ -88,9 +93,9 @@ D0-D7 as no-offer and later lapse buckets as promotional. If that contract is
 missing or differs, stop as contract drift instead of hard-coding the buckets in
 the runner. The frozen policy remains authoritative for each run.
 
-For every selected subscription whose CMS offer type is `PROMOTIONAL`, require:
+For every selected subscription whose configured offer type is `PROMOTIONAL`, require:
 
-1. live CMS provides a non-empty `requestedOfferId`;
+1. the frozen offer configuration provides a non-empty `requestedOfferId`;
 2. the H5 surfaces required by the approved design show the discounted amount,
    the regular or renewal comparison amount, promotion duration, and
    post-promotion recurrence; when a card intentionally omits price, require
@@ -107,7 +112,7 @@ For every selected subscription whose CMS offer type is `PROMOTIONAL`, require:
 7. fallback-to-regular count is zero for the promotional UAT denominator.
 
 Keep `requestedOfferId` and `resolvedOfferId` as separate evidence fields. The
-first comes from CMS; the second must come from the provider catalog/checkout
+first comes from the frozen offer configuration; the second must come from the provider catalog/checkout
 selection. Copying the request into the response, receiving any real price, or
 opening a provider sheet does not prove promotional resolution.
 
@@ -124,7 +129,7 @@ Provider identity is channel-specific:
 If the product deliberately allows checkout to fall back to its regular/base
 price, preserve that operational behavior but emit
 `PROMOTIONAL_OFFER_FALLBACK`. The checkout may remain usable; the promotional
-scenario still fails. For a policy-declared no-offer scenario, require CMS,
+scenario still fails. For a policy-declared no-offer scenario, require offer configuration,
 quote, Continue payload, and provider selection to keep offer identity absent.
 
 ## 3. Native IAP: Apple and Google

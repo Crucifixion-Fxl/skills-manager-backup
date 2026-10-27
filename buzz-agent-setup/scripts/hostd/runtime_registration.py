@@ -128,6 +128,16 @@ class RuntimeRegistrar:
         await self.daemon.register_runtime_binding(row, plan, **options)
 
     async def readback(self, row, plan):
+        return self.readback_now(row,plan)
+
+    def readback_now(self, row, plan, *, scoped=False):
+        """Current local observation; no await or network IO.
+
+        Grant transactions reuse this exact Worker authority/workset check so a
+        concurrent ledger commit cannot slip between an older proof and grant.
+        scoped preserves that obligation across recovery to active; default
+        callers retain their original active-state contract.
+        """
         row, plan = self._request(row, plan)
         h, name, app, agent = self.daemon, plan['binding_id'], row['callback_app_id'], row['agent_id']
         reader_app = self._bound(row, plan).sync_app_id if row['kind'] == 'channel' else app
@@ -135,21 +145,39 @@ class RuntimeRegistrar:
         tasks = h.binding_tasks.get(name, {})
         status = h.status['bindings'].get(name, {})
         worker = (alive(tasks.get('worker')) and name in h.workers and status.get('runs', 0) > 0
-                  and h.workers[name].binding_id == name and str(h.workers[name].config) == plan['config_path']
-                  and h._binding_state(name) == 'active')
+                  and h.workers[name].binding_id == name and str(h.workers[name].config) == plan['config_path'])
         reader = all(alive(h.app_tasks.get(identity)) and h.status['apps'].get(identity, {}).get('feishu') == 'connected'
                      for identity in {app, reader_app})
         relay = alive(tasks.get('relay')) and status.get('relay') == 'connected'
         report = getattr(h.workers.get(name), 'last', {})
         result = (report.get('hostd') or {}).get('outlet_results', {}).get(agent, {})
-        observe = getattr(h.workers.get(name), 'outlet_readiness', None)
+        registration_observe = getattr(h.workers.get(name), 'registration_readiness', None)
+        observe = registration_observe if callable(registration_observe) else getattr(h.workers.get(name), 'outlet_readiness', None)
         if callable(observe):
             result = observe(agent, h.runtime_store)
         checked = result.get('checked_at')
+        business_ready = result.get('status') in {'verified', 'acked'} and result.get('pending') == 0
+        orphan_ready = (callable(registration_observe) and result.get('registration_only') is True
+                        and result.get('status') == 'pending' and result.get('reason') == 'orphan_withdrawal_wait'
+                        and result.get('pending') == 1)
         outlet = (alive(h.outlet_tasks.get((name, agent))) and h.outlet_status.get((name, agent)) == 'connected'
-                  and result.get('status') in {'verified', 'acked'} and result.get('app_id') == app
-                  and type(result.get('pending')) is int and result['pending'] == 0
+                  and (business_ready or orphan_ready) and result.get('app_id') == app
+                  and type(result.get('pending')) is int
                   and type(checked) is int and 0 <= int(self.clock()) - checked <= 300)
+        # Aggregate business degradation does not revoke this agent's current
+        # scoped verification. Legacy reports alone cannot relax that state.
+        state = h._binding_state(name)
+        if (state == 'degraded' or scoped) and outlet and not orphan_ready:
+            # A normal verified cache binds authority, not work captured since
+            # verification. Do not borrow it for a scoped grant exception.
+            # The orphan observer already validates its exact current workset.
+            current_work = h.runtime_store.conn.execute(
+                'SELECT 1 FROM outlet_work WHERE binding_id=? AND agent_id=? '
+                'UNION ALL SELECT 1 FROM outlet_pending WHERE binding_id=? AND agent_id=? LIMIT 1',
+                (name, agent, name, agent)).fetchone()
+            outlet = current_work is None
+        worker = worker and (not scoped or callable(registration_observe)) and (state == 'active' or
+                             (state == 'degraded' and callable(registration_observe) and outlet))
         values = [row['request_id'], name, plan['channel_id'], row['chat_id'], app, worker, reader, relay, outlet]
         digest = hashlib.sha256(json.dumps(values, separators=(',', ':')).encode()).hexdigest()
         return RegistrationProof(*values, int(self.clock()), digest)

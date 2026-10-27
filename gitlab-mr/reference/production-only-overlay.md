@@ -31,8 +31,11 @@ Git diff must match GitLab. Every deployment change must modify an existing
 regular YAML file beneath that production overlay. The content is limited to
 `NetworkPolicy.spec` or JSON patches of workload NodePool/egress selectors;
 image, resource-source and arbitrary workload changes are not exempt. Only
-`docs/requirements/<Work Item IID>/plan.md` and an existing
-`docs/deployment/prod-deployment-plan.md` may accompany it. A changed
+`docs/requirements/<current-repository Issue IID>/plan.md` and an existing
+`docs/deployment/prod-deployment-plan.md` may accompany it.
+The plan path is keyed by a current-repository IID, so an MR that includes it
+must also carry an `Issue:` (or legacy `Work Item:`) line for that exact
+current-repository Issue; a cross-project Issue alone cannot identify the plan. A changed
 production file may be absent from staging, as in Issue #170. If staging has
 that file but its content differs from the production target, classification
 fails closed until that lineage is resolved.

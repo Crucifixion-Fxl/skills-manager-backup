@@ -1,0 +1,59 @@
+{
+  "schema_version": "1.1",
+  "conclusion": "通过",
+  "score": "N/A",
+  "should_pass": true,
+  "scope": "SYNTHETIC EVAL-001 / CA / EN-FR; one-page packaging.pdf, page 1 only; renderer contract fixture, not an actual file inspection",
+  "documentation": "Synthetic brief and stage contract",
+  "quality": "Synthetic design evidence fields for renderer validation",
+  "e2e": "Local JSON-to-Markdown rendering only; no Adobe or PDF execution",
+  "red_lines": [],
+  "suggestions": [],
+  "review_profile": "design",
+  "design_review": {
+    "stage": "design-review",
+    "dimensions": {
+      "requirements": {
+        "status": "PASS",
+        "required": true,
+        "summary": "SYNTHETIC: EVAL-001 / CA / EN-FR scope matches",
+        "evidence": [
+          "Synthetic brief.md revision abc: EVAL-001 / CA / EN-FR; packaging.pdf page 1 is the entire one-page scope"
+        ]
+      },
+      "content": {
+        "status": "PASS",
+        "required": true,
+        "summary": "SYNTHETIC: Both files list Sensor x1, USB-C cable x1, Tripod x1",
+        "evidence": [
+          "Synthetic brief.md BOM and packaging.pdf page 1: Sensor x1, USB-C cable x1, Tripod x1"
+        ]
+      },
+      "visual": {
+        "status": "PASS",
+        "required": true,
+        "summary": "SYNTHETIC: Synthetic single-page scope: page 1 has no clipping",
+        "evidence": [
+          "Synthetic visual observation for packaging.pdf page 1 only (one-page fixture); no real PDF was opened"
+        ]
+      },
+      "production": {
+        "status": "PASS",
+        "required": true,
+        "summary": "SYNTHETIC: Source and export hashes agree; editable text read back",
+        "evidence": [
+          "Synthetic source/export receipt: editable text roundtrip and matching hashes are assumed fixture inputs, not actual tool execution"
+        ]
+      },
+      "approval": {
+        "status": "PASS",
+        "required": true,
+        "summary": "SYNTHETIC: Design review scope only; manufacturing is outside this stage",
+        "evidence": [
+          "Synthetic brief.md stage: design review only; no real approval or manufacturing release"
+        ]
+      }
+    },
+    "findings": []
+  }
+}

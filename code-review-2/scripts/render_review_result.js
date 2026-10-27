@@ -73,6 +73,18 @@ if (incompleteReasons.length > 0 && result.conclusion !== "审查未完成") {
   fail("incomplete_reasons require conclusion=审查未完成");
 }
 
+// Legacy Buzz copies only this renderer. Technical results must remain usable
+// until the caller negotiates and ships the optional design-report module.
+const usesDesignFields = (result.review_profile !== undefined && result.review_profile !== "technical")
+  || result.design_review !== undefined;
+let designReport = null;
+let renderDesign;
+if (usesDesignFields) {
+  const design = require("./design_review_report.js");
+  designReport = design.validateDesign(result, fail);
+  renderDesign = design.renderDesign;
+}
+
 const allowedTddLevels = new Set(["T0", "T1", "T2", "T3", "T4", "N/A", "UNVERIFIED"]);
 const allowedTddApplicability = new Set(["applicable", "not_applicable", "unknown"]);
 const maxTddSummaryChars = 2000;
@@ -160,6 +172,7 @@ function safeSection(value) {
   return value
     .trim()
     .replace(/<!--\s*code-review-tdd-assessment\s*:/gi, "&lt;!-- code-review-tdd-assessment:")
+    .replace(/<!--\s*code-review-profile\s*:/gi, "&lt;!-- code-review-profile:")
     .replace(/^[ \t]{0,3}#{1,6}(\s+)/gm, "####$1")
     // Match the summary parser's whitespace, including vertical tabs and form feeds.
     // Process each line separately so whitespace cannot consume another line's prefix.
@@ -190,7 +203,7 @@ const tddSection = [
   detailList("缺口", tddAssessment.gaps),
 ].join("\n");
 
-const body = [
+const body = designReport ? renderDesign(result, designReport, safeSection, list) : [
   "### 1. 范围（Scope）",
   safeSection(result.scope),
   "",

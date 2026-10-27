@@ -1,7 +1,9 @@
 # CN 集群迁移与证据（2026-09-28）
 
 AWS CN 集群已弃用。当前 CN 生产使用腾讯云账号 `100014919455`，独立 staging 和
-tech-service 使用账号 `100052802231`。目录存在、旧 DNS 名仍解析、历史 CI job 或历史
+tech-service 使用账号 `100052802231`。例外：AWS prod-cn（`741924744516`）的存量服务迁入
+`100052802231` 的独立 prod 集群 `cn-prod`（`cls-302bzai9`，目录 `tencent-100052802231-cn-prod`，catalog `cn-tke-prod`，
+keyword `prod-cn-tke-2231`），与 cn-tech-service 资源隔离。目录存在、旧 DNS 名仍解析、历史 CI job 或历史
 允许项都不构成新部署准入证据。禁止回退到 AWS CN，或把旧腾讯 staging 账号
 `100050722703`、旧 `100014919455` tech-service 当成当前目标。
 
@@ -34,7 +36,8 @@ CI runner：GitLab instance runner 4542（`tke-staging-runner`，运行在 `cls-
 | prod-cn / prod-cn-tke | cn-k8s | tencent-100014919455-cn-main | argocd-cn-k8s.addx.live / harbor-cn.addx.live |
 | staging-cn / staging-cn-tke（CN 唯一 dev/staging 目标） | cn-tke-staging | tencent-100052802231-cn-staging | argocd-cn-staging.addx.live / harbor-02231-cn-staging.addx.live（内网） |
 | dev-cn（已退役，STOP；改用 staging-cn） | cn-eks-dev | — | — |
-| prod-cn-restricted-admin（域名目标待切换） | cn-tke-tech-service | tencent-100052802231-cn-tech-service | argocd-cn-tech-service-tke.addx.live / harbor-02231-cn-tech-service.addx.live |
+| prod-cn-tke-2231（AWS prod-cn 迁入目标，2026-10-09 起） | cn-tke-prod | tencent-100052802231-cn-prod | argocd-cn-prod-tke.addx.live / harbor-02231-cn-prod.addx.live（内网） |
+| prod-cn-restricted-admin | cn-tke-tech-service | tencent-100052802231-cn-tech-service | argocd-cn-tech-service-tke.addx.live / harbor-02231-cn-tech-service.addx.live |
 
 ## 数据来源
 
@@ -54,29 +57,32 @@ CI runner：GitLab instance runner 4542（`tke-staging-runner`，运行在 `cls-
 - canonical token realm 为 `https://harbor-02231-cn-staging-pub.addx.live/service/token`；内网拉取仍须验证 registry 与 token 服务均可达且落到预期私网。
 - `harbor-cn-staging.addx.live` 是**同一 Harbor 实例**的兼容入口（2026-10-05 只读核实：VPC 内三个域名均解析到 `172.17.2.3`，公网 `/v2/` 的 token realm 均为 `-pub`），不是另一套 Harbor。它当前仍是 runner `HARBOR_REGISTRY`、Image Updater registry（`api_url`/`prefix`）和约 105 个运行中容器的实际镜像域名；`harbor-cn-staging-new.addx.live` 为另一个公网入口，仅极少量镜像在用。新项目默认仍用内网 `harbor-02231-cn-staging.addx.live`。本次 catalog 更新不自动迁移现存 image refs 或 Secret。切换消费者前，核查 runner 实际 `HARBOR_REGISTRY`、构建/部署 image refs、Docker `auths` 和 Image Updater registry/凭据配置中的**精确 hostname**。采用内网镜像的 pull secret 必须包含 `harbor-02231-cn-staging.addx.live` 对应 auth key；同一有效 robot 可复用，但旧域名的凭据条目不能证明新域名已配置。缺失时由平台同步机制补齐并验证后再切换，禁止静默替换现存镜像或 Secret。
 
-## tech-service 目标域名（待切换）
+## tech-service 已核验目录准入（2026-10-19）
 
-用户于 2026-09-28 明确“作为目标命名，但是 skill 先改”。catalog 的 tech-service URL
-按目标填写，`endpoint_status: pending-cutover`；不能当作 DNS、证书、服务或迁移已验收。
-完整七个入口与固定版本的旧声明对照见 [CN 集群清单](../../../infrastructure/k8s-ops/references/cn-tencent-inventory.md)。
+`cn-tke-tech-service` 已登记 `deployment_status: allowed`、`endpoint_status: verified`，
+集群为 `100052802231 / ap-beijing / cls-o0gwzdpz`，amd64 构建 tag 为 `cn-tech-amd64`。
+身份、GitOps/live、DNS/TLS、OIDC discovery/登录重定向、Harbor 和实例 Runner 4942
+证据及限制见 [准入回执](cn-tech-service-admission-2026-10-19.md)。
 
-- ArgoCD 为 `argocd-cn-tech-service-tke.addx.live`，Casdoor 为
-  `casdoor-cn-tech-service-tke.addx.live`；实施时同步核验 server URL、OIDC issuer/discovery、
-  client redirect URI 和 webhook 入口，不能只改 Ingress host。
-- Harbor 内网目标 `harbor-02231-cn-tech-service.addx.live`；外部同步目标
-  `harbor-02231-cn-tech-service-pub.addx.live`。同一实例双入口是目标合同；还没有 staging
-  那样的私网部署回执，不能声称 token realm、split DNS、镜像同步或 auth aliases 已就绪。
-- `vault_builder_url=https://vault-cn.builder.addx.live` 单独记录 Builder 服务目标入口，
-  不改变 `domain=ops`、`vault=vault-cn-prod`、`vault_css=vault-backend`。
-  Vault 服务部署位置、应用密钥域、ESO 认证是三个不同问题；域名存在不证明迁往新 TKE。
-- VictoriaMetrics 查询 base 为 `https://victoria-metrics-cn-tech-service-tke.addx.live/select/0/prometheus`；
-  VMAlert 为 `https://vm-alert-cn-tech-service-tke.addx.live`，两者用途不同。
-- URL 命名不会改变 JWT mount、KV 路径、ServiceAccount、指标 `cluster` 标签或 runner tag。
-  独立 runner 与业务准入仍未核验，`deployment_status=blocked` 保留；即便只把它误改成
-  `allowed`，准入检查仍因 `endpoint_status=pending-cutover` 拒绝 Build。待平台切换并核验后
-  通过新的源仓库变更将状态登记为 `verified`，禁止 workflow 自行放行。
-  `endpoint_status` 如显式提供，只接受 `pending-cutover` / `verified`；空值或未知值视为
-  catalog 错误并拒绝解析。既有其他集群未设置该字段时保持原准入规则，不据缺省推断 live 已验证。
+- `argocd-cn-tech-service-tke.addx.live` 与 `argocd-cn-tech-service.addx.live` 为
+  `cn-tke-tech-service` 内同一 ArgoCD 实例的双入口，用户于 2026-10-19 明确确认。
+  旧 `cn-eks-tech-service` 已下线；不能按域名是否带 `-tke` 区分集群或判断迁移状态。
+  当前配置的 primary URL 为带 `-tke` 域名，无 `-tke` 域名为 additionalUrls。
+  Casdoor 实际 issuer 为
+  `https://casdoor-cn-tech-service.addx.live`，不能按域名命名规则改成兼容入口。
+- Harbor 默认私网入口为 `harbor-02231-cn-tech-service.addx.live`，受限公网为 `-pub`。
+  本轮集群内私网域解析 `10.2.0.6`、公网域解析公网 IP；realm 随请求 host 分别返回，
+  不继承 staging 的公网域在 VPC 内解析私网合同。Runner 已实际使用私网镜像和同域 auth key。
+- Ops `vault-backend` 仍指向 `vault-cn.addx.live`，JWT mount 为
+  `jwt-tke-cn-tech-service-2231`；Builder Vault 入口可达不改变 Ops 密钥域。
+- 已验证实例 Runner 4942 在线、未锁定，并有 `cn-tech-amd64` 成功作业；每个项目仍须
+  启用实例 Runner，核对 tag/分支权限和实际构建推送。ResourceSpace 项目共享开关已开，
+  本轮没有触发该项目的验证流水线。
+- 共享 `app-runtime` 只允许已登记仓库/destination/kind，不是整个集群的通用授权。
+  ResourceSpace 原要求的 Ubuntu digest 在 `base/ubuntu` 路径返回 404，依赖该镜像的
+  构建仍须先补齐精确镜像。目录 PASS 不替代镜像存在性、Application 注册或业务验收。
+- `check_deployment_target.py` 继续严格检查 `deployment_status` 和 `endpoint_status`；
+  未修改 validator，也不为缺失能力添加绕过。
 
 ## 必须按新集群重新验证的能力
 
@@ -84,12 +90,11 @@ CI runner：GitLab instance runner 4542（`tke-staging-runner`，运行在 `cls-
   tech-service 的同名 CSS 指向 `https://vault-cn.addx.live`，JWT mount 为
   `jwt-tke-cn-tech-service-2231`。前者不因 CSS 名称变成 ops Vault；后者 ESO mount 不代表
   `sentry-onboard` role 已配置。原 cn-main 的 JWT mount、ServiceAccount 和内网域名不能套用。
-- 新 tech-service 只核验到平台 Application，业务 AppProject/部署准入未证实，
-  catalog 标为 `blocked`；restricted-admin keyword 保留正确目标映射，但禁止 Build。
-  该目录也未声明独立 build runner，catalog 不提供虚构 tag。
-  需要构建时先核验 runner/Harbor 对应关系；镜像已存在的部署仍须检查具体目标 readiness。
+- 新 tech-service 的平台入口、实例 Runner 和 ResourceSpace AppProject 已核验，目录准入
+  见上方回执。共享 MySQL Composition、COS OIDC/CSI 等逐能力门禁仍保持；
+  新应用须按精确 source/destination/kind 核验，不把目录准入等同于所有业务能力可用。
 - 原 AWS CN shared-middleware/MSK、Sentry JWT role、开发者 kubectl wrapper、TDD demo
-  的已上线记录仅供历史排障。AWS `staging-cn-shared-msk` 已删除；TDD demo 已整体退役不迁。当前两个 `100052802231` 集群必须核验各自
+  的已上线记录仅供历史排障。AWS `staging-cn-shared-msk` 已删除；TDD demo 已整体退役不迁。当前 cn-prod、staging、tech-service 三个 `100052802231` 集群必须核验各自
   XRD/Composition/ProviderConfig、Vault writer/reader、身份权限和镜像分发；不能自动复制 AWS ARN、
   MSK broker、NAT NodePool、旧账号 CAM role 或 cn-main 专用 Sentry 模板。
 - `check_db_resource_contracts.py` 的 producer 投影仍对应现有 AWS Composition（staging 使用
@@ -102,3 +107,32 @@ CI runner：GitLab instance runner 4542（`tke-staging-runner`，运行在 `cls-
   不能把 ALB 模板只补一段 TLS 就当成 TKE 模板。公共 DNS 前按真实后端重新核验暴露面。
 - 保留的 AWS CN catalog 项均为 `retired`；历史 ARN、validator 兼容测试和精确 legacy exception
   不授予 Build 准入。旧应用迁移需单独核验 source/target，不因 keyword 改路由而静默移动存量。
+
+## cn-prod 能力状态与存量维护
+
+新 `cn-tke-prod` 的 allowed / verified 是 catalog 准入与已记录的平台入口状态，
+不等于所有自助能力就绪。存量路径和 namespace 决策见 [runtime-target.md](runtime-target.md)。
+
+| 能力 | 当前边界与后续动作 |
+|---|---|
+| 普通 ESO / Vault | `vault-cn-prod`、`vault-backend`，Ops 域；按实际 CSS 核验 writer/reader 与 JWT，不复用 cn-main mount。 |
+| 日志标签 | 新 keyword 默认标签 blocked；存量 `prod-cn` 仅配置兼容。见 [日志门禁](logging/README.md#cn-prod-日志映射门禁)。 |
+| Sentry onboarding | 现有腾讯 recipe 仅支持 cn-main；cn-prod STOP + Ops Todo，已有 DSN 消费不等于 onboarding。 |
+| Ingress / 证书 / SG / WAF | AWS ALB recipe 不适用；须取得该目标 TKE/CLB 已验收合同。 |
+| 原生 COS / 托管资源 / CAM | 按原生 workflow 的目标 handoff；readonly provider 不授权新建资源或接管存量。 |
+| 基础镜像分发 | 新 Harbor 的持续 fanout 未在下列 base-images 快照登记；精确镜像不存在时 STOP，由平台接入。 |
+| Grafana datasource | 外部 dashboard 权威 catalog 尚缺该目标；先在该仓验收 VM/datasource 映射，不复用 cn-main UID。 |
+| VM / VMAlert | 精确目标的 CRD/watch、唯一 evaluator、通知链需单独验收，不猜 URL 或继承其他集群配置。 |
+| 存量 AWS RDS | 消费已有 per-app 连接需核验 owner、稳定 NAT、SG 白名单及 TLS；不因此套用 AWS IRSA 或创建腾讯 DB。 |
+| 开发者 kubectl wrapper | staging-only，不把生产加入支持范围。 |
+
+新 cn-prod 固定 desired state：
+[argocd-apps](https://gitlab.addx.ai/DEV/argocd-apps/-/tree/7daa17dc17dc7a0270c23b0062ee8605b1ec8fec/tencent-100052802231-cn-prod)、
+[k8s](https://gitlab.addx.ai/DEV/k8s/-/tree/1489d4d04cc60855be1bc951a632cd64e309f5d6/clusters/tencent-100052802231-cn-prod)。
+这些配置可核对 ArgoCD/Casdoor/Harbor、Runner、ESO；不能代替 live DNS/证书、
+Harbor registry/token realm、GitLab 实际 runner tags 或 Vault 登录/日志入库回执。
+
+跨仓能力缺口基于
+[base-images 6ff377b8](https://gitlab.addx.ai/DEV/base-images/-/tree/6ff377b8b4333aa3a59a6967c78d1ec5e6724ffc) 和
+[dashboard catalog 891d03b1](https://gitlab.addx.ai/DEV/grafana-dashboards-as-code/-/tree/891d03b103e9df166ceb976091e0f286bd355323)
+快照；执行时重新读取对应权威仓，不把历史缺口永久视作现状。

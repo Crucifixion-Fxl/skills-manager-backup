@@ -8,6 +8,36 @@ const YAML = require('yaml');
 const { digest } = require('../cli/src/contracts');
 
 const cli = path.resolve(__dirname, '../cli/bin/events-tdd.js');
+
+test('published baseline can be checked with an explicitly empty selection, never used to build a new release', t => {
+  const dir = fixture();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  fs.writeFileSync(path.join(dir, 'selected.yaml'), 'changes: []\n');
+  const args = [`--baseline=${path.join(dir, 'baseline.yaml')}`, `--change-list=${path.join(dir, 'selected.yaml')}`];
+  const result = spawnSync(process.execPath, [cli, 'check-contract', ...args], { encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr);
+  const report = JSON.parse(result.stdout);
+  assert.equal(report.baseDigest, report.candidateDigest);
+  assert.deepEqual(report.selectedIssues, []);
+  const baseline = YAML.parse(fs.readFileSync(path.join(dir, 'baseline.yaml'), 'utf8'));
+  const event = baseline.events[0];
+  fs.writeFileSync(path.join(dir, 'scenario.yaml'), YAML.stringify({ schemaVersion: 1, kind: 'scenario',
+    host: baseline.host, applicationId: baseline.applicationId, expectations: [{ event, count: 1, fields: {} }] }));
+  fs.writeFileSync(path.join(dir, 'capture.json'), JSON.stringify({ events: [{ ...event, fields: {} }] }));
+  const local = spawnSync(process.execPath, [cli, 'verify-local', ...args,
+    `--scenario=${path.join(dir, 'scenario.yaml')}`, `--capture=${path.join(dir, 'capture.json')}`, '--commit=abc'], { encoding: 'utf8' });
+  assert.equal(local.status, 0, local.stderr);
+  assert.equal(JSON.parse(local.stdout).status, 'PASS');
+  const build = spawnSync(process.execPath, [cli, 'build-candidate', ...args], { encoding: 'utf8' });
+  assert.notEqual(build.status, 0);
+  assert.match(build.stderr, /INVALID_CHANGE_LIST/);
+  const bootstrap = YAML.parse(fs.readFileSync(path.join(dir, 'baseline.yaml'), 'utf8'));
+  bootstrap.kind = 'bootstrapBaseline'; bootstrap.release.status = 0; bootstrap.events = [];
+  fs.writeFileSync(path.join(dir, 'baseline.yaml'), YAML.stringify(bootstrap));
+  const emptyBootstrap = spawnSync(process.execPath, [cli, 'check-contract', ...args], { encoding: 'utf8' });
+  assert.notEqual(emptyBootstrap.status, 0);
+  assert.match(emptyBootstrap.stderr, /INVALID_CHANGE_LIST/);
+});
 function fixture() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'events-tdd-'));
   const event = { type: 'PAGE', trackerType: 'BASE', spm: ['feed'], point: 'feed', parameters: [] };

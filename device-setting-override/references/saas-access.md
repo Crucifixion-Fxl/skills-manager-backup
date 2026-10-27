@@ -4,7 +4,7 @@
 
 认证路由：revenue-sharing /skill-api LDAP token proxy (default); explicitly authorized AK/SK only。
 
-优先复用 SKILL_LDAP_TOKEN；缺失由本机安全凭据注入 POST <rs-host>/skill-api/login {ldapCn,password}，不将密码放命令行/聊天。生产 RS host 在 owner 契约中待部署，不能自动切换 AK/SK。
+优先复用 SKILL_LDAP_TOKEN；缺失由本机安全凭据注入 POST <rs-host>/skill-api/login {ldapCn,password}，不将密码放命令行/聊天。生产 RS host 已部署并端到端验收 (2026-10-08)；rs-auth 模块按 rs-env 各持 PaasConfig 凭据路由，AK/SK 由服务端环境决定。
 
 raw Authorization LDAP token，3 天；RS 服务端托管 PaasConfig AK/SK 与节点路由；显式 AK/SK 模式 IOT_ADMIN_AK/SK 做 URL HmacSHA1。
 

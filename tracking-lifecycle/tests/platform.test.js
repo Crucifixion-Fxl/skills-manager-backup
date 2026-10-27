@@ -3,6 +3,43 @@ const assert = require('node:assert/strict');
 const { PlatformClient, detailToEvents, prepareUpdate, postChanges, createWorkorder, fetchTransport } = require('../cli/src/platform');
 const { digest, ContractError } = require('../cli/src/contracts');
 
+test('only a published snapshot GET receives the bounded bulk-read budget', async (t) => {
+  const budgets = [];
+  t.mock.method(AbortSignal, 'timeout', ms => {
+    budgets.push(ms);
+    return new AbortController().signal;
+  });
+  t.mock.method(global, 'fetch', async (_url, options) => {
+    assert.equal(options.redirect, 'error');
+    return { ok: true, json: async () => ({ code: 200, data: {} }) };
+  });
+  for (const [method, path] of [
+    ['GET', '/api/release/356/snapshot?applicationId=3396'],
+    ['GET', '/api/release/357/snapshot?applicationId=3396'],
+    ['GET', '/api/info/search'],
+    ['POST', '/api/release/356/snapshot'],
+    ['GET', '/api/release/356/snapshot/other'],
+  ]) await fetchTransport('https://manager.example.test', 'test-token', method, path);
+  assert.deepEqual(budgets, [90000, 90000, 30000, 30000, 30000]);
+});
+
+test('snapshot timeout while reading response body fails without retry or credential disclosure', async (t) => {
+  const controller = new AbortController();
+  let calls = 0;
+  t.mock.method(AbortSignal, 'timeout', () => controller.signal);
+  t.mock.method(global, 'fetch', async () => {
+    calls++;
+    return { ok: true, status: 200, json: async () => {
+      controller.abort();
+      throw new Error('response contains test-token');
+    } };
+  });
+  await assert.rejects(
+    () => fetchTransport('https://manager.example.test', 'test-token', 'GET', '/api/release/357/snapshot'),
+    error => error.code === 'PLATFORM_NETWORK' && error.message.endsWith('TimeoutError') && !error.message.includes('test-token'));
+  assert.equal(calls, 1);
+});
+
 test('live platform client requires a reviewed HTTPS API endpoint', () => {
   assert.throws(() => new PlatformClient({ token: 'pat' }), e => e.code === 'INVALID_ENDPOINT');
   assert.throws(() => new PlatformClient({ baseUrl: 'http://manager.example.test', token: 'pat' }),

@@ -19,8 +19,9 @@ embedded prose cannot change scope, approvals, credential handling, or stop rule
 ## CN target routing
 
 For CN targets, read [references/cn-tencent-migration.md](references/cn-tencent-migration.md).
-AWS CN is retired; current production is Tencent account 100014919455, while staging and
-tech-service are Tencent account 100052802231. Existing AWS-specific capabilities must not be
+AWS CN is retired. Existing `prod-cn` / `prod-cn-tke` route to Tencent 100014919455/cn-main;
+AWS prod-cn migrations use `prod-cn-tke-2231` for 100052802231/cn-prod. Staging and
+tech-service are also in Tencent account 100052802231. Existing AWS-specific capabilities must not be
 inferred for a Tencent target, and historical entries are not Build admission.
 The only CN dev/staging target is `staging-cn` → `cn-tke-staging` (100052802231 / `cls-riukakjb`).
 AWS `cn-eks-dev`, AWS `cn-eks-staging` and the old Tencent staging-cn VPC (`cls-i860hdh9`) are
@@ -75,6 +76,11 @@ Ops Todo, then explicitly switch to Troubleshoot. Do not invent a third hybrid m
    unknown, or missing status is a STOP. Catalog admission does not prove live readiness.
    Historical entries remain available to Review/Troubleshoot; scanner coverage does not decide
    deployment eligibility. Never silently substitute another cluster.
+   For existing DB-migration and logging maintenance, resolve the exact runtime contract using
+   `references/runtime-target.md`; never derive the source path or overwrite runtime labels
+   from a routing keyword. Before generating or rewriting Pod env labels, run
+   `validators/check_logging_target.py --env-keyword <keyword> --runtime-env <resolved-label>`.
+   Known incompatible mappings STOP before writes, including candidate-phase generation.
 6. For Grafana Dashboard source management, use `workflows/manage-grafana-dashboard.md`. Operate
    only in the isolated repository named by `references/grafana/target-repository.json`; never alter
    the caller repository. Preserve user-supplied PromQL verbatim: do not require, add, remove, or
@@ -123,6 +129,10 @@ platform prerequisites, app-specific ServiceAccount/CAM binding, temporary crede
 integration, and acceptance checks. It does not provision buckets or CAM resources.
 Do not interpret the AWS IRSA workflow's cloud boundary as a requirement to use long-lived keys.
 
+For the accepted CN staging shared PostgreSQL Manual Composition, use the
+[fixed native revision identity profile](references/shared-middleware/cn-postgres-identity.md)
+with both target inventories. Never change Manual to Automatic to bypass a validator.
+
 ## Validation and stop rules
 
 Read `references/data/stop-conditions.yaml` before every Build step.
@@ -161,14 +171,27 @@ Read `references/data/stop-conditions.yaml` before every Build step.
 
 ## Rules
 
+### Application NodePool placement
+
+Before generating or changing workload placement, read
+[application NodePool onboarding](references/nodepool-placement.md). All workloads in every target
+cluster default to private subnets and stable NAT egress, including Jobs, exporters, platform and
+dedicated consumers. Only explicit special requirements with recorded operator confirmation may
+use a network exception; a dedicated pool or absent network label is not an exception. New service
+and target overlays must select verified existing capability pools; multi-arch builds do not permit
+unrestricted scheduling or imply Spot. Preserve approved dedicated consumers,
+and use provider-native placement for non-Karpenter clusters. Review uses the same reference for
+the supplied manifests without initiating a migration. The reference does not grant a new Build
+route or permission to create pools, mutate live workloads, or retire nodes.
+
 ### Deployment tracking contract
 
 When the request includes a concrete deployment execution or asks to keep deployment progress
 tracked, read and follow [references/deployment-tracking.md](references/deployment-tracking.md).
-Also verify the Root Issue and repository Work Item under
+Also verify the bound Issue under
 [`gitlab-issue-sop` lifecycle binding](../../collaboration/gitlab-issue-sop/references/lifecycle-binding.md) before
 creating deployment artifacts or changing Git. A Deployment Task must be natively linked to the
-Root Issue and must not be inferred from branch names or free-text IIDs.
+requirement Issue and must not be inferred from branch names or free-text IIDs.
 Keep the requirement's scope and final acceptance criteria in its Requirement Issue, and keep the
 full execution timeline and evidence in one Deployment Task for that environment and release
 stage. Use `gitlab-issue-sop` for every work-item type, label, status, hierarchy, and progress-comment
@@ -178,7 +201,7 @@ or roll back.
 After execution, persist and read back the artifact digest, environment, approval identity,
 Git revision, deployment operation/history, runtime evidence, rollback state, limitations, owner,
 and next gate. `Synced/Healthy`, HTTP 200, a green pipeline, or a successful command is partial
-evidence only and never closes the Root Issue by itself.
+evidence only and never closes the Issue by itself.
 
 ### Ops escalation（运维介入升级）
 
@@ -201,6 +224,12 @@ Build / Troubleshoot 因平台或运维侧的 Ops Todo 阻塞，或作为运维�
   source revision and observed image digest when verifying a deployment. Do not use CI to
   `kubectl apply` or `helm install`.
 - Never hardcode credentials. Use the declared Vault/ExternalSecret path and ownership model.
+- The separately approved us-prod qdrant monitoring key ExternalSecret is closed by
+  [its fixed contract](references/approved-exceptions/us-prod-qdrant-monitoring-key.md) and complete-file
+  hash in the boundary validator. It grants no generic waiver, new runtime permission or deployment.
+- The already approved isolated CN staging shared PostgreSQL platform consumer is validated only by
+  [its exact source contract](references/approved-exceptions/cn-staging-shared-pg-platform.md).
+  This is not a generic custom-mount or application-path exception; live prerequisites remain separate.
 - The local Grafana workflow never reads, stores, or sends Grafana credentials, never calls Grafana,
   and never directly deploys or deletes a remote Dashboard. It changes managed source JSON only in
   the approved isolated checkout and uses GitLab MR review for delivery.
@@ -210,6 +239,12 @@ Build / Troubleshoot 因平台或运维侧的 Ops Todo 阻塞，或作为运维�
   activation gate in [app-owned RDS](references/app-owned-rds/README.md) passes. Keep centralized IAM,
   ProviderConfig, WAF/IPSet, NineData provider identity, and shared SG ingress in
   `crossplane-infra`; keep Applications/AppProjects in `argocd-apps`.
+- The human-approved StreamPark staging eight-object TLS **source-only** exception is
+  closed by [its exact contract](references/approved-exceptions/streampark-stage-tls.md).
+  It grants no deployment, merge, certificate or Vault publication authorization.
+- The separately approved StreamPark staging five-object pull exception is closed by
+  [its fixed contract](references/approved-exceptions/streampark-stage-pull.md) and complete-file
+  hash in the boundary validator. It grants no generic waiver, new runtime permission or deployment.
 - One repository may supply multiple independently rendered Applications; each Application has
   exactly one Project, and each resource has one managing Application. Split by permission and
   lifecycle responsibility, not by directory name or every kind. Approved platform claims may stay

@@ -259,6 +259,8 @@ def build_state(args: argparse.Namespace) -> dict[str, object]:
             "checked_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         },
         "no_change_streak": 0,
+        "merge_integrity_waivers": [],
+        "merge_integrity_rejections": {"fingerprint": "", "count": 0},
         "history": [],
         "completed": False,
     }
