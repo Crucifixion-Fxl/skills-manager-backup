@@ -7,6 +7,7 @@
     "claude_code": true,
     "codex": true,
     "cursor": true,
-    "github_copilot": true
+    "github_copilot": true,
+    "opencode": true
   }
 }
