@@ -5,13 +5,34 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from dataclasses import dataclass
 
 COMPOSITION = "database.cn-staging.platform.addx.io"
+APP_RE = r"[a-z][a-z0-9]*(_[a-z0-9]+)*"
+PURPOSE_RE = APP_RE
+
+
+@dataclass(frozen=True)
+class Capability:
+    """What one reviewed Composition spec accepts; mirrors its template guards."""
+
+    publication: bool
+    purpose: bool = False
+    purpose_publication: bool = False
+    underscore_publication: bool = False
+
+
 # Canonical JSON of Composition.spec, excluding only Revision.spec.revision.
-# DEV/k8s merged911798: SQL-only; merged71e85e0: default-off native publication.
+# DEV/k8s merged911798: SQL-only; merged71e85e0: default-off native publication
+# for alphanumeric apps; merged067a008: app__purpose identities, no purpose
+# publication; mergedbb5ec5d: publication for purpose and underscore identities.
 APPROVED_SPECS = {
-    "f478388ab73a7b7fc909186b2fd0e21470feab397945b62763e039a0c70d1c15": False,
-    "022802afb1a8dc44f36f368b403eae8f9b67db12f9d51a41bfce596918723ffe": True,
+    "f478388ab73a7b7fc909186b2fd0e21470feab397945b62763e039a0c70d1c15": Capability(False),
+    "022802afb1a8dc44f36f368b403eae8f9b67db12f9d51a41bfce596918723ffe": Capability(True),
+    "363a2e6b6efd755d3eb3585337eda47d83c793afccee678832c3d712dcbe019e": Capability(True, purpose=True),
+    "2ff826c1ee99fd3e9787b0e357473ce0c2040793be82a30cb9aae47042cc3008": Capability(
+        True, purpose=True, purpose_publication=True, underscore_publication=True
+    ),
 }
 
 
@@ -97,19 +118,41 @@ def claim_failures(doc, revisions):
         failures.append(
             "CN PostgreSQL requires an explicit verified native CompositionRevision"
         )
+    # Unknown revision: judge against the strictest (SQL-only) capability.
+    capability = (
+        revisions.get(revision_name, Capability(False))
+        if revisions is not None and isinstance(revision_name, str)
+        else Capability(False)
+    )
     app = db.get("app")
     if (
         not isinstance(app, str)
         or not 2 <= len(app) <= 31
-        or re.fullmatch(r"[a-z][a-z0-9]*(_[a-z0-9]+)*", app) is None
+        or re.fullmatch(APP_RE, app) is None
     ):
         failures.append(
             "CN PostgreSQL requires a canonical snake_case app of 2..31 characters"
         )
     if db.get("env") != "staging" or db.get("engine") != "postgres":
         failures.append("CN PostgreSQL supports only explicit staging/postgres")
-    if "purpose" in db or "additionalUsers" in db or "instanceRef" in db:
-        failures.append("CN PostgreSQL supports only the primary app identity")
+    if "additionalUsers" in db or "instanceRef" in db:
+        failures.append("CN PostgreSQL supports only the app and optional purpose identity")
+    purpose = db.get("purpose")
+    if "purpose" in db:
+        if not capability.purpose:
+            failures.append("selected CN PostgreSQL revision does not support purpose")
+        if (
+            not isinstance(purpose, str)
+            or not 2 <= len(purpose) <= 20
+            or re.fullmatch(PURPOSE_RE, purpose) is None
+        ):
+            failures.append(
+                "CN PostgreSQL purpose must be canonical snake_case of 2..20 characters"
+            )
+        elif isinstance(app, str) and len(app) + len(purpose) + 2 > 63:
+            failures.append(
+                "CN PostgreSQL derived app__purpose identity exceeds 63 characters"
+            )
     metadata = doc.get("metadata")
     namespace = metadata.get("namespace") if isinstance(metadata, dict) else None
     if isinstance(app, str) and namespace != "staging-" + app.replace("_", "-"):
@@ -118,14 +161,15 @@ def claim_failures(doc, revisions):
     if type(publish) is not bool:
         failures.append("CN PostgreSQL publication must be a boolean")
     elif publish:
-        if revisions is not None and (
-            not isinstance(revision_name, str)
-            or not revisions.get(revision_name, False)
-        ):
+        if revisions is not None and not capability.publication:
             failures.append(
                 "selected CN PostgreSQL revision does not support publication"
             )
-        if (
+        if "purpose" in db and not capability.purpose_publication:
+            failures.append(
+                "selected CN PostgreSQL revision does not support publication for a purpose identity"
+            )
+        if not capability.underscore_publication and (
             not isinstance(app, str)
             or re.fullmatch(r"[a-z][a-z0-9]{1,30}", app) is None
         ):
@@ -134,24 +178,33 @@ def claim_failures(doc, revisions):
 
 
 def producers(doc):
-    """Reserve the exact SQL, credential and potential publication identities."""
-    app = doc["spec"]["app"]
-    dns = app.replace("_", "-")
+    """Reserve the exact SQL, credential and potential publication identities.
+
+    Matches the reviewed templates: the physical identity is app or app__purpose;
+    Kubernetes and Vault names use its kebab form. Every approved revision either
+    keeps these names (alphanumeric app, no purpose) or uses exactly this form, so
+    one projection covers same-claim revision adoption.
+    """
+    db = doc["spec"]
+    app = db["app"]
+    purpose = db.get("purpose")
+    identity = f"{app}__{purpose}" if purpose else app
+    dns = identity.replace("_", "-")
     prefix = f"cn-staging-{dns}-postgres"
     return {
         "primary": {
-            ("postgres.Role", f"shared-postgres/{app}"),
-            ("postgres.Database", f"shared-postgres/{app}"),
+            ("postgres.Role", f"shared-postgres/{identity}"),
+            ("postgres.Database", f"shared-postgres/{identity}"),
             ("postgres.ProviderConfig", f"{prefix}-schema"),
             ("Secret", f"crossplane-system/{prefix}-db-cred"),
             ("PushSecret", f"crossplane-system/{prefix}"),
             ("ClusterSecretStore", f"{prefix}-reader"),
             ("ClusterSecretStore", f"{prefix}-writer"),
-            ("ServiceAccount", f"shared-postgres-publishers/{app}"),
-            ("ServiceAccount", f"shared-postgres-readers/{app}"),
+            ("ServiceAccount", f"shared-postgres-publishers/{dns}"),
+            ("ServiceAccount", f"shared-postgres-readers/{dns}"),
             (
                 "Vault",
-                f"cn-staging-vault/shared-db/staging/rds/application/{app}/postgres",
+                f"cn-staging-vault/shared-db/staging/rds/application/{dns}/postgres",
             ),
         }
     }

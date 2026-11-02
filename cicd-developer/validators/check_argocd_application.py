@@ -2,7 +2,8 @@
 """check_argocd_application.py <directory>
 
 Verifies every ArgoCD Application in <directory> has:
-  1. metadata.finalizers contains 'resources-finalizer.argocd.argoproj.io'
+  1. metadata.finalizers contains 'resources-finalizer.argocd.argoproj.io',
+     except for the exact active VIP US production grandfather identity
   2. spec.project is set
   3. spec.syncPolicy.automated exists
   4. spec.syncPolicy.automated.selfHeal == true
@@ -81,6 +82,14 @@ PRUNE_DISABLED_BRIDGE_IDENTITIES = frozenset(
 
 
 REQUIRED_FINALIZER = "resources-finalizer.argocd.argoproj.io"
+# Existing VIP US production Application has no deletion finalizer. Adding it
+# changes deletion into a cascading workload deletion; preserve the live
+# ownership contract for this exact, active, repository-bound legacy identity.
+VIP_US_FINALIZER_GRANDFATHER = (
+    "aws-302571458622-us-prod", "vip-service-prod-us", "prod-us", "vip-service",
+    "https://gitlab.addx.ai/DEV/argocd-apps.git",
+    "https://gitlab.addx.ai/CLOUD/vip-service.git", "k8s/overlays/prod-us",
+)
 AI_PREFIX = "argocd-image-updater.argoproj.io/"
 PLATFORM_WRITEBACK_PREFIX = "image-writeback.addx.io/"
 REQUIRED_IMAGE_UPDATER_GLOBAL = {
@@ -242,15 +251,41 @@ def validate_core_contracts(
     name: str,
     metadata: dict,
     spec: dict,
+    controlled_applications: Collection[ApplicationException] = (),
 ) -> list[str]:
     failures: list[str] = []
-    finalizers = metadata.get("finalizers") or []
+    raw_finalizers = metadata.get("finalizers")
+    finalizers = raw_finalizers or []
     project = spec.get("project")
     automated = (spec.get("syncPolicy") or {}).get("automated")
     identity = application_identity(file, scan_root, name)
     expected_prune = identity not in PRUNE_DISABLED_BRIDGE_IDENTITIES
 
-    if REQUIRED_FINALIZER not in (finalizers or []):
+    raw_annotations = metadata.get("annotations")
+    annotations = raw_annotations if isinstance(raw_annotations, dict) else {}
+    # !1340 represents expired identities as records. Preserve only the VIP
+    # identity while letting the shared matcher reject it when expired.
+    vip_exceptions = {
+        item for item in controlled_applications
+        if item == VIP_US_FINALIZER_GRANDFATHER
+        or getattr(item, "identity", None) == VIP_US_FINALIZER_GRANDFATHER
+    }
+    vip_grandfather = (
+        (raw_finalizers is None or raw_finalizers == [])
+        and metadata.get("namespace") == "argo-cd"
+        and metadata.get("labels") == {"app": "vip-service", "env": "prod-us"}
+        and annotations.get(f"{AI_PREFIX}image-list")
+        == "app=harbor-30257-us-prod.addx.live/cicd/prod-us/vip-service"
+        and project == "app-data-plane"
+        and spec.get("destination") == {"server": "https://kubernetes.default.svc", "namespace": "prod-us"}
+        and isinstance(spec.get("source"), dict)
+        and spec["source"].get("targetRevision") == "master"
+        and application_matches_exception(
+            file, scan_root, name, "prod-us", "vip-service",
+            vip_exceptions, {"spec": spec},
+        )
+    )
+    if REQUIRED_FINALIZER not in (finalizers or []) and not vip_grandfather:
         failures.append(fail(file, name, f"missing finalizer [{REQUIRED_FINALIZER}]"))
 
     if not isinstance(project, str) or not project:
@@ -861,6 +896,13 @@ def validate_image_contract(
     return failures
 
 
+def has_image_updater_annotations(annotations: object) -> bool:
+    return isinstance(annotations, dict) and any(
+        isinstance(key, str) and key.startswith(AI_PREFIX)
+        for key in annotations
+    )
+
+
 def application_failures(
     file: Path,
     scan_root: Path,
@@ -879,13 +921,11 @@ def application_failures(
         name,
         metadata,
         spec,
+        controlled_applications,
     )
     failures.extend(validate_notification_annotations(file, name, annotations))
     failures.extend(validate_retired_writeback_labels(file, name, metadata))
-    if any(
-        isinstance(key, str) and key.startswith(AI_PREFIX)
-        for key in annotations
-    ):
+    if has_image_updater_annotations(annotations):
         annotation_failures, entries = validate_image_updater_annotations(
             file,
             name,
@@ -916,9 +956,7 @@ def main(argv: list[str]) -> int:
         print(f"FAIL: directory not found: {root}", file=sys.stderr)
         return 2
 
-    controlled_applications, _ = load_namespace_legacy_exceptions(
-        LEGACY_EXCEPTIONS_YAML
-    )
+    controlled_applications: set[ApplicationException] | None = None
     bad = 0
     total = 0
 
@@ -930,7 +968,12 @@ def main(argv: list[str]) -> int:
         if not is_application(doc):
             continue
         total += 1
-        failures = application_failures(f, root, doc, controlled_applications)
+        annotations = (doc.get("metadata") or {}).get("annotations")
+        if controlled_applications is None and has_image_updater_annotations(annotations):
+            controlled_applications, _ = load_namespace_legacy_exceptions(
+                LEGACY_EXCEPTIONS_YAML
+            )
+        failures = application_failures(f, root, doc, controlled_applications or ())
         for failure in failures:
             print(failure)
         bad += len(failures)

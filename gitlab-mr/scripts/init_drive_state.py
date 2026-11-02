@@ -19,6 +19,8 @@ from typing import Any
 LIB_DIR = Path(__file__).resolve().parents[1] / "lib"
 sys.path.insert(0, str(LIB_DIR))
 
+from drive_state_io import StateError
+from drive_state_io import create as create_state
 from production_overlay_attestation import attest_production_overlay
 from release_drive_state import cleanup_state, promotion_state
 from release_drive_validation import (
@@ -270,11 +272,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
     try:
         state = build_state(args)
-        args.output.write_text(
-            json.dumps(state, ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
-        )
-    except (OSError, PolicyError) as exc:
+        create_state(args.output, state)  # shared lock + atomic 0600; never drops history
+    except (OSError, PolicyError, StateError) as exc:
         print(f"INPUT ERROR: {exc}", file=sys.stderr)
         return 2
     if args.as_json:

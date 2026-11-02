@@ -4,7 +4,6 @@ import json
 import unittest
 from pathlib import Path
 
-
 SKILL = Path(__file__).resolve().parents[1]
 REFERENCES = SKILL / "references"
 GUIDE = REFERENCES / "diff-long-line-view.md"
@@ -26,7 +25,7 @@ class DiffLongLineViewContractTest(unittest.TestCase):
 
     def test_all_entrypoints_use_the_same_contract(self):
         for filename in (
-            "SKILL.md",
+            "references/step-0-intake.md",
             "references/ci-integration.md",
             "references/review-data-contract.md",
         ):

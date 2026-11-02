@@ -110,6 +110,8 @@ EngagementTouchpoint.proactive(
 
 `PROACTIVE` 不要传 child。miss、GB 不命中、fatigue 冷却命中、CMS 渲染失败都会表现为高度 0，宿主收起 header。
 
+宿主不得再为该 Banner 增加 `maxPerSession`、`maxPerDay`、dismiss cooldown、素材切换延迟或永久关闭的本地 policy。这些都会与本文的 admin/GB/service fatigue 形成第二个判定源。如果产品需要当前 schema 不支持的新频控组合，先扩展 engagement-admin/engagement-service 的通用策略，再由触点配置使用。
+
 ### 2.3 Android / Flutter 边界
 
 广告 FreeLicense 触点族里，`library_cloud_promo` banner 本身是原生相册 surface。领取页是 Flutter：
@@ -243,6 +245,8 @@ PROACTIVE 触点有两个正交维度：
 | Fatigue | 多久再展示、关闭后如何冷却 | `fatigue_variant` | `engagement_<slug>_fatigue` | `fatigue_key` |
 
 这两个维度不要耦合。`library_cloud_promo` 可以改 banner 文案 / deep link，而不改疲劳策略；也可以只改疲劳策略，而不动 CMS 内容。
+
+文案后续即使引入 `runtimeBundle`/`runtimeInputs` 的动态变量，也不会产生第三个“是否展示”业务判定源：动态链路只为已命中内容取值和选文案分支，资格与疲劳度仍由 Experience/Fatigue 链路负责。
 
 当前 `library_cloud_promo` 的 fatigue variant：
 

@@ -19,7 +19,8 @@ or asking the question does not authorize cleanup.
 Run this flow only after the user explicitly agrees. The user may agree while
 the MR is still awaiting merge, but execution must wait until a fresh GitLab
 read proves `state=merged`. When prompting and when receiving a decision, append
-a `kind=post_merge_local_cleanup` event to the existing drive state's `history`.
+a `kind=post_merge_local_cleanup` event to the existing drive state's `history`
+with `scripts/drive_state.py event` (shared lock; never rewrite the whole file).
 Each event must contain `mr_iid`, the current session's absolute `worktree`,
 `branch`, `decision=pending|approved|declined`, and `ts`. On resume, only the
 latest event whose MR, worktree, and branch all match is valid. Missing or
@@ -33,7 +34,8 @@ worktrees, and do not clean sibling sessions.
 ## Issue synchronization before deletion
 
 The parent must first complete [associated Issue update/close](issue-sync.md),
-including live merge evidence, per-Issue disposition and note/state readback.
+including live merge evidence, per-Issue disposition and note/state readback,
+recorded per Issue with `scripts/drive_state.py postmerge` (`kind=issue_sync_postmerge`).
 A verified open disposition with remaining acceptance work satisfies this
 synchronization requirement; Issues need not all be closed to clean local files.
 An unknown or failed write returns `ISSUE_SYNC_UNVERIFIED` and blocks local

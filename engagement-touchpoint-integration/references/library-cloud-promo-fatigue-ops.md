@@ -111,6 +111,7 @@ Prometheus / 后端指标关注：
 | iOS header 不展示 | evaluate 命中但 UI 空 | 确认容器先挂 tableHeaderView，`onContentSizeChange` 是否回调高度 |
 | 用户关闭后马上又出现 | dismiss 没写入 `next_show_at` 或 fatigue JSON 没解析 | 查 dismiss API、`dismiss_count`、`next_show_at`、后端 fallback metric |
 | 关闭第 4 次仍出现 | `permanentAfter` 漏配或 DB 列未生效 | 查 fatigueJson 和 `permanently_suppressed_at` |
+| service 判定可展示但 App 仍隐藏 | 宿主另有 Session/Day/关闭冷却 policy | 删除本地疲劳度，需要的新策略补到 admin/service |
 | production 不命中 | prod GB experience rules 当前为空 | 配 prod rules、admin prod release、CMS prod 内容和 App 版本依赖 |
 
 ## 13. 接入其他带疲劳度 PROACTIVE 触点的最小输入卡
@@ -151,6 +152,7 @@ testing:
   dismissWritesNextShowAt: true
   cooldownHidesEvaluate: true
   permanentAfterVerified: true
+  hostHasNoLocalFrequencyPolicy: true
 ```
 
 ## 14. 参考资料

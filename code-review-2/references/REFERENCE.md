@@ -1,6 +1,8 @@
 # Code Review - 参考文档
 
 > 本文档是 SKILL.md 的补充参考。
+>
+> 普通审查不预读本索引。运行时只按 `SKILL.md` 的触发条件读取对应 reference；本索引用于维护和定位分发资源。
 
 ## 审查标准来源
 
@@ -43,6 +45,21 @@
 ## 代码中文字面量拦截
 
 - [`code-chinese-literal-review.md`](code-chinese-literal-review.md)：当 diff 涉及源码文件（`*.go`/`*.ts`/`*.tsx`/`*.js`/`*.jsx`/`*.java`/`*.kt`/`*.swift`/`*.dart`/`*.py` 等，排除 i18n 资源文件与 `*.md`/docs）时触发的增量检查。**C1**：源码字符串字面量含中文（`\p{Han}` 或中文标点）—— 非豁免高置信子集覆盖用户可见文案/接口返回值/日志/枚举/普通测试数据/品牌名硬编码；只有随 Skill 分发的 `references/code-review-policy.yaml` 中 `blocking_namespaces` 后代项目或 `blocking_projects` 精确项目才进红线 🔴，范围外高置信项及注释·docstring·外部绑定·生成文件·测试意图不明均为 ⚠️。i18n 资源文件，以及 test-only 且明确验证中文 locale / 多语言文案的期望值、fixture、snapshot/golden 完全豁免。LLM-driven，读整份源文件并结合测试语义消除误报。
+
+## 条件专项路由
+
+- [`implementation-risk-review.md`](implementation-risk-review.md)：功能代码或生产行为变更时的默认风险清单；安全、固件和部署专项只作增量补充。
+- [`tracking-event-publish-review.md`](tracking-event-publish-review.md)：跟踪配置、事件版本或调用点变更时核对发布状态。
+- [`adr-review.md`](adr-review.md)：架构 ADR 文件变更时审查决策质量与格式边界。
+- [`migration-review.md`](migration-review.md)：migration SQL 或 `schema_migrations` 访问变更时使用；含数据变更红线与 expand-and-contract 检查。
+- [`catalog-consistency-review.md`](catalog-consistency-review.md)：catalog/API/MkDocs/服务依赖或 catalog-backed 文档变更时，限定核对受影响契约与 TechDocs 路径。
+- [`a4x-deployment-review-routing.md`](a4x-deployment-review-routing.md)：命中 A4x 部署文件范围时路由 `cicd-developer` 专项审查。
+- [`firmware-security-routing.md`](firmware-security-routing.md)：产品固件或相关启动、打包、安全接口变更时路由固件安全基线审查。
+- [`bounded-review-execution.md`](bounded-review-execution.md)：仅可信 CI 明确注入 `CODE_REVIEW_BOUNDED_EXECUTION=true` 时启用；否则不得读取或调用该扩展。
+
+## CI Job 依赖安装声明
+
+- [`ci-job-setup.md`](ci-job-setup.md)：固定 root GitLab CI 文件中单 Job / 单 Python dependency 的脱敏静态安装声明；anchors、merge、default、extends 的支持边界和负向结论限制见契约。
 
 ## 变更获取方式详解
 

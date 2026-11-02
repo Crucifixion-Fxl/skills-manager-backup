@@ -54,14 +54,80 @@ SCRIPT_DIR=$(cd -P "${SCRIPT_DIR}" && pwd)
 . "${SCRIPT_DIR}/runtime_attestation.sh"
 configure_code_review_runtime
 
+is_bounded_execution() {
+  [ "${CODE_REVIEW_BOUNDED_EXECUTION:-false}" = "true" ]
+}
+
+request_timeout_before_job_deadline() {
+  local request_limit deadline_ms now_ms remaining_ms request_limit_ms seconds milliseconds
+  request_limit="${1:-}"
+  case "${request_limit}" in
+    ''|*[!0-9]*) return 1 ;;
+  esac
+  deadline_ms="${CODE_REVIEW_JOB_DEADLINE_MS:-}"
+  case "${deadline_ms}" in
+    ''|*[!0-9]*) return 1 ;;
+  esac
+  [ "${#deadline_ms}" -le 16 ] || return 1
+  deadline_ms=$((10#${deadline_ms}))
+  now_ms=$(clean_exec "${NODE_BIN}" -e 'process.stdout.write(String(Date.now()))') || return 1
+  case "${now_ms}" in
+    ''|*[!0-9]*) return 1 ;;
+  esac
+  [ "${#now_ms}" -le 16 ] || return 1
+  remaining_ms=$((deadline_ms - now_ms - 250))
+  [ "${remaining_ms}" -gt 0 ] || return 1
+  request_limit_ms=$((10#${request_limit} * 1000))
+  if [ "${remaining_ms}" -gt "${request_limit_ms}" ]; then
+    remaining_ms="${request_limit_ms}"
+  fi
+  seconds=$((remaining_ms / 1000))
+  milliseconds=$((remaining_ms % 1000))
+  printf '%d.%03d' "${seconds}" "${milliseconds}"
+}
+
+if is_bounded_execution; then
+  case "${CODE_REVIEW_JOB_DEADLINE_MS:-}" in
+    ''|*[!0-9]*)
+      echo "ERROR: bounded note publishing requires CODE_REVIEW_JOB_DEADLINE_MS" >&2
+      exit 1
+      ;;
+  esac
+  if [ "${#CODE_REVIEW_JOB_DEADLINE_MS}" -gt 16 ]; then
+    echo "ERROR: bounded note publishing has an invalid job deadline" >&2
+    exit 1
+  fi
+fi
+
 curl_clean() {
+  local -a curl_args
+  local max_time_index arg_index effective_timeout
+  curl_args=("$@")
+  if is_bounded_execution; then
+    max_time_index=-1
+    for ((arg_index = 0; arg_index < ${#curl_args[@]}; arg_index++)); do
+      if [ "${curl_args[${arg_index}]}" = "--max-time" ]; then
+        max_time_index=$((arg_index + 1))
+        break
+      fi
+    done
+    if [ "${max_time_index}" -lt 0 ] || [ "${max_time_index}" -ge "${#curl_args[@]}" ]; then
+      printf 'INVALID_REQUEST_TIMEOUT'
+      return 2
+    fi
+    if ! effective_timeout=$(request_timeout_before_job_deadline "${curl_args[${max_time_index}]}"); then
+      printf 'DEADLINE_EXCEEDED'
+      return 28
+    fi
+    curl_args[${max_time_index}]="${effective_timeout}"
+  fi
   if [ "${TEST_MODE}" = "1" ]; then
     printf 'PRIVATE-TOKEN: %s\n' "${GITLAB_TOKEN}" | clean_exec \
       "MOCK_CURL_STATE=${MOCK_CURL_STATE:?ERROR: test mode requires MOCK_CURL_STATE}" \
-      "${CURL_BIN}" -q --noproxy '*' --cacert "${CA_FILE}" --header @- "$@"
+      "${CURL_BIN}" -q --noproxy '*' --cacert "${CA_FILE}" --header @- "${curl_args[@]}"
   else
     printf 'PRIVATE-TOKEN: %s\n' "${GITLAB_TOKEN}" | clean_exec \
-      "${CURL_BIN}" -q --noproxy '*' --cacert "${CA_FILE}" --header @- "$@"
+      "${CURL_BIN}" -q --noproxy '*' --cacert "${CA_FILE}" --header @- "${curl_args[@]}"
   fi
 }
 

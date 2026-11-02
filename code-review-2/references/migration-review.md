@@ -200,7 +200,7 @@ reviewer 要求作者按上述模式拆，不接受一步到位。
 4. PR checklist
 5. 大表 ALTER 警告 + 阈值
 
-`server/CLAUDE.md` 仅留一句：迁移遵循 [迁移规则](../docs/architecture/server/migration-rules.md)：schema-only、幂等 guard、禁止 column drift、限定影响范围、变更注释；大表 ALTER 遵循文档阈值。
+`server/CLAUDE.md` 仅留一句，指向项目内的 `docs/architecture/server/migration-rules.md`：schema-only、幂等 guard、禁止 column drift、限定影响范围、变更注释；大表 ALTER 遵循文档阈值。
 
 参考实现：
 - naturehood: [`server/CLAUDE.md > 数据库迁移`](https://gitlab.addx.ai/applications/naturehood/-/blob/master/server/CLAUDE.md) + [`docs/architecture/server/migration-rules.md`](https://gitlab.addx.ai/applications/naturehood/-/blob/master/docs/architecture/server/migration-rules.md)

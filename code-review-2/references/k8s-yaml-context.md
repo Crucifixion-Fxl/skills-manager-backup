@@ -80,3 +80,6 @@
 审查者可将单个已检查的 Kustomization 相对路径解析到 root `k8s/` 内后显式请求。读取器不自动跟随、
 解析或验证引用，仅限制 root `k8s/`、YAML 类型、固定 revision 和自身预算；不判断文件与 diff 的关系。
 其声明覆盖和 UNKNOWN 边界按专属契约处理。
+若拒绝后的必要问题只涉及 Secret/ConfigMap 引用名、optional 或 Argo CD sync-wave，可另行独立协商
+[受限 K8s Secret 引用投影](k8s-secret-refs.md)。它同样不依赖或扩展全文 YAML 能力，只输出固定
+`base|head` 的字面声明，敏感或不透明的引用名只给摘要，不返回值、不渲染、不跟随引用。

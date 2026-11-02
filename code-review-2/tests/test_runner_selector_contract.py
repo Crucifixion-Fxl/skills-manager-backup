@@ -25,7 +25,7 @@ def test_runner_contract_and_precise_request():
         example["path"]
         == "clusters/aws-125710977284-sg-devops/cicd/gitlab-runner/values-override-amd64-ultra.yaml"
     )
-    assert "runner-selector.md" in (SKILL / "SKILL.md").read_text()
+    assert "runner-selector.md" in (SKILL / "references/step-0-intake.md").read_text()
     literal = re.search(r"`(\^karpenter[^`]+)`", guide)[1]
     assert literal == r"^karpenter\.sh/nodepool=gitlab-runner-ultra-ondemand$"
     for term in (

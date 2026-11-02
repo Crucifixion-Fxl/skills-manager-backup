@@ -444,3 +444,21 @@ def test_cleanup_retains_job_and_attempts_cancel_when_auth_refresh_fails() -> No
     queries = [json.loads(call.args[0].data)["query"] for call in request.call_args_list]
     assert TRIGGER.CANCEL_JOB in queries
     assert TRIGGER.QUERY_JOB in queries
+
+
+@pytest.mark.parametrize("message", ["invalid phone_kind: unsupported", "No available resources match requirements"])
+def test_server_create_rejection_retains_diagnostic_and_cleans_plan(tmp_path, monkeypatch, capsys, message):
+    batch = tmp_path / "batch.json"
+    batch.write_text(json.dumps([{
+        "name": "case", "tags": "@uid=case",
+        "resources": [{"name": "phone", "type": "PHONE", "conditions": {"phone_kind": "$eq:virtual"}}],
+    }]), encoding="utf-8")
+    args = TRIGGER.parse_args(["--app-type", "tests", "--batch", str(batch)])
+    monkeypatch.setattr(TRIGGER, "create_plan_once", lambda *_a, **_kw: ("12", True))
+    monkeypatch.setattr(TRIGGER, "gql", lambda *_: {"createJob": {"success": False, "message": message}})
+    cleanup_calls = []
+    monkeypatch.setattr(TRIGGER, "ensure_plan_jobs_released", lambda *a, **kw:
+                        cleanup_calls.append((a[2], a[3])) or {"verified": True, "jobs": []})
+    assert TRIGGER.batch_mode(args, auth_client=object(), launched_by="tester@example.com") == 1
+    assert cleanup_calls == [("12", [])]
+    assert message in capsys.readouterr().out

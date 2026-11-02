@@ -71,7 +71,7 @@ def test_metadata_contract_is_exact_and_independent():
 
 def test_metadata_guide_is_reachable_from_affected_entrypoints():
     for filename in (
-        "SKILL.md",
+        "references/step-0-intake.md",
         "references/ci-integration.md",
         "references/review-data-contract.md",
         "references/behavior-coverage-review.md",

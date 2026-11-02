@@ -38,7 +38,7 @@ description: Perform a structured company security and compliance review using e
 - `R11 高敏数据零人工访问（视频/地址/电话等）`
 - `R12 保留与删除/DSAR`
 - `R14 Agent Skills 供应链`
-- `R15 定位权限`
+- `R15 位置权限与网络标识`
 
 ### Step 3: 按规则分类处理
 
@@ -101,22 +101,34 @@ description: Perform a structured company security and compliance review using e
 - 加密与密钥管理（涉及 PIN/password/OTP/token/key/Private Key 等；内网微服务仅缺 TLS/mTLS 不构成阻断澄清项）
 - 新增 PII 字段与脱敏方案（user_id/SN/email 之外）
 
-#### 定位权限（R15，公司级隐私红线）
+#### 位置权限与网络标识（R15，公司级隐私红线）
 
-**绝对禁止**在任何平台申请用户地理位置权限，包括但不限于：
-- Android: `ACCESS_FINE_LOCATION`、`ACCESS_COARSE_LOCATION`、`ACCESS_BACKGROUND_LOCATION`
-- iOS: `NSLocationWhenInUseUsageDescription`、`NSLocationAlwaysUsageDescription`
-- Web: `navigator.geolocation`、Permissions API `geolocation`
-- Flutter: `geolocator`、`location` 等定位插件
+R15 按**业务目的 + 实际数据流 + 权限范围**判定，不得仅因代码声明了
+Android/iOS/Web/Flutter 定位权限或使用 SSID/BSSID API 就直接阻断。
 
-城市/地区信息**只能**通过用户主动选择获取，选择结果持久化存储，不重复询问。
+**允许的合理场景**包括：
+- IoT/智能硬件配网时读取手机当前 SSID，在 Wi-Fi 选择中标识当前网络，防止用户选错或输错。
+- Home Wi-Fi 配网、换网或重连时比较手机当前 SSID 与设备目标 SSID，不一致时引导用户切换。
+- SoftAP/Wi-Fi Direct、Mesh/多 AP、同名 SSID、快速连接、重连和 route 诊断中，在可说明的连接目的内读取或使用 SSID/BSSID。
+- 操作系统为上述网络能力要求前台、后台或始终位置权限，且产品能证明权限范围与真实功能需求相符。只读取当前 SSID 通常不足以证明需要长期后台权限。
+
+WebRTC/直播使用已建立的网络 route 不等于它使用位置数据；若直播前仅由连接层读取
+SSID/BSSID 确认 route，按网络连接场景审查。
+
+**审查边界**：
+- 配网/连接例外不自动授权读取经纬度、轨迹、地理围栏或持续位置更新；使用这些数据必须有独立、明确的产品需求与数据处理说明。
+- SSID/BSSID 可按合理场景显示、比较、诊断、本地保存或用于快速连接；日志、埋点、上传、第三方可见性与保留周期必须有明确用途和生命周期。
+- 禁止用位置或网络标识进行未声明的地理位置推断、用户画像、跨场景跟踪、广告或无关第三方用途。
+- 权限文案、产品说明、隐私声明和代码实际行为必须一致；用户拒绝时应按产品能力提供手动选网、系统 Wi-Fi 设置或 route 可达性等合理降级。
+
+完整决策表与取证要求见 [R15 位置权限与网络标识](references/REFERENCE.md#r15-位置权限与网络标识)。
 
 #### 红线（发现则不通过）
 
 - 员工（含运维/支持）可直接访问/导出客户、设备原始视频或分类/授权未核实的视频：直接判定 `需整改/不通过`。仅公司自有且已确认营销授权的素材按 [R11 分类与证据门禁](references/REFERENCE.md#视频数据零人工访问)核对窄例外；账号可见或需求作者自述不构成许可。
 - 明文存储/日志记录密码、token、key 等凭证要素，以及上述内网微服务规则范围外的明文凭证传输：高风险阻断；内网微服务 HTTP 仅按非阻断警告处理
 - 高敏数据（地址/电话）存在人工查看入口：直接判定 `需整改/不通过`
-- 申请任何形式的地理位置权限：直接判定 `需整改/不通过`（R15）
+- 位置/网络标识的实际数据流超出已声明的合理场景，或用于未声明的位置推断、画像、跟踪、广告/第三方用途：判定 `需整改/不通过`（R15）。仅出现权限声明、定位插件或 SSID/BSSID API 不得直接阻断。
 
 ## 输出结构
 

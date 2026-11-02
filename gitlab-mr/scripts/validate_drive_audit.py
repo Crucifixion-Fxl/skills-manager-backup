@@ -16,6 +16,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).parents[1] / "lib"))
 
+from issue_sync_audit import audit_issue_sync
 from merge_integrity_audit import validate_merge_integrity
 from production_overlay_audit import validate_non_promotion_overlay_audit
 from release_branch_audit import validate_branch_acceptance
@@ -273,6 +274,7 @@ def validate(state: dict[str, Any], audit: dict[str, Any]) -> None:
         raise AuditError("audit.release must be an object")
     validate_release_evidence(state, release)
     validate_merge_integrity(state, audit, AuditError)
+    audit_issue_sync(state, AuditError)  # comment readback alone cannot complete submission sync
 
 
 def main(argv: list[str] | None = None) -> int:

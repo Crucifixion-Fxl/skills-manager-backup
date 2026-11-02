@@ -58,6 +58,10 @@ GVK。私有窗口带固定 commit/blob/行范围，但不证明文件属于本�
 唯一路径固定 commit/blob 的完整已支持11对象语义；核对 coverage 和 documents 全集。
 UNKNOWN 不是 ABSENT，覆盖不足不当作通过，不证明在线 RBAC/IRSA 或平台验收。
 
+## CI Job 依赖声明
+
+对“某个 CI Job 未安装依赖”这类负向结论，必须先按固定 SHA 追踪实际 Job 的 setup 与继承关系；只查看单个 YAML scalar 或得到 `installation_declared=false` 不满足缺失证明条件。受支持声明投影、unknown/unsupported 与运行时边界见[CI Job setup 契约](ci-job-setup.md)。必要证据未解决时按现有行为覆盖规则保持 incomplete，不自动通过，也不把平台取证缺口写成产品红线；其余独立确认的问题照常报告。
+
 ## 输出证据
 
 可信模板的 [超长 diff 行可读视图](diff-long-line-view.md) 绑定同一 project、固定

@@ -15,6 +15,7 @@ SCRIPT = Path(__file__).parents[1] / "scripts" / "validate_drive_audit.py"
 CHECKER = Path(__file__).parents[1] / "scripts" / "check_merge_integrity.py"
 sys.path.insert(0, str(Path(__file__).parents[1] / "lib"))
 
+import gitlab_mr_issue_sync_fixture as fx  # noqa: E402
 from merge_integrity_audit import MergeIntegrityError, validate_merge_integrity  # noqa: E402
 
 # Fixed identities and dates make the fixture commits (and so their SHAs) identical in every tmp_path.
@@ -87,7 +88,9 @@ def run_audit(
     tmp_path: Path,
     state: dict,
     audit: dict,
+    issue_snapshot: dict | None = None,
 ) -> subprocess.CompletedProcess[str]:
+    """Run the real CLI; live Issue GETs go to a GET-only fake glab on PATH."""
     state_path = tmp_path / "state.json"
     audit_path = tmp_path / "audit.json"
     write_json(state_path, state)
@@ -105,8 +108,17 @@ def run_audit(
         capture_output=True,
         check=False,
         cwd=build_repo(tmp_path / "git")[0],
-        env=GIT_ENV,
+        env=fx.install_fake_glab(
+            tmp_path / "glab-bin",
+            issue_snapshot if issue_snapshot is not None else fx.in_review(HEAD, 42),
+            GIT_ENV,
+        ),
     )
+
+
+def issue_history() -> list[dict]:
+    """Step 4 receipt exactly as verify_issue_sync_receipt.py records it for HEAD."""
+    return [{"round": 1, "status": "done"}, fx.verified_receipt(HEAD, 42)]
 
 
 def promotion_state() -> dict:
@@ -127,6 +139,8 @@ def promotion_state() -> dict:
         },
         "emergency": {"approved": False},
         "last_snapshot": {"head_sha": HEAD},
+        "project_path": fx.REPO,
+        "history": issue_history(),
     }
 
 
@@ -255,6 +269,8 @@ def cleanup_state() -> dict:
         },
         "emergency": {"approved": False},
         "last_snapshot": {"head_sha": HEAD},
+        "project_path": fx.REPO,
+        "history": issue_history(),
     }
 
 
@@ -776,3 +792,106 @@ def test_merge_integrity_unfinished_check_is_rejected(tmp_path: Path, monkeypatc
     evidence = integrity_evidence(tmp_path, "octopus")
     assert evidence["exit_code"] == 2
     rejects(tmp_path, monkeypatch, {"merge_integrity": evidence}, "did not complete", variant="octopus")
+
+
+# Issue61: submission sync completes only with a fresh live review-state readback.
+RECEIPT_SCRIPT = Path(__file__).parents[1] / "scripts" / "verify_issue_sync_receipt.py"
+BINDING_SCRIPT = Path(__file__).parents[1] / "scripts" / "record_issue_binding.py"
+
+
+def test_mr205_comment_only_receipt_cannot_complete_audit(tmp_path: Path) -> None:
+    from issue_review_state import verify
+
+    state = promotion_state()
+    comment_only = verify(fx.request(HEAD, 42), reader=fx.reader(fx.snapshot(None, HEAD, 42)), host=fx.HOST)
+    state["history"] = [comment_only]
+    result = run_audit(tmp_path, state, valid_audit(tmp_path), fx.snapshot(None, HEAD, 42))
+    assert result.returncode == 1
+    assert "ISSUE_SYNC_UNVERIFIED" in result.stderr and "review_state_missing" in result.stderr
+
+
+def test_audit_without_issue_receipt_fails(tmp_path: Path) -> None:
+    state = promotion_state()
+    state["history"] = [{"round": 1, "status": "done"}]
+    result = run_audit(tmp_path, state, valid_audit(tmp_path))
+    assert result.returncode == 1
+    assert "no submitted/revised Issue receipt for the current HEAD" in result.stderr
+
+
+def test_self_asserted_receipt_is_rechecked_live(tmp_path: Path) -> None:
+    state = promotion_state()
+    result = run_audit(tmp_path, state, valid_audit(tmp_path), fx.snapshot(["status::in-progress"], HEAD, 42))
+    assert result.returncode == 1
+    assert "fresh review-state readback failed (review_state_missing)" in result.stderr
+
+
+def test_live_read_failure_blocks_audit_without_leaking(tmp_path: Path) -> None:
+    unreadable = fx.in_review(HEAD, 42)
+    unreadable["merge_request"]["iid"] = 999  # the MR GET endpoint for !42 is then missing
+    result = run_audit(tmp_path, promotion_state(), valid_audit(tmp_path), unreadable)
+    assert result.returncode == 1
+    assert "read_failed" in result.stderr and fx.SECRET not in result.stdout + result.stderr
+
+
+def test_receipt_for_previous_head_cannot_cover_new_push(tmp_path: Path) -> None:
+    state = promotion_state()
+    state["history"] = [fx.verified_receipt("e" * 40, 42)]
+    result = run_audit(tmp_path, state, valid_audit(tmp_path))
+    assert result.returncode == 1
+    assert "no submitted/revised Issue receipt for the current HEAD" in result.stderr
+
+
+def test_producer_receipt_flows_into_audit_pass(tmp_path: Path) -> None:
+    """The real producer CLI appends the receipt, and the real audit CLI consumes it."""
+    state = promotion_state()
+    state["history"] = [{"round": 1, "status": "done"}]
+    state_path = tmp_path / "producer-state.json"
+    write_json(state_path, state)
+    args = ["--issue", fx.ISSUE_URL, "--mr-project", fx.REPO, "--mr-iid", "42", "--revision", HEAD,
+            "--phase", "submitted", "--note-id", str(fx.NOTE_ID), "--state", str(state_path)]
+    for snap, code in ((fx.snapshot(None, HEAD, 42), 1), (fx.in_review(HEAD, 42), 0)):
+        produced = subprocess.run([sys.executable, str(RECEIPT_SCRIPT), *args], text=True, capture_output=True,
+                                  check=False, env=fx.install_fake_glab(tmp_path / f"producer-{code}", snap))
+        assert produced.returncode == code, produced.stderr
+        recorded = json.loads(state_path.read_text(encoding="utf-8"))
+        if code == 1:  # the comment-only result is preserved and blocks the audit
+            assert run_audit(tmp_path, recorded, valid_audit(tmp_path)).returncode == 1
+    assert [item["result"] for item in recorded["history"][1:]] == ["ISSUE_SYNC_UNVERIFIED", "VERIFIED"]
+    result = run_audit(tmp_path, recorded, valid_audit(tmp_path))
+    assert result.returncode == 0, result.stderr
+
+
+def test_closed_release_flowback_issue_flows_into_audit_pass(tmp_path: Path) -> None:
+    """A closed bound Issue is a live terminal closed reference: no label write, no reopen, audit passes."""
+    state = promotion_state()
+    state["history"] = [{"round": 1, "status": "done"}]
+    state_path = tmp_path / "closed-state.json"
+    write_json(state_path, state)
+    args = ["--issue", fx.ISSUE_URL, "--mr-project", fx.REPO, "--mr-iid", "42", "--revision", HEAD,
+            "--phase", "submitted", "--note-id", str(fx.NOTE_ID), "--state", str(state_path)]
+    env = fx.install_fake_glab(tmp_path / "producer", fx.closed(HEAD, 42))
+    undeclared = subprocess.run([sys.executable, str(RECEIPT_SCRIPT), *args], text=True, capture_output=True,
+                                check=False, env=env)  # Issue61 F1: closed alone never implies a reference
+    assert undeclared.returncode == 1 and json.loads(undeclared.stdout)["errors"] == ["binding_role_unresolved"]
+    admit = ["admit", "--state", str(state_path), "--issue", fx.ISSUE_URL, "--mr-project", fx.REPO,
+             "--mr-iid", "42", "--revision", HEAD, "--binding-role", "closed-reference"]
+    admitted = subprocess.run([sys.executable, str(BINDING_SCRIPT), *admit], text=True, capture_output=True,
+                              check=False, env=env)
+    assert admitted.returncode == 0, admitted.stdout + admitted.stderr
+    produced = subprocess.run([sys.executable, str(RECEIPT_SCRIPT), *args], text=True, capture_output=True,
+                              check=False, env=env)
+    assert produced.returncode == 0, produced.stderr
+    recorded = json.loads(state_path.read_text(encoding="utf-8"))
+    assert [item.get("result") for item in recorded["history"][1:]] == [
+        "ISSUE_SYNC_UNVERIFIED", "ADMITTED", "NOT_APPLICABLE_CLOSED"]
+    calls = (tmp_path / "producer" / "fixture.json.calls").read_text().split()
+    assert not any("/labels?" in call for call in calls)  # closed reference: no label catalog GET
+    result = run_audit(tmp_path, recorded, valid_audit(tmp_path), fx.closed(HEAD, 42))
+    assert result.returncode == 0, result.stderr
+    reopened = run_audit(tmp_path, recorded, valid_audit(tmp_path), fx.in_review(HEAD, 42))
+    assert reopened.returncode == 1 and "Issue state changed since the recorded receipt" in reopened.stderr
+
+
+def test_opened_receipt_does_not_silently_become_closed_reference(tmp_path: Path) -> None:
+    result = run_audit(tmp_path, promotion_state(), valid_audit(tmp_path), fx.closed(HEAD, 42))
+    assert result.returncode == 1 and "readback failed (binding_role_unresolved)" in result.stderr

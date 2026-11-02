@@ -77,7 +77,7 @@ Ask one consolidated set of questions, grouped by decision. Include why each ans
 
 ## Produce the typed outcome
 
-For a ready requirement, select the exact source-kind profile in `references/requirements-contract.md`: project/product delivery uses the live-verified GitLab Issue profile; pasted text and documents may use the local/manual profile only for explicitly non-project analysis with no durable downstream artifact. Never mix profiles and never fabricate GitLab or Buzz identity fields to make a non-GitLab source fit the Buzz writer schema. Every acceptance criterion must have a stable ID and observable Given/When/Then behavior. Keep implementation choices out of acceptance criteria unless the requirement is explicitly technical.
+For a ready requirement, select the exact source-kind and actual-runtime profile in `references/requirements-contract.md`: project/product delivery uses the live-verified GitLab Issue profile (Buzz or non-Buzz as applicable); pasted text and documents may use the local/manual profile only for explicitly non-project analysis with no durable downstream artifact. Never mix profiles and never fabricate GitLab or Buzz identity fields to make a non-GitLab source fit the Buzz writer schema. Every acceptance criterion must have a stable ID and observable Given/When/Then behavior. Keep implementation choices out of acceptance criteria unless the requirement is explicitly technical.
 
 The ready Artifact must use `requirements-analysis/1.1`. Its structured PRD
 quality review and interpretation confirmations are part of the canonical

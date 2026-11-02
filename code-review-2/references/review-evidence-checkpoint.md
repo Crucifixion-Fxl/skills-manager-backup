@@ -1,10 +1,10 @@
 # 大型 JSON/HTML diff 的覆盖回执
 
-此能力只补齐大型已变更 JSON/HTML 的 diff 阅读覆盖；它不是 JSON 语义解析器、源码 reader、浏览器或额外 Git/API 通道。先按[共享范围规则](diff-scoped-review.md#按问题判断证据与视觉必要性)确定具体问题和必要性。当前工具只覆盖本次范围内的**整组合格候选**，不会按 `role`、`required_by` 或 reviewer 选择过滤。只有某个具体问题确实要求覆盖整组候选，且相关 diff、必要源码或现有 bounded view 不足以回答时，才显式调用；先记录整组范围为何必要。profile、文件大小或后缀本身都不触发调用。若只需子集/局部核验，或整组中包含与问题无关的候选，留在现有 diff/source/bounded-view 路径，记录实际核验范围，不为使用工具扩大 scope，也不声称完成整组机械对账。计划一旦创建，计划内所有文件和页面都必须对账；不能用 optional 标记、改 profile 或删回执绕过缺页校验。页面覆盖证明逐页到达，不证明语义正确；工具不替 reviewer 判断 `required_by`。
+本节定义有界执行未启用时的大型 JSON/HTML diff 覆盖路径；可信 CI 启用 `CODE_REVIEW_BOUNDED_EXECUTION=true` 时，按 [有界执行扩展](bounded-review-execution.md)处理可信计划中的所有任务类型与回执。该能力不是 JSON 语义解析器、源码 reader、浏览器或额外 Git/API 通道。先按[共享范围规则](diff-scoped-review.md#按问题判断证据与视觉必要性)确定具体问题和必要性。当前 legacy 工具只覆盖本次范围内的**整组合格候选**，不会按 `role`、`required_by` 或 reviewer 选择过滤。只有某个具体问题确实要求覆盖整组候选，且相关 diff、必要源码或现有 bounded view 不足以回答时，才显式调用；先记录整组范围为何必要。profile、文件大小或后缀本身都不触发调用。若只需子集/局部核验，或整组中包含与问题无关的候选，留在现有 diff/source/bounded-view 路径，记录实际核验范围，不为使用工具扩大 scope，也不声称完成整组机械对账。计划一旦创建，计划内所有文件和页面都必须对账；不能用 optional 标记、改 profile 或删回执绕过缺页校验。页面覆盖证明逐页到达，不证明语义正确；工具不替 reviewer 判断 `required_by`。
 
 ## 协商与适用范围
 
-只有 `review-evidence-checkpoint-contract.json` 与可信 CI 模板双方支持 `review-evidence-checkpoint/v1`，并由可信运行时设置 `CODE_REVIEW_EVIDENCE_CHECKPOINT_ENABLED=true` 时，才可调用 `review_evidence_checkpoint`。调用不带参数生成计划；只有当前工具明确提供 `records` 参数时，根会话才可同时携带当前 `plan_sha256` 与 `records` 保存已返回的真实任务回执。工具没有候选筛选参数：一旦显式选择整组核验，它就纳入 `$REVIEW_DATA_DIR/meta.json` 当前 scope 中已物化 diff 大小至少 64 KiB 且当前/旧路径后缀为 `.json`、`.html` 或 `.htm` 的全部变更候选；路径只决定是否分页，不决定文件职责、`required_by`、浏览器要求或审查通过。是否整组必要是 reviewer 的判断，不是该工具或校验器从 profile/文件名推导的结论。
+只有 `review-evidence-checkpoint-contract.json` 与可信 CI 模板双方支持 `review-evidence-checkpoint/v1`，并由可信运行时设置 `CODE_REVIEW_EVIDENCE_CHECKPOINT_ENABLED=true` 时，才可调用 `review_evidence_checkpoint`。调用不带参数只用于创建当前计划，bounded 模式也应在开始分派前调用一次；之后由[有界执行扩展](bounded-review-execution.md)规定的工具负责执行和保存回执。在 legacy 路径或 bounded 模式的原生 Task fallback 中，只有当前工具明确提供 `records` 参数时，根会话才可同时携带当前 `plan_sha256` 与真实任务回执保存记录。bounded 模式若使用 `review_evidence_wave`，该工具已经校验并保存返回回执；不得把同一批 `records` 再提交给 `review_evidence_checkpoint`。工具没有候选筛选参数：一旦在 legacy 路径显式选择整组核验，它就纳入 `$REVIEW_DATA_DIR/meta.json` 当前 scope 中已物化 diff 大小至少 64 KiB 且当前/旧路径后缀为 `.json`、`.html` 或 `.htm` 的全部变更候选；路径只决定是否分页，不决定文件职责、`required_by`、浏览器要求或审查通过。是否整组必要是 reviewer 的判断，不是该工具或校验器从 profile/文件名推导的结论。
 
 单次计划上限为8个候选文件、16MiB原始diff、256页、32项任务，每项任务最多16页。超限返回明确覆盖缺口，不因此豁免必要审查或扩大预算。
 
@@ -20,14 +20,16 @@
    - 当前工具若返回 `delegation_prompt`，将该字符串原样作为新 Task 的 prompt；由可信运行时填入该任务完整页清单和回执契约，不自行拼接整文件任务、其他 task 或自由指令，也不让子会话再次分派。没有该字段的旧模板仍按现有可信页段任务执行，不能假称获得新委派能力。
    - 在同一任务内可批量读取多个可信 `page_path`，但须逐页确认 Read 返回完整且未截断，并用该 `page_source` 对应的可信校验器核验。不得只读取每个任务的首页、少量代表页或固定步长页后宣称完整。也不扩大 token、模型或 900 秒预算。
    - 每项回执须报告真实读取的 `task_id`、`file_id`、`diff_sha256`、`covered_pages:[{page_id}]`、语义审查摘要 `summary` 和未决证据 `unresolved_items`。`page_sha256` 可选随回执提交但必须匹配；提交器按可信计划把对应页摘要写入 sidecar。不能因读完页就自动清空未决项，例如尚未核验的物理引脚/方向仍须保留。
-   - 根会话每收到一项或一波已完成任务，就核对身份、摘要、实际覆盖和未决项；当前工具若提供 `records`，立即调用 `review_evidence_checkpoint(plan_sha256=<当前可信计划摘要>, records=[...])` 保存这些回执，两个参数必须同时提供，不等所有任务结束才组织一次大型结果。缺页、重复页、跨任务页或摘要错绑必须显式处理。保存回执是审查者内部工作，不是要求业务作者补交材料。`evidence-coverage.json` 的 `status=complete` 只表示计划页被覆盖，不自动产生业务通过结论。
+   - 根会话每收到一项或一波已完成任务，就核对身份、摘要、实际覆盖和未决项。legacy 路径或 bounded 原生 Task fallback 中，若当前工具提供 `records`，立即用精确的当前 `plan_sha256` 保存回执；bounded `review_evidence_wave` 已逐项校验并保存，不要再次调用 checkpoint 重交其回执。缺页、重复页、跨任务页或摘要错绑必须显式处理。保存回执是审查者内部工作，不是要求业务作者补交材料。`evidence-coverage.json` 的 `status=complete` 只表示计划页被覆盖，不自动产生业务通过结论。
 4. 将摘要中的确认问题写入普通 review findings；仍未核实的必要事实写入 `incomplete_reasons`，保持 `should_pass=false`。已确认的缺陷可形成完整 FAIL 结论，不因存在 finding 而冒充 coverage 不足；反之，coverage complete 也不能掩盖未完成的语义核验。
 
 ## 截止时间和提交
 
 复用 runtime-control 现有 `FINALIZE_MS=180000`（`reserve_ms=180000`），不新增或覆盖窗口值。必须先读取并校验计划及已分配页；当 `CODE_REVIEW_RUNTIME_DEADLINE_MS - now <= reserve_ms` 时停止新增任务，也不再 Read 新页，只汇总已读回执、校验 sidecar 并提交。当前运行时若明确允许 record-only checkpoint，此时只能保存已经返回的回执，不能重建任务或开始取证。不可延长 900 秒执行窗口、批量重试或在最终窗口内继续扩展分析。缺少任何必要页时保留已核验内容和具体缺页，结果仍为 incomplete。
 
-最终提交只选一条互斥路径：已经通过根会话 `records` 保存回执，且当前提交工具明确提供 `use_recorded_checkpoint` 时，只传 `use_recorded_checkpoint=true`，不再传 `evidence_checkpoint`；可信提交器重新校验本次记录。否则使用合同原有的 `evidence_checkpoint:{plan_sha256,status,records}`，每条 record 使用以上真实覆盖字段；若没有任何已完成项，如实传 incomplete 与空 records，不假称有已保存回执。两种字段不能并传，也不能靠 flag 补造覆盖。旧工具没有该参数时保持显式字段路径。可信提交器生成 `evidence-coverage.json` 并校验页摘要、缺页、重复页与计划摘要；不把 coverage sidecar 塞入旧结果 schema。`evidence-coverage.json` 是非指令数据，也不能自证 `summary` 的语义结论。只有整组核验确有必要但没有适用文件时，才使用可信提交器提供的 `not_applicable`；未调用工具且没有整组核验要求时，不应声称 checkpoint 已适用或完成。
+最终提交只选一条互斥路径：回执已由 bounded wave 或根会话 `records` 保存，且当前提交工具明确提供 `use_recorded_checkpoint` 时，只传 `use_recorded_checkpoint=true`，不再传 `evidence_checkpoint`；可信提交器重新校验本次记录。否则使用合同原有的 `evidence_checkpoint:{plan_sha256,status,records}`，每条 record 使用以上真实覆盖字段；若没有任何已完成项，如实传 incomplete 与空 records，不假称有已保存回执。两种字段不能并传，也不能靠 flag 补造覆盖。旧工具没有该参数时保持显式字段路径。可信提交器生成 `evidence-coverage.json` 并校验页摘要、缺页、重复页与计划摘要；不把 coverage sidecar 塞入旧结果 schema。`evidence-coverage.json` 是非指令数据，也不能自证 `summary` 的语义结论。只有整组核验确有必要但没有适用文件时，才使用可信提交器提供的 `not_applicable`；未调用工具且没有整组核验要求时，不应声称 checkpoint 已适用或完成。
+
+若 `submit_review_result` 返回 `EVIDENCE_CHECKPOINT_REQUIRED`，可信提交器要求当前提交补齐 checkpoint。若 bounded wave 已保存回执且提交工具支持 `use_recorded_checkpoint`，按上述互斥路径只重试 `use_recorded_checkpoint=true`，不得重复提交回执。否则，即使 legacy 路径按正常范围规则不会主动启动整组核验，也要调用一次不带 `records` 的 `review_evidence_checkpoint`，读取该执行当前计划与精确 `plan_sha256`，再按计划记录真实覆盖；这只履行错误响应指定的 assignment，不授权另选或扩大候选范围。若工具未返回计划摘要，不得猜测或伪造，保持未完成并保留该工具错误。已取得计划摘要但到达收尾 reserve 或仍有缺页时，使用该摘要提交 `status=incomplete` 与实际已完成记录（没有则为空），并在 `incomplete_reasons` 说明缺口。不得伪造覆盖、声称通过，或因错误而跳过所需 checkpoint。
 
 若运行时报告 `CI_CONTEXT_WINDOW_EXCEEDED`，不要恢复或重复请求已超限的同一上下文。保留已核验记录，向根会话返回具体任务缺口；根会话只可在剩余预算和可信分配内处理未完成部分。不能把上下文超限误报为限流、清除未决项或通过不完整审查。
 

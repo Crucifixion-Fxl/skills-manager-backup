@@ -156,6 +156,16 @@ diff 关系、依赖直接性。不自动遍历或渲染引用，不返回原文
 不渲染、不宣称有效配置。缺能力或投影拒绝保持 UNKNOWN/incomplete，不改用 Git/API、旧
 helper 或其他路径绕过。
 
+## 受限 K8s Secret 引用
+
+`k8s-secret-refs-contract.json` 与可信模板、实际 `read_review_source` 工具和固定 manifest
+共同协商后，才可在普通 YAML `file` 操作因 Secret 引用等整文件敏感准入拒绝、且只需
+Secret/ConfigMap 引用名、optional 或 sync-wave 证据时使用 `secret-refs`。按
+[Secret 引用契约](k8s-secret-refs.md)，审查者只请求 root `k8s/` 的当前变更 YAML 或由 diff
+明确实际路径的必要直接 consumer YAML；读取器不跟随引用、不渲染、不返回字面值或原文，敏感或
+不透明的引用名只给摘要。缺能力或投影拒绝保持 UNKNOWN/incomplete，不改用 Git/API、旧 helper
+或其他路径绕过。
+
 ## 固定 GitOps 身份上下文
 
 独立 `gitops-identity-context-contract.json` 与 fixed-source 契约、可信工具及固定 manifest
@@ -168,6 +178,21 @@ helper 或其他路径绕过。
 仅在独立协商 `ci-resources-contract.json` 后按 [资源投影契约](ci-resources.md)
 读取当前变更的固定 CI 资源声明。无全文、脚本或其他变量值；不解析有效继承，
 不将声明当运行结果，不扩大 file/search/config。缺能力或必要证据仍保持 incomplete。
+
+## 固定 CI Job 依赖安装声明
+
+需要核验一个明确 CI Job 是否声明安装一个 Python 依赖时，仅在可信技能和模板独立协商
+[`ci-job-setup.md`](ci-job-setup.md) 的 `ci-job-setup/v1` 后调用
+`read_review_source` 的 `ci-job-setup` operation。该能力有自己的
+`ci-job-setup-contract.json` 与 `CODE_REVIEW_CI_JOB_SETUP_ENABLED` 开关；实际工具枚举和
+`source-context.json` 必须同时确认 `fixed-source-context/v1` 与 `ci-job-setup/v1`，且身份与
+可信 meta 的 project/base/head 一致。不得自行设置开关或用旧工具绕过缺失协商。
+
+请求只可指定固定 `base|head`、root `.gitlab-ci.yml` / `.gitlab-ci.yaml`、一个已知 Job 和一个
+PEP 503 dependency 名称。读取器不要求该配置本身出现在 diff 清单中；调用方必须由 diff 或可信
+Job 证据说明其与本次问题的关系。锚点、merge、`default`、同文件 `extends` 和字面 `pip install`
+的边界、脱敏投影、预算计量及 whole-review artifact 复用限制以该专属契约为准；requirements、shell/dynamic setup
+和外部 include 等未支持范围不得被描述为已解析。
 
 ## CI 场景输出约束
 

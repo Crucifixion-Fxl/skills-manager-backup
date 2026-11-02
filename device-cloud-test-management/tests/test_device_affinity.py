@@ -1,4 +1,4 @@
-"""Offline regressions for topology-aware preflight and confirmation."""
+"""Offline regressions for explicit affinity and Server-owned resource conditions."""
 
 from __future__ import annotations
 
@@ -78,21 +78,6 @@ def test_feature_affinity_and_explicit_constraints_reach_jobs_and_confirmation(t
     assert "belongToCabinet" not in json.dumps(context["preview"])
 
 
-@pytest.mark.parametrize("resources", [pool(camera_host="B"), pool(camera_cabinet="Y"), pool(camera_host=None)])
-def test_cross_domain_and_missing_topology_rejected_before_creation(tmp_path, monkeypatch, resources):
-    args = args_for(tmp_path, monkeypatch, extra=[
-        "--resource-constraints", json.dumps(job()["constraints"]),
-    ])
-    monkeypatch.setattr(CLI, "_run_batch_with_reused_auth", lambda *_: pytest.fail("must not create"))
-    with pytest.raises(ValueError, match="实时空闲资源"):
-        CLI.build_trigger_command(args, resources)
-
-
-def test_backtracks_to_complete_group_instead_of_keeping_first_wrong_host():
-    wrong = pool(phone_host="wrong")[0]
-    assert CLI._allocate_job(job(), [wrong, *pool()]) == [wrong]
-
-
 def test_unrelated_model_capacity_does_not_invalidate_affinity_confirmation(tmp_path, monkeypatch):
     args = args_for(tmp_path, monkeypatch, extra=[
         "--resource-constraints", json.dumps(job()["constraints"]),
@@ -105,94 +90,14 @@ def test_unrelated_model_capacity_does_not_invalidate_affinity_confirmation(tmp_
     assert live["preview"]["confirmation"]["token"] == initial["preview"]["confirmation"]["token"]
 
 
-@pytest.mark.parametrize("resources", [pool(camera_host="B"), pool(camera_cabinet="Y"), pool(camera_host=None)])
-def test_confirmed_token_does_not_bypass_live_affinity_checks(tmp_path, monkeypatch, resources):
-    args = args_for(tmp_path, monkeypatch, extra=[
-        "--resource-constraints", json.dumps(job()["constraints"]),
-    ])
-    _, initial = CLI.build_trigger_command(args, pool())
-    args.confirm = initial["preview"]["confirmation"]["token"]
-    args.dry_run = False
-    monkeypatch.setattr(CLI, "_authenticate_and_fetch_available_resources",
-                        lambda _env: (resources, object(), "tester@example.com"))
-    monkeypatch.setattr(CLI, "_run_batch_with_reused_auth",
-                        lambda *_: pytest.fail("must not create a cross-domain Job"))
-    with pytest.raises(ValueError, match="实时空闲资源"):
-        CLI.run_test(args)
-
-
-def test_multiple_constraints_must_hold_for_the_same_pair():
-    first = pool(phone_host="A", camera_host="B")
-    second = pool(phone_host="B", camera_host="A", phone_cabinet="Y", camera_cabinet="Y")
-    assert CLI._allocate_job(job(), [*first, *second]) is None
-
-
-def test_matching_type_and_model_still_required_with_affinity():
-    resources = pool()
-    resources[1]["deviceModel"] = "other-model"
-    assert CLI._allocate_job(job(), resources) is None
-
-
-@pytest.mark.parametrize(("expression", "expected"), [
-    ("$eq:Android", "$eq:android"), ("$eq:ANDROID", "$eq:android"),
-    ("$in:Android, iOS", "$in:android,ios"),
-])
-def test_platform_canonicalized_before_preview_and_create_payload(expression, expected):
-    original = [{"name": "phone", "type": "PHONE", "conditions": {"platform": expression}}]
-    normalized = CLI._validate_resource_list(original, False)
-    assert normalized[0]["conditions"]["platform"] == expected
-    assert original[0]["conditions"]["platform"] == expression
-    from trigger_cloud_job import build_resource_requirements
-    payload = build_resource_requirements(normalized)
-    assert payload[0]["conditions"][0]["value"] == expected.partition(":")[2]
-    assert CLI._matches_requirement({"type": "PHONE", "platform": "android"}, normalized[0])
-
-
-def test_noncanonical_platform_is_not_falsely_accepted_by_capacity_matching():
-    requirement = {"type": "PHONE", "conditions": {"platform": "$eq:Android"}}
-    assert not CLI._matches_requirement({"type": "PHONE", "platform": "android"}, requirement)
-
-
-def test_model_and_topology_matching_preserves_case_like_server_tags():
-    requirement = {"type": "BATTERYCAM", "conditions": {
-        "device_model": "$eq:kf451", "belong_to_host": "$eq:host-a",
-    }}
-    assert not CLI._matches_requirement({
-        "type": "BATTERYCAM", "deviceModel": "KF451", "belongToHost": "host-a",
-    }, requirement)
-    requirement["conditions"]["device_model"] = "$eq:KF451"
-    assert not CLI._matches_requirement({
-        "type": "BATTERYCAM", "deviceModel": "KF451", "belongToHost": "HOST-A",
-    }, requirement)
-
-
-def test_concurrency_counts_disjoint_complete_groups():
-    groups = [*pool(), *pool(phone_host="B", camera_host="B", phone_cabinet="Y", camera_cabinet="Y")]
-    count, _ = CLI._planned_concurrency([job(), job(), job()], groups, 4)
-    assert count == 2
-
-
-@pytest.mark.parametrize("value", [None, "", {}, [], "unknown"])
-def test_missing_or_invalid_topology_never_proves_assignment(value):
-    resources = pool()
-    resources[0]["belongToHost"] = value
-    if value == "unknown":
-        assert CLI._allocate_job(job(), resources) is None
-    elif isinstance(value, (dict, list)):
-        # Invalid values must not become topology IDs by stringification.
-        with pytest.raises(ValueError):
-            CLI.validate_assignment(job()["constraints"], {"phone": resources[0], "camera": resources[1]})
-    else:
-        assert CLI._allocate_job(job(), resources) is None
-
-
 @pytest.mark.parametrize("value", [{"id": "same"}, ["same"], True])
 def test_identical_invalid_topology_values_cannot_prove_affinity(value):
     resources = pool()
     for resource in resources:
         resource["belongToHost"] = value
     with pytest.raises(ValueError, match="无法核验"):
-        CLI.validate_assignment(job()["constraints"], {
+        from resource_affinity import validate_assignment
+        validate_assignment(job()["constraints"], {
             "phone": resources[0], "camera": resources[1],
         })
 
@@ -221,21 +126,24 @@ def test_unsupported_affinity_count_rejected(count):
     request = job()
     request["resources"][0]["count"] = count
     with pytest.raises(ValueError, match="count=1"):
-        CLI._allocate_job(request, pool())
+        CLI.validate_affinity_counts(request["constraints"], request["resources"])
 
 
 def test_unconstrained_alias_multicount_in_affinity_group_is_rejected():
     request = job()
     request["resources"].append({"name": "fixture", "type": "FIXTURE", "count": 2})
     with pytest.raises(ValueError, match="count=1"):
-        CLI._allocate_job(request, pool())
+        CLI.validate_affinity_counts(request["constraints"], request["resources"])
 
 
-def test_run_local_with_feature_affinity_rejected_before_client_setup(tmp_path, monkeypatch):
+def test_run_local_with_feature_affinity_retained_after_client_setup(tmp_path, monkeypatch):
     args = args_for(tmp_path, monkeypatch, "# @firmware.affinity=belong_to_cabinet")
-    monkeypatch.setattr(CLI, "_resolve_local_client_root", lambda *_: pytest.fail("must reject before client setup"))
-    with pytest.raises(ValueError, match="亲和约束.*云端 run"):
-        CLI.build_local_client_command(args, pool())
+    args.client_root = str(tmp_path)
+    monkeypatch.setattr(CLI, "_resolve_local_client_root", lambda *_: tmp_path)
+    monkeypatch.setattr(CLI, "_validate_local_runtime", lambda *_: None)
+    monkeypatch.setattr(CLI, "_local_client_snapshot", lambda *_: {"commit": "c" * 40})
+    _, context, _ = CLI.build_local_client_command(args, pool())
+    assert context["job"][0]["constraints"] == [constraint("belong_to_cabinet")]
 
 
 def test_fetch_keeps_topology_internal_and_does_not_fetch_connection_secrets(monkeypatch):
@@ -257,7 +165,86 @@ def test_fetch_keeps_topology_internal_and_does_not_fetch_connection_secrets(mon
 
 
 @pytest.mark.parametrize("connection", [{"edges": [], "pageInfo": {"hasNextPage": True}}, {"edges": [{}] * 1000}])
-def test_truncated_capacity_refuses_preflight(monkeypatch, connection):
+def test_truncated_inventory_is_omitted_without_rejecting_execution(monkeypatch, capsys, connection):
+    from types import SimpleNamespace
+    auth = SimpleNamespace(authenticate=lambda: SimpleNamespace(email="tester@example.com"))
+    monkeypatch.setattr(CLI, "DeviceCloudAuthClient", lambda _: auth)
     monkeypatch.setattr(CLI, "gql", lambda *_: {"phoneConnection": connection, "deviceConnection": {"edges": []}})
-    with pytest.raises(ValueError, match="截断"):
-        CLI.fetch_available_resources("prod-cn", object())
+    resources, returned_auth, email = CLI._authenticate_and_fetch_available_resources("prod-cn")
+    assert resources is None
+    assert returned_auth is auth
+    assert email == "tester@example.com"
+    assert "截断" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("phone_kind", ["physical", "virtual"])
+def test_native_conditions_survive_snapshot_token_batch_and_server_payload(tmp_path, monkeypatch, phone_kind):
+    from trigger_cloud_job import build_resource_requirements, create_job_batch, load_batch_jobs
+    args = args_for(tmp_path, monkeypatch, extra=[
+        "--resource-constraints", json.dumps([constraint()]),
+    ])
+    resources = job()["resources"]
+    resources[0]["conditions"] = {
+        "phone_kind": "$eq:" + phone_kind,
+        "manufacturer": "$nin:unknown,other",
+        "sdk_version": "$ge:31",
+        "platform": "$in:Android, iOS",
+    }
+    args.resource_json = json.dumps(resources)
+    _, context = CLI.build_trigger_command(args, [])
+    assert context["job"][0]["resources"] == resources
+    assert context["preview"]["resourceGroup"] == resources
+    token = context["preview"]["confirmation"]["token"]
+    changed = copy.deepcopy(context["preview"])
+    changed["resourceGroups"][0]["resources"][0]["conditions"]["sdk_version"] = "$ge:32"
+    assert CLI._confirmation_token(changed) != token
+    batch_path = tmp_path / "batch.json"
+    batch_path.write_text(json.dumps(context["job"]), encoding="utf-8")
+    loaded = load_batch_jobs(str(batch_path))[0]
+    captured = {}
+    def create(_endpoint, _auth, _query, variables):
+        captured.update(variables["in"])
+        return {"createJob": {"success": True, "id": 34}}
+    monkeypatch.setitem(create_job_batch.__globals__, "gql", create)
+    assert create_job_batch("endpoint", object(), 12, {},
+                            build_resource_requirements(loaded["resources"]),
+                            "manual", 5, "tester@example.com",
+                            constraints=loaded["constraints"]) == 34
+    assert captured["constraints"] == [constraint()]
+    assert captured["resourceRequirements"][0]["conditions"] == [
+        {"key": "phone_kind", "operator": "$eq", "value": phone_kind},
+        {"key": "manufacturer", "operator": "$nin", "value": "unknown,other"},
+        {"key": "sdk_version", "operator": "$ge", "value": "31"},
+        {"key": "platform", "operator": "$in", "value": "Android, iOS"},
+    ]
+
+
+def test_default_phone_kind_is_left_to_server(tmp_path, monkeypatch):
+    args = args_for(tmp_path, monkeypatch)
+    _, context = CLI.build_trigger_command(args, [])
+    assert "phone_kind" not in context["job"][0]["resources"][0]["conditions"]
+
+
+@pytest.mark.parametrize("value", [[], "platform=android", 1])
+def test_malformed_resource_conditions_rejected(value):
+    with pytest.raises(ValueError, match="conditions"):
+        CLI._validate_resource_list([{"name": "phone", "type": "PHONE", "conditions": value}], False)
+
+
+@pytest.mark.parametrize("resource_json", [
+    "{broken", "{}", '[{"name":"","type":"PHONE"}]',
+    '[{"name":"phone","type":"invalid type"}]',
+    '[{"name":"phone","type":"PHONE"},{"name":"phone","type":"PHONE"}]',
+])
+def test_resource_structure_validation_remains_local(tmp_path, monkeypatch, resource_json):
+    args = args_for(tmp_path, monkeypatch)
+    args.resource_json = resource_json
+    with pytest.raises(ValueError):
+        CLI.build_trigger_command(args, [])
+
+
+def test_resource_json_cannot_drop_scenario_phone_alias(tmp_path, monkeypatch):
+    args = args_for(tmp_path, monkeypatch)
+    args.resource_json = json.dumps([{"name": "camera", "type": "BATTERYCAM"}])
+    with pytest.raises(ValueError, match="手机别名"):
+        CLI.build_trigger_command(args, [])

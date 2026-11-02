@@ -141,29 +141,18 @@ def test_firmware_parser_exposes_only_implemented_inputs(command: str) -> None:
 
 
 @pytest.mark.parametrize("runner", ["run_test", "run_local_client"])
-@pytest.mark.parametrize("version", [None, "", "1.19.35", "-d", "1.19.35-d-extra"])
-def test_embedded_firmware_rejects_missing_or_non_debug_before_auth(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, runner: str, version: str | None,
-) -> None:
+@pytest.mark.parametrize("version", ["", "1.19.35\n", "1.19\x00.35", "1.19\u200b.35"])
+def test_malformed_firmware_rejected_before_auth(tmp_path, monkeypatch, runner, version):
     args = _embedded_args(tmp_path)
     args.firmware_version = version
-    monkeypatch.setenv("DEVIUM_FIRMWARE_VERSION", "1.19.34-d")
-    monkeypatch.setattr(
-        DEVICE_CLOUD, "_authenticate_and_fetch_available_resources",
-        lambda *_a: pytest.fail("invalid firmware must fail before authentication"),
-    )
-    monkeypatch.setattr(
-        DEVICE_CLOUD.subprocess, "Popen",
-        lambda *_a, **_k: pytest.fail("invalid firmware must not create jobs"),
-    )
-    with pytest.raises(ValueError, match="--firmware-version.*-d"):
+    monkeypatch.setattr(DEVICE_CLOUD, "_authenticate_and_fetch_available_resources",
+                        lambda *_: pytest.fail("malformed firmware must fail before authentication"))
+    with pytest.raises(ValueError, match="--firmware-version"):
         getattr(DEVICE_CLOUD, runner)(args)
 
 
 @pytest.mark.parametrize("hint", ["explicit", "module", "origin"])
-def test_embedded_firmware_requirement_uses_type_module_or_local_origin_before_auth(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, hint: str,
-) -> None:
+def test_embedded_type_does_not_require_firmware(tmp_path, monkeypatch, hint):
     args = _embedded_args(tmp_path)
     args.firmware_version = None
     args.tests_repo = "https://example.invalid/generic-tests.git"
@@ -173,16 +162,12 @@ def test_embedded_firmware_requirement_uses_type_module_or_local_origin_before_a
         args.tests_module = "firmware-tests"
     else:
         args.tests_repo = None
-        monkeypatch.setattr(
-            DEVICE_CLOUD, "_origin_url",
-            lambda _root: "https://example.invalid/firmware-tests.git",
-        )
-    monkeypatch.setattr(
-        DEVICE_CLOUD, "_authenticate_and_fetch_available_resources",
-        lambda *_a: pytest.fail("embedded detection must precede authentication"),
-    )
-    with pytest.raises(ValueError, match="--firmware-version"):
-        DEVICE_CLOUD.run_test(args)
+        monkeypatch.setattr(DEVICE_CLOUD, "_origin_url",
+                            lambda _: "https://example.invalid/firmware-tests.git")
+    command, context = DEVICE_CLOUD.build_trigger_command(args)
+    assert context["preview"]["automationType"] == "embedded"
+    assert context["preview"]["firmware"]["testedVersion"] is None
+    assert not any("FIRMWARE_VERSION=" in value for value in command)
 
 
 @pytest.mark.parametrize("companion", [None, "1.19.36-d"])
@@ -220,20 +205,13 @@ def test_firmware_preflight_cloud_env_and_job_metadata(
     assert job_metadata["env"]["DEVIUM_COMPANION_FIRMWARE_VERSION"] == firmware["companionVersion"]
 
 
-@pytest.mark.parametrize("version", [
-    "", "1.19.36", "-d", "1.19.36-d\n", " 1.19.36-d", "1.19\x00.36-d",
-    "1.19\x80.36-d", "1.19\u200b.36-d",
-])
-def test_companion_firmware_is_debug_and_fails_before_auth(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, version: str,
-) -> None:
+@pytest.mark.parametrize("version", ["", "1.19.36\n", "1.19\x00.36", "1.19\x80.36", "1.19\u200b.36"])
+def test_companion_firmware_rejects_malformed_before_auth(tmp_path, monkeypatch, version):
     args = _embedded_args(tmp_path)
     args.companion_firmware_version = version
-    monkeypatch.setattr(
-        DEVICE_CLOUD, "_authenticate_and_fetch_available_resources",
-        lambda *_a: pytest.fail("invalid companion must fail before authentication"),
-    )
-    with pytest.raises(ValueError, match="--companion-firmware-version.*-d"):
+    monkeypatch.setattr(DEVICE_CLOUD, "_authenticate_and_fetch_available_resources",
+                        lambda *_: pytest.fail("invalid companion must fail before authentication"))
+    with pytest.raises(ValueError, match="--companion-firmware-version"):
         DEVICE_CLOUD.run_test(args)
 
 
@@ -274,14 +252,22 @@ def test_explicit_automation_type_is_independent_of_app_artifact(tmp_path: Path)
     assert not any("FIRMWARE_VERSION=" in value for value in command)
 
 
-def test_companion_requires_explicit_tested_firmware(tmp_path: Path) -> None:
+def test_companion_only_firmware_forwarded_to_cloud_and_local(tmp_path, monkeypatch):
     args = _embedded_args(tmp_path)
-    args.automation_type = "hardware"
-    args.tests_repo = "https://example.invalid/hardware-tests.git"
+    args.tests_repo = "https://example.invalid/generic-tests.git"
     args.firmware_version = None
-    args.companion_firmware_version = "1.19.36-d"
-    with pytest.raises(ValueError, match="--companion-firmware-version.*--firmware-version"):
-        DEVICE_CLOUD.build_trigger_command(args)
+    args.companion_firmware_version = "1.19.36"
+    command, context = DEVICE_CLOUD.build_trigger_command(args)
+    parsed = DEVICE_CLOUD.parse_trigger_args(command[2:])
+    assert parsed.inject_env == ["DEVIUM_COMPANION_FIRMWARE_VERSION=1.19.36"]
+    assert json.loads(parsed.metadata)["firmware"]["companionVersion"] == "1.19.36"
+    args.client_root = str(tmp_path)
+    monkeypatch.setattr(DEVICE_CLOUD, "_resolve_local_client_root", lambda _: tmp_path)
+    monkeypatch.setattr(DEVICE_CLOUD, "_validate_local_runtime", lambda *_: None)
+    monkeypatch.setenv("DEVIUM_FIRMWARE_VERSION", "stale")
+    _, _, child_env = DEVICE_CLOUD.build_local_client_command(args)
+    assert child_env["DEVIUM_COMPANION_FIRMWARE_VERSION"] == "1.19.36"
+    assert "DEVIUM_FIRMWARE_VERSION" not in child_env
 
 
 def test_firmware_repository_is_detected_even_with_legacy_module(tmp_path: Path) -> None:
@@ -297,22 +283,17 @@ def test_firmware_repository_is_detected_even_with_legacy_module(tmp_path: Path)
 
 
 @pytest.mark.parametrize("automation_type", ["app", "hardware"])
-def test_nonembedded_type_cannot_bypass_firmware_repository(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, automation_type: str,
-) -> None:
+def test_explicit_type_overrides_repository_inference(tmp_path, automation_type):
     args = _embedded_args(tmp_path)
     args.automation_type = automation_type
     args.firmware_version = None
-    monkeypatch.setattr(
-        DEVICE_CLOUD, "_authenticate_and_fetch_available_resources",
-        lambda *_a: pytest.fail("type conflict must fail before authentication"),
-    )
-    with pytest.raises(ValueError, match="--automation-type.*firmware-tests"):
-        DEVICE_CLOUD.run_test(args)
+    _, context = DEVICE_CLOUD.build_trigger_command(args)
+    assert context["preview"]["automationType"] == automation_type
+    assert context["preview"]["automationTypeSource"] == "explicit"
 
 
-@pytest.mark.parametrize("version", ["1.2-d", "1.19.35.7-d", "release-candidate-d"])
-def test_debug_firmware_does_not_impose_extra_version_grammar(
+@pytest.mark.parametrize("version", ["1.19.35", "1.2-d", "1.19.35.7-d", "release-candidate"])
+def test_firmware_does_not_impose_debug_or_version_grammar(
     tmp_path: Path, version: str,
 ) -> None:
     args = _embedded_args(tmp_path)
@@ -602,6 +583,11 @@ def test_feature_id_preview_pins_commit_from_selected_repository(
     if repository:
         args.firmware_version = "1.19.35-d"
 
+    if repository:
+        with pytest.raises(ValueError, match="固件/嵌入式任务的 --feature-id"):
+            DEVICE_CLOUD.build_trigger_command(args)
+        return
+
     command, context = DEVICE_CLOUD.build_trigger_command(args)
 
     expected_repository = repository or DEVICE_CLOUD.TESTS_REPO
@@ -806,6 +792,266 @@ def test_run_parser_does_not_require_app_url() -> None:
 
     assert parsed.app_url is None
     assert parsed.tests_repo.endswith("hardware-tests.git")
+
+
+def test_selected_app_reinstall_step_requires_app_url_before_plan(tmp_path: Path) -> None:
+    _write_feature(
+        tmp_path,
+        "app-lifecycle.feature",
+        """Feature: app lifecycle
+  Background:
+    | phone | PHONE |
+    When 我卸载 phone 的当前应用
+    And 我远程重新安装 phone 的应用
+
+  @uid=app-lifecycle-001
+  Scenario: verify after reinstall
+""",
+    )
+    args = _feature_id_args("auto")
+    args.feature_id = None
+    args.uid = "app-lifecycle-001"
+    args.cases_root = str(tmp_path)
+    args.app_url = None
+
+    with pytest.raises(ValueError, match=r"必须提供 --app-url.*不会创建 TestPlan"):
+        DEVICE_CLOUD.build_trigger_command(args)
+
+    [case] = DEVICE_CLOUD.load_case_catalog(tmp_path)
+    assert case.public()["appUrlRequired"] is True
+    assert case.public()["appUrlRequiredSteps"] == [
+        "我卸载 phone 的当前应用",
+        "我远程重新安装 phone 的应用",
+    ]
+
+
+def test_app_lifecycle_words_in_comments_do_not_require_app_url(tmp_path: Path) -> None:
+    _write_feature(
+        tmp_path,
+        "comment.feature",
+        """Feature: no app install
+  # 文档说明：有些用例会卸载 App，但本用例不会。
+  @uid=no-app-001
+  Scenario: inspect hardware only
+""",
+    )
+
+    [case] = DEVICE_CLOUD.load_case_catalog(tmp_path)
+
+    assert case.public()["appUrlRequired"] is False
+    assert case.public()["appUrlRequiredSteps"] == []
+
+
+@pytest.mark.parametrize(
+    "step",
+    [
+        "Given BigPhone 已安装应用 com.kb.kiwibit",
+        "When 我将 phone 的应用切换到后台",
+        "When I switch the app to background",
+        "Then App 显示固件升级成功",
+        "When 我通过 App 升级 camera 固件",
+    ],
+)
+def test_non_artifact_app_steps_do_not_require_app_url(step: str) -> None:
+    assert DEVICE_CLOUD._app_url_required_step(step) is None
+
+
+def test_gherkin_star_app_reinstall_step_requires_app_url() -> None:
+    assert DEVICE_CLOUD._app_url_required_step("* 我远程重新安装 phone 的应用") == (
+        "我远程重新安装 phone 的应用"
+    )
+
+
+def test_rule_background_app_steps_apply_only_to_own_scenarios(tmp_path: Path) -> None:
+    _write_feature(
+        tmp_path,
+        "rules.feature",
+        """Feature: scoped backgrounds
+  Rule: reuse installed app
+    Background:
+      Given phone 已登录当前应用
+    @uid=rule-one
+    Scenario: no reinstall
+
+  Rule: reinstall app
+    Background:
+      * 我远程重新安装 phone 的应用
+    @uid=rule-two
+    Scenario: requires artifact
+""",
+    )
+
+    cases = {case.uid: case for case in DEVICE_CLOUD.load_case_catalog(tmp_path)}
+
+    assert cases["rule-one"].app_url_required_steps == ()
+    assert cases["rule-two"].app_url_required_steps == (
+        "我远程重新安装 phone 的应用",
+    )
+
+
+def test_feature_id_without_app_url_fails_closed_before_plan() -> None:
+    args = _feature_id_args("phone")
+    args.app_url = None
+    args.tests_repo = "https://gitlab.addx.ai/DEVT/test-suite/firmware-tests.git"
+    args.tests_module = None
+
+    with pytest.raises(ValueError, match=r"固件/嵌入式任务的 --feature-id.*不会创建 TestPlan"):
+        DEVICE_CLOUD.build_trigger_command(args)
+
+
+def test_embedded_feature_id_with_app_url_still_fails_closed() -> None:
+    args = _feature_id_args("phone")
+    args.tests_repo = "https://gitlab.addx.ai/DEVT/test-suite/firmware-tests.git"
+    args.tests_module = None
+
+    with pytest.raises(ValueError, match=r"固件/嵌入式任务的 --feature-id.*改用 --uid"):
+        DEVICE_CLOUD.build_trigger_command(args)
+
+
+@pytest.mark.parametrize("automation_type", ["app", "hardware"])
+def test_explicit_non_embedded_type_overrides_firmware_repository_inference(
+    automation_type: str,
+) -> None:
+    args = _feature_id_args("phone")
+    args.automation_type = automation_type
+    args.tests_repo = "https://gitlab.addx.ai/DEVT/test-suite/firmware-tests.git"
+    args.tests_module = None
+
+    assert not DEVICE_CLOUD._is_embedded_request(args)
+
+
+def test_selected_app_identity_must_match_app_url(tmp_path: Path) -> None:
+    _write_feature(
+        tmp_path,
+        "app-identity.feature",
+        """Feature: app identity
+  Background:
+    When 我远程重新安装 phone 的应用
+  @uid=app-bapp @app=BAPP
+  Scenario: requires BAPP
+""",
+    )
+    args = _feature_id_args("auto")
+    args.feature_id = None
+    args.uid = "app-bapp"
+    args.cases_root = str(tmp_path)
+    args.app_url = (
+        "https://example.invalid/VicoHome_Android/"
+        "vicohome_android_4.7.0-290805_staging_d00ac3e_20261020-175915.apk"
+    )
+
+    with pytest.raises(ValueError, match=r"要求 App BAPP.*解析为 VicoHome"):
+        DEVICE_CLOUD.build_trigger_command(args)
+
+
+def test_mixed_required_apps_must_be_split_into_separate_plans(tmp_path: Path) -> None:
+    for name, uid, app in (("bapp", "mixed-bapp", "BAPP"), ("vh", "mixed-vh", "VicoHome")):
+        _write_feature(
+            tmp_path,
+            f"{name}.feature",
+            f"""Feature: {name}
+  Background:
+    When 我远程重新安装 phone 的应用
+  @uid={uid} @app={app} @testCase_modules=mixed
+  Scenario: {name}
+""",
+        )
+    args = _feature_id_args("auto")
+    args.feature_id = None
+    args.uid = None
+    args.module = "mixed"
+    args.allow_multiple = True
+    args.cases_root = str(tmp_path)
+
+    with pytest.raises(ValueError, match=r"需要多个 App.*按 App 拆分执行"):
+        DEVICE_CLOUD.build_trigger_command(args)
+
+
+def test_explicit_app_url_must_match_all_selected_cases(tmp_path: Path) -> None:
+    _write_feature(
+        tmp_path,
+        "required.feature",
+        """Feature: required BAPP
+  Background:
+    When 我远程重新安装 phone 的应用
+  @uid=required-bapp @app=BAPP @testCase_modules=mixed-reuse
+  Scenario: required BAPP
+""",
+    )
+    _write_feature(
+        tmp_path,
+        "reuse.feature",
+        """Feature: reuse VicoHome
+  @uid=reuse-vh @app=VicoHome @testCase_modules=mixed-reuse
+  Scenario: reuse installed VicoHome
+""",
+    )
+    args = _feature_id_args("auto")
+    args.feature_id = None
+    args.uid = None
+    args.module = "mixed-reuse"
+    args.allow_multiple = True
+    args.cases_root = str(tmp_path)
+
+    with pytest.raises(ValueError, match=r"需要多个 App.*按 App 拆分执行"):
+        DEVICE_CLOUD.build_trigger_command(args)
+
+
+def test_explicit_app_url_must_match_non_installing_selected_case(tmp_path: Path) -> None:
+    _write_feature(
+        tmp_path,
+        "reuse.feature",
+        """Feature: reuse VicoHome
+  @uid=reuse-vh @app=VicoHome
+  Scenario: reuse installed VicoHome
+""",
+    )
+    args = _feature_id_args("auto")
+    args.feature_id = None
+    args.uid = "reuse-vh"
+    args.cases_root = str(tmp_path)
+
+    with pytest.raises(ValueError, match=r"要求 App VicoHome.*解析为 BAPP"):
+        DEVICE_CLOUD.build_trigger_command(args)
+
+
+def test_required_app_case_without_app_tag_fails_closed(tmp_path: Path) -> None:
+    _write_feature(
+        tmp_path,
+        "missing-app.feature",
+        """Feature: missing app identity
+  Background:
+    When 我远程重新安装 phone 的应用
+  @uid=missing-app
+  Scenario: missing app identity
+""",
+    )
+    args = _feature_id_args("auto")
+    args.feature_id = None
+    args.uid = "missing-app"
+    args.cases_root = str(tmp_path)
+
+    with pytest.raises(ValueError, match=r"缺少 @app 身份.*不会创建 TestPlan"):
+        DEVICE_CLOUD.build_trigger_command(args)
+
+
+@pytest.mark.parametrize("keyword", ["假设", "假定", "同时"])
+def test_supported_chinese_gherkin_keywords_detect_reinstall(keyword: str) -> None:
+    assert DEVICE_CLOUD._app_url_required_step(
+        f"{keyword} 我远程重新安装 phone 的应用"
+    ) == "我远程重新安装 phone 的应用"
+
+
+@pytest.mark.parametrize(
+    "step",
+    [
+        "当 我卸载当前应用",
+        "当 我升级 App 到指定版本 1.2.3",
+        "当 我降级 phone 的 App 到指定版本 1.2.3",
+    ],
+)
+def test_direct_app_artifact_steps_are_detected(step: str) -> None:
+    assert DEVICE_CLOUD._app_url_required_step(step) is not None
 
 
 def test_no_app_generic_repository_uses_declared_hardware_resources(tmp_path: Path) -> None:
@@ -1109,7 +1355,7 @@ def test_auto_phone_only_case_does_not_allocate_camera(tmp_path: Path) -> None:
     assert [item["type"] for item in context["preview"]["resourceGroup"]] == ["PHONE"]
 
 
-def test_preflight_rejects_job_that_cannot_fit_live_capacity(tmp_path: Path) -> None:
+def test_preflight_allows_server_allocation_despite_insufficient_inventory(tmp_path: Path) -> None:
     _write_feature(
         tmp_path,
         "share.feature",
@@ -1128,14 +1374,14 @@ def test_preflight_rejects_job_that_cannot_fit_live_capacity(tmp_path: Path) -> 
     args.allow_multiple = False
     args.cases_root = str(tmp_path)
 
-    with pytest.raises(ValueError, match="没有满足全部条件的实时空闲资源"):
-        DEVICE_CLOUD.build_trigger_command(
-            args,
-            available_resources=[
-                {"type": "PHONE", "platform": "android", "available": True},
-                {"type": "PLUGINCAM", "platform": None, "available": True},
-            ],
-        )
+    _, context = DEVICE_CLOUD.build_trigger_command(
+        args,
+        available_resources=[
+            {"type": "PHONE", "platform": "android", "available": True},
+            {"type": "PLUGINCAM", "platform": None, "available": True},
+        ],
+    )
+    assert context["preview"]["execution"]["concurrency"] == 1
 
 
 def test_auto_honors_multiple_explicit_camera_resources(tmp_path: Path) -> None:
@@ -1214,7 +1460,7 @@ def test_auto_resolves_camera_type_independently_per_feature(tmp_path: Path) -> 
     ]
 
 
-def test_resource_json_capacity_honors_device_model(tmp_path: Path) -> None:
+def test_resource_model_condition_passes_through_despite_snapshot_mismatch(tmp_path: Path) -> None:
     _write_feature(
         tmp_path,
         "live.feature",
@@ -1235,14 +1481,15 @@ def test_resource_json_capacity_honors_device_model(tmp_path: Path) -> None:
       {"name":"camera","type":"BATTERYCAM","conditions":{"device_model":"$eq:KF126"}}
     ]"""
 
-    with pytest.raises(ValueError, match="没有满足全部条件"):
-        DEVICE_CLOUD.build_trigger_command(
-            args,
-            available_resources=[
-                {"type": "PHONE", "platform": "android", "available": True},
-                {"type": "BATTERYCAM", "deviceModel": "KF129", "available": True},
-            ],
-        )
+    _, context = DEVICE_CLOUD.build_trigger_command(
+        args,
+        available_resources=[
+            {"type": "PHONE", "platform": "android", "available": True},
+            {"type": "BATTERYCAM", "deviceModel": "KF129", "available": True},
+        ],
+    )
+    assert context["preview"]["execution"]["concurrency"] == 1
+    assert context["job"][0]["resources"][1]["conditions"] == {"device_model": "$eq:KF126"}
 
 
 def test_no_wait_is_rejected_until_terminal_cleanup_can_be_verified(tmp_path: Path) -> None:
@@ -1357,26 +1604,17 @@ def test_run_accepts_capacity_changes_that_preserve_execution(
     assert calls[0][0].concurrency == 1
 
 
-@pytest.mark.parametrize("live_resources", [[], [
-    {"type": "PHONE", "platform": "android", "available": False},
-]])
-def test_run_rechecks_capacity_before_using_confirmed_token(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, live_resources: list[dict],
-) -> None:
+@pytest.mark.parametrize("live_resources", [[], [{"type": "PHONE", "available": False}]])
+def test_confirmed_run_defers_allocation_when_inventory_is_empty(tmp_path, monkeypatch, live_resources):
     args = _feature_id_args("phone")
     args.cases_root = str(tmp_path)
     args.dry_run = False
-    _, initial = DEVICE_CLOUD.build_trigger_command(args, [
-        {"type": "PHONE", "platform": "android", "available": True},
-    ])
+    _, initial = DEVICE_CLOUD.build_trigger_command(args, [{"type": "PHONE", "available": True}])
     args.confirm = initial["preview"]["confirmation"]["token"]
     monkeypatch.setattr(DEVICE_CLOUD, "_authenticate_and_fetch_available_resources",
-                        lambda _env: (live_resources, object(), "tester@example.com"))
-    monkeypatch.setattr(DEVICE_CLOUD, "_run_batch_with_reused_auth",
-                        lambda *_: pytest.fail("实时容量不足时不得创建计划"))
-
-    with pytest.raises(ValueError, match="实时空闲资源"):
-        DEVICE_CLOUD.run_test(args)
+                        lambda _: (live_resources, object(), "tester@example.com"))
+    monkeypatch.setattr(DEVICE_CLOUD, "_run_batch_with_reused_auth", lambda *_: 1)
+    assert DEVICE_CLOUD.run_test(args) == 1
 
 
 def test_run_rejects_confirmation_for_changed_concurrency(
@@ -1396,6 +1634,7 @@ def test_run_rejects_confirmation_for_changed_concurrency(
     args.dry_run = False
     phone = {"type": "PHONE", "platform": "android", "available": True}
     _, initial = DEVICE_CLOUD.build_trigger_command(args, [phone, dict(phone)])
+    args.max_concurrency = 1
     _, live = DEVICE_CLOUD.build_trigger_command(args, [phone])
     assert initial["preview"]["execution"]["concurrency"] == 2
     assert live["preview"]["execution"]["concurrency"] == 1
@@ -2563,3 +2802,48 @@ def test_client_image_is_run_only() -> None:
         DEVICE_CLOUD.parser().parse_args(
             ["run-local", "--uid", "x", "--client-image", "test-1"]
         )
+
+
+@pytest.mark.parametrize("error", [
+    ValueError("inventory truncated"),
+    DEVICE_CLOUD.GraphQLRequestError("inventory unavailable"),
+])
+def test_inventory_failure_is_advisory_after_authentication(monkeypatch, capsys, error):
+    auth = SimpleNamespace(authenticate=lambda: SimpleNamespace(email="tester@example.com"))
+    monkeypatch.setattr(DEVICE_CLOUD, "DeviceCloudAuthClient", lambda _: auth)
+    def fail_fetch(*_):
+        raise error
+    monkeypatch.setattr(DEVICE_CLOUD, "fetch_available_resources", fail_fetch)
+    resources, returned_auth, email = DEVICE_CLOUD._authenticate_and_fetch_available_resources("prod-cn")
+    assert resources is None
+    assert returned_auth is auth
+    assert email == "tester@example.com"
+    assert str(error) in capsys.readouterr().err
+
+
+def test_authentication_failure_still_blocks_inventory_and_execution(monkeypatch):
+    from device_cloud_auth import AuthenticationError
+    def fail_auth():
+        raise AuthenticationError("login required")
+    monkeypatch.setattr(DEVICE_CLOUD, "DeviceCloudAuthClient",
+                        lambda _: SimpleNamespace(authenticate=fail_auth))
+    monkeypatch.setattr(DEVICE_CLOUD, "fetch_available_resources",
+                        lambda *_: pytest.fail("must authenticate first"))
+    with pytest.raises(AuthenticationError, match="login required"):
+        DEVICE_CLOUD._authenticate_and_fetch_available_resources("prod-cn")
+
+
+@pytest.mark.parametrize("code", [401, 403])
+def test_inventory_auth_response_is_not_downgraded_to_warning(monkeypatch, code):
+    import urllib.error
+    auth = SimpleNamespace(authenticate=lambda: SimpleNamespace(email="tester@example.com"))
+    monkeypatch.setattr(DEVICE_CLOUD, "DeviceCloudAuthClient", lambda _: auth)
+    request_error = DEVICE_CLOUD.GraphQLRequestError
+    def fail_fetch(*_):
+        try:
+            raise urllib.error.HTTPError("endpoint", code, "auth", {}, None)
+        except urllib.error.HTTPError as cause:
+            raise request_error(f"HTTP {code} from endpoint") from cause
+    monkeypatch.setattr(DEVICE_CLOUD, "fetch_available_resources", fail_fetch)
+    with pytest.raises(request_error, match=f"HTTP {code}"):
+        DEVICE_CLOUD._authenticate_and_fetch_available_resources("prod-cn")

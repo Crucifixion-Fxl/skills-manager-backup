@@ -3,7 +3,7 @@ name: gitlab-issue-sop
 description: GitLab issue 管理 SOP — 验收执行结束或用户确认通过/免验/阻塞时，AI 主动回写关联 Issue/MR，不依赖 release-agent；AI create/update/close 必带当前 agent 环境、session ID、恢复检查点与回读回执；创建前查重、指定 assignee、标签治理、进展评论、看板和关联。AI 即将改该 Issue 时先写会话认领（harness、session id、恢复指针），该 Issue 分支的 push、MR 与 session 清理都回写 Issue。适用于开发发现、PM/运营/QA 反馈、review 文档导入、AI 对话中已确认的需求变化，也适用于从飞书群聊、文档 revision、会议纪要/妙记提取证据，创建或更新预研 Issue（含鉴权、自动查找会议、权限复查和完整来源链接）。GitLab CE 适配。
 ---
 
-**按动作加载与读回**：已有项目任务开始持久产物前完整读取 `references/lifecycle-binding.md`，用 `scripts/check_artifact_binding.py --issue <URL> --repository <namespace/project>` 实时核验关联 Issue（一个即可，可跨项目；旧的 `--root-issue`/`--work-item` 双参数仍兼容）；发布评审/合并/关闭前同时读取 `references/status-workflow.md` 并对账适用字段。不要以只读入口前几行声明全部规则已加载。记录实际返回片段、摘要和所覆盖规则；历史缺失不补造。评审链接已发布后读回 `status::in-review` 或明确记录项目模式缺口，不能仅有 comment 而漏状态流转。写结果未知按稳定 marker 先对账，不重放；离线证据校验不替代实时权限与绑定检查。
+**按动作加载与读回**：已有项目任务开始持久产物前完整读取 `references/lifecycle-binding.md`，用 `scripts/check_artifact_binding.py --issue <URL> --repository <namespace/project>` 实时核验关联 Issue（一个即可，可跨项目；旧的 `--root-issue`/`--work-item` 双参数仍兼容）；发布评审/合并/关闭前同时读取 `references/status-workflow.md` 并对账适用字段。不要以只读入口前几行声明全部规则已加载。记录实际返回片段、摘要和所覆盖规则；历史缺失不补造。评审链接已发布后读回 `status::in-review` 或明确记录项目模式缺口，不能仅有 comment 而漏状态流转；MR 提交/更新回执由 [gitlab-mr issue-sync](../../delivery/gitlab-mr/reference/issue-sync.md) 的 `verify_issue_sync_receipt.py` 实时核验，exit 0 前不得宣称同步完成，缺口保持 `BLOCKED`/`ISSUE_SYNC_UNVERIFIED`。写结果未知按稳定 marker 先对账，不重放；离线证据校验不替代实时权限与绑定检查。
 
 # gitlab-issue-sop
 

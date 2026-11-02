@@ -115,17 +115,17 @@ public enum EngagementSlot {
 }
 ```
 
-### 3.2 设备级硬过滤
+### 3.2 存量设备过滤（历史事实，不作为新接入默认模板）
 
 入口：g0-ios 仓库 `AddxAi/Classes/SmartLiveSDK/LiveVideoUIKit/LiveVideo/Engagement/DeviceBean+EngagementEligibility.swift`
 
-`home_page_device_badge` 在 host 侧先过滤硬业务约束：
+`home_page_device_badge` 当前 host 侧存在这些业务过滤：
 
 - shared device：非 owner，不展示。
 - 4G-only device：没有这个云存储套餐导购路径，不展示。
 - feeder device：不走云存储感知 / 保护套餐，不展示。
 
-这些是业务硬约束，不应该绕到 GrowthBook 做实验判断。新设备级触点也应先明确哪些条件是宿主硬过滤，哪些条件才交给 GB / PE。
+上述是存量实现证据，不得直接复制到新触点。对新接入或重做的触点，shared/owner、设备类型和权益等稳定业务资格优先由 PE 提供权威属性、由 GrowthBook/Engagement 决定是否命中。宿主只保留页面/容器失效、缺必要输入等技术 fail-closed；如果暂时保留存量业务过滤，必须把它记为迁移债务并确保不与服务端疲劳度重复。
 
 ### 3.3 安装 FEATURE_GATE
 
@@ -219,7 +219,7 @@ payload:
 3. 创建素材内容，填写文案、图片、颜色、跳转所需素材字段，并发布。
 4. 触发或确认多语言翻译完成；有文字的素材不能只看英文。
 5. 记录 `cmsSlug` 和 `blockType`，后续 engagement-admin 的 `cmsSlug` 必须引用这份内容。
-6. 再检查目标端 engagement-sdk 是否支持该 `blockType`；不支持时先改 SDK builder。
+6. 再检查目标端 SDK 是否支持该 `blockType`；不支持时优先复用，必要时可按既有渲染模型新增 `ContentViewBuilder` 并注册。builder 根据 CMS payload 展示并复用标准事件，不内置业务准入、疲劳度、变体或 Paywall 选择；按 `sdk-core-change-guardrails.md` 评审实际影响，不因只有首个使用触点或带业务命名而直接阻断。
 
 当前 CMS UI 里已经能看到这些 Engagement 触点模板：
 

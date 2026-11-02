@@ -677,8 +677,10 @@ rules:
       `references/data/namespace-legacy-exceptions.yaml`。每个 identity 必须引用带 accountable
       owner、tracking issue/MR、固定 expiry、reason、exit strategy 和 compensating controls
       的 control record；owner 记录问责方，机器授权范围只来自下方 exact identity。
-      `expires_on` 是最后一个有效的 UTC 日历日；缺字段、重复 YAML key、未知引用、过期或未使用
-      的 control 都是 status 2 配置错误。registry-managed namespace 必须继续满足 Fluent Bit
+      `expires_on` 是最后一个有效的 UTC 日历日；缺字段、重复 YAML key、未知引用、非法日期
+      或未使用的 control 均全局 status 2。过期 control 的处理取决于实际版本：依赖 MR !1340
+      合入并发布后，只在精确命中过期 identity 时 status 2，无关身份继续常规校验；此前版本
+      仍对任一过期 control 全局 status 2。registry-managed namespace 必须继续满足 Fluent Bit
       phase prefix，且 overlay path 必须是完整的 `k8s/[.../]overlays/<target>/kustomization.yaml`。
       validator 只接受完整的 cluster directory、Application name 或 overlay path、namespace
       与 image app 组合；任何 sibling 不继承。
@@ -730,9 +732,19 @@ rules:
       可临时兼容历史 target suffix：共享 parser 同时精确匹配 immediate parent cluster directory、
       Application name、destination namespace 与 authoritative image app。该兼容只跳过普通
       `{app}-{env_keyword}` suffix 断言，不会把历史 suffix 加入 env-keywords 路由，也不跳过
-      finalizer、project、automated sync、通知、Image Updater 或 recovery seed 等其它契约；
-      registry 缺失、格式错误、引用错误、存在闲置 control 或过期时 status 2 fail closed。
-      namespace 前缀式 `{phase}-{app}` 由 #31 约束。
+      finalizer、project、automated sync、通知、Image Updater 或 recovery seed 等其它契约。
+      唯一独立的存量 finalizer 例外为 `aws-302571458622-us-prod/vip-service-prod-us`：
+      该 Application 线上没有 cascading finalizer，保留当前删除行为仅在 registry 对应
+      repo/cluster/path/app/namespace identity 仍有效、Project 和 source 全部精确匹配时允许；
+      只豁免 finalizer，其他检查不变。删除该 Application 会孤立其资源，不代表可安全删除；
+      加 finalizer 或移交所有权须另行评审级联删除、prune 和迁移方案。
+      registry 缺失、格式错误、引用错误或存在闲置 control 时全局 status 2 fail closed；
+      control 过期的版本化处理遵循 #31。namespace 前缀式 `{phase}-{app}` 由 #31 约束。
+      Service 名称断言唯一的存量例外是 DEV/buildbarn SG 的 3 个入口 Service（`bb-cache`、
+      `bb-cache-metrics`、`bb-exec`），见
+      `references/approved-exceptions/sg-buildbarn-entry-services.md`：仅限 `DEV/buildbarn` origin、
+      精确受 git 跟踪路径与完整文件 SHA-256，2026-12-31（UTC）后失效；selector 必须选中
+      workload 的检查不跳过。改名属于入口迁移，须另行评审。
     applies_to:
       - recipes/k8s/rollout.yaml.tmpl
       - recipes/k8s/service.yaml.tmpl
@@ -741,6 +753,7 @@ rules:
       - validators/check_workload_naming.py
       - validators/check_argocd_application.py
       - validators/_namespace_legacy_exceptions.py
+      - references/approved-exceptions/sg-buildbarn-entry-services.md
 
   - id: 33
     title: ArgoCD AppProject 必须保持平台分类和 resource whitelist 权限围栏

@@ -68,7 +68,7 @@ git status
 - 要求一个完整 Issue URL，可以属于其他项目，不需要再为当前仓单独建 Work Item。通过 GitLab API 验证 Issue 存在、至少一位 assignee；新工作要求 `opened`，release 回流等引用已交付并关闭的 Issue 的 MR 可以是 `closed`，不得为过门禁重开 Issue。选 MR 作者和 CI review token 都能读到的 Issue，否则 code-review 门禁会失败。
 - 已有 MR 时，MR 描述中的 `Issue:` 只是候选，仍须确认 GitLab 将当前 MR 列为该 Issue 的 related MR。新 MR 在创建前以 live Issue 放行，创建后必须完成 related-MR 回读。
 - 缺失、不可读、无 assignee、关系不匹配，或新工作关联了已关闭 Issue 时停止，不执行 code-review、push 或 MR 写入。
-- 保存完整 binding 字段与 snapshot digest，后续 review、方案回链、MR 描述和最终审计使用同一 identity。
+- 保存完整 binding 字段与 snapshot digest，后续 review、方案回链、MR 描述和最终审计使用同一 identity；state 初始化后由 `scripts/record_issue_binding.py admit --binding-role new-work|closed-reference --state` 实时记录角色（首次角色固定，不按 `closed` 推断），不再交付的 Issue 只能用 `retire --reason` 受控退休（见 [issue-sync](reference/issue-sync.md)）。
 
 #### 1a：识别 MR 模式
 
@@ -340,7 +340,7 @@ glab api "projects/:id/merge_requests/<mr-id>"
 
 最终交付时同时报告 MR URL 和实际回读的 reviewer。命令语义见 [GitLab CLI create](https://docs.gitlab.com/cli/mr/create/) / [update](https://docs.gitlab.com/cli/mr/update/)，回读字段见 [Merge requests API](https://docs.gitlab.com/api/merge_requests/)。
 
-进入 Step 5 前，父会话按 [Issue 同步流程](reference/issue-sync.md) 回写并回读本次提交/更新的 Issue receipt；HEAD、目标分支、关联 Issue 或交付范围改变时重新同步。Driver 返回新的 HEAD 后由父会话负责同步，不能只把链接写在 MR 描述中。
+进入 Step 5 前，父会话按 [Issue 同步流程](reference/issue-sync.md) 回写并回读本次提交/更新的 Issue receipt；HEAD、目标分支、关联 Issue 或交付范围改变时重新同步。Driver 返回新的 HEAD 后由父会话负责同步，不能只把链接写在 MR 描述中。仅回读评论不算 receipt。以 `closed-reference` 准入（release 回流引用已交付 Issue）且实时为 `closed` 时不 PUT 标签、不重开，直接运行 verifier 得到终态 `NOT_APPLICABLE_CLOSED`（exit 0）；`new-work` 或未准入的 closed Issue 保持 `ISSUE_SYNC_UNVERIFIED`；其他情况父会话先实时确认标签目录已有精确的 `status::in-review`（缺失即项目模式缺口，不自动建标签），再用 `remove_labels`（已有 `status::` 旧值）+ `add_labels` 迁移（同名标签重复或写入 ACK 与回读不符时不算完成、不盲目重放，按目录身份做精确 ID 增量，见 issue-sync 状态迁移第 4 步）后运行 `scripts/verify_issue_sync_receipt.py`，exit 0（实时 `VERIFIED`）才算提交同步完成；`ISSUE_SYNC_UNVERIFIED` / `BLOCKED`（含项目模式缺口）保留结构化结果并停在此步。
 
 #### 回读通过后的 reviewer 飞书通知
 
@@ -421,7 +421,7 @@ uv run <skill-path>/scripts/init_drive_state.py \
 `staging_flow_exists=false`、工作流证据和不适用原因；有 staging 分支时分别用 `--staging-flow-evidence` 和 `--staging-application-evidence` 提供 `DEV/argocd-apps` 生产与 staging Application 的 main blob URL，生成 `non_promotion` attestation，caller reason 单独无效。
 cleanup 按 reference 传入 `staging_flow_exists=true` 和 `--cleanup-contract`；hotfix 填批准/owner/验证/回补。
 
-Step 4 的已回读 Issue receipt 先保存在父会话证据记录；initializer 创建 state 后，父会话将这些真实 receipt 追加到 `history`，不能被初始化的空 history 丢弃。派 Driver/Auditor 前从最新记录生成 `ISSUE_SYNC_CONTEXT` JSON（已验证 binding 与当前 revision 的 receipt），原样填入各 prompt；恢复时重新生成，不省略字段。
+Step 4 的已回读 Issue receipt 先保存在父会话证据记录；initializer 创建 state 后，父会话先 `record_issue_binding.py admit ... --state` 再用 `verify_issue_sync_receipt.py ... --state "$STATE_FILE"` 重新实时核验并由脚本追加到 `history`，不手写 receipt，也不能被初始化的空 history 丢弃；其余写入走 `scripts/drive_state.py`（共享锁与原子替换，见 background-drive 第 1 节）。派 Driver/Auditor 前从最新记录生成 `ISSUE_SYNC_CONTEXT` JSON（已验证 binding 与当前 revision 的 receipt），原样填入各 prompt；恢复时重新生成，不省略字段。
 
 #### 5b：派 Driver（background Agent）
 
@@ -495,7 +495,7 @@ Driver 返回时是一个 JSON（见 reference 第 2 节返回格式）。按 `s
 
 然后把 snapshot 交给用户决定重派还是中止。
 
-每次处理完，在 state 文件的 `history` append 一条记录。
+每次处理完，用 `scripts/drive_state.py event` 在 state 文件的 `history` append 一条记录。
 
 ### Step 7：完工审计
 
@@ -512,7 +512,7 @@ Agent(
 
 - Auditor 必须返回 `background-drive.md` 定义的结构化 JSON。
 - 父会话先按 Step 4 回读 reviewer，验证通过后再用 `scripts/validate_drive_audit.py` 校验该 JSON 与最新 state；只有
-  `AUDIT PASS` 且当前 HEAD 的 Issue 提交 receipt 回读通过，才写 `completed: true`、取消 liveness 并报告 MR URL。该字段仅表示 MR 可合并审计完成，不表示已经合并或 Issue 已关闭。
+  `AUDIT PASS` 且当前 HEAD 的 Issue 提交 receipt 回读通过（脚本要求每个活动绑定 Issue 有当前 HEAD 的实时 `VERIFIED`，或以 `closed-reference` 准入且已关闭 Issue 的 `NOT_APPLICABLE_CLOSED` receipt，并重新 GET 确认结果与 Issue 状态未变），才用 `drive_state.py complete --head-sha` 写 `completed: true`、取消 liveness 并报告 MR URL。该字段仅表示 MR 可合并审计完成，不表示已经合并或 Issue 已关闭。
 - 校验失败时把准确错误放入新 `{{RESUME_DECISIONS}}`，回到 Step 5b 再派一轮 Driver。
 
 生产目标的 Auditor 还必须验证 `mr_mode` 与目标分支一致；`production-promotion` 在
@@ -531,7 +531,7 @@ PASS 及外部 gate 实时核验通过（适用时）+ 合并内容完整性检�
 `AUDIT PASS` 或 `mergeable` 只代表 MR 已就绪，**不得执行清理**。若 GitLab 已回读为
 `state=merged`，改问“是否现在清理”。
 
-发送询问以及收到同意或拒绝时，分别向现有 drive state 的 `history` 追加一条
+发送询问以及收到同意或拒绝时，分别用 `drive_state.py event` 向现有 drive state 的 `history` 追加一条
 `kind=post_merge_local_cleanup` 记录，至少包含 `mr_iid`、当前 session 的绝对
 `worktree`、`branch`、`decision=pending|approved|declined` 和 `ts`。恢复时只认
 MR/worktree/branch 三者完全匹配的最后一条记录；记录缺失或不完整时不得推断用户选择。

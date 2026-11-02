@@ -29,7 +29,7 @@ Dashboard 527（`https://superset-us.addx.live/superset/dashboard/527/`）仅作
 
 | 现象 | 优先排查 |
 |---|---|
-| evaluated 为 0 | 宿主硬过滤、slotName 不一致、SDK 未初始化、网关缺 `/en` 前缀 |
+| evaluated 为 0 | 宿主技术 gate/存量业务过滤、slotName 不一致、SDK 未初始化、网关缺 `/en` 前缀 |
 | evaluated 有但 impressed 低 | UI 容器未入屏、cell 复用、SDK type mismatch、图片/内容渲染失败 |
 | 全部 locked | 未传 `sn`、PE device attrs 缺失、GB rule 没命中、default value 指向 locked |
 | data 为空 | GB 返回 value 与 admin variantKey drift、cmsSlug 不存在、snapshot 未发布 |
@@ -44,7 +44,7 @@ Dashboard 527（`https://superset-us.addx.live/superset/dashboard/527/`）仅作
 - 明确触点所属 App。即使 VicoHome、KiwiBit、VicoNature 共用同一套代码，也优先按 App 拆分 slug，例如 VicoHome `home_page_device_badge`、KiwiBit `kb_home_page_device_badge`、VicoNature `vn_home_page_device_badge`。
 - 不要把多个 App 混进同一个触点或同一个 GrowthBook feature，再靠 app 条件分流。
 - 明确 `FEATURE_GATE` 还是 `PROACTIVE`。
-- 明确是否设备级：设备级必须定义 `sn` 来源和宿主硬过滤。
+- 明确是否设备级：设备级必须定义 `sn` 来源，并分开宿主技术 gate 与应进 PE/GB 的业务资格。
 - 明确 `locked=true/false` 或 proactive 展示的 UI 形态。
 - 明确 CTA：`OPEN_PAYWALL`、`DEEP_LINK`、`DISMISS` 或无 CTA。
 - 明确观测分母 `preludeEventKey`。
@@ -61,7 +61,7 @@ Dashboard 527（`https://superset-us.addx.live/superset/dashboard/527/`）仅作
 ### C. 宿主 App
 
 - `EngagementSlotIdentifiers.swift` 加 slot 常量。
-- 新增或复用集成封装，集中处理宿主硬过滤、布局、缓存、语言切换。
+- 新增或复用集成封装，集中处理页面/容器技术 gate、布局、缓存、语言切换；不新增本地业务准入或疲劳度。
 - `FEATURE_GATE` 调 `EngagementTouchpoint.gate` 并提供 child 视图。
 - `PROACTIVE` 调 `EngagementTouchpoint.proactive`。
 - 设备级触点传 `EngagementContext(sn:)`；点击、state、converted 也传相同 sn。
@@ -95,7 +95,9 @@ type: FEATURE_GATE | PROACTIVE
 deviceScope: true | false
 hostLocation: <宿主页面和 view 文件>
 hardGates:
-  - <例如 shared device excluded>
+  - <仅页面/容器/必要参数等技术条件>
+eligibilityAttributes:
+  - <例如 owner/device capability，由 PE/GB 表达>
 ui:
   locked: <CMS blockType / 文案 / 图片>
   unlocked: <宿主 child 视图，仅 FEATURE_GATE 需要>

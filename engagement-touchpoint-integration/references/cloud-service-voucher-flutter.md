@@ -109,10 +109,12 @@ Widget _freeContent() {
 | 点 | 规则 |
 |---|---|
 | `sn` | 从页面入参 `serialNumber` 取，必须传给 `EngagementContext` |
-| 宿主硬过滤 | 广告 FL 已 active / resumable 的设备走 Manage 入口，不再展示领取 voucher banner |
+| 存量宿主业务过滤 | 广告 FL 已 active / resumable 的设备走 Manage 入口，当前代码不再展示领取 voucher banner |
 | reload key | key 包含 `sn`、locale 和 `_cloudServiceVoucherReloadKey`，用于设备切换、语言切换、领取后返回时重新 evaluate |
 
 `PROACTIVE` 不要传 child。Flutter SDK 的语义是命中渲染 CMS，未命中渲染 `SizedBox.shrink()`；如果要保留原生 fallback，应改产品 / 灰度策略，而不是把 fallback 塞进 `EngagementProactive`。
+
+这个 active/resumable 过滤是存量实现事实，不是新触点的推荐边界。新接入应先确认 PE 是否已有权威属性，并由 GB/Engagement 决定是否返回 voucher 变体。宿主只保留页面失效等技术检查，不得再以此为由增加本地频控。
 
 ## 4. SDK 渲染模型
 
@@ -415,8 +417,10 @@ host:
   location: <页面 repo-relative path>
   context:
     sn: <设备级必填>
-  hardGates:
-    - <必须在调 SDK 前过滤的业务条件>
+  technicalGates:
+    - <页面没有可挂载容器、缺必要调用参数等技术条件>
+  eligibilityAttributes:
+    - <会员、设备和内容资格的权威 PE 属性；不在宿主复制判断>
 cms:
   banner:
     blockType: textBanner | cardBanner | ...

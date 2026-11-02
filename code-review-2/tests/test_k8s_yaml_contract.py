@@ -24,7 +24,7 @@ def test_k8s_capability_is_separate_from_existing_permissions():
 
 def test_all_affected_entrypoints_link_the_narrow_contract():
     for filename in (
-        "SKILL.md",
+        "references/step-0-intake.md",
         "references/ci-integration.md",
         "references/review-data-contract.md",
         "references/behavior-coverage-review.md",

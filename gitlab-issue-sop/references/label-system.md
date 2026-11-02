@@ -261,7 +261,7 @@ Other Business Groups and future values still require the placement and new-labe
 ### Agent capability intake: `agent::dev` (Project label exception)
 
 This single project label marks an open Issue as an Agent capability request for the `agent-dev`
-Buzz Agent. It is one of three OR-combined admission sources; Issues filed by zlin or a current
+Buzz Agent. It is one of three OR-combined admission sources; Issues filed by the `agent-dev` approver or a current
 human member of the `agent-dev` channel, or carrying an `agent-dev: take` admission comment from
 them, are admitted without it. The label only requests intake; it does not imply an accepted
 Requirement, a Gate decision, priority, or deployment authorization.
@@ -270,15 +270,15 @@ Requirement, a Gate decision, priority, or deployment authorization.
 |---|---|
 | Projects | `engineering/skills` (1021), `zlin/buzz-gitlab-webhook-adapter` (1785), `zlin/buzz-deploy` (1791) only |
 | Cardinality | Presence flag; `agent::` has no other values |
-| Consumers | Adapter `gitlab-issue-intake.yaml` `agent-dev` route; `agent-dev` S0 admission; the `agent-dev` GitLab writer's per-write admission recheck |
-| Owner | zlin (GitLab user 22) |
-| Retirement | Remove when `agent-dev` is retired or admission moves to another field, after no open Issue or intake route references it |
+| Consumers | The `agent-dev` monitor's GitLab poll (adding the label triggers S0, G2 amendment A7); `agent-dev` S0 admission; the `agent-dev` GitLab writer's per-write admission recheck |
+| Owner | The `agent-dev` approver named in its design doc §2 |
+| Retirement | Remove when `agent-dev` is retired or admission moves to another field, after no open Issue or the monitor poll references it |
 
 Project placement passes the exception gate below: the three projects have no common Group
-(`engineering` Group and the `zlin` personal namespace), the meaning is specific to `agent-dev`, the intake route and writer consume it,
+(`engineering` Group and the `zlin` personal namespace), the meaning is specific to `agent-dev`, the monitor poll and writer consume it,
 and no native field expresses an intake request. Do not create it in any other project. Create it
 once per project after checking project and inherited labels, then read it back. The design source
-is `docs/agent-harness/design/agent-dev/design.md` §3 (S0 admission, G2 amendment A1).
+is `zlin/buzz-deploy` `docs/design/agent-dev/design.md` §3 (S0 trigger and admission, G2 amendments A1 and A7).
 
 ### Blocking: `flag/blocked`
 

@@ -5,7 +5,6 @@ import re
 import unittest
 from pathlib import Path
 
-
 SKILL = Path(__file__).resolve().parents[1]
 REFERENCES = SKILL / "references"
 
@@ -27,7 +26,7 @@ class MarkdownLineCountContractTest(unittest.TestCase):
 
     def test_all_consumers_reach_the_same_evidence_contract(self):
         for filename in (
-            "SKILL.md",
+            "references/step-0-intake.md",
             "references/review-data-contract.md",
             "references/ci-integration.md",
         ):
@@ -35,17 +34,25 @@ class MarkdownLineCountContractTest(unittest.TestCase):
                 self.assertIn("markdown-line-count.md", (SKILL / filename).read_text())
 
     def test_line_limit_is_not_red_in_rules_template_or_example(self):
-        skill = (SKILL / "SKILL.md").read_text()
-        line_rules = [line for line in skill.splitlines() if "600 行" in line]
+        guidance = "\n".join(
+            (SKILL / filename).read_text()
+            for filename in (
+                "references/step-0-intake.md",
+                "references/analysis-review.md",
+                "references/verification-verdict.md",
+                "references/output-contract.md",
+            )
+        )
+        line_rules = [line for line in guidance.splitlines() if "600 行" in line]
         self.assertGreaterEqual(len(line_rules), 4)
         # Preserve the existing advisory classification across all three entrypoints.
-        self.assertIn("超过建议拆分", skill)
-        self.assertIn("✅/⚠️/豁免/待核验", skill)
-        self.assertIn("636 行 → ⚠️", skill)
+        self.assertIn("超过建议拆分", guidance)
+        self.assertIn("✅/⚠️/豁免/待核验", guidance)
+        self.assertIn("636 行 → ⚠️", guidance)
         for line in line_rules:
             with self.subTest(line=line):
                 self.assertNotRegex(line, r"(?:✅/🔴|→ 🔴)")
-        self.assertIn("建议改进项（不阻断）", skill)
+        self.assertIn("建议改进项（不阻断）", guidance)
 
     def test_unknown_evidence_never_becomes_a_pass(self):
         guide = (REFERENCES / "markdown-line-count.md").read_text()

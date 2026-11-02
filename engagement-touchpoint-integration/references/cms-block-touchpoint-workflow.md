@@ -12,6 +12,8 @@
 6. `docs/architecture/admin/operations/touchpoint-creation.md`。
 7. `docs/architecture/admin/operations/variant-naming.md`。
 
+如果 CMS 内容包含 `runtimeBundle`、`runtimeText` 或 `{{variable}}`，还必须读 `dynamic-copy-runtime.md`，并先确认目标 App 实际锁定的 SDK revision 已包含该能力。
+
 如果是 iOS，优先参考这些文件：
 
 | 目的 | 文件 |
@@ -34,7 +36,8 @@ slug:
 type:
 deviceScope:
 hostLocation:
-hardGates:
+technicalGates:
+eligibilityAttributes:
 lockedUi:
 unlockedUi:
 cms:
@@ -46,12 +49,33 @@ actionType:
 paywallId:
 deepLink:
 gbFeatureIdExperience:
+experienceVariants:
+  - variantKey:
+    cmsSlug:
+    presentationKey: <唯一 Banner preset/creative>
+    actionType:
+    paywallId: <OPEN_PAYWALL 时唯一确定>
+gbFeatureIdFatigue:
+fatigue:
+  enabled:
+  variantKey:
+  strategy:
+  maxImpressions:
+dynamicCopy:
+  enabled:
+  sdkRevision:
+  runtimeInputs:
+  variables:
+  formatting: <单复数/数字日期/相对时间等展示规则；不选择营销业务变体>
+  allowedTargets: <仅文案展示字段>
+  forbiddenTargets: [blockType, preset, creativeKey, cmsSlug, actionType, actionContext, paywallId, solutionId]
+  failureBehavior:
 adminRelease:
 observability:
   supersetDashboard: <通用 P0；按 slotName + paywallId 筛选>
 ```
 
-如果 `slug`、`cms.slug`、`cms.blockType`、`gbFeatureIdExperience` 或 `variantKey` 不一致，先停下来修正，不进入代码。
+如果 `slug`、`cms.slug`、`cms.blockType`、`gbFeatureIdExperience` 或 `variantKey` 不一致，先停下来修正，不进入代码。每个 `variantKey` 还必须唯一确定 CMS Banner 样式和 action；不能让多个业务场景共用一个 Experience 后再由客户端分流。
 
 slug 命名规则：
 
@@ -67,12 +91,14 @@ slug 命名规则：
 
 - `EngagementSDK.configure(...)` 只在 App 启动配置一次。
 - `networkProvider` 能把 SDK path 转成真实网关路径，例如 iOS 需要 `/en` 前缀。
-- `onOpenAction` 同时覆盖 `DEEP_LINK` 和 `OPEN_PAYWALL`。
+- `onOpenAction` 同时执行 engagement-service 已确定的 `DEEP_LINK` 和 `OPEN_PAYWALL`，不根据业务数据改写目标。
 - `OPEN_PAYWALL` 透传 referrer attribution：`slotName`、`solutionId`、`experimentKey`、`variationId`、`experienceKey`、`fatigueKey`、设备 sn。
 - paywall payment success 能回调 `EngagementTouchpoint.notifyConverted(...)`。
 - `tracker` 已接 `touchpoint_evaluated / impressed / cta_clicked / dismissed / converted`。
+- 动态文案需求中，runtime data provider 能通过宿主现有网络层处理 CMS 允许的 `service + method + relative path`，不在 SDK 里保存域名、Token 或业务鉴权。
+- 目标 App 依赖的 SDK revision 已固定并可追溯；不将“SDK MR 已创建”当作宿主已具备能力。
 
-没有这些基础能力时，先补基础能力，不要只接单个触点 UI。
+能力缺失时先判断归属：App 初始化、网关鉴权适配和既定路由接线留在宿主；业务准入、疲劳度和变体选择回到 PE/GB/Admin/Service；CMS 触点缺少视觉或文案处理时，可在 SDK 扩展 builder、resolver、formatter。按 `sdk-core-change-guardrails.md` 审查实际受影响的公共 surface 和兼容性，不因首个触点使用或与业务同 MR 就要求搬到宿主。
 
 ### Phase 3：marketing-cms 素材与模板准备
 
@@ -84,8 +110,17 @@ engagement-admin 配置前必须先确认 CMS 内容存在。admin 的 `cmsSlug`
 2. 确认内容已创建、Published、多语言进度符合上线要求。
 3. 记录内容组件的 `blockType` 和关键 payload 字段。
 4. 确认 marketing-cms 代码里已经定义这个模板 / block；如果平台没有对应模板，先改 marketing-cms。
-5. 确认目标宿主端的 engagement-sdk 已注册同名 builder；如果 SDK 不支持该 `blockType`，先改 SDK，再接宿主触点。
+5. 确认目标端 SDK 已注册同名 builder；不支持时优先复用，必要时可沿既有 registry 新增按 payload 展示的 builder。按 `sdk-core-change-guardrails.md` 验证字段、布局、标准事件接线与兼容性，不以名称包含 `Library` 或只有一个使用触点为由直接阻断；builder 不得内置业务准入、疲劳度、变体或路由决策。
 6. 只有 CMS 内容和 SDK builder 都存在后，才进入 engagement-admin 绑定 `cmsSlug`。
+
+动态文案还要检查：
+
+1. CMS `runtimeBundle.variables[]` 的 key、类型、数据源、JSON path 和 `allowedTargets` 都有明确 schema。
+2. `kind=context` 只读显式 `runtimeInputs`；`kind=api` 只使用宿主 provider 允许的服务和相对路径。
+3. `allowedTargets` 只能包含 `text`、`subtitle`、`highlightText` 等文案展示字段；必须拒绝 `blockType`、`preset`、`creativeKey`、`cmsSlug`、`actionType`、`actionContext`、`paywallId`、`solutionId`。
+4. 缺输入、缺值、类型错、业务错误、超时时收起受影响 block，不显示未解析占位符或旧账号文案。
+5. 运行时文案和用户值不写入全局快照缓存；Experience、attribution 和 `paywallId` 只保留 engagement-service 已下发的最终值，runtime 不产生“resolved creative route”。
+6. `runtimeText.cases` / formatter 可处理模板中的单复数、数字/日期/相对时间和同一业务含义的语法分支；按 `dynamic-copy-runtime.md` 区分展示格式化与业务文案变体。会员资格、实验准入、营销方案、Banner 样式、CTA、Paywall 路由和疲劳度仍由平台决定；有效零值不伪装为缺值以隐藏触点。
 
 `home_page_device_badge` 当前样例：
 
@@ -135,14 +170,28 @@ CMS 平台当前可选模板包括 `Image`、`Badge`、`Icon Card`、`Chip Carou
 EngagementContext(sn: device.serialNumber)
 ```
 
+动态文案触点在同一个 context 中增加当前页面已有的查询上下文：
+
+```swift
+EngagementContext(
+    sn: device.serialNumber,
+    runtimeInputs: ["library": ["query": currentLibraryQuery]]
+)
+```
+
+实际 API 和类型以目标 SDK revision 为准。`runtimeInputs` 是输入字典，不是 Engagement evaluate 响应；不把全局 App 状态或鉴权凭据塞进去。
+
 宿主集成封装应统一处理：
 
-- 宿主硬过滤：不符合条件时不调用 SDK。
+- 技术 gate：页面/容器已失效或缺必要请求参数时不调用 SDK；会员、设备权益和稳定业务资格应进 PE/GB。
 - 清理：miss / ineligible 时清空 container。
 - 布局：预留空间，防止长文案或 cell 复用把触点挤出屏幕。
 - 缓存：语言切换、账号切换、权益变化时按需 invalidate。
 - 重入：cell 重复配置风暴不能导致无意义 N+1 evaluate。
 - 设备级 attribution：state / trackCta / notifyConverted 都传同一个 sn。
+- 失效：账号、语言、页面或容器世代变化后丢弃旧 runtime 结果。
+
+宿主不得新增或使用 `presentation.shouldPresent` 一类展示否决回调，也不得在 Controller 或 Widget 中重新判断会员资格、实验条件、每 Session/每日次数、关闭冷却或永久抑制。页面已销毁、容器已替换等情况由订阅取消、生命周期 token 和安全挂载处理；这些内部机制不向业务方暴露展示判断。
 
 ### Phase 5：engagement-admin 配置
 
@@ -187,8 +236,10 @@ API 创建或修改后的 UI 只读复核是必做步骤：
 - 核对 `slug`、`type`、`preludeEventKey`、`gbFeatureIdExperience`。
 - 核对每个 experience variant 的 `variantKey`、`cmsSlug`、`slotType`、`locked`、`isSystem`、`sortOrder`。
 - 核对 `actionType` 和 `actionConfig` 是否匹配，例如 `OPEN_PAYWALL` 必须有正确 `paywallId`，`DEEP_LINK` 必须有正确链接。
+- 核对一个 Experience 是否唯一对应一个 CMS Banner 样式和一个 action。Snapshot/Rolling 等样式或 Paywall 不同的场景必须拆成不同 variant，不接受 `paywallIdsByCreative` 或客户端 action map。
 - `FEATURE_GATE` 必须确认系统 `unlocked` 变体存在且不可编辑，运营变体是 `locked=true`。
-- `PROACTIVE` 必须确认 fatigue variant 存在，且 fatigue JSON 符合打扰频控预期。
+- `PROACTIVE` 必须确认 fatigue 决策：有频控需求时必须有 fatigue feature/variant 且 JSON 符合预期；无频控时明确记录 `null`/`none` 及原因，不由宿主暗中补一套。
+- 宿主 App/Flutter module 不存在与 admin fatigue 并行的本地次数、冷却或永久关闭 policy。
 - 在 Releases 创建发布单前，再看一次 pending diff / snapshot 预检，避免配错后发布到 staging 再返工。
 
 鉴权与 API 自动化：
@@ -222,7 +273,7 @@ experienceVariants:
     actionConfig:
       paywallId: <OPEN_PAYWALL>
       deepLink: <DEEP_LINK>
-fatigueVariants: <PROACTIVE 必填，FEATURE_GATE 不需要>
+fatigueVariants: <PROACTIVE 有频控需求时必填；无频控时显式记录 null/none；FEATURE_GATE 不需要>
 ```
 
 规则：
@@ -231,7 +282,9 @@ fatigueVariants: <PROACTIVE 必填，FEATURE_GATE 不需要>
 - `FEATURE_GATE` 创建时 admin 自动插入系统 `unlocked` 变体，作为 `locked=false` 的宿主 child 透传分支。
 - 运营新增的 experience variant 固定是 `locked=true`，必须有可渲染 CMS 内容。
 - GrowthBook 可以返回 `unlocked`，但不要尝试在 admin 再创建第二个 `locked=false` 变体。
-- `PROACTIVE` 按现有框架配置 fatigue；业务明确无频控时使用 `strategy=none`、`maxImpressions=null`，不能自行添加冷却或账号永久展示一次。
+- GrowthBook `variantKey` 命中后，当前 Experience 的 `cmsSlug`、Banner 样式、`actionType` 和 `paywallId` 已经最终确定；SDK/runtime 可渲染、替换及格式化文案，不再次选择业务变体或路由。
+- `PROACTIVE` 按现有框架配置 fatigue；业务明确无频控时，按当前已验证的触点契约使用 `gbFeatureIdFatigue=null` 或 `strategy=none,maxImpressions=null`，并记录原因；不能自行添加冷却或账号永久展示一次。
+- 需求是每日/每会话上限或新型冷却，当前 fatigue schema 表达不了时，应先扩展 engagement-admin/engagement-service 并发布通用策略；不在 App/SDK 中增加业务专用 policy。
 - `cmsSlug` / `paywallId` 应从 CMS 下拉或代理确认，不手敲未知值；`cmsSlug` 指向的内容必须已在 marketing-cms 发布，且目标端 SDK 支持对应 `blockType`。
 
 发布单和环境流转：
@@ -264,6 +317,9 @@ GrowthBook 必查：
 | default value | 语义明确：空串代表不展示，某个 variantKey 代表兜底展示 |
 | environment | 先 staging，后 production；不要只配 prod |
 | 设备属性 | 设备级规则使用的属性必须能通过 `(userId, sn)` 解析出来 |
+| 最终决策 | 每个返回值唯一映射 Admin Experience 的 Banner 与 action；样式/Paywall 不同就返回不同 `variantKey` |
+
+PROACTIVE 启用频控时还必查 `gbFeatureIdFatigue`：每个 GB fatigue value 都必须在 admin fatigue variants 中有同名 `variantKey`，且命中后的 `fatigueJson` 能完整表达产品频控。不用 Experience feature 或宿主变量替代 Fatigue feature。
 
 如果产品需求里的条件在 GrowthBook attributes 里找不到，不要在规则里硬写不存在的字段。按下面流程新增 PE attribute：
 
@@ -331,7 +387,13 @@ staging 命中验证建议：
 | 宿主单测 | ineligible 不调用 SDK，container 被清空，布局约束恢复 |
 | 宿主单测 | eligible 传正确 slotName 和 sn |
 | SDK / 集成 | `locked=true` 渲染 CMS，`locked=false` 渲染 child 视图 |
-| CTA | `DEEP_LINK` / `OPEN_PAYWALL` 路由参数完整 |
+| 展示扩展 | 新 builder 按 CMS payload 注册/分发，验证字段、布局、标准回调；不夹带业务决策 |
+| 动态静态隔离 | 无 `runtimeBundle` 时 runtime provider 0 请求；动态文案不进入全局快照缓存 |
+| 动态数据 | 精确参数绑定、同源去重、超时/业务错误/缺值收起、账号/语言/页面过期结果丢弃；控制字段 target 全部拒绝 |
+| 文案格式化 | 单复数 0/1/多、locale、数字/日期、时区/跨日；语法分支不改变营销方案、Experience、preset、action、Paywall 或标准事件 |
+| 疲劳度 | evaluate 命中 `fatigueKey`；impress/dismiss 推进服务端状态；宿主无第二套计数/冷却 |
+| CTA | `DEEP_LINK` / `OPEN_PAYWALL` 路由参数完整且等于 service 返回；N/D 变化不改变 Banner preset 或 `paywallId` |
+| 归因 | 每个 `experience_key` 唯一对应 `solution_id`、Banner 样式和 `paywall_id`，能直接复用通用 P0 看板 |
 | conversion | payment success 后 `notifyConverted` 带完整 attribution |
 | 埋点 | 5 事件带 `slot_name`、`solution_id`、`experience_key`、`variation_id`、设备级 `device_sn`；接入完成后用 `addx:tracking-lifecycle` 到埋点管理平台 `/check/dashboard/` 生成配置，App 扫码验证触点埋点已发布且字段正确 |
 | 回归 | cell 复用、语言切换、长设备名、权益变化 |
@@ -340,7 +402,7 @@ staging 命中验证建议：
 
 优先使用 `addx:superset` skill 查询看板和 chart 数据。agent 在具备 `SUPERSET_URL`、`SUPERSET_USERNAME`、`SUPERSET_PASSWORD` 时，可以通过 Superset REST API 获取 dashboard charts、chart query_context，并调用 `/api/v1/chart/data` 或 SQL Lab 查询真实图表数据。如果这些变量保存在 `~/.zshrc`，脚本里要显式 `source ~/.zshrc` 后再登录 Superset，避免非交互 shell 没加载配置导致误判。
 
-`OPEN_PAYWALL` 默认使用 `https://superset-us.addx.live/superset/dashboard/paywall-p0-touchpoint-to-paywall-health/`，按业务触点 `slot_name` 和目标 `paywall_id` 筛选触点机会、evaluate、曝光、点击、Paywall 打开和支付结果；接入通用埋点契约后不重复建设业务看板。
+`OPEN_PAYWALL` 默认使用 `https://superset-us.addx.live/superset/dashboard/paywall-p0-touchpoint-to-paywall-health/`，按业务触点 `slot_name`、`experience_key`、`experiment_key` 和目标 `paywall_id` 筛选触点机会、evaluate、曝光、点击、Paywall 打开和支付结果；接入通用埋点契约后不重复建设业务看板。若一个 Experience 仍可能在客户端进入多个 Paywall，应先修正架构，不能用新看板掩盖归因问题。
 Dashboard 527（`https://superset-us.addx.live/superset/dashboard/527/`）仅用于 SDK 基础链路排障。`DEEP_LINK` 等非 Paywall 结果优先使用已有领域看板；确有指标或维度缺口时，先记录缺口并让 owner 确认，再申请新看板。
 
 Superset 重点看：

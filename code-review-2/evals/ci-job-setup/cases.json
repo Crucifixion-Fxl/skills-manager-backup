@@ -1,0 +1,128 @@
+{
+  "schema_version": 1,
+  "source_issue": "engineering/ci-templates#158",
+  "cases": [
+    {
+      "id": "two-document-input-header-anchor-and-tolerated-failure",
+      "request": {
+        "operation": "ci-job-setup",
+        "source": "root",
+        "revision": "head",
+        "path": ".gitlab-ci.yml",
+        "job": "unit-test",
+        "dependency": "PyYAML"
+      },
+      "yaml_fixture": "spec:\n  inputs:\n    python_image:\n      default: python:3.11\n---\n.setup: &setup\n  before_script:\n    - \"python3 -m pip install PyYAML==6.0.3 || echo 'fallback'\"\ndefault:\n  <<: *setup\n.shared: &shared\n  interruptible: true\nunit-test:\n  <<: *shared\n  extends: .shared\n  image: $[[ inputs.python_image ]]\n  script:\n    - pytest\n",
+      "independent_evidence": {
+        "job_trace": "The pip install process exited nonzero; its command-level echo fallback ran and the Job continued.",
+        "job_result": "success"
+      },
+      "expected_projection": {
+        "coverage": "static_job_setup_declarations_only",
+        "job_found": true,
+        "installation_declared": true,
+        "effective_configuration_resolved": false,
+        "runtime_installation_verified": false,
+        "unknown_reasons_include": [
+          "image_and_runtime_dependencies_unverified",
+          "inputs_unresolved",
+          "shell_execution_unresolved"
+        ],
+        "contains_record": {
+          "kind": "literal_pip_install",
+          "failure_tolerated": true
+        },
+        "inheritance_kinds_include": ["alias", "merge", "extends", "default"]
+      },
+      "expected_review": "Accept exactly this spec-header plus CI-document shape. Keep inputs_unresolved and do not interpolate the image input. Find the install declaration through alias/merge/default/extends; failure_tolerated marks the literal || echo fallback, but the trace still proves pip failed and Job success does not prove the dependency installed."
+    },
+    {
+      "id": "confirmed-missing-in-clean-pinned-image",
+      "request": {
+        "operation": "ci-job-setup",
+        "source": "root",
+        "revision": "head",
+        "path": ".gitlab-ci.yaml",
+        "job": "unit-test",
+        "dependency": "PyYAML"
+      },
+      "yaml_fixture": "unit-test:\n  image: registry.example/ci/python@sha256:1111111111111111111111111111111111111111111111111111111111111111\n  script:\n    - python -c 'import yaml'\n",
+      "independent_evidence": {
+        "image_inventory": "The exact image digest is pinned and its trusted SBOM confirms that PyYAML is absent.",
+        "job_trace": "The matching fixed-head Job reports ModuleNotFoundError for yaml.",
+        "unresolved_install_sources": []
+      },
+      "expected_projection": {
+        "coverage": "static_job_setup_declarations_only",
+        "job_found": true,
+        "installation_declared": false,
+        "effective_configuration_resolved": false,
+        "runtime_installation_verified": false,
+        "unknown_reasons_include": [
+          "image_and_runtime_dependencies_unverified",
+          "shell_execution_unresolved"
+        ]
+      },
+      "expected_review": "The runtime failure and pinned-image inventory independently prove the observed missing dependency; installation_declared=false is corroboration only. If either independent item or a necessary setup source is unresolved, do not assert absence and keep the required coverage incomplete."
+    },
+    {
+      "id": "unsupported-requirements-and-external-include",
+      "request": {
+        "operation": "ci-job-setup",
+        "source": "root",
+        "revision": "head",
+        "path": ".gitlab-ci.yml",
+        "job": "unit-test",
+        "dependency": "PyYAML"
+      },
+      "yaml_fixture": "include:\n  - local: ci/install.yml\nunit-test:\n  script:\n    - python -m pip install -r requirements-test.txt\n    - pytest\n",
+      "independent_evidence": {},
+      "expected_projection": {
+        "coverage": "static_job_setup_declarations_only",
+        "installation_declared": false,
+        "effective_configuration_resolved": false,
+        "runtime_installation_verified": false,
+        "unknown_reasons_include": [
+          "image_and_runtime_dependencies_unverified",
+          "external_config_unresolved",
+          "pip_arguments_unresolved",
+          "shell_execution_unresolved"
+        ]
+      },
+      "expected_review": "Do not reinterpret no supported literal match as absence. If this setup is needed to resolve the finding, keep coverage incomplete; preserve any other independently proven finding."
+    },
+    {
+      "id": "arbitrary-multidocument-input-remains-unknown",
+      "request": {
+        "operation": "ci-job-setup",
+        "source": "root",
+        "revision": "head",
+        "path": ".gitlab-ci.yml",
+        "job": "unit-test",
+        "dependency": "PyYAML"
+      },
+      "yaml_fixture": "spec:\n  inputs:\n    image:\n      default: python:3.11\n---\nstages:\n  - test\n---\nunit-test:\n  script: pytest\n",
+      "expected_projection": {
+        "status": "unknown",
+        "reason": "CI_JOB_SETUP_UNSAFE"
+      },
+      "expected_review": "Do not turn rejection of the third document into a missing-job or missing-dependency finding. If this source is necessary to resolve the review question, keep coverage incomplete."
+    },
+    {
+      "id": "capability-marker-invalidates-legacy-review-artifact",
+      "artifact_context": {
+        "old_artifact": "signed under the authenticated MR context without ci_job_setup_contract",
+        "current_context": "same authenticated MR context with ci-job-setup/v1 enabled",
+        "first_activation": "the context digest changes, so the legacy review artifact is not reusable",
+        "subsequent_retry": "a whole review artifact created under the new contract may replay when all existing authentication, identity, and gate checks pass"
+      },
+      "projection_requests": {
+        "result_cache": false,
+        "same_job_dependency_request": "recomputes the fixed-blob projection on each operation call",
+        "budget_query_identity": ["job", "dependency"],
+        "whole_review_digest_contains_job_dependency": false
+      },
+      "expected_review": "Distinguish whole-review artifact replay from source projection. Capability activation invalidates a legacy artifact; later same-context replay is not an independent re-review, and no per-job/dependency result cache exists."
+    }
+  ]
+}

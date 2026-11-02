@@ -278,7 +278,32 @@ controls:
       - Child Applications remain absent until artifact copy, image-only normalization, and directed passive-adoption validation pass.
       - Both Jenkins entries remain authoritative until automatic promotion is accepted.
 
+  vip-service-prod-us-shared-namespace:
+    owner: CLOUD/vip-service
+    tracking_ref: https://gitlab.addx.ai/CLOUD/vip-service/-/issues/125
+    expires_on: "2026-11-29"
+    reason: >-
+      The existing prod-us VIP Rollout and its associated services and
+      dependencies run in the shared prod-us namespace. This identity records
+      the existing deployment; moving it requires a coordinated migration.
+    exit_strategy: >-
+      Separately plan and execute migration of the exact workload, Service,
+      secrets, and traffic dependencies to prod-vip-service, then remove this
+      exception.
+    compensating_controls:
+      - The namespace keeps the prod- prefix required by the Fluent Bit business-namespace gate.
+      - Only the exact US prod Application and prod-us overlay in the specified repositories are accepted.
+      - This exception does not authorize namespace migration, public exposure, or changes to shared Project permissions.
+
 applications:
+  - cluster_dir: aws-302571458622-us-prod
+    application_name: vip-service-prod-us
+    namespace: prod-us
+    image_app: vip-service
+    manifest_repository: https://gitlab.addx.ai/DEV/argocd-apps.git
+    source_repository: https://gitlab.addx.ai/CLOUD/vip-service.git
+    source_path: k8s/overlays/prod-us
+    exception_id: vip-service-prod-us-shared-namespace
   - cluster_dir: aws-002497567426-us-tech-service
     application_name: troubleshooting-prod-us
     namespace: prod-us
@@ -543,6 +568,12 @@ applications:
     exception_id: state-machine-staging-cn-tke-shared-namespace
 
 kustomizations:
+  - path_suffix: [k8s, overlays, prod-us, kustomization.yaml]
+    namespace: prod-us
+    image_app: vip-service
+    repository: https://gitlab.addx.ai/CLOUD/vip-service.git
+    exception_id: vip-service-prod-us-shared-namespace
+
   - path_suffix: [k8s, overlays, prod-us, kustomization.yaml]
     namespace: prod-us
     image_app: alexa-access-front

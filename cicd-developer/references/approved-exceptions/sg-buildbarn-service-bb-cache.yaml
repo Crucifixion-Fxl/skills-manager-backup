@@ -1,0 +1,26 @@
+{
+  "apiVersion": "v1",
+  "kind": "Service",
+  "metadata": {
+    "labels": {
+      "app.kubernetes.io/managed-by": "gitops",
+      "app.kubernetes.io/part-of": "buildbarn"
+    },
+    "name": "bb-cache",
+    "namespace": "prod-buildbarn"
+  },
+  "spec": {
+    "ports": [
+      {
+        "name": "grpc",
+        "port": 443,
+        "protocol": "TCP",
+        "targetPort": 8980
+      }
+    ],
+    "selector": {
+      "app": "bb-frontend"
+    },
+    "type": "ClusterIP"
+  }
+}

@@ -51,7 +51,7 @@ fetch 之后又有新的长期分支 push 时会报 "not available locally"（ex
 
 ## 豁免
 
-FAIL 是有意为之（例如刻意回退）时，只能由用户确认后，由父会话写入 Driver state 的 `merge_integrity_waivers`：
+FAIL 是有意为之（例如刻意回退）时，只能由用户确认后，由父会话用 `scripts/drive_state.py waiver --json '<豁免>'` 写入 Driver state 的 `merge_integrity_waivers`：
 
 ```json
 {"head_sha": "<MR HEAD>", "target_sha": "<目标 SHA>", "checks": ["A", "C"], "files": ["<FAIL 列出的全部文件>"],

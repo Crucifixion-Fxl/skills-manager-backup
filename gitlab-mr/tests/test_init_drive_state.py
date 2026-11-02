@@ -12,8 +12,11 @@ from urllib.parse import quote, urlencode
 
 import pytest
 
+import gitlab_mr_issue_sync_fixture as fx
+
 SCRIPT = Path(__file__).parents[1] / "scripts" / "init_drive_state.py"
 AUDIT_SCRIPT = Path(__file__).parents[1] / "scripts" / "validate_drive_audit.py"
+RECEIPT_SCRIPT = Path(__file__).parents[1] / "scripts" / "verify_issue_sync_receipt.py"
 PROJECT_PATH = "engineering/skills"
 ORIGIN_MR_IID = 101
 VERIFICATION_MR_IID = 102
@@ -1312,6 +1315,16 @@ def test_non_promotion_audit_rechecks_live_attestation(tmp_path: Path) -> None:
         },
     }
     audit_file.write_text(json.dumps(audit), encoding="utf-8")
+    # Step 5a: after init, the live verifier itself appends the Issue receipt to history.
+    env = fx.install_fake_glab(tmp_path / "issue-glab", fx.in_review(sha, 42, PROJECT_PATH), env,
+                               fallback=tmp_path / "fake-overlay-bin" / "glab")
+    receipt = subprocess.run(
+        [sys.executable, str(RECEIPT_SCRIPT), "--issue", fx.ISSUE_URL, "--mr-project", PROJECT_PATH,
+         "--mr-iid", "42", "--revision", sha, "--phase", "submitted", "--note-id", str(fx.NOTE_ID),
+         "--state", str(state_file)],
+        cwd=repo, env=env, text=True, capture_output=True, check=False,
+    )
+    assert receipt.returncode == 0, receipt.stdout + receipt.stderr
     command = [
         sys.executable,
         str(AUDIT_SCRIPT),

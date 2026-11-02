@@ -1,0 +1,26 @@
+{
+  "apiVersion": "v1",
+  "kind": "Service",
+  "metadata": {
+    "labels": {
+      "app.kubernetes.io/managed-by": "gitops",
+      "app.kubernetes.io/part-of": "buildbarn"
+    },
+    "name": "bb-exec",
+    "namespace": "prod-buildbarn"
+  },
+  "spec": {
+    "ports": [
+      {
+        "name": "client-grpc",
+        "port": 443,
+        "protocol": "TCP",
+        "targetPort": 8982
+      }
+    ],
+    "selector": {
+      "app": "scheduler"
+    },
+    "type": "ClusterIP"
+  }
+}

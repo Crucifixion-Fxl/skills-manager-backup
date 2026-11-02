@@ -35,6 +35,11 @@ expected:
   expectedVariantKey: <可空>
   expectedCmsSlug: <可空>
 symptom: <不展示 / 展示错内容 / 点击无效 / Superset 无数据 / 疲劳度异常>
+dynamicCopy:
+  enabled: true | false
+  sdkRevision: <目标 App 实际依赖>
+  runtimeInputKeys: [<例如 library.query>]
+  dataSource: context | <service + method + relative path>
 links:
   growthbook: <feature url>
   admin: <touchpoint or release url>
@@ -46,15 +51,18 @@ links:
 ```mermaid
 flowchart TD
   A["用户报告展示异常"] --> B{"宿主是否进入触点代码?"}
-  B -->|否| B1["宿主硬过滤 / 页面生命周期 / cell 复用 / App 版本"]
+  B -->|否| B1["宿主技术 gate / 页面生命周期 / cell 复用 / App 版本"]
   B -->|是| C{"是否发起 evaluate?"}
   C -->|否| C1["SDK 初始化 / slotName / context(sn) / 网络 adapter"]
   C -->|是| D{"后端日志是否有 evaluate 链路?"}
   D -->|否| D1["用 troubleshooting 查 engagement-service 网络/鉴权/路由异常"]
   D -->|是| E{"evaluate 是否返回触点?"}
   E -->|否| E1["GB rule / PE attribute / admin snapshot / fatigue cooldown"]
-  E -->|是| F{"payload 是否可渲染?"}
-  F -->|否| F1["CMS blockType / SDK builder / 图片资源 / type mismatch"]
+  E -->|是| R{"content 是否含 runtimeBundle?"}
+  R -->|是| R1["runtimeInputs / host provider / API response / resolver / stale epoch"]
+  R -->|否| F{"payload 是否可渲染?"}
+  R1 --> F
+  F -->|否| F1["CMS blockType / SDK builder / 动态变量 / 图片资源 / type mismatch"]
   F -->|是| G{"是否曝光/点击/转化上报?"}
   G -->|否| G1["容器入屏 / tracker adapter / actionConfig / attribution"]
   G -->|是| H["按 action 类型查通用 P0 或领域看板确认规模影响"]
@@ -67,14 +75,14 @@ flowchart TD
 | 检查 | 证据 |
 |---|---|
 | 页面是否真的加载目标容器 | 页面日志、断点、UI 层级 |
-| 宿主硬过滤是否提前 return | shared device、4G-only、feeder、非目标 App、非目标版本 |
+| 宿主是否被技术 gate 提前 return | 页面/容器失效、缺必要参数、非目标 App/版本；稳定业务资格应另查 PE/GB |
 | slotName 是否等于 admin slug | 代码常量值，不只看变量名 |
 | 设备级触点是否拿到 sn | evaluate context、日志、curl 入参 |
 | cell/header 是否因为复用残留被清空 | cell prepareForReuse、header 高度回调、reload key |
 
 常见结论：
 
-- 宿主硬过滤命中是“按预期不展示”，不要去改 GB。
+- 宿主技术 gate 命中是“当前调用无法安全执行”，先修页面生命周期或输入，不盲改 GB。如果是会员/设备资格，检查其是否应由 PE/GB 表达。
 - `slotName` 拼错时，admin / GB 配得再对也不会返回内容。
 - 设备级触点不传 sn 时，PE 设备属性拿不到，很多规则会全部 miss。
 
@@ -92,6 +100,13 @@ App 有日志时，优先看 SDK evaluate 请求。没有日志时，用 Charles
 | language | 和 App 当前语言一致 |
 | appType/version | 能命中 GB 版本条件 |
 | Authorization | 有效 token；`-1024 ACCOUNT_GET_KICKED` 需要重新登录 |
+
+动态文案还需要区分两个请求：
+
+1. engagement `evaluate` 返回含 `runtimeBundle` 的 CMS 内容。
+2. SDK 根据 `runtimeInputs` 和 CMS 数据源，通过宿主鉴权 provider 请求 context/API 数据并准备文案。
+
+第 1 个请求成功不代表第 2 个已发出或已成功。无 `runtimeBundle` 的静态触点不应发第 2 个请求。
 
 如果 App 没有发 evaluate，优先查：
 
@@ -129,7 +144,11 @@ curl -s -X POST "$API_BASE/en/engagement/v1/touchpoints/evaluate" \
 | 无目标 slot | GB targeting、PE attribute、admin snapshot、fatigue、宿主入参 |
 | 有 slot 但 `data/content` 空 | admin variantKey / cmsSlug / release snapshot / CMS 内容 |
 | 有 content，App 不展示 | SDK renderer、blockType builder、容器布局、图片资源 |
+| 有 `runtimeBundle`，动态 block 空 | 目标 SDK revision、`runtimeInputs`、runtime provider、CMS 数据源/target、缺值或超时 |
+| 返回的 `paywallId` 与 App 实际打开目标不同 | SDK/宿主非法二次路由；检查并删除 `paywallIdsByCreative`、creative/action map 或 runtime override |
 | 有 `locked=false` 但展示 locked 内容 | GB value、admin variant、SDK cache、宿主 child 绑定 |
+
+手工 curl evaluate 只能验证服务端是否返回 `runtimeBundle`；它不会代替客户端 SDK 通过宿主 provider 执行后续业务取数。
 
 ## 6. 第四层：用 troubleshooting 查后端日志
 
@@ -170,6 +189,7 @@ curl -s -X POST "$API_BASE/en/engagement/v1/touchpoints/evaluate" \
 | admin snapshot 问题 | `snapshot`、`variantKey`、`cmsSlug`、`no_content_configured` |
 | fatigue 问题 | `gbFeatureIdFatigue`、`fatigueKey`、`cooldown`、`next_show_at`、`permanent` |
 | CMS 内容问题 | `cmsSlug`、`blockType`、`cms-content`、`content empty` |
+| 动态文案问题 | `runtimeBundle`、`runtimeInputs`、`allowedTargets`、`responsePath`、`timeout`、`stale runtime request` |
 
 日志结论要和黑盒 evaluate 对齐：
 
@@ -180,6 +200,7 @@ curl -s -X POST "$API_BASE/en/engagement/v1/touchpoints/evaluate" \
 | PE 返回空 / default | GB rule 或 attribute 不命中 |
 | PE 返回 variantKey，但 engagement 找不到 variant | GB value 和 admin variant drift |
 | 找到 variant，但 cmsSlug 内容为空 | admin release snapshot 或 CMS 内容问题 |
+| 找到 variant 且 service 返回 `paywallId` | 该 Experience 的 Banner/action 已最终确定；客户端不得再按 N/D/creative 改写 |
 | fatigue 返回 cooldown/permanent | 按预期不展示，查 dismiss 状态 |
 
 ## 7. 第五层：GrowthBook / PE
@@ -194,6 +215,7 @@ GrowthBook 只负责返回 feature value，不负责渲染。
 | value | 必须等于 admin `variantKey`；空串通常表示不展示 |
 | attributes | 产品要求的条件必须存在于 PE attribute schema 和赋值逻辑 |
 | device attrs | 设备级规则必须带 sn 才能取到 |
+| 业务变体 | Banner 样式或 Paywall 不同时必须返回不同 `variantKey`，不能返回通用 treatment 后交给客户端选择 |
 
 如果 GB 条件依赖 `vipCovered`、`activeFlTierId` 等属性，去 personalization-engine 确认 attribute 是否已在 staging 分支合入，并用 evaluate 调试或 issue 里的步骤验证用户/设备属性。
 
@@ -207,7 +229,8 @@ admin 页面保存不等于运行时生效，运行时读的是发布后的 snap
 | type | `FEATURE_GATE` / `PROACTIVE` 是否和宿主 API 一致 |
 | experience variant | `variantKey` 是否等于 GB value |
 | cmsSlug | CMS 内容是否存在且已发布到对应环境 |
-| actionConfig | CTA 类型和参数是否完整 |
+| actionConfig | CTA 类型和参数是否完整；`OPEN_PAYWALL` 的 `paywallId` 是否为该 Experience 唯一最终值 |
+| 唯一映射 | 一个 Experience 是否唯一对应 Banner 样式和 action；不得配置或依赖 `paywallIdsByCreative` |
 | fatigue variant | PROACTIVE 是否有疲劳度配置 |
 | release | staging release 是否通过；prod 依赖是否齐全 |
 
@@ -222,14 +245,29 @@ evaluate 有内容但 App 空白，多数在 CMS blockType 和 SDK builder。
 | `blockType` 不支持 | marketing-cms 模板已建，但 SDK 没注册 builder |
 | 图片不显示 | 资源 URL、环境域名、尺寸、缓存 |
 | 文案旧 | SDK cache key 是否包含 locale，语言切换是否 invalidate |
+| 单复数、数字或相对日期不正确 | 查 CMS 文案分支、SDK formatter、locale、时区及时间基准；不把格式分支一概当作业务分流 |
 | 高度为 0 | header/cell 容器约束、`onContentSizeChange`、入屏判断 |
 | FEATURE_GATE 展示错 child | `locked=false` variant 是否命中，宿主 child 是否被清空 |
+| 文案保留 `{{variable}}` | malformed `runtimeBundle` 被当成静态内容、目标未允许、解析失败错误回退 |
+| 动态 block 被收起 | 缺 `runtimeInputs`、provider 不支持 service/method、业务响应失败、JSON path/类型/target 不匹配 |
+| 切账号/语言后文案未更新 | 运行时值或 resolved copy 被快照缓存，epoch 没有失效 |
+| 动态值变化后 Banner/Paywall 变化 | 实现越界；删除 runtime creative/route 分流，把条件移到 PE/GB 并拆成唯一 Experience |
+| CTA 打开目标与 service `paywallId` 不同 | SDK/宿主覆盖了最终 action；删除 `paywallIdsByCreative` 等映射并原样执行 service 路由 |
 
 新增模板时要同时确认：
 
 - marketing-cms 已定义模板和字段。
-- engagement-sdk 对应端支持 blockType。
+- engagement-sdk 对应端支持 blockType；缺少视觉时可沿 registry 扩展 builder，按 payload 和标准回调验证，不因首个使用场景或业务命名直接阻断。
 - 宿主容器尺寸能容纳该模板。
+
+动态文案要另外验证：
+
+- 目标 App 固定的 SDK revision 已包含 resolver，不只是源 MR 存在。
+- `runtimeInputs` 是当前页面已有、可快照的查询参数，不包 Token 或全局 App 对象。
+- 宿主 provider 负责域名、鉴权、区域和网关路由；CMS 只持有受控 service/method/相对 path。
+- 同源变量只发一次请求；超时、页面离开、账号/语言切换时旧结果不挂载。
+- SDK 允许变量替换、单复数、数字/日期/相对时间和同一业务含义的语法分支；`blockType`、`preset`、`creativeKey`、Experience、action 和 `paywallId` 必须保持 service 返回值。`runtimeText.cases` 按实际输入输出排查；若在选择不同营销卖点/优惠/方案，或判断会员、实验、样式、路由、频控，将决策移回 PE/GB/Admin。
+- 内容完整性失败可按统一策略收起，但合法 `N=0` 不等于缺值；因业务零值不应展示的条件应由 PE/GB 判定。
 
 ## 10. 第八层：PROACTIVE 和疲劳度
 
@@ -245,6 +283,8 @@ PROACTIVE 触点展示异常，要额外查 fatigue。
 
 不要把所有 PROACTIVE 都强行接 fatigue。cell 级 contextual CTA 如果业务上不需要关闭冷却，可以明确记录 `gbFeatureIdFatigue=null`。
 
+但“无服务端 fatigue”不得用 App 本地频控代替。如果产品需要每 Session/每日上限、关闭冷却或永久抑制，应在 admin/GB/engagement-service 配置或扩展通用策略。当 service 的 evaluate 返回 show 但 App 本地 policy 再隐藏时，这是双重判定问题，不是正常的 host gate。
+
 ## 11. 第九层：CTA 和 converted
 
 展示正常但点击或转化异常，查 action 和 attribution。
@@ -253,6 +293,7 @@ PROACTIVE 触点展示异常，要额外查 fatigue。
 |---|---|
 | 点击没反应 | `actionType`、`actionConfig`、host `onOpenAction` 分支 |
 | deep link 打不开 | scheme、path、query 参数、Flutter/native 路由 |
+| Paywall 与 evaluate 不一致 | 对比 service `TouchpointView.paywallId` 和实际打开参数；客户端不得二次选择或覆盖 |
 | paywall 打开但归因缺失 | `OPEN_PAYWALL` 是否透传 touchpoint attribution |
 | converted 缺失 | payment success 是否 echo `slotName/solutionId/experienceKey/variationId/sn` 并调用 `notifyConverted` |
 | dismissed 缺失 | 关闭按钮是否走 SDK dismiss/action，而不是宿主直接隐藏 |
@@ -264,7 +305,7 @@ PROACTIVE 触点展示异常，要额外查 fatigue。
 `OPEN_PAYWALL` 完整漏斗默认看板：
 
 - `https://superset-us.addx.live/superset/dashboard/paywall-p0-touchpoint-to-paywall-health/`
-- 按 `slot_name` 和 `paywall_id` 筛选，不为每个新业务重复建看板。
+- 按 `slot_name`、`experience_key`、`experiment_key` 和 `paywall_id` 筛选，不为每个新业务重复建看板。
 
 SDK 基础排障看板：
 
@@ -279,7 +320,7 @@ Dashboard 527 适合确认：
 - `touchpoint_converted / cta_clicked` 是否断层。
 - `slot_name`、`solution_id`、`experience_key`、`variation_id`、`fatigue_key`、`device_sn` 是否完整。
 
-Paywall 打开和支付结果通过通用 P0 看板验收。`DEEP_LINK` 等非 Paywall 结果使用已有领域看板；只有通用或领域看板缺少必要指标时，才记录缺口并经 owner 确认后申请新看板。
+Paywall 打开和支付结果通过通用 P0 看板验收。一个 `experience_key` 应唯一解释 Banner 和 `paywall_id`；如果客户端二次路由导致无法归因，先修实现，不新建看板绕过。`DEEP_LINK` 等非 Paywall 结果使用已有领域看板；只有通用或领域看板缺少必要指标时，才记录缺口并经 owner 确认后申请新看板。
 
 ## 13. 快速症状表
 
@@ -294,6 +335,10 @@ Paywall 打开和支付结果通过通用 P0 看板验收。`DEEP_LINK` 等非 P
 | 所有人都 locked | GB default / sn / PE attrs | 查请求 sn 和 GB 命中规则 |
 | 应该 locked 但 unlocked | GB value / SDK cache | 查 `locked` 变体和 cache key |
 | PROACTIVE 关闭后还出现 | fatigue dismiss | 查 dismiss API 和 `next_show_at` |
+| service 返回 show 但 App 本地隐藏 | 宿主存在第二展示决策源 | 查展示否决回调、Controller/Widget policy；删除本地判断，规则移回 PE/GB/Fatigue |
+| 动态文案空白或占位符 | runtime resolver | 查 SDK revision、`runtimeInputs`、provider 请求、CMS path/target |
+| 动态值改变 Banner/Paywall | 客户端二次分流 | 删除 creative/route 映射；PE/GB 拆分最终 Experience |
+| CTA Paywall 与 service 不一致 | SDK/宿主覆盖 action | 删除 `paywallIdsByCreative` 等逻辑，原样使用 service `paywallId` |
 | 点击无效 | action / host route | 查 `actionType` 和 `onOpenAction` |
 | converted 缺失 | attribution | 查 paywall success 是否回传 |
 | Paywall 漏斗异常 | 通用 P0 看板 | 按 `slot_name + paywall_id` 定位断层，527 辅助排查 SDK 上报 |

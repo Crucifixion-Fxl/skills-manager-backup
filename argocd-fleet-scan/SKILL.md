@@ -116,6 +116,9 @@ description: 扫描全部 EKS/TKE/GKE 集群的 ArgoCD Application 异常状态�
   # grafana-bootstrap / grafana-resources 全部漏判成 app（2026-05-28 修）
   prometheus(-.*)?|grafana(-.*)?|loki|
   vm-(operator|stack|agent)|vmagent|vmalert|vmsingle|vmcluster|blackbox-exporter|yace|meta-monitoring|observability-.*|
+  # 2026-10-29 核验后补充的精确名称；不扩展同名前缀或版本
+  victoria-metrics-k8s-stack|victoria-metrics-config|vpc-cni|
+  istio-base|istiod-1-30-2|nvidia-device-plugin|external-snapshotter|gke-node-pools|
   # 集群入口
   root-apps|
   # 命名后缀显式声明 infra 的
@@ -325,7 +328,7 @@ done
 3. 多个 anomaly 取最严重的展示，但报告里同一行列出全部 tag
 
 ```bash
-INFRA_RE='^(argocd|argocd-image-updater|argo-rollouts|casdoor(-.*)?|crossplane|crossplane-.*|external-secrets|external-secrets-.*|cluster-secret-store-.*|kyverno|kyverno-.*|cert-manager|harbor(-.*)?|nexus(-.*)?|buildbuddy(-.*)?|fluent-bit-.*|vector(-.*)?|logstash|apisix-gateway-.*|aws-load-balancer-controller|egress-proxy|coredns(-.*)?|karpenter(-.*)?|metrics-server|gitlab-runner-.*|gitlab-runner-rbac|gitlab-vault-sync-ops(-.*)?|gitlab-vault-sync-builder|vault-policies-sync|vault-sync|flink-operator|flink-kubernetes-operator|telepresence|eck-operator|elastic-operator|oidc-dev-rbac(-.*)?|domain-exporter|prometheus(-.*)?|grafana(-.*)?|loki|vm-(operator|stack|agent)|vmagent|vmalert|vmsingle|vmcluster|blackbox-exporter|yace|meta-monitoring|observability-.*|root-apps|.*-infra|cicd-sentry-.*)$'
+INFRA_RE='^(argocd|argocd-image-updater|argo-rollouts|casdoor(-.*)?|crossplane|crossplane-.*|external-secrets|external-secrets-.*|cluster-secret-store-.*|kyverno|kyverno-.*|cert-manager|harbor(-.*)?|nexus(-.*)?|buildbuddy(-.*)?|fluent-bit-.*|vector(-.*)?|logstash|apisix-gateway-.*|aws-load-balancer-controller|egress-proxy|coredns(-.*)?|karpenter(-.*)?|metrics-server|gitlab-runner-.*|gitlab-runner-rbac|gitlab-vault-sync-ops(-.*)?|gitlab-vault-sync-builder|vault-policies-sync|vault-sync|flink-operator|flink-kubernetes-operator|telepresence|eck-operator|elastic-operator|oidc-dev-rbac(-.*)?|domain-exporter|prometheus(-.*)?|grafana(-.*)?|loki|vm-(operator|stack|agent)|vmagent|vmalert|vmsingle|vmcluster|blackbox-exporter|yace|meta-monitoring|observability-.*|victoria-metrics-k8s-stack|victoria-metrics-config|vpc-cni|istio-base|istiod-1-30-2|nvidia-device-plugin|external-snapshotter|gke-node-pools|root-apps|.*-infra|cicd-sentry-.*)$'
 
 # APP_EXCLUDE: `.*-infra` catch-all 会误吃 dvc-remote-infra-*（ML 数据栈，必须留 app）。
 # 在 INFRA_RE 匹配之前先排除。与 fleet-scanner Go 服务的 appExcludeRegex 等价。

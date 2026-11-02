@@ -28,7 +28,7 @@ def test_placement_descriptor_is_independent_and_legacy_descriptors_stay_exact()
 
 def test_guide_is_linked_from_skill_and_relevant_k8s_entrypoints():
     for name in (
-        "SKILL.md",
+        "references/step-0-intake.md",
         "references/ci-integration.md",
         "references/k8s-yaml-context.md",
     ):

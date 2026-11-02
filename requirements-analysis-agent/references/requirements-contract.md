@@ -2,7 +2,7 @@
 
 ## Ready Artifact profiles
 
-Ready Artifacts use a source-kind discriminated union. Select exactly one profile from the canonical source; never copy transport-only fields between profiles:
+Ready Artifacts use a source-kind discriminated union with a runtime discriminator. Select exactly one profile from the canonical source and actual runtime; never copy transport-only fields between profiles:
 
 The Issue lifecycle gate is stricter than the storage profile: any project/product delivery
 requirement must create or reuse an open, assigned Root Issue before analysis can become ready.
@@ -12,7 +12,7 @@ cannot authorize architecture, test design, coding, MR, deployment, or release w
 
 | Source kind | Ready profile | Required source fields |
 |---|---|---|
-| `GITLAB_ISSUE_SNAPSHOT` | Buzz/GitLab | stable reference, digest, retrieval time, live project/Issue identity and revision |
+| `GITLAB_ISSUE_SNAPSHOT` | Buzz/GitLab or Non-Buzz GitLab, according to actual runtime | stable reference, digest, retrieval time, live project/Issue identity and revision |
 | `INLINE_TEXT_SNAPSHOT` | Local/manual | stable synthetic reference, digest, retrieval time |
 | `DOCUMENT_SNAPSHOT` | Local/manual | stable document reference, digest, retrieval time |
 
@@ -150,9 +150,37 @@ material ambiguity is not an interpretation confirmation and must use
 The formal envelope's `open_questions` must remain exactly empty for a ready
 Artifact. The next responsible role is `PO`.
 
+### Non-Buzz GitLab Ready Artifact
+
+For a verified open, assigned GitLab Issue in a non-Buzz project workflow, use the
+complete `requirements-analysis/1.1` envelope and content shape in the Buzz/GitLab
+example above, including its Chinese business fields, quality review, interpretation
+confirmations, skill provenance and canonical hash. The `source_baseline` remains
+`GITLAB_ISSUE_SNAPSHOT` and retains live `project_id`, `issue_iid`,
+`issue_updated_at`, exact source digest and retrieval time. Pin every actual skill
+source and content digest; do not invent a Buzz capability pin. Replace only the
+transport-specific session identity with the actual runtime identity. For Codex:
+
+```yaml
+session_identity: "codex:<actual CODEX_THREAD_ID>"
+```
+
+If a runtime does not expose a verifiable stable session identity, report
+`ATTEMPT_NEEDS_INPUT` instead of inventing one. This profile is not accepted by the Buzz writer and grants no Buzz route, claim, remote write or signing authority.
+Never use a Codex/local session as a Buzz public key or weaken the signed Buzz gate.
+
+A separate coordinator requests an independent PO decision over the exact Artifact
+ID/hash and source digest. The producer must not self-approve. Preserve the actual
+human or independently verified approver identity, timestamp, decision and exact
+Artifact ID/hash in an append-only receipt and read back the receipt from its
+verified conversation or authorized ledger. The producer's own output, an implied
+approval, or a copied approval for a different hash is not a decision. Changed
+source, assumptions, acceptance criteria, review findings or interpretations
+require a new attempt and decision. No remote write is implied by this profile.
+
 ### Local/manual Ready Artifact
 
-Use this exact profile for pasted prose and non-GitLab documents. It is not accepted by the Buzz writer and grants no Buzz route, claim, comment, or remote-write authority. `source_ref` must identify the exact immutable input: use `inline:<source_digest>` for pasted text, or a stable document URL/path plus immutable revision when one exists.
+Use this exact profile for explicitly non-project pasted prose and non-GitLab documents; it cannot authorize project delivery. It is not accepted by the Buzz writer and grants no Buzz route, claim, comment, or remote-write authority. `source_ref` must identify the exact immutable input: use `inline:<source_digest>` for pasted text, or a stable document URL/path plus immutable revision when one exists.
 
 ```yaml
 schema_version: "1.0"
@@ -173,57 +201,67 @@ evidence_refs:
 open_questions: []
 next_responsible_role: PO
 content:
-  contract_version: "requirements-analysis/1.0"
+  contract_version: "requirements-analysis/1.1"
   requirement_kind: PRODUCT # PRODUCT | TECHNICAL | BUG_FIX | RESEARCH | OPERATIONS
   source_baseline:
     source_kind: INLINE_TEXT_SNAPSHOT # or DOCUMENT_SNAPSHOT
     source_ref: "<stable source reference>"
     source_digest: "<64 lowercase hex canonical source SHA-256>"
     retrieved_at: "<RFC3339 timestamp>"
-  problem_statement: "<who is affected, in what context, and why it matters>"
-  goal: "<observable desired outcome>"
-  value: "<why this outcome matters>"
-  stakeholders: ["<role or user group>"]
-  scope: ["<included behavior>"]
-  non_goals: ["<explicitly excluded behavior>"]
+  problem_statement: "<受影响者、场景及重要性>"
+  goal: "<可观测的目标结果>"
+  value: "<该结果的价值>"
+  stakeholders: ["<角色或用户群体>"]
+  scope: ["<包含的行为>"]
+  non_goals: ["<明确排除的行为>"]
   acceptance_criteria:
     - id: AC-001
-      given: "<context>"
-      when: "<action>"
-      then: "<observable result>"
-  constraints: ["<constraint or none identified>"]
-  risks: ["<risk or none identified>"]
-  success_metrics: ["<metric and target>"]
-  assumptions: ["<accepted assumption or none identified>"]
-  dependencies: ["<dependency and owner or none identified>"]
+      given: "<前置场景>"
+      when: "<执行动作>"
+      then: "<可观测结果>"
+  constraints: ["<约束或当前未识别到>"]
+  risks: ["<风险或当前未识别到>"]
+  success_metrics: ["<指标与目标>"]
+  assumptions: ["<已接受的假设或当前未识别到>"]
+  dependencies: ["<依赖及负责人或当前未识别到>"]
   skills_considered:
     - skill_id: "addx:story-craftsman"
       load_key: story-craftsman
       decision: SELECTED
-      reason: mandatory PRD quality review
+      reason: 必选的需求质量评审
   company_skill_reviews:
     - skill_id: requirements-analysis-agent
       load_key: requirements-analysis-agent
       skill_source: "<pinned engineering/skills commit and Skill path>"
       skill_content_sha256: "<pinned primary SKILL.md SHA-256>"
-      selection_reason: mandatory primary requirements contract
+      selection_reason: 必选的主需求契约
       verdict: PASS
-      findings: ["F-000 <finding or no material finding>"]
+      findings: ["F-000 <评审发现或当前无重要发现>"]
       evidence_refs: ["<immutable evidence reference>"]
     - skill_id: "addx:story-craftsman"
       load_key: story-craftsman
       skill_source: "<same pinned engineering/skills commit and Skill path>"
       skill_content_sha256: "<pinned story-craftsman SKILL.md SHA-256>"
-      selection_reason: mandatory PRD quality review
+      selection_reason: 必选的需求质量评审
       verdict: PASS
-      findings: ["F-001 <finding or no material finding>"]
+      findings: ["F-001 <评审发现或当前无重要发现>"]
       evidence_refs: ["<source section or immutable evidence reference>"]
-  prd_review_summary: "<why the source is ready>"
+  prd_quality_review:
+    verdict: PASS # PASS | CONDITIONAL
+    findings:
+      - id: PRD-001
+        severity: NOTE # BLOCKER | MAJOR | MINOR | NOTE
+        finding: "<有来源的评审发现>"
+        disposition: OBSERVATION # RESOLVED_IN_ARTIFACT | ACCEPTED_CONSTRAINT | OBSERVATION
+        resolution: "<如何处理或保留>"
+        evidence_refs: ["<immutable source or review evidence reference>"]
+  interpretation_confirmations: [] # or complete IC entries as in the GitLab profile
+  prd_review_summary: "<来源为何具备审阅条件>"
   readiness: READY_FOR_PO_REVIEW
 artifact_hash: "<SHA-256 of canonical JSON for every field above except artifact_hash>"
 ```
 
-The local/manual profile uses the same canonical JSON and full-envelope hash algorithm as the Buzz/GitLab profile. Its `session_identity` records provenance only; it is not a remote identity proof. PO acceptance still binds the exact Artifact ID/hash, but the additional signed Buzz message requirements apply only to the Buzz/GitLab profile.
+The local/manual profile uses the same Chinese business-field requirements, canonical JSON and full-envelope hash algorithm as the Buzz/GitLab profile. Unresolved BLOCKER or MAJOR findings still require ATTEMPT_NEEDS_INPUT. Its `session_identity` records provenance only; it is not a remote identity proof. PO acceptance still binds the exact Artifact ID/hash, but the additional signed Buzz message requirements apply only to the Buzz/GitLab profile.
 
 ## Needs-input control outcome
 

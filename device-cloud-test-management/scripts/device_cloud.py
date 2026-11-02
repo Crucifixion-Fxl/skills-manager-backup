@@ -17,6 +17,9 @@ import re
 import subprocess
 import sys
 import tempfile
+import threading
+import time
+import urllib.error
 import urllib.parse
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -27,16 +30,21 @@ SCRIPTS_DIR = Path(__file__).resolve().parent
 if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
-from device_cloud_auth import DeviceCloudAuthClient, server_base_url  # noqa: E402
+from device_cloud_auth import AuthenticationError, DeviceCloudAuthClient, server_base_url  # noqa: E402
 from resource_affinity import (  # noqa: E402
-    TOPOLOGY_FIELDS, normalize_constraints, validate_affinity_counts, validate_assignment,
+    TOPOLOGY_FIELDS, normalize_constraints, validate_affinity_counts,
 )
 from trigger_cloud_job import (  # noqa: E402
     ENV_ENDPOINTS,
+    GraphQLRequestError,
     batch_mode,
     ensure_plan_jobs_released,
     gql,
     parse_args as parse_trigger_args,
+    _query_affinity_job,
+    _verify_batch_job_affinity,
+    terminal_job_status,
+    job_fully_passed,
 )
 
 TRIGGER_SCRIPT = SCRIPTS_DIR / "trigger_cloud_job.py"
@@ -101,6 +109,21 @@ _PHONE_ALIAS_PATTERNS = (
 )
 _LEGACY_RESOURCE_TYPES = {"PHONE", "BATTERYCAM", "PLUGINCAM"}
 _RESOURCE_TYPE_RE = re.compile(r"^[A-Z][A-Z0-9_]*$")
+_GHERKIN_STEP_RE = re.compile(
+    r"^\s*(?:Given|When|Then|And|But|假如|假设|假定|当|那么|并且|而且|同时|但是|\*)\s+(.+?)\s*$",
+    re.I,
+)
+_APP_ARTIFACT_STEP_PATTERNS = (
+    re.compile(r"^(?:我)?(?:远程)?卸载\s+\S+\s+的当前(?:App|应用)\s*$", re.I),
+    re.compile(r"^(?:我)?(?:远程)?卸载(?:当前|指定版本的)?(?:App|应用)\s*$", re.I),
+    re.compile(r"^(?:我)?(?:远程)?(?:重新安装|重装|安装)\s+\S+\s+的(?:指定版本的)?(?:App|应用|APK)\s*$", re.I),
+    re.compile(r"^(?:我)?(?:在\s+\S+\s+上)?(?:重新安装|重装|安装)(?:指定版本的)?(?:App|应用|APK)\s*$", re.I),
+    re.compile(r"^(?:我)?(?:将|把)?\s*(?:\S+\s+的\s*)?(?:App|应用)\s*(?:升级|降级|切换)\s*(?:到|至|为)\s*(?:指定)?版本(?:\s+\S+)?\s*$", re.I),
+    re.compile(r"^(?:我)?(?:升级|降级|切换)\s*(?:\S+\s+的\s*)?(?:App|应用)\s*(?:到|至|为)\s*(?:指定)?版本(?:\s+\S+)?\s*$", re.I),
+    re.compile(r"^(?:uninstall|remove)\s+(?:the\s+)?(?:current\s+)?(?:app|application|apk)(?:\s+on\s+\S+)?\s*$", re.I),
+    re.compile(r"^(?:reinstall|install)\s+(?:the\s+)?(?:specified\s+version\s+of\s+)?(?:app|application|apk)(?:\s+on\s+\S+)?\s*$", re.I),
+    re.compile(r"^(?:upgrade|downgrade|switch)\s+(?:the\s+)?(?:app|application)\s+to\s+(?:the\s+)?(?:specified\s+)?version\S*\s*$", re.I),
+)
 
 RESOURCE_CAPACITY_QUERY = """
 query DeviceCloudResourceCapacity($first: Int!) {
@@ -124,6 +147,69 @@ def _scenario_name(line: str) -> str | None:
             name = stripped[len(marker):].strip()
             return name or None
     return None
+
+
+def _app_url_required_step(line: str) -> str | None:
+    """Return a lifecycle step that requires a downloadable App artifact."""
+    match = _GHERKIN_STEP_RE.match(line)
+    if match is None:
+        return None
+    step = match.group(1).strip()
+    return step if any(pattern.fullmatch(step) for pattern in _APP_ARTIFACT_STEP_PATTERNS) else None
+
+
+def _app_steps_by_scenario(lines: list[str]) -> dict[int, tuple[str, ...]]:
+    """Map Scenario line indexes to Feature/Rule Background plus local App steps."""
+    feature_background: list[str] = []
+    rule_background: list[str] = []
+    scenarios: dict[int, list[str]] = {}
+    target: list[str] | None = None
+    in_rule = False
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if re.match(r"^(?:Rule|规则):", stripped, re.I):
+            in_rule = True
+            rule_background = []
+            target = None
+            continue
+        if re.match(r"^(?:Background|背景):", stripped, re.I):
+            target = rule_background if in_rule else feature_background
+            target.clear()
+            continue
+        if _scenario_name(line) is not None:
+            target = [*feature_background, *rule_background]
+            scenarios[index] = target
+            continue
+        step = _app_url_required_step(line)
+        if step is not None and target is not None:
+            target.append(step)
+    return {index: tuple(steps) for index, steps in scenarios.items()}
+
+
+def _safe_evidence(value: str, limit: int = 160) -> str:
+    printable = "".join(character if character.isprintable() else " " for character in value)
+    normalized = " ".join(printable.split())
+    return normalized if len(normalized) <= limit else normalized[: limit - 1] + "…"
+
+
+def _selected_app_names(cases: list[CaseInfo]) -> set[str]:
+    return {
+        tag.partition("=")[2]
+        for case in cases
+        for tag in case.tags
+        if tag.startswith("@app=") and tag.partition("=")[2]
+    }
+
+
+def _is_embedded_request(args: argparse.Namespace) -> bool:
+    automation_type = getattr(args, "automation_type", None)
+    if automation_type is not None:
+        return automation_type == "embedded"
+    module = getattr(args, "tests_module", None)
+    if module and module.casefold() == "firmware-tests":
+        return True
+    repository = getattr(args, "tests_repo", None)
+    return bool(repository and _repository_module(repository).casefold() == "firmware-tests")
 
 
 def _table_row(line: str) -> tuple[str, ...] | None:
@@ -217,6 +303,31 @@ def _phone_aliases(text: str) -> tuple[str, ...]:
     return tuple(sorted(aliases))
 
 
+def _background_constraints(lines: list[str]) -> tuple[dict, ...]:
+    """Read the existing Client's native Background constraint table."""
+    constraints = []
+    for index, line in enumerate(lines):
+        if "约束条件如下" not in line or line.lstrip().startswith("#"):
+            continue
+        rows = []
+        for table_line in lines[index + 1:]:
+            cells = _table_row(table_line)
+            if cells is None:
+                break
+            rows.append(cells)
+        if not rows or set(rows[0]) != {"类型", "拓扑键", "设备"} or len(rows) < 2:
+            raise ValueError("Feature 约束条件表必须包含类型、拓扑键、设备及约束行")
+        for cells in rows[1:]:
+            if len(cells) != 3:
+                raise ValueError("Feature 约束条件表行无效")
+            row = dict(zip(rows[0], cells))
+            constraints.append({
+                "type": row["类型"], "topologyKey": row["拓扑键"],
+                "resources": [name.strip().strip("{}") for name in row["设备"].split(",")],
+            })
+    return tuple(constraints)
+
+
 def _feature_name(lines: list[str], fallback: str) -> str:
     for line in lines:
         stripped = line.strip()
@@ -308,8 +419,10 @@ class CaseInfo:
     camera_referenced: bool
     camera_types: tuple[str, ...]
     resource_source: str
+    app_url_required_steps: tuple[str, ...] = ()
     logical_resources: tuple[tuple[str, str], ...] = ()
     affinity_topologies: tuple[str, ...] = ()
+    affinity_constraints: tuple[dict, ...] = ()
 
     def public(self) -> dict:
         return {
@@ -322,6 +435,8 @@ class CaseInfo:
             "cameraReferenced": self.camera_referenced,
             "cameraTypes": list(self.camera_types),
             "resourceSource": self.resource_source,
+            "appUrlRequired": bool(self.app_url_required_steps),
+            "appUrlRequiredSteps": list(self.app_url_required_steps),
             "affinityTopologies": list(self.affinity_topologies),
             "logicalResources": [
                 {"name": name, "type": resource_type}
@@ -513,28 +628,20 @@ def _firmware_inputs(
     automation_type = getattr(args, "automation_type", None)
     if automation_type not in (None, "app", "embedded", "hardware"):
         raise ValueError("--automation-type 必须为 app、embedded 或 hardware")
-    if inferred_source and automation_type in ("app", "hardware"):
-        raise ValueError("--automation-type 与 firmware-tests 固件测试来源冲突")
     automation_source = "explicit" if automation_type else inferred_source or "unspecified"
     automation_type = automation_type or ("embedded" if inferred_source else None)
 
     tested = getattr(args, "firmware_version", None)
     companion = getattr(args, "companion_firmware_version", None)
-    if tested is None and automation_type == "embedded":
-        raise ValueError("嵌入式自动化必须提供 --firmware-version，且为以 -d 结尾的调试固件")
     for option, version in (
         ("--firmware-version", tested), ("--companion-firmware-version", companion),
     ):
         if version is not None and (
             not isinstance(version, str)
-            or len(version) <= 2
-            or not version.endswith("-d")
+            or not version.strip()
             or not version.isprintable()
-            or any(character.isspace() for character in version)
         ):
-            raise ValueError(f"{option} 必须是无空白/控制字符且以 -d 结尾的调试固件版本")
-    if companion is not None and tested is None:
-        raise ValueError("--companion-firmware-version 需要同时提供 --firmware-version（-d）")
+            raise ValueError(f"{option} 必须是非空且不含控制字符的固件版本")
     return {
         "automationType": automation_type,
         "automationTypeSource": automation_source,
@@ -555,11 +662,13 @@ def _firmware_inputs(
 
 
 def _firmware_runtime_env(firmware: dict) -> dict[str, str]:
-    if firmware["testedVersion"] is None:
-        return {}
     return {
-        "DEVIUM_FIRMWARE_VERSION": firmware["testedVersion"],
-        "DEVIUM_COMPANION_FIRMWARE_VERSION": firmware["companionVersion"],
+        key: firmware[field]
+        for key, field in (
+            ("DEVIUM_FIRMWARE_VERSION", "testedVersion"),
+            ("DEVIUM_COMPANION_FIRMWARE_VERSION", "companionVersion"),
+        )
+        if firmware[field] is not None
     }
 
 
@@ -663,10 +772,12 @@ def load_case_catalog(root: Path) -> list[CaseInfo]:
         scenario_indexes = [i for i, line in enumerate(lines) if _scenario_name(line)]
         if not scenario_indexes:
             continue
+        app_steps_by_scenario = _app_steps_by_scenario(lines)
         feature_name = _feature_name(lines, feature_path.stem)
         background_lines = lines[:scenario_indexes[0]]
         background_text = "\n".join(background_lines)
         background_resources = _resource_rows(background_lines)
+        background_constraints = _background_constraints(background_lines)
         affinity_topologies = set()
         for line in background_lines:
             match = re.fullmatch(r"\s*#\s*@firmware\.affinity=(\S+)\s*", line)
@@ -690,6 +801,7 @@ def load_case_catalog(root: Path) -> list[CaseInfo]:
             body = "\n".join(scenario_lines)
             resources = {**background_resources, **_resource_rows(scenario_lines)}
             combined_text = background_text + "\n" + body
+            app_url_required_steps = app_steps_by_scenario[start]
             explicit_phone_aliases = {
                 name for name, resource_type in resources.items() if resource_type == "PHONE"
             }
@@ -713,8 +825,10 @@ def load_case_catalog(root: Path) -> list[CaseInfo]:
                 resource_source=(
                     "feature/scenario resource table" if resources else "case device references"
                 ),
+                app_url_required_steps=app_url_required_steps,
                 logical_resources=tuple(sorted(resources.items())),
                 affinity_topologies=tuple(sorted(affinity_topologies)),
+                affinity_constraints=background_constraints,
             ))
     return cases
 
@@ -855,17 +969,7 @@ def _validate_resource_list(resources: list[dict], camera_required: bool) -> lis
         if item.get("conditions") is not None:
             if not isinstance(item["conditions"], dict):
                 raise ValueError("资源 conditions 必须是 JSON 对象")
-            conditions = dict(item["conditions"])
-            if "platform" in conditions:
-                for operator in ("eq", "in"):
-                    value = _condition_value(conditions["platform"], operator)
-                    if value is not None:
-                        values = value.split(",") if operator == "in" else [value]
-                        conditions["platform"] = f"${operator}:" + ",".join(
-                            part.strip().lower() for part in values
-                        )
-                        break
-            normalized_item["conditions"] = conditions
+            normalized_item["conditions"] = dict(item["conditions"])
         normalized.append(normalized_item)
     resource_types = {item["type"] for item in normalized}
     if camera_required and not resource_types.intersection({"BATTERYCAM", "PLUGINCAM"}):
@@ -876,7 +980,7 @@ def _validate_resource_list(resources: list[dict], camera_required: bool) -> lis
 def fetch_available_resources(
     device_cloud_env: str, auth_client: DeviceCloudAuthClient | None = None
 ) -> list[dict]:
-    """读取实时资源容量，但不返回资源标识或连接信息。"""
+    """读取在线且未绑定 Job 的库存参考；不代表分配器可用容量。"""
     endpoint = ENV_ENDPOINTS[device_cloud_env]
     if auth_client is None:
         auth = DeviceCloudAuthClient(server_base_url(endpoint))
@@ -887,9 +991,9 @@ def fetch_available_resources(
     for connection_name in ("phoneConnection", "deviceConnection"):
         connection = data.get(connection_name)
         if not isinstance(connection, dict) or not isinstance(connection.get("edges"), list):
-            raise ValueError("实时资源容量响应不完整；不会创建 TestPlan")
+            raise ValueError("资源库存响应不完整")
         if (connection.get("pageInfo") or {}).get("hasNextPage") or len(connection["edges"]) >= 1000:
-            raise ValueError("实时资源容量查询被截断，无法核验亲和资源；不会创建 TestPlan")
+            raise ValueError("资源库存查询被截断")
     resources: list[dict] = []
     for edge in (data.get("phoneConnection") or {}).get("edges") or []:
         node = edge.get("node") or {}
@@ -915,11 +1019,20 @@ def fetch_available_resources(
 
 def _authenticate_and_fetch_available_resources(
     device_cloud_env: str,
-) -> tuple[list[dict], DeviceCloudAuthClient, str]:
+) -> tuple[list[dict] | None, DeviceCloudAuthClient, str]:
     endpoint = ENV_ENDPOINTS[device_cloud_env]
     auth_client = DeviceCloudAuthClient(server_base_url(endpoint))
     session = auth_client.authenticate()
-    resources = fetch_available_resources(device_cloud_env, auth_client)
+    try:
+        resources = fetch_available_resources(device_cloud_env, auth_client)
+    except (GraphQLRequestError, ValueError, KeyError, TypeError) as error:
+        cause = error.__cause__
+        if isinstance(cause, AuthenticationError) or (
+            isinstance(cause, urllib.error.HTTPError) and cause.code in (401, 403)
+        ):
+            raise
+        print(f"[WARN] 资源库存参考不可用；资源合法性与分配交由 Server：{error}", file=sys.stderr)
+        resources = None
     return resources, auth_client, session.email
 
 
@@ -1053,170 +1166,11 @@ def _capacity_snapshot(available_resources: list[dict] | None) -> dict | None:
     return {"byType": by_type, "byModel": by_model}
 
 
-def _condition_value(expression: object, operator: str) -> str | None:
-    prefix = f"${operator}:"
-    text = str(expression)
-    return text[len(prefix):] if text.startswith(prefix) else None
-
-
-def _matches_requirement(resource: dict, requirement: dict) -> bool:
-    if str(resource.get("type") or "").upper() != str(requirement["type"]).upper():
-        return False
-    for key, expression in (requirement.get("conditions") or {}).items():
-        field = {"platform": "platform", "device_model": "deviceModel"}.get(key)
-        field = field or TOPOLOGY_FIELDS.get(key)
-        if field is None:
-            raise ValueError(f"实时资源预检暂不支持条件 {key}；不会创建 TestPlan")
-        actual = str(resource.get(field) or "")
-        expected = _condition_value(expression, "eq")
-        if expected is not None and actual != expected:
-            return False
-        choices = _condition_value(expression, "in")
-        if choices is not None and actual not in {
-            choice.strip() for choice in choices.split(",") if choice.strip()
-        }:
-            return False
-        if expected is None and choices is None:
-            raise ValueError(
-                f"实时资源预检暂不支持条件表达式 {key}={expression}；不会创建 TestPlan"
-            )
-    return True
-
-
-def _allocate_job(job: dict, resources: list[dict]) -> list[dict] | None:
-    remaining = [item for item in resources if item.get("available")]
-    constraints = normalize_constraints(
-        job.get("constraints"), [item["name"] for item in job["resources"]]
-    )
-    if constraints or job.get("placement", {}).get("policy") == "same_cabinet_first":
-        validate_affinity_counts(constraints, job["resources"])
-        return _allocate_affinity_group(job, resources, constraints)
-    requirements = sorted(
-        job["resources"], key=lambda item: len(item.get("conditions") or {}), reverse=True
-    )
-    for requirement in requirements:
-        index = next(
-            (i for i, item in enumerate(remaining) if _matches_requirement(item, requirement)),
-            None,
-        )
-        if index is None:
-            return None
-        remaining.pop(index)
-    return remaining
-
-
-def _allocate_affinity_group(job: dict, resources: list[dict], constraints: list[dict]) -> list[dict] | None:
-    """Backtrack over complete groups instead of mixing unrelated resource pools."""
-    candidates = {
-        requirement["name"]: [
-            index for index, resource in enumerate(resources)
-            if resource.get("available") and _matches_requirement(resource, requirement)
-        ]
-        for requirement in job["resources"]
-    }
-    names = sorted(candidates, key=lambda name: (len(candidates[name]), name))
-    used, allocated = set(), {}
-    attempts = 0
-
-    def search(position: int) -> set[int] | None:
-        nonlocal attempts
-        if position == len(names):
-            return set(used) if validate_assignment(constraints, allocated) else None
-        name = names[position]
-        for index in candidates[name]:
-            if index in used:
-                continue
-            attempts += 1
-            if attempts > 100000:
-                raise ValueError("亲和资源组合超出预检搜索上限；不会创建 TestPlan")
-            allocated[name] = resources[index]
-            try:
-                validate_assignment(constraints, allocated)
-            except ValueError:
-                allocated.pop(name)
-                continue
-            used.add(index)
-            result = search(position + 1)
-            if result is not None:
-                return result
-            used.remove(index)
-            allocated.pop(name)
-        return None
-
-    selected = search(0)
-    if selected is None:
-        return None
-    return [resource for index, resource in enumerate(resources) if index not in selected]
-
-
-def _apply_embedded_cabinet_preference(
-    jobs: list[dict], resources: list[dict] | None, automation_type: str | None,
-) -> None:
-    """Choose the embedded placement from the current snapshot, before creating Jobs."""
-    if automation_type != "embedded":
-        return
-    for job in jobs:
-        names = [item["name"] for item in job["resources"]]
-        if len(names) < 2:
-            continue
-        same_cabinet = {
-            "type": "AFFINITY", "topologyKey": "belong_to_cabinet", "resources": names,
-        }
-        validate_affinity_counts([same_cabinet], job["resources"])
-        if resources is None:
-            raise ValueError("嵌入式同柜优先需要完整的实时空闲资源快照；未创建 TestPlan")
-        original = normalize_constraints(job.get("constraints"), names)
-        preferred = {**job, "constraints": normalize_constraints([*original, same_cabinet], names)}
-        if _allocate_job(preferred, resources) is not None:
-            job["constraints"] = preferred["constraints"]
-            mode, reason = "same_cabinet", "complete_same_cabinet_group_available"
-        else:
-            # Unknown topology cannot prove that no complete same-cabinet group exists.
-            for resource in resources:
-                if not resource.get("available") or not any(
-                    _matches_requirement(resource, requirement) for requirement in job["resources"]
-                ):
-                    continue
-                cabinet = resource.get("belongToCabinet")
-                if type(cabinet) not in (str, int) or not str(cabinet).strip():
-                    raise ValueError("相关空闲资源缺少机柜拓扑，不能判断是否可跨柜；未创建 TestPlan")
-            if _allocate_affinity_group(job, resources, original) is None:
-                raise ValueError(f"Job“{job['name']}”没有满足全部条件的实时空闲资源；未创建 TestPlan")
-            # Preserve all explicit constraints; only the optional preference is absent.
-            mode, reason = "cross_cabinet_allowed", "no_complete_same_cabinet_group"
-        job["placement"] = {"policy": "same_cabinet_first", "mode": mode, "reason": reason}
-
-
 def _planned_concurrency(
     jobs: list[dict], available_resources: list[dict] | None, maximum: int
 ) -> tuple[int, dict | None]:
-    snapshot = _capacity_snapshot(available_resources)
-    if available_resources is None:
-        return min(maximum, len(jobs)), None
-    remaining = list(available_resources)
-    admitted = 0
-    for demand in sorted(
-        jobs, key=lambda item: len(item["resources"]),
-    ):
-        if admitted >= maximum:
-            break
-        allocated = _allocate_job(demand, remaining)
-        if allocated is not None:
-            admitted += 1
-            remaining = allocated
-    return admitted, snapshot
-
-
-def _validate_live_capacity(
-    jobs: list[dict], available_resources: list[dict] | None
-) -> None:
-    if available_resources is None:
-        return
-    for job in jobs:
-        if _allocate_job(job, available_resources) is None:
-            raise ValueError(
-                f"Job“{job['name']}”没有满足全部条件的实时空闲资源；未创建 TestPlan"
-            )
+    # Inventory cannot reproduce Server condition validation, leases or allocation.
+    return min(maximum, len(jobs)), _capacity_snapshot(available_resources)
 
 
 def _feature_jobs(
@@ -1246,7 +1200,7 @@ def _feature_jobs(
         constraints = [
             {"type": "AFFINITY", "topologyKey": key, "resources": ["phone", "camera"]}
             for key in sorted(topologies)
-        ] + (resource_constraints or [])
+        ] + [constraint for case in feature_cases for constraint in case.affinity_constraints] + (resource_constraints or [])
         normalized = normalize_constraints(constraints, [item["name"] for item in job["resources"]])
         validate_affinity_counts(normalized, job["resources"])
         if normalized:
@@ -1283,8 +1237,7 @@ def _confirmation_token(preview: dict) -> str:
         },
         "selection": preview["selection"],
         "resourceGroups": preview["resourceGroups"],
-        # Live capacity is revalidated before creation, not a resource reservation.
-        # Keep effective concurrency and every other execution parameter bound.
+        # Advisory inventory does not change the confirmed execution request.
         "execution": {
             key: value for key, value in preview["execution"].items()
             if key != "capacitySnapshot"
@@ -1327,6 +1280,57 @@ def build_trigger_command(
     app_url = getattr(args, "app_url", None)
     config = parse_app_url(app_url) if app_url else None
     cases_root, matches = _preflight_cases(args)
+    if args.feature_id is not None and _is_embedded_request(args):
+        raise ValueError(
+            "固件/嵌入式任务的 --feature-id 无法在创建前读取实际步骤和 @app 身份；"
+            "请改用 --uid/--module/--tags 让预检读取用例。"
+            "不会创建 TestPlan、Job 或锁定资源"
+        )
+    app_required = [case for case in matches if case.app_url_required_steps]
+    if config is None:
+        if app_required:
+            details = "；".join(
+                f"{_safe_evidence(case.uid or '-')} {_safe_evidence(case.name)}"
+                f"（{', '.join(_safe_evidence(step) for step in case.app_url_required_steps[:3])}）"
+                for case in app_required[:10]
+            )
+            details = _safe_evidence(details, 2000)
+            suffix = "……" if len(app_required) > 10 else ""
+            raise ValueError(
+                "所选用例包含卸载、安装、重新安装、升级/降级或切换指定版本 App 的步骤，"
+                f"必须提供 --app-url：{details}{suffix}。"
+                "不会创建 TestPlan、Job 或锁定资源"
+            )
+    else:
+        missing_app_identity = [
+            case for case in app_required
+            if not any(tag.startswith("@app=") and tag.partition("=")[2] for tag in case.tags)
+        ]
+        if missing_app_identity:
+            details = ", ".join(
+                f"{_safe_evidence(case.uid or '-')} {_safe_evidence(case.name)}"
+                for case in missing_app_identity[:10]
+            )
+            raise ValueError(
+                f"需要安装包的用例缺少 @app 身份：{_safe_evidence(details, 1200)}。"
+                "无法验证 --app-url；不会创建 TestPlan、Job 或锁定资源"
+            )
+        expected_apps = _selected_app_names(matches)
+        if len(expected_apps) > 1:
+            raise ValueError(
+                "所选用例需要多个 App（" + ", ".join(
+                    _safe_evidence(value) for value in sorted(expected_apps)
+                ) + "）；"
+                "单个计划只接受一个 --app-url，请按 App 拆分执行。"
+                "不会创建 TestPlan、Job 或锁定资源"
+            )
+        if expected_apps and config.app_name not in expected_apps:
+            expected = next(iter(expected_apps))
+            raise ValueError(
+                f"所选用例要求 App {_safe_evidence(expected)}，"
+                f"但 --app-url 解析为 {_safe_evidence(config.app_name)}；"
+                "请提供匹配的 APK URL。不会创建 TestPlan、Job 或锁定资源"
+            )
     tests_repository, tests_module = _test_source(args, cases_root)
     firmware_inputs = _firmware_inputs(args, tests_repository, tests_module)
     client_image = _client_image(args)
@@ -1393,11 +1397,9 @@ def build_trigger_command(
             job[0]["constraints"] = normalized
     else:
         job = _feature_jobs(matches, args.resource_profile, args.resource_json, resource_constraints)
-    _apply_embedded_cabinet_preference(job, available_resources, firmware_inputs["automationType"])
     concurrency, capacity = _planned_concurrency(
         job, available_resources, args.max_concurrency
     )
-    _validate_live_capacity(job, available_resources)
     if args.no_wait:
         raise ValueError(
             "统一入口不支持 --no-wait；返回结果前必须确认 Job 终态和资源释放"
@@ -1420,7 +1422,10 @@ def build_trigger_command(
     for key, value in _firmware_runtime_env(firmware_inputs["firmware"]).items():
         command += ["--inject-env", f"{key}={value}"]
     metadata: dict = {}
-    if firmware_inputs["automationType"] or firmware_inputs["firmware"]["testedVersion"]:
+    if firmware_inputs["automationType"] or any(
+        firmware_inputs["firmware"][key] is not None
+        for key in ("testedVersion", "companionVersion")
+    ):
         metadata.update(firmware_inputs)
     if client_image:
         metadata["image"] = client_image
@@ -1449,8 +1454,7 @@ def build_trigger_command(
         "resourceGroup": job[0]["resources"] if len(job) == 1 else None,
         "resourceGroups": [
             {"job": item["name"], "tags": item["tags"], "resources": item["resources"],
-             **({"constraints": item["constraints"]} if item.get("constraints") else {}),
-             **({"placement": item["placement"]} if item.get("placement") else {})}
+             **({"constraints": item["constraints"]} if item.get("constraints") else {})}
             for item in job
         ],
         "execution": {
@@ -1495,8 +1499,6 @@ def run_test(args: argparse.Namespace) -> int:
             "预检未确认或结果已变化；请重新展示当前预检，并将其中 token 作为 --confirm 的值"
         )
     concurrency = context["preview"]["execution"]["concurrency"]
-    if concurrency < 1:
-        raise ValueError("当前空闲资源不足，未创建 TestPlan；请稍后重新预检")
     with tempfile.TemporaryDirectory(prefix="device-cloud-test-") as temp_dir:
         batch_file = Path(temp_dir) / "job.json"
         batch_file.write_text(json.dumps(context["job"], ensure_ascii=False), encoding="utf-8")
@@ -1598,8 +1600,6 @@ def build_local_client_command(
     context["_triggerCommand"] = trigger_command
     if len(context["job"]) != 1:
         raise ValueError("run-local 仅支持单 Job；多 Feature 请使用云端 run")
-    if any(job.get("constraints") for job in context["job"]):
-        raise ValueError("亲和约束暂仅支持云端 run；本地 Client 交接尚不支持，未创建 TestPlan")
     preview = context["preview"]
     cases_root = Path(preview["tests"]["caseSource"]).resolve()
     client_root = _resolve_local_client_root(args.client_root)
@@ -1688,15 +1688,19 @@ def _create_managed_local_job(
         stderr=subprocess.STDOUT,
     )
     result = None
-    assert process.stdout is not None
-    for line in process.stdout:
-        print(line, end="", flush=True)
-        if line.startswith("[RESULT_JSON] "):
-            result = json.loads(line[len("[RESULT_JSON] "):])
-            identity = _managed_local_job_identity(result)
-            if identity is not None:
-                context["_createdResult"] = identity
-    return_code = process.wait()
+    try:
+        assert process.stdout is not None
+        for line in process.stdout:
+            print(line, end="", flush=True)
+            if line.startswith("[RESULT_JSON] "):
+                result = json.loads(line[len("[RESULT_JSON] "):])
+                identity = _managed_local_job_identity(result)
+                if identity is not None:
+                    context["_createdResult"] = identity
+        return_code = process.wait()
+    except BaseException:
+        _terminate_local_client(process)
+        raise
     if return_code != 0:
         raise RuntimeError(f"Device Cloud 创建本地执行 Job 失败（exit={return_code}）")
     if not isinstance(result, dict):
@@ -1711,6 +1715,64 @@ def _create_managed_local_job(
         "planId": int(result["planId"]), "jobId": int(job_ids[0])
     }
     return result
+
+
+def _terminate_local_client(process: subprocess.Popen) -> None:
+    if process.poll() is None:
+        process.terminate()
+        try:
+            process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait()
+
+
+def _monitor_local_affinity(args, auth, process, job_id, definition,
+                            verification, stop, errors) -> None:
+    """Observe Server allocations even while the owned Client emits no output."""
+    context = {"endpoint": ENV_ENDPOINTS[args.device_cloud_env], "auth": auth,
+               "jobs": [definition]}
+    state = {"running": {job_id: {"index": 0}},
+             "affinityVerification": {job_id: verification}}
+    created = time.monotonic()
+    started = None
+    try:
+        while True:
+            job = _query_affinity_job(context, job_id)
+            _verify_batch_job_affinity(context, state, job_id, job)
+            terminal = terminal_job_status(job.get("status"))
+            if terminal:
+                if not verification["verified"]:
+                    raise RuntimeError(f"job#{job_id} 终态前未核验完整亲和分配")
+                if not job_fully_passed(job):
+                    raise RuntimeError(
+                        f"job#{job_id} 终态未通过 (status={job.get('status')}, "
+                        f"scenario={job.get('passedScenarios')}/{job.get('totalScenarios')})"
+                    )
+                # FINISH may precede Client reporting/teardown. Give the owned
+                # process its existing cleanup budget to exit naturally.
+                deadline = time.monotonic() + args.cleanup_timeout
+                while process.poll() is None:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise TimeoutError(f"job#{job_id} 终态后本地 Client 退出超时")
+                    if stop.wait(min(remaining, max(0.01, args.poll_interval))):
+                        return
+                return
+            now = time.monotonic()
+            if job.get("startedAt") or str(job.get("status") or "").upper() in {
+                "RUNNING", "STARTED", "EXECUTING", "IN_PROGRESS",
+            }:
+                started = started if started is not None else now
+            origin = created if started is None else started
+            timeout = args.queue_timeout if started is None else args.timeout
+            if now - origin >= timeout:
+                raise TimeoutError(f"job#{job_id} 本地亲和执行/排队超时 ({timeout}s)")
+            if stop.wait(max(0.01, args.poll_interval)):
+                return
+    except BaseException as error:
+        errors.append(error)
+        _terminate_local_client(process)
 
 
 def run_local_client(args: argparse.Namespace) -> int:
@@ -1733,6 +1795,10 @@ def run_local_client(args: argparse.Namespace) -> int:
     fatal_output = False
     return_code = 1
     execution_error: BaseException | None = None
+    affinity_verification: list[dict] = []
+    affinity_stop = threading.Event()
+    affinity_errors: list[BaseException] = []
+    affinity_monitor: threading.Thread | None = None
     try:
         with tempfile.TemporaryDirectory(prefix="device-cloud-local-client-") as temp_dir:
             temp_root = Path(temp_dir)
@@ -1741,6 +1807,8 @@ def run_local_client(args: argparse.Namespace) -> int:
                 json.dumps(context["job"], ensure_ascii=False), encoding="utf-8"
             )
             result = _create_managed_local_job(args, context, child_env, batch_file)
+            if context["job"][0].get("constraints"):
+                affinity_verification = [{"jobId": int(result["jobIds"][0]), "verified": False}]
             execution_file = temp_root / "execution.json"
             execution_file.write_text(json.dumps({
                 "feishu": {},
@@ -1756,45 +1824,58 @@ def run_local_client(args: argparse.Namespace) -> int:
                 },
             }, ensure_ascii=False), encoding="utf-8")
             command.extend(["--resources-config", str(execution_file)])
-            process = subprocess.Popen(
-                command,
-                env=child_env,
-                cwd=context["preview"]["clientRoot"],
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-            )
-            fatal_markers = (
-                "HOOK-ERROR in before_all:",
-                "AuthenticationError:",
-                "Exception ValueError: list.remove(x): x not in list",
-                "Behave ValueError caught",
-            )
-            scenario_started = False
-            assert process.stdout is not None
-            for line in process.stdout:
-                print(line, end="", flush=True)
-                stripped = line.lstrip()
-                if "SCENARIO START:" in line or stripped.startswith("Scenario:"):
-                    scenario_started = True
-                if not scenario_started:
-                    fatal_output = fatal_output or any(
-                        marker in line for marker in fatal_markers
+            try:
+                process = subprocess.Popen(
+                    command,
+                    env=child_env,
+                    cwd=context["preview"]["clientRoot"],
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                )
+                if affinity_verification:
+                    affinity_monitor = threading.Thread(
+                        target=_monitor_local_affinity,
+                        args=(args, auth_client, process, int(result["jobIds"][0]),
+                              context["job"][0], affinity_verification[0],
+                              affinity_stop, affinity_errors),
+                        name="device-cloud-local-affinity",
                     )
-            return_code = process.wait()
+                    affinity_monitor.start()
+                fatal_markers = (
+                    "HOOK-ERROR in before_all:",
+                    "AuthenticationError:",
+                    "Exception ValueError: list.remove(x): x not in list",
+                    "Behave ValueError caught",
+                )
+                scenario_started = False
+                assert process.stdout is not None
+                for line in process.stdout:
+                    print(line, end="", flush=True)
+                    stripped = line.lstrip()
+                    if "SCENARIO START:" in line or stripped.startswith("Scenario:"):
+                        scenario_started = True
+                    if not scenario_started:
+                        fatal_output = fatal_output or any(
+                            marker in line for marker in fatal_markers
+                        )
+                return_code = process.wait()
+            finally:
+                if affinity_monitor is not None:
+                    _terminate_local_client(process)
+                    affinity_stop.set()
+                    affinity_monitor.join()
     except BaseException as error:
         execution_error = error
         if result is None:
             result = context.get("_createdResult")
-        if process is not None and process.poll() is None:
-            process.terminate()
-            try:
-                process.wait(timeout=10)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                process.wait()
+        if process is not None:
+            _terminate_local_client(process)
+
+    if execution_error is None and affinity_errors:
+        execution_error = affinity_errors[0]
 
     if result is None:
         if execution_error is not None:
@@ -1802,6 +1883,10 @@ def run_local_client(args: argparse.Namespace) -> int:
         raise RuntimeError("本地执行未获得 Plan/Job 标识，无法完成资源释放核验")
 
     job_ids = [int(job_id) for job_id in result["jobIds"]]
+    if context["job"][0].get("constraints") and not affinity_verification:
+        affinity_verification = [{"jobId": job_id, "verified": False} for job_id in job_ids]
+    if execution_error is None and any(not item["verified"] for item in affinity_verification):
+        execution_error = RuntimeError("本地 Client 结束前未核验完整亲和分配")
     cleanup = ensure_plan_jobs_released(
         ENV_ENDPOINTS[args.device_cloud_env],
         auth_client,
@@ -1813,6 +1898,19 @@ def run_local_client(args: argparse.Namespace) -> int:
         timeout_seconds=args.cleanup_timeout,
         poll_interval=min(2, args.poll_interval),
     )
+    if affinity_verification and execution_error is None and return_code == 0 and not fatal_output:
+        try:
+            final_job = _query_affinity_job(
+                {"endpoint": ENV_ENDPOINTS[args.device_cloud_env], "auth": auth_client},
+                job_ids[0],
+            )
+            if not job_fully_passed(final_job):
+                raise RuntimeError(
+                    f"job#{job_ids[0]} 终态未通过 (status={final_job.get('status')}, "
+                    f"scenario={final_job.get('passedScenarios')}/{final_job.get('totalScenarios')})"
+                )
+        except Exception as error:
+            execution_error = error
     if return_code == 0 and fatal_output:
         print(
             "本地 Client 在创建/执行计划前发生致命初始化错误；拒绝把其零退出码视为成功。",
@@ -1833,6 +1931,7 @@ def run_local_client(args: argparse.Namespace) -> int:
         "finalStatus": "PASSED" if failure_reason is None else "FAILED",
         "firstFailureReason": failure_reason,
         "cleanup": cleanup,
+        "affinityVerification": affinity_verification,
     }, ensure_ascii=False), flush=True)
     if execution_error is not None:
         raise execution_error
@@ -1903,11 +2002,11 @@ def _add_run_arguments(command: argparse.ArgumentParser, *, local_client: bool =
     )
     command.add_argument(
         "--firmware-version",
-        help="待测固件版本；embedded 必填，须以 -d 结尾；Background 使用此版本升级设备",
+        help="可选待测固件版本；是否必需及是否需要调试版本由实际用例决定",
     )
     command.add_argument(
         "--companion-firmware-version",
-        help="配测固件版本；须以 -d 结尾，默认待测版本；读取需配套 Client 支持，OTA 使用尚未实现",
+        help="可选配测固件版本，默认待测版本；可单独提供；实际使用由用例和 Client 决定",
     )
     command.add_argument(
         "--app-url",

@@ -47,4 +47,5 @@ def test_boundaries_are_explicit_without_second_authorizer(term):
 
 
 def test_skill_routes_to_shipped_reference():
-    assert "[builder 静态取证契约](references/builder-static-context.md)" in (SKILL / "SKILL.md").read_text()
+    intake = (SKILL / "references/step-0-intake.md").read_text()
+    assert "[builder 静态取证契约](builder-static-context.md)" in intake

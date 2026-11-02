@@ -178,11 +178,17 @@ def load_additional_legacy_namespaces(
     return load_namespace_legacy_exceptions(path, today=today)
 
 
-additional_applications, additional_kustomizations = (
-    load_additional_legacy_namespaces()
-)
-LEGACY_APPLICATION_NAMESPACES.update(additional_applications)
-LEGACY_KUSTOMIZATION_NAMESPACES.update(additional_kustomizations)
+_legacy_namespaces_loaded = False
+
+
+def ensure_legacy_namespaces_loaded() -> None:
+    """Validate the entire registry once, only when business checks need it."""
+    global _legacy_namespaces_loaded
+    if not _legacy_namespaces_loaded:
+        applications, kustomizations = load_additional_legacy_namespaces()
+        LEGACY_APPLICATION_NAMESPACES.update(applications)
+        LEGACY_KUSTOMIZATION_NAMESPACES.update(kustomizations)
+        _legacy_namespaces_loaded = True
 
 
 def load_scoped_ga_targets() -> dict[str, set[str]]:
@@ -433,6 +439,7 @@ def is_legacy_namespace(
     ns: str,
     app: str | None,
 ) -> bool:
+    ensure_legacy_namespaces_loaded()
     if is_application(doc):
         return application_matches_exception(
             file,
@@ -512,6 +519,9 @@ def check_object(
     doc,
     scoped_ga_overlays: set[tuple[Path, str, str]],
 ) -> str | None:
+    # main calls this only for business objects. Do not let missing namespace
+    # or invalid ownership short-circuit a broken business exception registry.
+    ensure_legacy_namespaces_loaded()
     ns = business_namespace(doc)
     if not (isinstance(ns, str) and ns):
         return None

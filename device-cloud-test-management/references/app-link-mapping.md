@@ -26,7 +26,7 @@ build number、commit、build time 只用于审计。无法唯一解析 App、�
 
 ## 与测试仓解耦
 
-`--tests-repo`、`--tests-ref`、`--tests-module` 由测试意图和仓库决定。内部 `appType` 也使用测试模块，而不是 App 品牌。没有 `--app-url` 时不注入 `DEVIUM_APP_*`，但仍可执行并申请用例声明的云端资源。
+`--tests-repo`、`--tests-ref`、`--tests-module` 由测试意图和仓库决定。内部 `appType` 也使用测试模块，而不是 App 品牌。Agent 必须检查实际选中的 Feature Background 和 Scenario 步骤：包含卸载、安装、重新安装、升级/降级或切换指定版本 App 的用例缺少 `--app-url` 时，不得执行、建单或申请资源；只有所选用例的实际步骤不需要安装包时，才可以不注入 `DEVIUM_APP_*`。URL 解析出的 App 身份必须与全部所选用例的 `@app` 一致；一个选择器命中多个 App 时按 App 拆分计划；需要安装包但缺少 `@app` 时停止。
 
 ## 环境正交
 

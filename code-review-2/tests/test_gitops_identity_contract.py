@@ -135,7 +135,7 @@ def test_output_is_complete_semantics_with_fixed_provenance_and_runtime_limits()
 
 
 @pytest.mark.parametrize("filename", [
-    "SKILL.md", "references/ci-integration.md", "references/review-data-contract.md",
+    "references/step-0-intake.md", "references/ci-integration.md", "references/review-data-contract.md",
     "references/behavior-coverage-review.md", "references/diff-scoped-review.md",
 ])
 def test_consumer_routes_resolve_to_the_shipped_reference(filename):

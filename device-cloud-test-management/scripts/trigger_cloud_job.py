@@ -474,6 +474,7 @@ def create_job_batch(endpoint, token, plan_id, metadata,
     data = gql(endpoint, token, CREATE_JOB, {"in": job_input})
     res = data["createJob"]
     if not res["success"]:
+        print(f"[FAILED] createJob rejected: {res.get('message')}", flush=True)
         return -1  # 批量模式下不 sys.exit，返回 -1 表示失败
     return int(res["id"])
 
@@ -1075,9 +1076,10 @@ def _fill_batch_window(args, context: dict, state: dict) -> None:
         if job.get("constraints"):
             state["affinityVerification"][job_id] = {"jobId": job_id, "verified": False}
             _verify_persisted_constraints(context, job_id, job)
-            _verify_batch_job_affinity(
-                context, state, job_id, _query_affinity_job(context, job_id)
-            )
+            if not context.get("managed_local_handoff"):
+                _verify_batch_job_affinity(
+                    context, state, job_id, _query_affinity_job(context, job_id)
+                )
 
 
 def _record_terminal_job(job_id: int, job: dict, state: dict) -> None:
@@ -1235,7 +1237,14 @@ def batch_mode(args, *, auth_client=None, launched_by: str | None = None):
     )
     reject_managed_credential_inputs(injected_env, extra_metadata)
     jobs_def = load_batch_jobs(args.batch)
-    if args.no_wait and any(job.get("constraints") for job in jobs_def):
+    managed_local_handoff = (
+        args.no_wait and args.client_mode == "legacy"
+        and len(jobs_def) == 1 and args.concurrency == 1
+        and isinstance(extra_metadata, dict)
+        and extra_metadata.get("executionLocation") == "LOCAL_CLIENT"
+        and extra_metadata.get("clientMode", "legacy") == "legacy"
+    )
+    if args.no_wait and any(job.get("constraints") for job in jobs_def) and not managed_local_handoff:
         raise ValueError("亲和约束暂仅支持云端 run；不支持本地交接 --no-wait，未创建 TestPlan")
     print(f"[+] batch mode : {len(jobs_def)} jobs, concurrency={args.concurrency}")
     print(f"[+] endpoint   : {endpoint}")
@@ -1261,6 +1270,7 @@ def batch_mode(args, *, auth_client=None, launched_by: str | None = None):
     print(f"[+] testPlanId : {plan_id}  ({plan_name})")
     context = {"endpoint": endpoint, "auth": auth_client, "plan_id": plan_id,
                "launched_by": launched_by, "jobs": jobs_def,
+               "managed_local_handoff": managed_local_handoff,
                "extra_metadata": extra_metadata, "injected_env": injected_env}
     started = time.monotonic()
     state = _new_batch_state(len(jobs_def))

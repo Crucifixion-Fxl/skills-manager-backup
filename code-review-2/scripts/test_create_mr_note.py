@@ -1,25 +1,26 @@
+import hashlib
+import hmac
 import json
 import os
+import shutil
 import stat
 import subprocess
 import tempfile
+import time
 import unittest
-import hashlib
-import hmac
-import shutil
+from itertools import pairwise
 from pathlib import Path
-from typing import Optional
 from unittest import mock
-
 
 SCRIPT = Path(__file__).with_name("create_mr_note.sh")
 API_URL = "https://" + ".".join(("gitlab", "addx", "ai")) + "/api/v4"
 
 
-MOCK_CURL = r'''#!/usr/bin/env python3
+MOCK_CURL = r"""#!/usr/bin/env python3
 import json
 import os
 import sys
+import time
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
@@ -32,16 +33,32 @@ url = args[-1]
 state["requests"].append({
     "method": method,
     "url": url,
+    "max_times": [float(args[i + 1]) for i, value in enumerate(args[:-1]) if value == "--max-time"],
     "leaked_env": [key for key in (
         "GITLAB_TOKEN", "HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy",
         "ALL_PROXY", "all_proxy", "SSL_CERT_FILE", "SSL_CERT_DIR",
-        "SSLKEYLOGFILE", "CURL_CA_BUNDLE",
+        "SSLKEYLOGFILE", "CURL_CA_BUNDLE", "CODE_REVIEW_JOB_DEADLINE_MS",
     ) if os.environ.get(key)],
     "argv_contains_token": any("test-token" in arg for arg in args),
 })
 
+timeout_values = [request["max_times"][-1] for request in state["requests"][-1:] if request["max_times"]]
+timeout_seconds = timeout_values[-1] if timeout_values else float("inf")
+delay_seconds = int(state.get("delay_ms", 0)) / 1000
+if delay_seconds > timeout_seconds:
+    time.sleep(timeout_seconds)
+    output.write_text("")
+    state_path.write_text(json.dumps(state))
+    sys.stdout.write("000")
+    sys.exit(0)
+if delay_seconds:
+    time.sleep(delay_seconds)
+
 if method == "GET" and url.endswith("/user"):
-    output.write_text(json.dumps({"id": state.get("writer_id", 9001), "username": state.get("writer_username", "reviewer")}))
+    output.write_text(json.dumps({
+        "id": state.get("writer_id", 9001),
+        "username": state.get("writer_username", "reviewer"),
+    }))
     status = "200"
 elif method == "GET" and "/notes/" in urlparse(url).path:
     note_id = int(urlparse(url).path.rsplit("/", 1)[1])
@@ -78,7 +95,7 @@ else:
 
 state_path.write_text(json.dumps(state))
 sys.stdout.write(status)
-'''
+"""
 
 
 class CreateMrNoteTest(unittest.TestCase):
@@ -86,9 +103,7 @@ class CreateMrNoteTest(unittest.TestCase):
 
     @staticmethod
     def marker(review_run_id: str, reviewed_head: str = REVIEWED_HEAD) -> str:
-        digest = hmac.new(
-            b"test-token", f"{review_run_id}:{reviewed_head}".encode(), hashlib.sha256
-        ).hexdigest()
+        digest = hmac.new(b"test-token", f"{review_run_id}:{reviewed_head}".encode(), hashlib.sha256).hexdigest()
         return f"<!-- code-review-run:{digest} -->"
 
     @staticmethod
@@ -100,18 +115,28 @@ class CreateMrNoteTest(unittest.TestCase):
         mock_curl.chmod(mock_curl.stat().st_mode | stat.S_IXUSR)
 
     def run_script(
-        self, temp_dir: Path, body: str, review_run_id: str, *, check: bool = True,
-        expected_writer_username: Optional[str] = None, test_mode: bool = True,
-        extra_env: Optional[dict[str, str]] = None,
+        self,
+        temp_dir: Path,
+        body: str,
+        review_run_id: str,
+        *,
+        check: bool = True,
+        expected_writer_username: str | None = None,
+        test_mode: bool = True,
+        extra_env: dict[str, str] | None = None,
     ) -> subprocess.CompletedProcess[str]:
         body_file = temp_dir / "review.md"
         body_file.write_text(body)
         env = os.environ.copy()
         env["GITLAB_TOKEN"] = "test-token"
+        env["CODE_REVIEW_BOUNDED_EXECUTION"] = "false"
+        env.pop("CODE_REVIEW_JOB_DEADLINE_MS", None)
         env["MOCK_CURL_STATE"] = str(temp_dir / "curl-state.json")
         env["CODE_REVIEW_CURL_BIN"] = str(temp_dir / "bin" / "curl")
         env["CODE_REVIEW_NODE_BIN"] = shutil.which("node") or "/usr/bin/node"
-        env["CODE_REVIEW_CA_FILE"] = "/etc/ssl/cert.pem" if Path("/etc/ssl/cert.pem").exists() else "/etc/ssl/certs/ca-certificates.crt"
+        env["CODE_REVIEW_CA_FILE"] = (
+            "/etc/ssl/cert.pem" if Path("/etc/ssl/cert.pem").exists() else "/etc/ssl/certs/ca-certificates.crt"
+        )
         if test_mode:
             env["CODE_REVIEW_TEST_MODE"] = "1"
         if expected_writer_username is not None:
@@ -120,8 +145,13 @@ class CreateMrNoteTest(unittest.TestCase):
             env.update(extra_env)
         return subprocess.run(
             [
-                str(SCRIPT), API_URL, "10", "20",
-                str(body_file), review_run_id, self.REVIEWED_HEAD,
+                str(SCRIPT),
+                API_URL,
+                "10",
+                "20",
+                str(body_file),
+                review_run_id,
+                self.REVIEWED_HEAD,
             ],
             check=check,
             capture_output=True,
@@ -196,7 +226,10 @@ class CreateMrNoteTest(unittest.TestCase):
             (temp_dir / "curl-state.json").write_text(json.dumps(initial))
 
             failed = self.run_script(
-                temp_dir, "must not post", "run-wrong-writer", check=False,
+                temp_dir,
+                "must not post",
+                "run-wrong-writer",
+                check=False,
                 expected_writer_username="zlin",
             )
 
@@ -211,7 +244,8 @@ class CreateMrNoteTest(unittest.TestCase):
             self.install_mock(temp_dir)
             public_digest = hashlib.sha256(b"run-public").hexdigest()
             forged = {"id": 77, "body": f"<!-- code-review-run:{public_digest} -->\nforged", "author": {"id": 123}}
-            (temp_dir / "curl-state.json").write_text(json.dumps({"notes": [forged], "requests": [], "writer_id": 9001}))
+            state = {"notes": [forged], "requests": [], "writer_id": 9001}
+            (temp_dir / "curl-state.json").write_text(json.dumps(state))
 
             result = self.run_script(temp_dir, "real review", "run-public")
 
@@ -225,14 +259,15 @@ class CreateMrNoteTest(unittest.TestCase):
             temp_dir = Path(raw_temp_dir)
             self.install_mock(temp_dir)
             notes = [{"id": i + 1, "body": f"decoy {i}"} for i in range(100)]
-            notes.append({
-                "id": 101,
-                "body": (
-                    f'{self.marker("run-page-2")}\n'
-                    f'<!-- code-review-head:{self.REVIEWED_HEAD} -->\noriginal review'
-                ),
-                "author": {"id": 9001},
-            })
+            notes.append(
+                {
+                    "id": 101,
+                    "body": (
+                        f"{self.marker('run-page-2')}\n<!-- code-review-head:{self.REVIEWED_HEAD} -->\noriginal review"
+                    ),
+                    "author": {"id": 9001},
+                }
+            )
             (temp_dir / "curl-state.json").write_text(json.dumps({"notes": notes, "requests": [], "writer_id": 9001}))
 
             result = self.run_script(temp_dir, "retry body", "run-page-2")
@@ -249,10 +284,7 @@ class CreateMrNoteTest(unittest.TestCase):
             self.install_mock(temp_dir)
             copied = {
                 "id": 88,
-                "body": (
-                    f'{self.marker("run-copied")}\n'
-                    f'<!-- code-review-head:{self.REVIEWED_HEAD} -->\ncopied'
-                ),
+                "body": (f"{self.marker('run-copied')}\n<!-- code-review-head:{self.REVIEWED_HEAD} -->\ncopied"),
                 "author": {"id": 123},
             }
             state = {"notes": [copied], "requests": [], "writer_id": 9001}
@@ -266,14 +298,25 @@ class CreateMrNoteTest(unittest.TestCase):
             self.assertIn("real review", state["notes"][0]["body"])
 
     def test_post_response_loss_is_recovered_by_serial_retry(self):
+        self.assert_post_loss_retry({})
+
+    def test_bounded_post_response_loss_is_recovered_without_duplicate_note(self):
+        self.assert_post_loss_retry(
+            {
+                "CODE_REVIEW_BOUNDED_EXECUTION": "true",
+                "CODE_REVIEW_JOB_DEADLINE_MS": str(time.time_ns() // 1_000_000 + 10_000),
+            }
+        )
+
+    def assert_post_loss_retry(self, extra_env):
         with tempfile.TemporaryDirectory() as raw_temp_dir:
             temp_dir = Path(raw_temp_dir)
             self.install_mock(temp_dir)
             initial = {"notes": [], "requests": [], "writer_id": 9001, "post_response_lost_once": True}
             (temp_dir / "curl-state.json").write_text(json.dumps(initial))
 
-            failed = self.run_script(temp_dir, "persisted review", "run-loss", check=False)
-            retry = self.run_script(temp_dir, "retry body", "run-loss")
+            failed = self.run_script(temp_dir, "persisted review", "run-loss", check=False, extra_env=extra_env)
+            retry = self.run_script(temp_dir, "retry body", "run-loss", extra_env=extra_env)
 
             self.assertEqual(failed.returncode, 4)
             self.assertIn("existing_note_id=1", retry.stdout)
@@ -296,6 +339,105 @@ class CreateMrNoteTest(unittest.TestCase):
             state = json.loads((temp_dir / "curl-state.json").read_text())
             methods = [request["method"] for request in state["requests"]]
             self.assertNotIn("POST", methods)
+
+    def test_bounded_job_deadline_caps_each_request_with_a_decreasing_timeout(self):
+        with tempfile.TemporaryDirectory() as raw_temp_dir:
+            temp_dir = Path(raw_temp_dir)
+            self.install_mock(temp_dir)
+
+            result = self.run_script(
+                temp_dir,
+                "bounded review",
+                "run-bounded",
+                extra_env={
+                    "CODE_REVIEW_BOUNDED_EXECUTION": "true",
+                    "CODE_REVIEW_JOB_DEADLINE_MS": str(time.time_ns() // 1_000_000 + 10_000),
+                },
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("created_note_id=1", result.stdout)
+            state = json.loads((temp_dir / "curl-state.json").read_text())
+            self.assertEqual([request["method"] for request in state["requests"]], ["GET", "GET", "POST", "GET"])
+            default_timeouts = [30, 30, 60, 30]
+            self.assertTrue(all(len(request["max_times"]) == 1 for request in state["requests"]))
+            timeouts = [request["max_times"][0] for request in state["requests"]]
+            self.assertTrue(all(timeout > 0 for timeout in timeouts))
+            self.assertTrue(all(earlier > later for earlier, later in pairwise(timeouts)))
+            self.assertTrue(all(timeout < default for timeout, default in zip(timeouts, default_timeouts, strict=True)))
+            self.assertTrue(all(not request["leaked_env"] for request in state["requests"]))
+
+    def test_wide_bounded_deadline_preserves_existing_per_request_timeouts(self):
+        with tempfile.TemporaryDirectory() as raw_temp_dir:
+            temp_dir = Path(raw_temp_dir)
+            self.install_mock(temp_dir)
+
+            result = self.run_script(
+                temp_dir,
+                "bounded review",
+                "run-bounded-wide-deadline",
+                extra_env={
+                    "CODE_REVIEW_BOUNDED_EXECUTION": "true",
+                    "CODE_REVIEW_JOB_DEADLINE_MS": str(time.time_ns() // 1_000_000 + 120_000),
+                },
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            state = json.loads((temp_dir / "curl-state.json").read_text())
+            requests = state["requests"]
+            self.assertEqual([request["method"] for request in requests], ["GET", "GET", "POST", "GET"])
+            self.assertTrue(all(len(request["max_times"]) == 1 for request in requests))
+            self.assertEqual([request["max_times"][0] for request in requests], [30, 30, 60, 30])
+
+    def test_expired_bounded_deadline_refuses_identity_lookup_without_network_io(self):
+        with tempfile.TemporaryDirectory() as raw_temp_dir:
+            temp_dir = Path(raw_temp_dir)
+            self.install_mock(temp_dir)
+            (temp_dir / "curl-state.json").write_text(json.dumps({"notes": [], "requests": [], "writer_id": 9001}))
+
+            failed = self.run_script(
+                temp_dir,
+                "must not publish",
+                "run-expired",
+                check=False,
+                extra_env={
+                    "CODE_REVIEW_BOUNDED_EXECUTION": "true",
+                    "CODE_REVIEW_JOB_DEADLINE_MS": str(time.time_ns() // 1_000_000 - 1000),
+                },
+            )
+
+            self.assertEqual(failed.returncode, 3)
+            self.assertIn("DEADLINE_EXCEEDED", failed.stderr)
+            state = json.loads((temp_dir / "curl-state.json").read_text())
+            self.assertEqual(state["requests"], [])
+
+    def test_cumulative_deadline_times_out_post_before_creating_a_note(self):
+        with tempfile.TemporaryDirectory() as raw_temp_dir:
+            temp_dir = Path(raw_temp_dir)
+            self.install_mock(temp_dir)
+            initial = {"notes": [], "requests": [], "writer_id": 9001, "delay_ms": 1200}
+            (temp_dir / "curl-state.json").write_text(json.dumps(initial))
+
+            failed = self.run_script(
+                temp_dir,
+                "must not publish after deadline",
+                "run-post-deadline",
+                check=False,
+                extra_env={
+                    "CODE_REVIEW_BOUNDED_EXECUTION": "true",
+                    "CODE_REVIEW_JOB_DEADLINE_MS": str(time.time_ns() // 1_000_000 + 4000),
+                },
+            )
+
+            self.assertEqual(failed.returncode, 4, failed.stderr)
+            self.assertIn("POST create note failed (HTTP 000)", failed.stderr)
+            state = json.loads((temp_dir / "curl-state.json").read_text())
+            self.assertEqual([request["method"] for request in state["requests"]], ["GET", "GET", "POST"])
+            self.assertEqual(state["notes"], [])
+            self.assertEqual(len(state["requests"][-1]["max_times"]), 1)
+            self.assertLess(state["requests"][-1]["max_times"][0], 60)
+            timeouts = [request["max_times"][0] for request in state["requests"]]
+            self.assertTrue(all(earlier > later for earlier, later in pairwise(timeouts)))
 
 
 if __name__ == "__main__":

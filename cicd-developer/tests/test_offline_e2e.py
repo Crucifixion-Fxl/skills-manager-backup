@@ -16,6 +16,7 @@ from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from types import ModuleType
+from tempfile import TemporaryDirectory
 
 import pytest
 import yaml
@@ -1474,7 +1475,7 @@ def test_rendered_recipe_workspace_passes_validators(tmp_path: Path) -> None:
             encoding="utf-8",
         )
 
-    result = run_validate_sh(tmp_path)
+    result = run_approved_window_validate_sh(tmp_path)
 
     assert result.returncode == 0, result.stdout
 
@@ -6253,6 +6254,16 @@ def test_reference_yaml_inventory_and_roots_stay_expected() -> None:
             documents = list(yaml.safe_load_all(path.read_text(encoding='utf-8')))
             assert len(documents) == 4
             actual[relative] = {doc['kind'] for doc in documents}
+        elif relative.startswith('approved-exceptions/sg-buildbarn-service-'):
+            name = relative.removeprefix('approved-exceptions/sg-buildbarn-service-').removesuffix('.yaml')
+            assert hashlib.sha256(path.read_bytes()).hexdigest() == {
+                'bb-cache': 'c32aeee80de1a546bed098a189c80aeb75da52c1d804cf534ca9c2c47b708b70',
+                'bb-cache-metrics': 'bdbabd82c156361c29e9d9fef79f642943eaabecd6d48cddb1e24590997b7e7d',
+                'bb-exec': '8429c205deb21c0955f9a350a421f446b1e41b3ea3a85e2d1db68732c11c3057',
+            }[name]
+            documents = list(yaml.safe_load_all(path.read_text(encoding='utf-8')))
+            assert len(documents) == 1
+            actual[relative] = {doc['kind'] for doc in documents}
         elif relative == 'approved-exceptions/us-prod-qdrant-monitoring-key.yaml':
             assert hashlib.sha256(path.read_bytes()).hexdigest() == (
                 '3c01a87c18a5e89819c82c11483b99636bfb3c76581484277d96c73ac54ed2a1')
@@ -6271,6 +6282,8 @@ def test_reference_yaml_inventory_and_roots_stay_expected() -> None:
     assert actual == {**EXPECTED_REFERENCE_ROOTS, approved: approved_kinds,
                       'approved-exceptions/cn-staging-shared-pg-platform.yaml': {'ExternalSecret'},
                       'approved-exceptions/us-prod-qdrant-monitoring-key.yaml': {'ExternalSecret'},
+                      **{f'approved-exceptions/sg-buildbarn-service-{name}.yaml': {'Service'}
+                         for name in ('bb-cache', 'bb-cache-metrics', 'bb-exec')},
                       **{f'approved-exceptions/streampark-stage-tls-{side}.yaml':
                          {'ServiceAccount', 'Role', 'RoleBinding', 'SecretStore'}
                          for side in ['server', 'client']}}
@@ -6583,7 +6596,8 @@ def test_gpu_inference_t03_application_uses_flywheel_legacy_identity_across_path
     application_file.parent.mkdir(parents=True)
     write_yaml(application_file, [application])
     applications, _ = legacy_helper.load_namespace_legacy_exceptions(
-        REFERENCE_ROOT / "data/namespace-legacy-exceptions.yaml"
+        REFERENCE_ROOT / "data/namespace-legacy-exceptions.yaml",
+        today=date(2026, 10, 29),  # Historical approval, not current admission.
     )
 
     assert legacy_helper.application_matches_exception(
@@ -6631,7 +6645,8 @@ def test_gpu_inference_t03_kustomization_exception_pre_registers_both_stages(
         [{"apiVersion": "kustomize.config.k8s.io/v1beta1"}],
     )
     _, kustomizations = legacy_helper.load_namespace_legacy_exceptions(
-        REFERENCE_ROOT / "data/namespace-legacy-exceptions.yaml"
+        REFERENCE_ROOT / "data/namespace-legacy-exceptions.yaml",
+        today=date(2026, 10, 29),  # Historical approval, not current admission.
     )
 
     assert legacy_helper.kustomization_matches_exception(
@@ -7389,13 +7404,13 @@ def test_namespace_pattern_validator_flags_suffix_form(tmp_path: Path) -> None:
         "spec": {"destination": {"namespace": "my-app-staging"}},
     }
     write_yaml(tmp_path / "app.yaml", [business_app])
-    result = run_validator("check_namespace_pattern.py", tmp_path)
+    result = run_approved_window_validator("check_namespace_pattern.py", tmp_path)
     assert result.returncode == 1, result.stdout
     assert "my-app-staging" in result.stdout
 
     business_app["spec"]["destination"]["namespace"] = "staging-my-app"
     write_yaml(tmp_path / "app.yaml", [business_app])
-    result = run_validator("check_namespace_pattern.py", tmp_path)
+    result = run_approved_window_validator("check_namespace_pattern.py", tmp_path)
     assert result.returncode == 0, result.stdout
 
 
@@ -7416,7 +7431,7 @@ def test_namespace_pattern_validator_flags_wrong_app_part(tmp_path: Path) -> Non
         "spec": {"destination": {"namespace": "staging-wrong-app"}},
     }
     write_yaml(tmp_path / "app.yaml", [business_app])
-    result = run_validator("check_namespace_pattern.py", tmp_path)
+    result = run_approved_window_validator("check_namespace_pattern.py", tmp_path)
     assert result.returncode == 1, result.stdout
     assert "must be 'staging-my-app'" in result.stdout
 
@@ -7440,7 +7455,7 @@ def test_namespace_pattern_validator_keeps_exact_single_image_identity(
     }
     write_yaml(tmp_path / "app.yaml", [business_app])
 
-    result = run_validator("check_namespace_pattern.py", tmp_path)
+    result = run_approved_window_validator("check_namespace_pattern.py", tmp_path)
 
     assert result.returncode == 1, result.stdout
     assert "single business image app 'my-app-server' must exactly match" in result.stdout
@@ -7469,7 +7484,7 @@ def test_namespace_pattern_validator_accepts_artifact_variant_single_image(
     }
     write_yaml(tmp_path / "app.yaml", [business_app])
 
-    result = run_validator("check_namespace_pattern.py", tmp_path)
+    result = run_approved_window_validator("check_namespace_pattern.py", tmp_path)
 
     assert result.returncode == 0, result.stdout
 
@@ -7530,7 +7545,7 @@ def test_argocd_application_validator_accepts_artifact_variant_image_path(
     }
     write_yaml(tmp_path / "app.yaml", [business_app])
 
-    result = run_validator("check_argocd_application.py", tmp_path)
+    result = run_approved_window_validator("check_argocd_application.py", tmp_path)
 
     assert result.returncode == 0, result.stdout
 
@@ -7584,7 +7599,7 @@ def test_namespace_pattern_validator_accepts_declared_multi_image_owner(
         }
 
     write_yaml(tmp_path / "kustomization.yaml", [business_app])
-    result = run_validator("check_namespace_pattern.py", tmp_path)
+    result = run_approved_window_validator("check_namespace_pattern.py", tmp_path)
 
     assert result.returncode == 0, result.stdout
 
@@ -7614,7 +7629,7 @@ def test_namespace_pattern_validator_binds_namespace_to_declared_owner(
     }
     write_yaml(tmp_path / "kustomization.yaml", [kustomization])
 
-    result = run_validator("check_namespace_pattern.py", tmp_path)
+    result = run_approved_window_validator("check_namespace_pattern.py", tmp_path)
 
     assert result.returncode == 1, result.stdout
     assert "must be 'staging-micro-app-platform'" in result.stdout
@@ -7643,7 +7658,7 @@ def test_namespace_pattern_validator_rejects_unrelated_component_image(
     }
     write_yaml(tmp_path / "kustomization.yaml", [kustomization])
 
-    result = run_validator("check_namespace_pattern.py", tmp_path)
+    result = run_approved_window_validator("check_namespace_pattern.py", tmp_path)
 
     assert result.returncode == 1, result.stdout
     assert "'unrelated-worker'" in result.stdout
@@ -7674,7 +7689,7 @@ def test_namespace_pattern_validator_rejects_multi_image_without_owner(
     }
     write_yaml(tmp_path / "kustomization.yaml", [kustomization])
 
-    result = run_validator("check_namespace_pattern.py", tmp_path)
+    result = run_approved_window_validator("check_namespace_pattern.py", tmp_path)
 
     assert result.returncode == 1, result.stdout
     assert "require authoritative metadata.labels.app" in result.stdout
@@ -7699,7 +7714,7 @@ def test_namespace_pattern_validator_rejects_invalid_declared_owner(
     }
     write_yaml(tmp_path / "kustomization.yaml", [kustomization])
 
-    result = run_validator("check_namespace_pattern.py", tmp_path)
+    result = run_approved_window_validator("check_namespace_pattern.py", tmp_path)
 
     assert result.returncode == 1, result.stdout
     assert "kebab-case app owner" in result.stdout
@@ -7727,7 +7742,7 @@ def test_namespace_pattern_validator_grandfathers_only_002_flink(tmp_path: Path)
     tech_file.parent.mkdir(parents=True)
     write_yaml(tech_file, [legacy_flink])
 
-    result = run_validator("check_namespace_pattern.py", tmp_path)
+    result = run_approved_window_validator("check_namespace_pattern.py", tmp_path)
     assert result.returncode == 0, result.stdout
 
     tech_file.unlink()
@@ -7737,7 +7752,7 @@ def test_namespace_pattern_validator_grandfathers_only_002_flink(tmp_path: Path)
     staging_file.parent.mkdir(parents=True)
     write_yaml(staging_file, [legacy_flink])
 
-    result = run_validator("check_namespace_pattern.py", tmp_path)
+    result = run_approved_window_validator("check_namespace_pattern.py", tmp_path)
     assert result.returncode == 1, result.stdout
     assert "must be 'staging-flink'" in result.stdout
 
@@ -7774,7 +7789,7 @@ def test_namespace_pattern_validator_grandfathers_exact_prod_flink_applications(
     app_file.parent.mkdir(parents=True)
     write_yaml(app_file, [app])
 
-    result = run_validator("check_namespace_pattern.py", tmp_path)
+    result = run_approved_window_validator("check_namespace_pattern.py", tmp_path)
 
     assert result.returncode == 0, result.stdout
 
@@ -7817,7 +7832,7 @@ def test_namespace_pattern_validator_grandfathers_exact_flink_overlays(
     overlay_file.parent.mkdir(parents=True)
     write_yaml(overlay_file, [kustomization])
 
-    result = run_validator("check_namespace_pattern.py", tmp_path)
+    result = run_approved_window_validator("check_namespace_pattern.py", tmp_path)
 
     assert result.returncode == 0, result.stdout
 
@@ -7848,7 +7863,7 @@ def test_namespace_pattern_validator_does_not_grandfather_sibling_flink_overlay(
     overlay_file.parent.mkdir(parents=True)
     write_yaml(overlay_file, [kustomization])
 
-    result = run_validator("check_namespace_pattern.py", tmp_path)
+    result = run_approved_window_validator("check_namespace_pattern.py", tmp_path)
 
     assert result.returncode == 1, result.stdout
     assert "must be 'prod-flink'" in result.stdout
@@ -7901,7 +7916,7 @@ def test_namespace_pattern_validator_grandfathers_exact_superset_us_migration(
     overlay_file.parent.mkdir(parents=True)
     write_yaml(overlay_file, [overlay])
 
-    result = run_validator("check_namespace_pattern.py", tmp_path)
+    result = run_approved_window_validator("check_namespace_pattern.py", tmp_path)
 
     assert result.returncode == 0, result.stdout
 
@@ -7931,7 +7946,7 @@ def test_namespace_pattern_validator_rejects_superset_migration_siblings(
     wrong_cluster_file.parent.mkdir(parents=True)
     write_yaml(wrong_cluster_file, [app])
 
-    result = run_validator("check_namespace_pattern.py", tmp_path)
+    result = run_approved_window_validator("check_namespace_pattern.py", tmp_path)
 
     assert result.returncode == 1, result.stdout
     assert "namespace 'superset'" in result.stdout
@@ -7959,7 +7974,7 @@ def test_namespace_pattern_validator_rejects_superset_migration_siblings(
     sibling_file.parent.mkdir(parents=True)
     write_yaml(sibling_file, [sibling_overlay])
 
-    result = run_validator("check_namespace_pattern.py", tmp_path)
+    result = run_approved_window_validator("check_namespace_pattern.py", tmp_path)
 
     assert result.returncode == 1, result.stdout
     assert "namespace 'superset'" in result.stdout
@@ -8011,7 +8026,7 @@ def test_namespace_pattern_validator_grandfathers_exact_nature_chat_frontends(
     overlay_file.parent.mkdir(parents=True)
     write_yaml(overlay_file, [overlay])
 
-    result = run_validator("check_namespace_pattern.py", tmp_path)
+    result = run_approved_window_validator("check_namespace_pattern.py", tmp_path)
 
     assert result.returncode == 0, result.stdout
 
@@ -8045,7 +8060,7 @@ def test_namespace_pattern_validator_rejects_nature_chat_frontend_siblings(
     sibling_file.parent.mkdir(parents=True)
     write_yaml(sibling_file, [overlay])
 
-    result = run_validator("check_namespace_pattern.py", tmp_path)
+    result = run_approved_window_validator("check_namespace_pattern.py", tmp_path)
 
     assert result.returncode == 1, result.stdout
     assert "must be 'prod-nature-chat-frontend'" in result.stdout
@@ -8209,7 +8224,7 @@ def test_namespace_pattern_validator_accepts_micro_app_in_linked_worktree_with_l
     application_file.parent.mkdir(parents=True)
     write_yaml(application_file, [_micro_app_prod_application()])
 
-    result = run_validator("check_namespace_pattern.py", argocd_root)
+    result = run_approved_window_validator("check_namespace_pattern.py", argocd_root)
 
     assert result.returncode == 0, result.stdout
     assert "1 business app namespace(s) checked" in result.stdout
@@ -8620,8 +8635,8 @@ def test_namespace_pattern_validator_accepts_exact_micro_app_prod_identities(
     overlay_file.parent.mkdir(parents=True)
     write_yaml(overlay_file, [_micro_app_prod_kustomization()])
 
-    application_result = run_validator("check_namespace_pattern.py", argocd_root)
-    overlay_result = run_validator("check_namespace_pattern.py", source_root)
+    application_result = run_approved_window_validator("check_namespace_pattern.py", argocd_root)
+    overlay_result = run_approved_window_validator("check_namespace_pattern.py", source_root)
 
     assert application_result.returncode == 0, application_result.stdout
     assert overlay_result.returncode == 0, overlay_result.stdout
@@ -8734,7 +8749,7 @@ def test_namespace_pattern_validator_rejects_micro_app_prod_siblings(
     write_yaml(overlay_file, [_micro_app_prod_kustomization()])
 
     scan_root = source_root if identity.startswith("overlay") else argocd_root
-    result = run_validator("check_namespace_pattern.py", scan_root)
+    result = run_approved_window_validator("check_namespace_pattern.py", scan_root)
 
     assert result.returncode == 1, result.stdout
     assert expected in result.stdout
@@ -8762,8 +8777,8 @@ def test_normal_validators_accept_micro_app_prod_namespace_on_both_repo_sides(
         [_micro_app_prod_application()],
     )
 
-    source_result = run_validate_sh(overlay_dir, repo_context="app")
-    argocd_result = run_validate_sh(cluster_dir, repo_context="argocd-apps")
+    source_result = run_approved_window_validate_sh(overlay_dir, repo_context="app")
+    argocd_result = run_approved_window_validate_sh(cluster_dir, repo_context="argocd-apps")
 
     assert source_result.returncode == 0, source_result.stdout
     assert argocd_result.returncode == 0, argocd_result.stdout
@@ -8843,11 +8858,11 @@ def test_normal_validators_reject_micro_app_prod_repository_and_path_siblings(
     )
 
     results = (
-        run_validate_sh(unrelated_overlay, repo_context="app"),
-        run_validate_sh(wrong_source_cluster, repo_context="argocd-apps"),
-        run_validate_sh(nested_cluster, repo_context="argocd-apps"),
-        run_validate_sh(outer_source, repo_context="app"),
-        run_validate_sh(outer_argocd, repo_context="argocd-apps"),
+        run_approved_window_validate_sh(unrelated_overlay, repo_context="app"),
+        run_approved_window_validate_sh(wrong_source_cluster, repo_context="argocd-apps"),
+        run_approved_window_validate_sh(nested_cluster, repo_context="argocd-apps"),
+        run_approved_window_validate_sh(outer_source, repo_context="app"),
+        run_approved_window_validate_sh(outer_argocd, repo_context="argocd-apps"),
     )
 
     for result in results:
@@ -8874,7 +8889,7 @@ def test_argocd_application_validator_rejects_micro_app_prod_multi_source(
     ]
     write_yaml(cluster_dir / f"{MICRO_APP_APPLICATION}.yaml", [application])
 
-    result = run_validator("check_argocd_application.py", cluster_dir)
+    result = run_approved_window_validator("check_argocd_application.py", cluster_dir)
 
     assert result.returncode == 1, result.stdout
     assert "must not set spec.sources" in result.stdout
@@ -9159,8 +9174,8 @@ def test_namespace_pattern_validator_accepts_exact_state_machine_tke_identity(
     overlay_file.parent.mkdir(parents=True)
     write_yaml(overlay_file, [_state_machine_staging_cn_kustomization()])
 
-    application_result = run_validator("check_namespace_pattern.py", argocd_root)
-    overlay_result = run_validator("check_namespace_pattern.py", source_root)
+    application_result = run_approved_window_validator("check_namespace_pattern.py", argocd_root)
+    overlay_result = run_approved_window_validator("check_namespace_pattern.py", source_root)
 
     assert application_result.returncode == 0, application_result.stdout
     assert overlay_result.returncode == 0, overlay_result.stdout
@@ -9213,7 +9228,7 @@ def test_namespace_pattern_validator_rejects_state_machine_application_siblings(
     application_file.parent.mkdir(parents=True)
     write_yaml(application_file, [application])
 
-    result = run_validator("check_namespace_pattern.py", argocd_root)
+    result = run_approved_window_validator("check_namespace_pattern.py", argocd_root)
 
     assert result.returncode == 1, result.stdout
     expected_namespace = {
@@ -9257,7 +9272,7 @@ def test_namespace_pattern_validator_rejects_state_machine_overlay_siblings(
     overlay_file.parent.mkdir(parents=True)
     write_yaml(overlay_file, [kustomization])
 
-    result = run_validator("check_namespace_pattern.py", source_root)
+    result = run_approved_window_validator("check_namespace_pattern.py", source_root)
 
     assert result.returncode == 1, result.stdout
     expected_namespace = {
@@ -9390,6 +9405,7 @@ def test_namespace_exception_registry_is_exact_controlled_and_time_bounded() -> 
     assert set(registry) == {"controls", "applications", "kustomizations"}
     assert set(registry["controls"]) == {
         "nature-chat-frontend-prod-us-shared-namespace",
+        "vip-service-prod-us-shared-namespace",
         "micro-app-platform-prod-us-shared-namespace",
         "flywheel-shared-tenant-namespaces",
         "algo-390-staging-service-discovery-namespaces",
@@ -9759,7 +9775,7 @@ def test_namespace_pattern_validator_accepts_each_exact_gpu_390_identity(
     overlay_file.parent.mkdir(parents=True)
     write_yaml(overlay_file, [_gpu_inference_kustomization(namespace)])
 
-    result = run_validator("check_namespace_pattern.py", tmp_path)
+    result = run_approved_window_validator("check_namespace_pattern.py", tmp_path)
 
     assert result.returncode == 0, result.stdout
     assert "2 business app namespace(s) checked" in result.stdout
@@ -9794,7 +9810,7 @@ def test_namespace_pattern_validator_accepts_gpu_390_from_nested_scan_roots(
         "overlay": overlay_file.parent,
     }
 
-    result = run_validator(
+    result = run_approved_window_validator(
         "check_namespace_pattern.py",
         scan_roots[scan_root_kind],
     )
@@ -9819,7 +9835,7 @@ def test_namespace_pattern_validator_rejects_gpu_390_leading_sibling_as_root(
     overlay_file.parent.mkdir(parents=True)
     write_yaml(overlay_file, [_gpu_inference_kustomization(namespace)])
 
-    result = run_validator("check_namespace_pattern.py", sibling_root)
+    result = run_approved_window_validator("check_namespace_pattern.py", sibling_root)
 
     assert result.returncode == 1, result.stdout
     assert "must be 'staging-addx-gpu-inference'" in result.stdout
@@ -9839,7 +9855,7 @@ def test_namespace_pattern_validator_requires_git_root_for_gpu_390_exception(
     overlay_file.parent.mkdir(parents=True)
     write_yaml(overlay_file, [_gpu_inference_kustomization(namespace)])
 
-    result = run_validator("check_namespace_pattern.py", tmp_path)
+    result = run_approved_window_validator("check_namespace_pattern.py", tmp_path)
 
     assert result.returncode == 1, result.stdout
     assert "must be 'staging-addx-gpu-inference'" in result.stdout
@@ -9913,7 +9929,7 @@ def test_namespace_pattern_validator_rejects_gpu_390_identity_mismatch(
         overlay_file.parent.mkdir(parents=True)
         write_yaml(overlay_file, [kustomization])
 
-    result = run_validator("check_namespace_pattern.py", tmp_path)
+    result = run_approved_window_validator("check_namespace_pattern.py", tmp_path)
 
     assert result.returncode == 1, result.stdout
     assert "must be '" in result.stdout
@@ -9939,7 +9955,7 @@ def test_namespace_pattern_validator_accepts_each_gpu_inference_shared_applicati
         [_gpu_inference_shared_application(application_name, namespace)],
     )
 
-    result = run_validator("check_namespace_pattern.py", tmp_path)
+    result = run_approved_window_validator("check_namespace_pattern.py", tmp_path)
 
     assert result.returncode == 0, result.stdout
     assert "1 business app namespace(s) checked" in result.stdout
@@ -9960,7 +9976,7 @@ def test_namespace_pattern_validator_accepts_each_gpu_inference_shared_overlay(
     overlay_file.parent.mkdir(parents=True)
     write_yaml(overlay_file, [_gpu_inference_kustomization(namespace)])
 
-    result = run_validator("check_namespace_pattern.py", tmp_path)
+    result = run_approved_window_validator("check_namespace_pattern.py", tmp_path)
 
     assert image_app == "addx-gpu-inference"
     assert result.returncode == 0, result.stdout
@@ -9991,7 +10007,7 @@ def test_argocd_validator_accepts_each_gpu_inference_shared_application(
         ],
     )
 
-    result = run_validator("check_argocd_application.py", tmp_path)
+    result = run_approved_window_validator("check_argocd_application.py", tmp_path)
 
     assert result.returncode == 0, result.stdout
     assert "1 ArgoCD Application(s) checked" in result.stdout
@@ -10065,7 +10081,7 @@ def test_namespace_pattern_validator_rejects_gpu_inference_shared_mismatch(
         overlay_file.parent.mkdir(parents=True)
         write_yaml(overlay_file, [kustomization])
 
-    result = run_validator("check_namespace_pattern.py", tmp_path)
+    result = run_approved_window_validator("check_namespace_pattern.py", tmp_path)
 
     assert result.returncode == 1, result.stdout
     assert "must be '" in result.stdout
@@ -10117,7 +10133,7 @@ def test_argocd_validator_rejects_gpu_inference_controlled_name_mismatch(
     application_file.parent.mkdir(parents=True)
     write_yaml(application_file, [application])
 
-    result = run_validator("check_argocd_application.py", tmp_path)
+    result = run_approved_window_validator("check_argocd_application.py", tmp_path)
 
     assert result.returncode == 1, result.stdout
     assert f"name must be '{expected_app}-<env-keyword>'" in result.stdout
@@ -10149,7 +10165,7 @@ def test_namespace_pattern_validator_accepts_each_exact_flywheel_identity(
     overlay_file.parent.mkdir(parents=True)
     write_yaml(overlay_file, [_flywheel_kustomization(namespace)])
 
-    result = run_validator("check_namespace_pattern.py", tmp_path)
+    result = run_approved_window_validator("check_namespace_pattern.py", tmp_path)
 
     assert result.returncode == 0, result.stdout
     assert "2 business app namespace(s) checked" in result.stdout
@@ -10172,7 +10188,7 @@ def test_argocd_validator_accepts_each_exact_flywheel_identity(
         [_controlled_flywheel_argocd_application(target, namespace)],
     )
 
-    result = run_validator("check_argocd_application.py", tmp_path)
+    result = run_approved_window_validator("check_argocd_application.py", tmp_path)
 
     assert result.returncode == 0, result.stdout
     assert "1 ArgoCD Application(s) checked" in result.stdout
@@ -10266,7 +10282,7 @@ def test_argocd_validator_rejects_controlled_name_exception_identity_mismatch(
     app_file.parent.mkdir(parents=True)
     write_yaml(app_file, [app])
 
-    result = run_validator("check_argocd_application.py", tmp_path)
+    result = run_approved_window_validator("check_argocd_application.py", tmp_path)
 
     assert result.returncode == 1, result.stdout
     assert f"name must be '{expected_app}-<env-keyword>'" in result.stdout
@@ -10323,7 +10339,7 @@ def test_argocd_validator_controlled_name_exception_keeps_other_contracts_strict
     app_file.parent.mkdir(parents=True)
     write_yaml(app_file, [app])
 
-    result = run_validator("check_argocd_application.py", tmp_path)
+    result = run_approved_window_validator("check_argocd_application.py", tmp_path)
 
     assert result.returncode == 1, result.stdout
     assert expected_failure in result.stdout
@@ -10353,7 +10369,7 @@ def test_argocd_validator_does_not_inherit_builtin_namespace_grandfathers(
     app_file.parent.mkdir(parents=True)
     write_yaml(app_file, [app])
 
-    result = run_validator("check_argocd_application.py", tmp_path)
+    result = run_approved_window_validator("check_argocd_application.py", tmp_path)
 
     assert result.returncode == 1, result.stdout
     assert "name must be 'dvc-remote-<env-keyword>'" in result.stdout
@@ -10384,7 +10400,7 @@ def test_namespace_pattern_validator_rejects_flywheel_sibling_identity(
         overlay_file.parent.mkdir(parents=True)
         write_yaml(overlay_file, [_flywheel_kustomization(namespace)])
 
-    result = run_validator("check_namespace_pattern.py", tmp_path)
+    result = run_approved_window_validator("check_namespace_pattern.py", tmp_path)
 
     assert result.returncode == 1, result.stdout
     assert "must be 'staging-flywheel'" in result.stdout
@@ -10436,7 +10452,7 @@ def test_namespace_pattern_validator_rejects_flywheel_identity_dimension_mismatc
         overlay_file.parent.mkdir(parents=True)
         write_yaml(overlay_file, [kustomization])
 
-    result = run_validator("check_namespace_pattern.py", tmp_path)
+    result = run_approved_window_validator("check_namespace_pattern.py", tmp_path)
 
     assert result.returncode == 1, result.stdout
     assert "must be '" in result.stdout
@@ -10455,7 +10471,7 @@ def test_namespace_pattern_validator_rejects_nested_flywheel_application(
     app_file.parent.mkdir(parents=True)
     write_yaml(app_file, [_flywheel_application(target, namespace)])
 
-    result = run_validator("check_namespace_pattern.py", tmp_path)
+    result = run_approved_window_validator("check_namespace_pattern.py", tmp_path)
 
     assert result.returncode == 1, result.stdout
     assert "must be 'staging-flywheel'" in result.stdout
@@ -10486,6 +10502,250 @@ def _valid_controlled_namespace_registry() -> dict:
         ],
         "kustomizations": [],
     }
+
+
+def scoped_registry_validator(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    script: str,
+    registry_state: str,
+) -> tuple[ModuleType, list[Path]]:
+    """Use the real strict loader, but an isolated registry and fixed UTC date."""
+    monkeypatch.syspath_prepend(str(VALIDATOR_ROOT))
+    helper = importlib.import_module("_namespace_legacy_exceptions")
+    strict_load = helper.load_namespace_legacy_exceptions
+    registry_path = tmp_path / "registry.yaml"
+    registry = _valid_controlled_namespace_registry()
+    registry["applications"][0]["application_name"] = "demo-prod-us-legacy"
+    registry["controls"]["demo-shared-namespace"]["expires_on"] = "2030-01-01"
+    if registry_state == "expired":
+        registry["controls"]["demo-shared-namespace"]["expires_on"] = "2029-12-31"
+    elif registry_state == "invalid-schema":
+        registry["controls"]["demo-shared-namespace"].pop("owner")
+    if registry_state == "malformed":
+        registry_path.write_text("controls: [", encoding="utf-8")
+    else:
+        write_yaml(registry_path, [registry])
+    calls: list[Path] = []
+
+    def fixed_load(path: Path, *, today=None):
+        assert path == registry_path
+        calls.append(path)
+        return strict_load(path, today=date(2030, 1, 1))
+
+    monkeypatch.setattr(helper, "LEGACY_EXCEPTIONS_YAML", registry_path)
+    monkeypatch.setattr(helper, "load_namespace_legacy_exceptions", fixed_load)
+    module = load_validator_module(script)
+    assert calls == [], "import must not read the business exception registry"
+    return module, calls
+
+
+@pytest.mark.parametrize("script", ["check_namespace_pattern.py", "check_argocd_application.py"])
+@pytest.mark.parametrize("registry_state", ["expired", "malformed", "invalid-schema"])
+@pytest.mark.parametrize("input_kind", ["empty", "no-application", "infrastructure", "parse-error"])
+def test_registry_scope_skips_unrelated_input(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    script: str,
+    registry_state: str,
+    input_kind: str,
+) -> None:
+    validator, calls = scoped_registry_validator(tmp_path, monkeypatch, script, registry_state)
+    root = tmp_path / "input"
+    root.mkdir()
+    if input_kind == "no-application":
+        write_yaml(root / "configmap.yaml", [{"apiVersion": "v1", "kind": "ConfigMap"}])
+    elif input_kind == "infrastructure":
+        write_yaml(root / "application.yaml", [good_platform_application()])
+        write_yaml(root / "kustomization.yaml", [{
+            "apiVersion": "kustomize.config.k8s.io/v1beta1",
+            "kind": "Kustomization",
+            "namespace": "nacos-migration-rehearsal-us",
+            "images": [{"name": "nacos", "newName": "harbor.example/library/nacos-server"}],
+        }])
+    elif input_kind == "parse-error":
+        (root / "broken.yaml").write_text("metadata: [", encoding="utf-8")
+
+    assert validator.main([script, str(root)]) == (1 if input_kind == "parse-error" else 0)
+    output = capsys.readouterr()
+    assert ("FAIL:" if input_kind == "parse-error" else "PASS:") in output.out
+    assert calls == []
+
+
+@pytest.mark.parametrize("registry_state", ["expired", "malformed", "invalid-schema"])
+def test_registry_scope_preserves_infrastructure_core_checks(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    registry_state: str,
+) -> None:
+    script = "check_argocd_application.py"
+    validator, calls = scoped_registry_validator(tmp_path, monkeypatch, script, registry_state)
+    root = tmp_path / "input"
+    root.mkdir()
+    application = good_platform_application()
+    application["metadata"].pop("finalizers")
+    write_yaml(root / "application.yaml", [application])
+
+    assert validator.main([script, str(root)]) == 1
+    assert "missing finalizer" in capsys.readouterr().out
+    assert calls == []
+
+
+@pytest.mark.parametrize("script", ["check_namespace_pattern.py", "check_argocd_application.py"])
+@pytest.mark.parametrize("registry_state", ["expired", "malformed", "invalid-schema"])
+@pytest.mark.parametrize("input_kind", ["business", "mixed", "missing-namespace", "invalid-owner"])
+def test_registry_scope_still_fails_closed_for_business(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    script: str,
+    registry_state: str,
+    input_kind: str,
+) -> None:
+    validator, calls = scoped_registry_validator(tmp_path, monkeypatch, script, registry_state)
+    root = tmp_path / "input"
+    root.mkdir()
+    application = good_application()
+    application["spec"]["destination"] = {"namespace": "staging-my-app"}
+    if input_kind == "missing-namespace":
+        application["spec"].pop("destination")
+    elif input_kind == "invalid-owner":
+        application["metadata"]["labels"] = {"app": "NOT_KEBAB"}
+    if input_kind == "mixed":
+        write_yaml(root / "a-infrastructure.yaml", [good_platform_application()])
+    write_yaml(root / "z-business.yaml", [application])
+
+    with pytest.raises(SystemExit) as error:
+        validator.main([script, str(root)])
+    assert error.value.code == 2
+    assert len(calls) == 1
+    assert "FAIL:" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("registry_state", ["expired", "malformed", "invalid-schema"])
+@pytest.mark.parametrize("script", ["check_namespace_pattern.py", "check_argocd_application.py"])
+def test_registry_scope_preserves_each_business_opt_in(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    registry_state: str,
+    script: str,
+) -> None:
+    validator, calls = scoped_registry_validator(tmp_path, monkeypatch, script, registry_state)
+    root = tmp_path / "input"
+    root.mkdir()
+    if script == "check_namespace_pattern.py":
+        document = {
+            "apiVersion": "kustomize.config.k8s.io/v1beta1",
+            "kind": "Kustomization",
+            "namespace": "staging-my-app",
+            "images": [{"name": "app", "newName": "harbor.example/cicd/staging-us/my-app"}],
+        }
+        filename = "kustomization.yaml"
+    else:
+        document = good_platform_application()
+        # Partial ImageUpdater opt-in still needs the full business contract.
+        document["metadata"]["annotations"]["argocd-image-updater.argoproj.io/write-back-method"] = "argocd"
+        filename = "application.yaml"
+    write_yaml(root / filename, [document])
+
+    with pytest.raises(SystemExit) as error:
+        validator.main([script, str(root)])
+    assert error.value.code == 2
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize("script", ["check_namespace_pattern.py", "check_argocd_application.py"])
+def test_registry_scope_loads_once_and_retains_active_exact_exception(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    script: str,
+) -> None:
+    validator, calls = scoped_registry_validator(tmp_path, monkeypatch, script, "active")
+    root = tmp_path / "aws-example"
+    root.mkdir()
+    application = good_application()
+    application["metadata"]["name"] = "demo-prod-us-legacy"
+    application["metadata"]["annotations"] = {
+        key: value.replace("my-app", "demo")
+        for key, value in application["metadata"]["annotations"].items()
+    }
+    application["spec"]["destination"] = {"namespace": "prod-us"}
+    application["spec"]["source"]["kustomize"]["images"] = [
+        image.replace("my-app", "demo")
+        for image in application["spec"]["source"]["kustomize"]["images"]
+    ]
+    write_yaml(root / "application.yaml", [application, application])
+
+    assert validator.main([script, str(root)]) == 0
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize("registry_state", ["expired", "malformed", "invalid-schema"])
+def test_registry_scope_direct_legacy_lookup_cannot_skip_validation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    registry_state: str,
+) -> None:
+    validator, calls = scoped_registry_validator(
+        tmp_path, monkeypatch, "check_namespace_pattern.py", registry_state,
+    )
+    # Even a built-in grandfather must not bypass a broken controlled registry.
+    application = good_application()
+    root = tmp_path / "aws-002497567426-us-tech-service"
+    with pytest.raises(SystemExit) as error:
+        validator.is_legacy_namespace(
+            root, root / "flink.yaml", application, "flink-tech-service-us", "staging-us", "flink",
+        )
+    assert error.value.code == 2
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize("script", ["check_namespace_pattern.py", "check_argocd_application.py"])
+@pytest.mark.parametrize(("day", "expected"), [(1, 0), (2, 2)])
+def test_registry_scope_business_cli_enforces_expiry_boundary(
+    tmp_path: Path,
+    script: str,
+    day: int,
+    expected: int,
+) -> None:
+    registry = _valid_controlled_namespace_registry()
+    registry["controls"]["demo-shared-namespace"]["expires_on"] = "2030-01-01"
+    registry_path = tmp_path / "registry.yaml"
+    write_yaml(registry_path, [registry])
+    root = tmp_path / "input"
+    root.mkdir()
+    application = good_application()
+    application["spec"]["destination"] = {"namespace": "staging-my-app"}
+    write_yaml(root / "application.yaml", [application])
+    # Exercise __main__ and its real exit code in a separate process. Only the
+    # fixture registry and helper's clock are bound; no production time override.
+    harness = """
+import runpy, sys
+from datetime import datetime, timezone
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+import _namespace_legacy_exceptions as helper
+helper.LEGACY_EXCEPTIONS_YAML = Path(sys.argv[2])
+fixed_day = int(sys.argv[3])
+class FixedUtcDateTime:
+    @classmethod
+    def now(cls, requested_timezone):
+        assert requested_timezone is timezone.utc
+        return datetime(2030, 1, fixed_day, 12, tzinfo=timezone.utc)
+helper.datetime = FixedUtcDateTime
+sys.argv = sys.argv[4:]
+runpy.run_path(sys.argv[0], run_name="__main__")
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", harness, str(VALIDATOR_ROOT), str(registry_path),
+         str(day), str(VALIDATOR_ROOT / script), str(root)],
+        capture_output=True, text=True, check=False,
+    )
+    assert result.returncode == expected, result.stdout + result.stderr
+    if expected == 2:
+        assert "expired on 2030-01-01" in result.stderr
 
 
 def test_namespace_exception_registry_accepts_no_active_exceptions(
@@ -11190,7 +11450,7 @@ def test_namespace_pattern_validator_grandfathers_exact_dvc_gcp_target(
     overlay_file.parent.mkdir(parents=True)
     write_yaml(overlay_file, [overlay])
 
-    result = run_validator("check_namespace_pattern.py", tmp_path)
+    result = run_approved_window_validator("check_namespace_pattern.py", tmp_path)
 
     assert result.returncode == 0, result.stdout
 
@@ -11220,7 +11480,7 @@ def test_namespace_pattern_validator_rejects_dvc_gcp_sibling_target(
     overlay_file.parent.mkdir(parents=True)
     write_yaml(overlay_file, [overlay])
 
-    result = run_validator("check_namespace_pattern.py", tmp_path)
+    result = run_approved_window_validator("check_namespace_pattern.py", tmp_path)
 
     assert result.returncode == 1, result.stdout
     assert "must be 'staging-dvc-remote'" in result.stdout
@@ -11247,11 +11507,11 @@ def test_namespace_pattern_validator_allows_scoped_ga_objectbucket_overlay(
     bucket["metadata"]["namespace"] = "staging-us-gcp"
     write_yaml(overlay_dir / "objectbucket.yaml", [bucket])
 
-    result = run_validator("check_namespace_pattern.py", tmp_path)
+    result = run_approved_window_validator("check_namespace_pattern.py", tmp_path)
     assert result.returncode == 1, result.stdout
     assert "must be 'staging-my-app'" in result.stdout
 
-    result = run_validator(
+    result = run_approved_window_validator(
         "check_namespace_pattern.py",
         tmp_path,
         "--objectbucket-target",
@@ -11259,13 +11519,13 @@ def test_namespace_pattern_validator_allows_scoped_ga_objectbucket_overlay(
     )
     assert result.returncode == 0, result.stdout
 
-    result = run_validate_sh(
+    result = run_approved_window_validate_sh(
         tmp_path,
         objectbucket_target="us-tech-service-gke",
     )
     assert result.returncode == 0, result.stdout
 
-    result = run_validator(
+    result = run_approved_window_validator(
         "check_namespace_pattern.py",
         tmp_path,
         "--objectbucket-target",
@@ -11296,7 +11556,7 @@ def test_namespace_pattern_validator_rejects_unapproved_objectbucket_namespace(
     bucket["metadata"]["namespace"] = "staging-other-gcp"
     write_yaml(overlay_dir / "objectbucket.yaml", [bucket])
 
-    result = run_validator(
+    result = run_approved_window_validator(
         "check_namespace_pattern.py",
         tmp_path,
         "--objectbucket-target",
@@ -11331,7 +11591,7 @@ def test_namespace_pattern_validator_binds_env_label_to_phase(
     }
     write_yaml(tmp_path / "flink-staging-us.yaml", [app])
 
-    result = run_validator("check_namespace_pattern.py", tmp_path)
+    result = run_approved_window_validator("check_namespace_pattern.py", tmp_path)
 
     assert result.returncode == 1, result.stdout
     assert "must be 'staging-flink'" in result.stdout
@@ -11354,7 +11614,7 @@ def test_namespace_pattern_validator_accepts_env_label_phase(tmp_path: Path) -> 
     }
     write_yaml(tmp_path / "flink-staging-us.yaml", [app])
 
-    result = run_validator("check_namespace_pattern.py", tmp_path)
+    result = run_approved_window_validator("check_namespace_pattern.py", tmp_path)
 
     assert result.returncode == 0, result.stdout
 
@@ -11368,7 +11628,7 @@ def test_namespace_pattern_validator_ignores_platform_app(tmp_path: Path) -> Non
         "spec": {"destination": {"namespace": "kyverno"}},
     }
     write_yaml(tmp_path / "platform.yaml", [platform_app])
-    result = run_validator("check_namespace_pattern.py", tmp_path)
+    result = run_approved_window_validator("check_namespace_pattern.py", tmp_path)
     assert result.returncode == 0, result.stdout
     assert "nothing to check" in result.stdout
 
@@ -11403,7 +11663,7 @@ def test_argocd_validator_flags_variable_in_image_list(tmp_path: Path) -> None:
         "app=${IMAGE_BASE}/cicd/staging-us/my-app"
     )
     write_yaml(tmp_path / "app.yaml", [app])
-    result = run_validator("check_argocd_application.py", tmp_path)
+    result = run_approved_window_validator("check_argocd_application.py", tmp_path)
     assert result.returncode == 1, result.stdout
     assert "literal Harbor host" in result.stdout
 
@@ -12158,6 +12418,46 @@ def run_validator(
     )
 
 
+
+def run_approved_window_validator(
+    script: str,
+    directory: Path,
+    *extra_args: str,
+) -> subprocess.CompletedProcess[str]:
+    """Check historical contracts as approved on 2026-10-29, not admission today.
+
+    This opt-in test helper only binds the registry helper's UTC clock. The real
+    registry, strict loader and validator __main__ run unchanged. Current-date
+    admission and expiry tests must use their independent entry points.
+    """
+    if script not in {"check_namespace_pattern.py", "check_argocd_application.py"}:
+        raise ValueError("approved-window clock is limited to namespace/Application contracts")
+    harness = """
+import runpy, sys
+from datetime import datetime, timezone
+sys.path.insert(0, sys.argv[1])
+import _namespace_legacy_exceptions as helper
+class ApprovedWindowDateTime:
+    @classmethod
+    def now(cls, requested_timezone):
+        assert requested_timezone is timezone.utc
+        return datetime(2026, 10, 29, 12, tzinfo=timezone.utc)
+helper.datetime = ApprovedWindowDateTime
+sys.argv = sys.argv[2:]
+runpy.run_path(sys.argv[0], run_name="__main__")
+"""
+    return subprocess.run(
+        [sys.executable, "-c", harness, str(VALIDATOR_ROOT),
+         str(VALIDATOR_ROOT / script), str(directory), *extra_args],
+        text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False,
+    )
+
+
+def test_approved_window_validator_rejects_other_script(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="limited to namespace/Application"):
+        run_approved_window_validator("check_routes.py", tmp_path)
+
+
 def init_fake_repo(path: Path, project: str) -> Path:
     path.mkdir(parents=True)
     subprocess.run(["git", "init", "-q", str(path)], check=True)
@@ -12200,6 +12500,7 @@ def run_validate_sh(
     repo_context: str | None = None,
     platform_source: Path | None = None,
     objectbucket_target: str | None = None,
+    environment: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     command = ["bash", str(SKILL_ROOT / "validators" / "validate.sh")]
     if repo_context:
@@ -12215,7 +12516,67 @@ def run_validate_sh(
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         check=False,
+        env=environment,
     )
+
+
+@contextmanager
+def approved_window_python_environment():
+    """Only two exact validator paths receive the historical registry clock."""
+    approved_paths = [str(VALIDATOR_ROOT / script) for script in (
+        "check_namespace_pattern.py", "check_argocd_application.py",
+    )]
+    with TemporaryDirectory(prefix="approved-namespace-window-") as directory:
+        shim = Path(directory) / "python3"
+        shim.write_text(f"""#!{sys.executable}
+import os, runpy, sys
+from datetime import datetime, timezone
+if len(sys.argv) < 2 or sys.argv[1] not in {approved_paths!r}:
+    os.execv({sys.executable!r}, [{sys.executable!r}, *sys.argv[1:]])
+sys.path.insert(0, {str(VALIDATOR_ROOT)!r})
+import _namespace_legacy_exceptions as helper
+class ApprovedWindowDateTime:
+    @classmethod
+    def now(cls, requested_timezone):
+        assert requested_timezone is timezone.utc
+        return datetime(2026, 10, 29, 12, tzinfo=timezone.utc)
+helper.datetime = ApprovedWindowDateTime
+sys.argv = sys.argv[1:]
+runpy.run_path(sys.argv[0], run_name="__main__")
+""", encoding="utf-8")
+        shim.chmod(0o700)
+        yield {**os.environ, "PATH": f"{directory}{os.pathsep}{os.environ.get('PATH', '')}"}
+
+
+def run_approved_window_validate_sh(directory: Path, **kwargs) -> subprocess.CompletedProcess[str]:
+    """Explicit opt-in for historical business fixtures in the real shell chain."""
+    with approved_window_python_environment() as environment:
+        return run_validate_sh(directory, **kwargs, environment=environment)
+
+
+def test_approved_window_shell_shim_preserves_other_python_invocations(tmp_path: Path) -> None:
+    # A same-name script outside the two exact paths must keep its real clock,
+    # argv and exit code, just like unrelated validators and Python -c calls.
+    sibling = tmp_path / "check_namespace_pattern.py"
+    sibling.write_text(
+        f"import sys\nsys.path.insert(0, {str(VALIDATOR_ROOT)!r})\n"
+        "import _namespace_legacy_exceptions as helper\n"
+        "print(helper.datetime.__name__, sys.argv[1:])\nraise SystemExit(23)\n",
+        encoding="utf-8",
+    )
+    with approved_window_python_environment() as environment:
+        result = subprocess.run(
+            ["python3", str(sibling), "space argument", "--flag"],
+            env=environment, capture_output=True, text=True, check=False,
+        )
+        inline = subprocess.run(
+            ["python3", "-c", "print('unchanged')"],
+            env=environment, capture_output=True, text=True, check=False,
+        )
+    assert result.returncode == 23
+    assert result.stdout == "datetime ['space argument', '--flag']\n"
+    assert inline.returncode == 0
+    assert inline.stdout == "unchanged\n"
 
 
 def run_validate_delta(
@@ -16909,7 +17270,7 @@ def test_validate_sh_accepts_minimal_good_workspace(tmp_path: Path) -> None:
     write_yaml(tmp_path / "good-secrets.yaml", [good_external_secret(), good_push_secret()])
     write_yaml(tmp_path / "good-application.yaml", [good_application()])
 
-    result = run_validate_sh(tmp_path)
+    result = run_approved_window_validate_sh(tmp_path)
 
     assert result.returncode == 0, result.stdout
     assert "PASS: all validators succeeded" in result.stdout
@@ -17344,7 +17705,7 @@ def test_argocd_validator_requires_notifications(tmp_path: Path) -> None:
     annotations.pop("notifications.argoproj.io/subscribe.on-sync-failed.feishu-ops")
     write_yaml(tmp_path / "bad-application-notifications.yaml", [app])
 
-    result = run_validator("check_argocd_application.py", tmp_path)
+    result = run_approved_window_validator("check_argocd_application.py", tmp_path)
 
     assert result.returncode == 1
     assert "notifications.argoproj.io/subscribe.on-sync-failed.feishu-ops" in result.stdout
@@ -17360,23 +17721,23 @@ def test_argocd_validator_requires_prune_disabled_for_exact_state_machine_bridge
     app["spec"]["syncPolicy"]["automated"]["prune"] = False
     write_yaml(cluster / "state-machine-staging-cn.yaml", [app])
 
-    result = run_validator("check_argocd_application.py", cluster)
+    result = run_approved_window_validator("check_argocd_application.py", cluster)
 
     assert result.returncode == 0, result.stdout
-    result = run_validator("check_argocd_application.py", tmp_path)
+    result = run_approved_window_validator("check_argocd_application.py", tmp_path)
 
     assert result.returncode == 0, result.stdout
 
     app["spec"]["syncPolicy"]["automated"]["prune"] = True
     write_yaml(cluster / "state-machine-staging-cn.yaml", [app])
-    result = run_validator("check_argocd_application.py", cluster)
+    result = run_approved_window_validator("check_argocd_application.py", cluster)
 
     assert result.returncode == 1
     assert "spec.syncPolicy.automated.prune != false" in result.stdout
 
     app["spec"]["syncPolicy"]["automated"].pop("prune")
     write_yaml(cluster / "state-machine-staging-cn.yaml", [app])
-    result = run_validator("check_argocd_application.py", cluster)
+    result = run_approved_window_validator("check_argocd_application.py", cluster)
 
     assert result.returncode == 1
     assert "spec.syncPolicy.automated.prune != false" in result.stdout
@@ -17392,7 +17753,7 @@ def test_argocd_validator_prune_disabled_bridge_exception_is_exact_identity(
     app["spec"]["syncPolicy"]["automated"]["prune"] = False
     write_yaml(cluster / "state-machine-staging-cn.yaml", [app])
 
-    result = run_validator("check_argocd_application.py", cluster)
+    result = run_approved_window_validator("check_argocd_application.py", cluster)
 
     assert result.returncode == 1
     assert "spec.syncPolicy.automated.prune != true" in result.stdout
@@ -17404,7 +17765,7 @@ def test_argocd_validator_requires_empty_notification_values(tmp_path: Path) -> 
     app["metadata"]["annotations"][key] = "true"
     write_yaml(tmp_path / "bad-application-notification-value.yaml", [app])
 
-    result = run_validator("check_argocd_application.py", tmp_path)
+    result = run_approved_window_validator("check_argocd_application.py", tmp_path)
 
     assert result.returncode == 1
     assert f"metadata.annotations[{key}] must be an empty string" in result.stdout
@@ -17416,7 +17777,7 @@ def test_argocd_validator_platform_app_skips_image_updater_but_requires_notifica
     app = good_platform_application()
     write_yaml(tmp_path / "platform-application.yaml", [app])
 
-    result = run_validator("check_argocd_application.py", tmp_path)
+    result = run_approved_window_validator("check_argocd_application.py", tmp_path)
 
     assert result.returncode == 0, result.stdout
 
@@ -17425,7 +17786,7 @@ def test_argocd_validator_platform_app_skips_image_updater_but_requires_notifica
     )
     write_yaml(tmp_path / "platform-application.yaml", [app])
 
-    result = run_validator("check_argocd_application.py", tmp_path)
+    result = run_approved_window_validator("check_argocd_application.py", tmp_path)
 
     assert result.returncode == 1, result.stdout
     assert "notifications.argoproj.io/subscribe.on-health-degraded.feishu-ops" in result.stdout
@@ -17438,7 +17799,7 @@ def test_argocd_validator_rejects_retired_platform_writeback_labels(
     app = good_platform_writeback_application()
     write_yaml(tmp_path / "platform-writeback-application.yaml", [app])
 
-    result = run_validator("check_argocd_application.py", tmp_path)
+    result = run_approved_window_validator("check_argocd_application.py", tmp_path)
 
     assert result.returncode == 1, result.stdout
     assert "retired image-writeback.addx.io labels are forbidden" in result.stdout
@@ -17467,7 +17828,7 @@ def test_argocd_validator_rejects_invalid_platform_writeback_labels(
         app["metadata"]["labels"][label] = value
     write_yaml(tmp_path / "bad-platform-writeback-application.yaml", [app])
 
-    result = run_validator("check_argocd_application.py", tmp_path)
+    result = run_approved_window_validator("check_argocd_application.py", tmp_path)
 
     assert result.returncode == 1, result.stdout
     assert "retired image-writeback.addx.io labels are forbidden" in result.stdout
@@ -17480,7 +17841,7 @@ def test_argocd_validator_rejects_dual_image_updater_owner(tmp_path: Path) -> No
     ] = "app=harbor.example.com/cicd/staging-us/my-app"
     write_yaml(tmp_path / "dual-image-updater-owner.yaml", [app])
 
-    result = run_validator("check_argocd_application.py", tmp_path)
+    result = run_approved_window_validator("check_argocd_application.py", tmp_path)
 
     assert result.returncode == 1, result.stdout
     assert "retired image-writeback.addx.io labels are forbidden" in result.stdout
@@ -17511,7 +17872,7 @@ def test_argocd_validator_partial_image_updater_opt_in_fails(
     app["metadata"]["annotations"][annotation_key] = annotation_value
     write_yaml(tmp_path / "partial-image-updater.yaml", [app])
 
-    result = run_validator("check_argocd_application.py", tmp_path)
+    result = run_approved_window_validator("check_argocd_application.py", tmp_path)
 
     assert result.returncode == 1, result.stdout
     assert expected in result.stdout
@@ -17529,7 +17890,7 @@ def test_argocd_validator_accepts_dynamic_plugin_alias(tmp_path: Path) -> None:
     )
     write_yaml(tmp_path / "plugin-application.yaml", [app])
 
-    result = run_validator("check_argocd_application.py", tmp_path)
+    result = run_approved_window_validator("check_argocd_application.py", tmp_path)
 
     assert result.returncode == 0, result.stdout
 
@@ -17544,7 +17905,7 @@ def test_argocd_validator_rejects_invalid_force_update_value(tmp_path: Path) -> 
     ] = "false"
     write_yaml(tmp_path / "bad-force-update.yaml", [app])
 
-    result = run_validator("check_argocd_application.py", tmp_path)
+    result = run_approved_window_validator("check_argocd_application.py", tmp_path)
 
     assert result.returncode == 1, result.stdout
     assert "status.summary.images exception is justified" in result.stdout
@@ -17561,7 +17922,7 @@ def test_argocd_validator_accepts_platform_ops_runtime_image_path(
     app["spec"]["project"] = "platform-ops-runtime"
     write_yaml(tmp_path / "platform-ops-runtime-application.yaml", [app])
 
-    result = run_validator("check_argocd_application.py", tmp_path)
+    result = run_approved_window_validator("check_argocd_application.py", tmp_path)
 
     assert result.returncode == 0, result.stdout
 
@@ -17575,7 +17936,7 @@ def test_argocd_validator_keeps_business_image_path_strict(tmp_path: Path) -> No
     app["spec"]["project"] = "app-runtime"
     write_yaml(tmp_path / "business-application-with-platform-path.yaml", [app])
 
-    result = run_validator("check_argocd_application.py", tmp_path)
+    result = run_approved_window_validator("check_argocd_application.py", tmp_path)
 
     assert result.returncode == 1, result.stdout
     assert "cicd/<env>-<region>/<app>" in result.stdout
@@ -17590,7 +17951,7 @@ def test_argocd_validator_requires_exact_platform_target_name(tmp_path: Path) ->
     app["spec"]["project"] = "platform-ops-runtime"
     write_yaml(tmp_path / "wrong-platform-target-name.yaml", [app])
 
-    result = run_validator("check_argocd_application.py", tmp_path)
+    result = run_approved_window_validator("check_argocd_application.py", tmp_path)
 
     assert result.returncode == 1, result.stdout
     assert "name must be 'buildbuddy-sg-devops' from metadata.labels" in result.stdout
@@ -17604,7 +17965,7 @@ def test_argocd_validator_requires_platform_target_labels(tmp_path: Path) -> Non
     app["spec"]["project"] = "platform-ops-runtime"
     write_yaml(tmp_path / "platform-target-without-labels.yaml", [app])
 
-    result = run_validator("check_argocd_application.py", tmp_path)
+    result = run_approved_window_validator("check_argocd_application.py", tmp_path)
 
     assert result.returncode == 1, result.stdout
     assert "require non-empty metadata.labels.app and metadata.labels.env" in result.stdout
@@ -17626,7 +17987,7 @@ def test_argocd_validator_accepts_multiple_dynamic_aliases(tmp_path: Path) -> No
     )
     write_yaml(tmp_path / "multi-image-application.yaml", [app])
 
-    result = run_validator("check_argocd_application.py", tmp_path)
+    result = run_approved_window_validator("check_argocd_application.py", tmp_path)
 
     assert result.returncode == 0, result.stdout
 
@@ -17646,7 +18007,7 @@ def test_argocd_validator_accepts_space_after_image_list_comma(tmp_path: Path) -
     )
     write_yaml(tmp_path / "spaced-multi-image-application.yaml", [app])
 
-    result = run_validator("check_argocd_application.py", tmp_path)
+    result = run_approved_window_validator("check_argocd_application.py", tmp_path)
 
     assert result.returncode == 0, result.stdout
 
@@ -17670,7 +18031,7 @@ def test_argocd_validator_requires_contract_for_each_alias(tmp_path: Path) -> No
     )
     write_yaml(tmp_path / "missing-frontend-contract.yaml", [app])
 
-    result = run_validator("check_argocd_application.py", tmp_path)
+    result = run_approved_window_validator("check_argocd_application.py", tmp_path)
 
     assert result.returncode == 1, result.stdout
     assert "argocd-image-updater.argoproj.io/frontend.platforms" in result.stdout
@@ -17697,7 +18058,7 @@ def test_argocd_validator_rejects_missing_recovery_seed(tmp_path: Path) -> None:
     }
     write_yaml(tmp_path / "competing-frontend-seed.yaml", [app])
 
-    result = run_validator("check_argocd_application.py", tmp_path)
+    result = run_approved_window_validator("check_argocd_application.py", tmp_path)
 
     assert result.returncode == 1, result.stdout
     assert "missing spec.source.kustomize.images recovery seed" in result.stdout
@@ -17727,7 +18088,7 @@ def test_argocd_validator_rejects_unsafe_allow_tags(
     ] = allow_tags
     write_yaml(tmp_path / "unsafe-allow-tags.yaml", [app])
 
-    result = run_validator("check_argocd_application.py", tmp_path)
+    result = run_approved_window_validator("check_argocd_application.py", tmp_path)
 
     assert result.returncode == 1, result.stdout
     assert "allows only 7..40 lowercase hex SHA characters" in result.stdout
@@ -17743,7 +18104,7 @@ def test_argocd_validator_accepts_stricter_sha_allow_tags(tmp_path: Path) -> Non
     ] = "regexp:^[a-f0-9]{40}$"
     write_yaml(tmp_path / "strict-allow-tags.yaml", [app])
 
-    result = run_validator("check_argocd_application.py", tmp_path)
+    result = run_approved_window_validator("check_argocd_application.py", tmp_path)
 
     assert result.returncode == 0, result.stdout
 
@@ -17759,7 +18120,7 @@ def test_argocd_validator_accepts_exact_sha_allow_tags(tmp_path: Path) -> None:
     ] = f"regexp:^{sha}$"
     write_yaml(tmp_path / "exact-allow-tags.yaml", [app])
 
-    result = run_validator("check_argocd_application.py", tmp_path)
+    result = run_approved_window_validator("check_argocd_application.py", tmp_path)
 
     assert result.returncode == 0, result.stdout
 
@@ -17792,7 +18153,7 @@ def test_business_rollback_exact_pins_accept_matching_image_set(
     app = business_rollback_pinned_application(alias_count)
     write_yaml(tmp_path / "rollback-application.yaml", [app])
 
-    result = run_validator("check_argocd_application.py", tmp_path)
+    result = run_approved_window_validator("check_argocd_application.py", tmp_path)
 
     assert result.returncode == 0, result.stdout
 
@@ -17806,7 +18167,7 @@ def test_business_rollback_exact_pin_rejects_mismatched_image_seed(
     seeds[changed_index] = seeds[changed_index].rsplit(":", 1)[0] + ":" + "c" * 40
     write_yaml(tmp_path / "rollback-application.yaml", [app])
 
-    result = run_validator("check_argocd_application.py", tmp_path)
+    result = run_approved_window_validator("check_argocd_application.py", tmp_path)
 
     assert result.returncode == 1, result.stdout
     assert "image seed tag must match the exact SHA pinned by allow-tags" in result.stdout
@@ -17822,7 +18183,7 @@ def test_business_rollback_second_alias_rejects_unsafe_tag_policy(
     ] = allow_tags
     write_yaml(tmp_path / "rollback-application.yaml", [app])
 
-    result = run_validator("check_argocd_application.py", tmp_path)
+    result = run_approved_window_validator("check_argocd_application.py", tmp_path)
 
     assert result.returncode == 1, result.stdout
     assert "worker.allow-tags" in result.stdout
@@ -17843,7 +18204,7 @@ def test_argocd_validator_rejects_retired_git_target(
     ] = branch
     write_yaml(tmp_path / "non-branch-git-target.yaml", [app])
 
-    result = run_validator("check_argocd_application.py", tmp_path)
+    result = run_approved_window_validator("check_argocd_application.py", tmp_path)
 
     assert result.returncode == 1, result.stdout
     assert "belongs to the retired Git write-back contract" in result.stdout
@@ -17859,7 +18220,7 @@ def test_argocd_validator_rejects_orphan_alias_annotation(tmp_path: Path) -> Non
     ] = "newest-build"
     write_yaml(tmp_path / "orphan-alias.yaml", [app])
 
-    result = run_validator("check_argocd_application.py", tmp_path)
+    result = run_approved_window_validator("check_argocd_application.py", tmp_path)
 
     assert result.returncode == 1, result.stdout
     assert "alias 'ghost' which is absent from image-list" in result.stdout
@@ -17872,7 +18233,7 @@ def test_argocd_validator_requires_target_name_for_dynamic_alias(tmp_path: Path)
     )
     write_yaml(tmp_path / "bad-dynamic-target-name.yaml", [app])
 
-    result = run_validator("check_argocd_application.py", tmp_path)
+    result = run_approved_window_validator("check_argocd_application.py", tmp_path)
 
     assert result.returncode == 1, result.stdout
     assert "must end with '-<env-keyword>'" in result.stdout
@@ -17886,7 +18247,7 @@ def test_argocd_validator_uses_app_label_for_dynamic_target_name(tmp_path: Path)
     app["metadata"]["labels"] = {"app": "reportportal"}
     write_yaml(tmp_path / "wrong-dynamic-owner.yaml", [app])
 
-    result = run_validator("check_argocd_application.py", tmp_path)
+    result = run_approved_window_validator("check_argocd_application.py", tmp_path)
 
     assert result.returncode == 1, result.stdout
     assert "name must be 'reportportal-<env-keyword>'" in result.stdout
@@ -17932,7 +18293,7 @@ def test_argocd_validator_rejects_malformed_image_list(
     ] = image_list
     write_yaml(tmp_path / "malformed-image-list.yaml", [app])
 
-    result = run_validator("check_argocd_application.py", tmp_path)
+    result = run_approved_window_validator("check_argocd_application.py", tmp_path)
 
     assert result.returncode == 1, result.stdout
     assert expected in result.stdout
@@ -17947,7 +18308,7 @@ def test_argocd_validator_rejects_application_name_unrelated_to_app(
     app["metadata"]["name"] = "totally-unrelated-name"
     write_yaml(tmp_path / "bad-application-name.yaml", [app])
 
-    result = run_validator("check_argocd_application.py", tmp_path)
+    result = run_approved_window_validator("check_argocd_application.py", tmp_path)
 
     assert result.returncode == 1
     assert "name must be 'my-app-<env-keyword>'" in result.stdout
@@ -17962,7 +18323,7 @@ def test_argocd_validator_rejects_bare_app_name_without_env_keyword(
     app["metadata"]["name"] = "my-app"
     write_yaml(tmp_path / "bad-application-bare.yaml", [app])
 
-    result = run_validator("check_argocd_application.py", tmp_path)
+    result = run_approved_window_validator("check_argocd_application.py", tmp_path)
 
     assert result.returncode == 1
     assert "name must be 'my-app-<env-keyword>'" in result.stdout
@@ -17974,7 +18335,7 @@ def test_argocd_validator_rejects_invalid_env_keyword_suffix(tmp_path: Path) -> 
     app["metadata"]["name"] = "my-app-staging-zz"
     write_yaml(tmp_path / "bad-application-kw.yaml", [app])
 
-    result = run_validator("check_argocd_application.py", tmp_path)
+    result = run_approved_window_validator("check_argocd_application.py", tmp_path)
 
     assert result.returncode == 1
     assert "name must be 'my-app-<env-keyword>'" in result.stdout
@@ -18105,7 +18466,7 @@ def test_argocd_validator_rejects_ignored_external_secret_annotations(
     ]
     write_yaml(tmp_path / "bad-application-ignore-es-annotations.yaml", [app])
 
-    result = run_validator("check_argocd_application.py", tmp_path)
+    result = run_approved_window_validator("check_argocd_application.py", tmp_path)
 
     assert result.returncode == 1
     assert "must not ignore ExternalSecret /metadata/annotations" in result.stdout
@@ -18125,7 +18486,7 @@ def test_argocd_validator_reports_ignore_rule_even_without_automated(
     ]
     write_yaml(tmp_path / "bad-application-no-auto-ignore.yaml", [app])
 
-    result = run_validator("check_argocd_application.py", tmp_path)
+    result = run_approved_window_validator("check_argocd_application.py", tmp_path)
 
     assert result.returncode == 1
     assert "missing spec.syncPolicy.automated" in result.stdout
@@ -18664,7 +19025,7 @@ def test_argocd_validator_rejects_flat_cicd_path(tmp_path: Path) -> None:
             }
         ],
     )
-    result = run_validator("check_argocd_application.py", tmp_path)
+    result = run_approved_window_validator("check_argocd_application.py", tmp_path)
     assert result.returncode == 1
     assert "cicd/<env>-<region>/<app>" in result.stdout
 
@@ -21632,3 +21993,207 @@ def test_linode_platform_vault_references(tmp_path: Path, key: str, accepted: bo
     write_yaml(tmp_path / "linode.yaml", [external_secret_with_vault_keys([key])])
     result = run_validator("check_vault_paths.py", tmp_path)
     assert (result.returncode == 0) == accepted, result.stdout
+
+
+def _vip_prod_us_application() -> dict:
+    app = good_application()
+    app["metadata"]["name"] = "vip-service-prod-us"
+    app["metadata"]["namespace"] = "argo-cd"
+    app["metadata"]["labels"] = {"app": "vip-service", "env": "prod-us"}
+    app["metadata"]["annotations"]["argocd-image-updater.argoproj.io/image-list"] = (
+        "app=harbor-30257-us-prod.addx.live/cicd/prod-us/vip-service"
+    )
+    app["metadata"]["annotations"]["argocd-image-updater.argoproj.io/app.kustomize.image-name"] = "vip-service"
+    app["spec"]["project"] = "app-data-plane"
+    app["spec"]["destination"] = {"server": "https://kubernetes.default.svc", "namespace": "prod-us"}
+    app["spec"]["source"] = {
+        "repoURL": "https://gitlab.addx.ai/CLOUD/vip-service.git",
+        "targetRevision": "master",
+        "path": "k8s/overlays/prod-us",
+        "kustomize": {"images": ["vip-service=harbor-30257-us-prod.addx.live/cicd/prod-us/vip-service:6bca658926ee65fac89715aa7be492a8426a5af9"]},
+    }
+    return app
+
+
+def _vip_prod_us_kustomization() -> dict:
+    return {
+        "apiVersion": "kustomize.config.k8s.io/v1beta1",
+        "kind": "Kustomization",
+        "namespace": "prod-us",
+        "images": [{"name": "vip-service", "newName": "harbor-30257-us-prod.addx.live/cicd/prod-us/vip-service"}],
+    }
+
+
+def test_vip_prod_us_exception_exact_application_and_overlay(tmp_path: Path) -> None:
+    root = _git_repo_with_origin(tmp_path / "argocd-apps", "git@gitlab.addx.ai:DEV/argocd-apps.git")
+    file = root / "aws-302571458622-us-prod" / "vip-service-prod-us.yaml"
+    file.parent.mkdir(parents=True)
+    write_yaml(file, [_vip_prod_us_application()])
+    source = _git_repo_with_origin(tmp_path / "vip-service", "git@gitlab.addx.ai:CLOUD/vip-service.git")
+    overlay = source / "k8s" / "overlays" / "prod-us" / "kustomization.yaml"
+    overlay.parent.mkdir(parents=True)
+    write_yaml(overlay, [_vip_prod_us_kustomization()])
+    for directory in (root, source):
+        result = run_approved_window_validator("check_namespace_pattern.py", directory)
+        assert result.returncode == 0, result.stdout
+
+
+@pytest.mark.parametrize("identity", ["cluster", "application", "source_repo", "source_path", "manifest_repo", "overlay_repo", "overlay_path"])
+def test_vip_prod_us_exception_rejects_sibling_identities(tmp_path: Path, identity: str) -> None:
+    app = _vip_prod_us_application()
+    cluster = "aws-302571458622-us-prod"
+    name = "vip-service-prod-us"
+    argocd_origin = "git@gitlab.addx.ai:DEV/argocd-apps.git"
+    source_origin = "git@gitlab.addx.ai:CLOUD/vip-service.git"
+    overlay_parts = ("k8s", "overlays", "prod-us")
+    if identity == "cluster":
+        cluster = "aws-740315635167-eu-prod"
+    elif identity == "application":
+        name = "vip-service-sibling-prod-us"
+        app["metadata"]["name"] = name
+    elif identity == "source_repo":
+        app["spec"]["source"]["repoURL"] = "https://gitlab.addx.ai/OTHER/vip-service.git"
+    elif identity == "source_path":
+        app["spec"]["source"]["path"] = "k8s/overlays/sibling"
+    elif identity == "manifest_repo":
+        argocd_origin = "git@gitlab.addx.ai:OTHER/argocd-apps.git"
+    elif identity == "overlay_repo":
+        source_origin = "git@gitlab.addx.ai:OTHER/vip-service.git"
+    elif identity == "overlay_path":
+        overlay_parts = ("k8s", "overlays", "sibling")
+    root = _git_repo_with_origin(tmp_path / "argocd-apps", argocd_origin)
+    file = root / cluster / f"{name}.yaml"
+    file.parent.mkdir(parents=True)
+    write_yaml(file, [app])
+    source = _git_repo_with_origin(tmp_path / "vip-service", source_origin)
+    overlay = source.joinpath(*overlay_parts, "kustomization.yaml")
+    overlay.parent.mkdir(parents=True)
+    write_yaml(overlay, [_vip_prod_us_kustomization()])
+    result = run_approved_window_validator("check_namespace_pattern.py", source if identity.startswith("overlay") else root)
+    assert result.returncode == 1, result.stdout
+    assert "must be 'prod-vip-service'" in result.stdout
+
+
+@pytest.mark.parametrize("finalizers", [None, [], "omitted"])
+def test_vip_finalizer_grandfather_accepts_exact_existing_identity(tmp_path: Path, finalizers: object) -> None:
+    root = _git_repo_with_origin(tmp_path / "argocd-apps", "git@gitlab.addx.ai:DEV/argocd-apps.git")
+    file = root / "aws-302571458622-us-prod" / "vip-service-prod-us.yaml"
+    file.parent.mkdir(parents=True)
+    app = _vip_prod_us_application()
+    if finalizers == "omitted":
+        del app["metadata"]["finalizers"]
+    else:
+        app["metadata"]["finalizers"] = finalizers
+    write_yaml(file, [app])
+    result = run_approved_window_validator("check_argocd_application.py", root)
+    assert result.returncode == 0, result.stdout
+
+
+@pytest.mark.parametrize("identity", ["cluster", "application", "source_repo", "source_path", "manifest_repo", "project", "namespace", "server", "revision", "app_label", "image", "control_namespace", "other_finalizer", "false_finalizer", "string_finalizer", "dict_finalizer"])
+def test_vip_finalizer_grandfather_rejects_other_identities(tmp_path: Path, identity: str) -> None:
+    app = _vip_prod_us_application()
+    del app["metadata"]["finalizers"]
+    cluster = "aws-302571458622-us-prod"
+    name = "vip-service-prod-us"
+    origin = "git@gitlab.addx.ai:DEV/argocd-apps.git"
+    if identity == "cluster": cluster = "aws-740315635167-eu-prod"
+    elif identity == "application":
+        name = "vip-service-sibling-prod-us"
+        app["metadata"]["name"] = name
+    elif identity == "source_repo": app["spec"]["source"]["repoURL"] = "https://gitlab.addx.ai/OTHER/vip-service.git"
+    elif identity == "source_path": app["spec"]["source"]["path"] = "k8s/overlays/sibling"
+    elif identity == "manifest_repo": origin = "git@gitlab.addx.ai:OTHER/argocd-apps.git"
+    elif identity == "project": app["spec"]["project"] = "app-runtime"
+    elif identity == "namespace": app["spec"]["destination"]["namespace"] = "prod-vip-service"
+    elif identity == "server": app["spec"]["destination"]["server"] = "https://example.invalid"
+    elif identity == "revision": app["spec"]["source"]["targetRevision"] = "staging"
+    elif identity == "app_label": app["metadata"]["labels"]["app"] = "vip-service-other"
+    elif identity == "image": app["metadata"]["annotations"]["argocd-image-updater.argoproj.io/image-list"] = "app=harbor.example.com/cicd/prod-us/other"
+    elif identity == "control_namespace": app["metadata"]["namespace"] = "other"
+    elif identity == "other_finalizer": app["metadata"]["finalizers"] = ["unrelated.example/finalizer"]
+    elif identity == "false_finalizer": app["metadata"]["finalizers"] = False
+    elif identity == "string_finalizer": app["metadata"]["finalizers"] = ""
+    elif identity == "dict_finalizer": app["metadata"]["finalizers"] = {}
+    root = _git_repo_with_origin(tmp_path / "argocd-apps", origin)
+    file = root / cluster / f"{name}.yaml"
+    file.parent.mkdir(parents=True)
+    write_yaml(file, [app])
+    result = run_approved_window_validator("check_argocd_application.py", root)
+    assert result.returncode == 1, result.stdout
+    assert "missing finalizer [resources-finalizer.argocd.argoproj.io]" in result.stdout
+
+
+def test_vip_finalizer_grandfather_keeps_other_contracts(tmp_path: Path) -> None:
+    root = _git_repo_with_origin(tmp_path / "argocd-apps", "git@gitlab.addx.ai:DEV/argocd-apps.git")
+    file = root / "aws-302571458622-us-prod" / "vip-service-prod-us.yaml"
+    file.parent.mkdir(parents=True)
+    app = _vip_prod_us_application()
+    del app["metadata"]["finalizers"]
+    app["spec"]["syncPolicy"]["automated"]["selfHeal"] = False
+    write_yaml(file, [app])
+    result = run_approved_window_validator("check_argocd_application.py", root)
+    assert result.returncode == 1, result.stdout
+    assert "spec.syncPolicy.automated.selfHeal != true" in result.stdout
+    assert "missing finalizer" not in result.stdout
+
+
+def test_vip_exception_expires_on_last_valid_utc_date(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    load_validator_module("check_namespace_pattern.py")
+    helper = importlib.import_module("_namespace_legacy_exceptions")
+    data = load_yaml(REFERENCE_ROOT / "data" / "namespace-legacy-exceptions.yaml")
+    key = "vip-service-prod-us-shared-namespace"
+    isolated = {
+        "controls": {key: data["controls"][key]},
+        "applications": [item for item in data["applications"] if item["exception_id"] == key],
+        "kustomizations": [item for item in data["kustomizations"] if item["exception_id"] == key],
+    }
+    registry = tmp_path / "registry.yaml"
+    write_yaml(registry, [isolated])
+    apps, _ = helper.load_namespace_legacy_exceptions(registry, today=date(2026, 11, 29))
+    assert any(item[:4] == ("aws-302571458622-us-prod", "vip-service-prod-us", "prod-us", "vip-service") for item in apps)
+    # Main currently rejects an expired registry at load; dependent !1340
+    # changes this to reject on an exact identity match. Both must reject VIP.
+    try:
+        expired_apps, _ = helper.load_namespace_legacy_exceptions(registry, today=date(2026, 11, 30))
+    except SystemExit as error:
+        assert error.code == 2
+    else:
+        root = _git_repo_with_origin(tmp_path / "argocd-apps", "git@gitlab.addx.ai:DEV/argocd-apps.git")
+        file = root / "aws-302571458622-us-prod" / "vip-service-prod-us.yaml"
+        file.parent.mkdir(parents=True)
+        app = _vip_prod_us_application()
+        write_yaml(file, [app])
+        with pytest.raises(SystemExit) as error:
+            helper.application_matches_exception(file, root, "vip-service-prod-us", "prod-us", "vip-service", expired_apps, app)
+        assert error.value.code == 2
+    assert "expired" in capsys.readouterr().err
+
+
+def test_vip_finalizer_validator_rejects_expired_control(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    validator = load_validator_module("check_argocd_application.py")
+    helper = importlib.import_module("_namespace_legacy_exceptions")
+    data = load_yaml(REFERENCE_ROOT / "data" / "namespace-legacy-exceptions.yaml")
+    key = "vip-service-prod-us-shared-namespace"
+    registry = tmp_path / "registry.yaml"
+    write_yaml(registry, [{
+        "controls": {key: data["controls"][key]},
+        "applications": [item for item in data["applications"] if item["exception_id"] == key],
+        "kustomizations": [item for item in data["kustomizations"] if item["exception_id"] == key],
+    }])
+    monkeypatch.setattr(validator, "LEGACY_EXCEPTIONS_YAML", registry)
+    class ExpiredClock:
+        @classmethod
+        def now(cls, requested_timezone):
+            assert requested_timezone is timezone.utc
+            return datetime(2026, 11, 30, 12, tzinfo=timezone.utc)
+    monkeypatch.setattr(helper, "datetime", ExpiredClock)
+    root = _git_repo_with_origin(tmp_path / "argocd-apps", "git@gitlab.addx.ai:DEV/argocd-apps.git")
+    file = root / "aws-302571458622-us-prod" / "vip-service-prod-us.yaml"
+    file.parent.mkdir(parents=True)
+    app = _vip_prod_us_application()
+    del app["metadata"]["finalizers"]
+    write_yaml(file, [app])
+    with pytest.raises(SystemExit) as error:
+        validator.main(["check_argocd_application.py", str(root)])
+    assert error.value.code == 2
+    assert "expired" in capsys.readouterr().err

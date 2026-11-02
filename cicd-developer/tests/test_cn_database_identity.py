@@ -15,18 +15,22 @@ COMPOSITION = "database.cn-staging.platform.addx.io"
 FIXTURES = SKILL / "tests/fixtures/cn-postgres-identity"
 
 
-def revision(publication=False):
-    filename = "publication.json" if publication else "sql-only.json"
-    spec = json.loads((FIXTURES / filename).read_text())["spec"]
+KINDS = ("sql-only", "publication", "purpose", "purpose-publication")
+
+
+def revision(publication=False, kind=None):
+    kind = kind or ("publication" if publication else "sql-only")
+    number = KINDS.index(kind) + 1
+    spec = json.loads((FIXTURES / f"{kind}.json").read_text())["spec"]
     return {
         "apiVersion": "apiextensions.crossplane.io/v1",
         "kind": "CompositionRevision",
         "metadata": {
-            "name": COMPOSITION + ("-test2" if publication else "-test1"),
+            "name": COMPOSITION + f"-test{number}",
             "uid": "synthetic-revision-for-parser-tests",
             "labels": {"crossplane.io/composition-name": COMPOSITION},
         },
-        "spec": {**spec, "revision": 2 if publication else 1},
+        "spec": {**spec, "revision": number},
     }
 
 
@@ -274,4 +278,108 @@ def test_cn_accepts_canonical_snake_app_without_publication(
     value["metadata"]["namespace"] = "staging-billing-api"
     value["spec"]["app"] = "billing_api"
     result = run(tmp_path, [value], evidence=revisions(revision(publication_revision)))
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def purpose_claim(kind, purpose="spicedb", app="micro_app_platform", publish=False):
+    value = claim()
+    value["metadata"] = {
+        "name": f"{app.replace('_', '-')}-postgres-{purpose.replace('_', '-')}",
+        "namespace": "staging-" + app.replace("_", "-"),
+    }
+    value["spec"]["app"] = app
+    value["spec"]["purpose"] = purpose
+    value["spec"]["compositionRevisionRef"] = {"name": revision(kind=kind)["metadata"]["name"]}
+    if publish:
+        value["spec"]["publishCredentials"] = True
+    return value
+
+
+def all_revisions():
+    return revisions(*(revision(kind=kind) for kind in KINDS))
+
+
+@pytest.mark.parametrize("kind", ["sql-only", "publication"])
+def test_pre_purpose_revisions_reject_purpose(tmp_path, kind):
+    result = run(tmp_path, [purpose_claim(kind)], evidence=all_revisions())
+    assert result.returncode == 1
+    assert "does not support purpose" in result.stdout
+
+
+@pytest.mark.parametrize("kind", ["purpose", "purpose-publication"])
+def test_purpose_revisions_accept_purpose_identity(tmp_path, kind):
+    result = run(tmp_path, [purpose_claim(kind)], evidence=all_revisions())
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize("kind,ok", [("purpose", False), ("purpose-publication", True)])
+def test_purpose_publication_needs_the_later_revision(tmp_path, kind, ok):
+    result = run(tmp_path, [purpose_claim(kind, publish=True)], evidence=all_revisions())
+    assert (result.returncode == 0) is ok, result.stdout + result.stderr
+    if not ok:
+        assert "publication for a purpose identity" in result.stdout
+
+
+@pytest.mark.parametrize(
+    "kind,ok", [("publication", False), ("purpose", False), ("purpose-publication", True)]
+)
+def test_underscore_app_publication_only_on_later_revision(tmp_path, kind, ok):
+    value = claim()
+    value["metadata"].pop("annotations")
+    value["metadata"]["namespace"] = "staging-billing-api"
+    value["spec"]["app"] = "billing_api"
+    value["spec"]["publishCredentials"] = True
+    value["spec"]["compositionRevisionRef"] = {"name": revision(kind=kind)["metadata"]["name"]}
+    result = run(tmp_path, [value], evidence=all_revisions())
+    assert (result.returncode == 0) is ok, result.stdout + result.stderr
+    if not ok:
+        assert "alphanumeric app" in result.stdout
+
+
+@pytest.mark.parametrize("purpose", ["a", "a__b", "ab_", "Audit", "1st", "x" * 21, 7])
+def test_noncanonical_purpose_is_rejected(tmp_path, purpose):
+    value = purpose_claim("purpose-publication")
+    value["spec"]["purpose"] = purpose
+    value["metadata"]["name"] = "micro-app-platform-postgres-x"
+    result = run(tmp_path, [value], evidence=all_revisions())
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "Traceback" not in result.stderr
+
+
+def test_longest_app_and_purpose_stay_within_identity_bound(tmp_path):
+    # app <= 31 and purpose <= 20 keep app__purpose at <= 53 characters.
+    value = purpose_claim("purpose-publication", purpose="p" * 20, app="a" * 31)
+    value["metadata"]["name"] = "long-postgres"
+    result = run(tmp_path, [value], evidence=all_revisions())
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_purpose_and_primary_coexist_but_duplicate_purpose_collides(tmp_path):
+    primary = claim()
+    primary["metadata"] = {"name": "micro-app-platform-postgres", "namespace": "staging-micro-app-platform"}
+    primary["spec"]["app"] = "micro_app_platform"
+    primary["spec"]["compositionRevisionRef"] = {"name": revision(kind="purpose-publication")["metadata"]["name"]}
+    result = run(tmp_path, [primary, purpose_claim("purpose-publication")], evidence=all_revisions())
+    assert result.returncode == 0, result.stdout + result.stderr
+    duplicate = purpose_claim("purpose-publication")
+    duplicate["metadata"]["name"] = "other-claim"
+    (tmp_path / "dup").mkdir()
+    result = run(tmp_path / "dup", [purpose_claim("purpose-publication"), duplicate], evidence=all_revisions())
+    assert result.returncode == 1
+    for expected in [
+        "postgres.Role shared-postgres/micro_app_platform__spicedb",
+        "crossplane-system/cn-staging-micro-app-platform--spicedb-postgres-db-cred",
+        "shared-postgres-readers/micro-app-platform--spicedb",
+        "staging/rds/application/micro-app-platform--spicedb/postgres",
+    ]:
+        assert expected in result.stdout
+
+
+def test_adopting_purpose_publication_revision_keeps_producers(tmp_path):
+    result = run(
+        tmp_path,
+        [purpose_claim("purpose-publication", publish=True)],
+        evidence=all_revisions(),
+        live=[purpose_claim("purpose")],
+    )
     assert result.returncode == 0, result.stdout + result.stderr

@@ -224,6 +224,11 @@ Build / Troubleshoot 因平台或运维侧的 Ops Todo 阻塞，或作为运维�
   source revision and observed image digest when verifying a deployment. Do not use CI to
   `kubectl apply` or `helm install`.
 - Never hardcode credentials. Use the declared Vault/ExternalSecret path and ownership model.
+- The three legacy DEV/buildbarn SG entry Services (`bb-cache`, `bb-cache-metrics`, `bb-exec`)
+  skip only the hard-rule #32 Service name assertion, closed by
+  [their fixed contract](references/approved-exceptions/sg-buildbarn-entry-services.md): exact
+  tracked paths in the DEV/buildbarn origin, complete-file hashes and a 2026-12-31 UTC expiry.
+  Selector matching and every other validator still apply; renaming is a separate entry migration.
 - The separately approved us-prod qdrant monitoring key ExternalSecret is closed by
   [its fixed contract](references/approved-exceptions/us-prod-qdrant-monitoring-key.md) and complete-file
   hash in the boundary validator. It grants no generic waiver, new runtime permission or deployment.

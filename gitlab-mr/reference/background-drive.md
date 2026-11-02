@@ -8,7 +8,8 @@ Driver / Supervisor / Auditor 的完整提示词契约、状态文件规范、�
 
 路径：`/tmp/gitlab-mr-drive-<mr-iid>.json`
 
-**只有父会话写**，Supervisor 和恢复逻辑只读。Driver 不读不写（Driver 从 prompt 拿到当前 snapshot 即可，不应依赖外部状态）。
+**只有父会话和 Supervisor liveness 写**，恢复逻辑只读。Driver 不读不写（Driver 从 prompt 拿到当前 snapshot 即可，不应依赖外部状态）。
+所有写入都走共享写入口（`lib/drive_state_io.py`）：同一 sidecar 锁 `<state>.lock` 下重读、校验 MR/项目（及适用时的 HEAD）、只改自己的字段、fsync 后原子替换为 0600；不整体覆盖 state，不在持锁时做网络请求。`issue_sync`（submitted/revised）只由 `verify_issue_sync_receipt.py`、`issue_binding` 只由 `record_issue_binding.py` 生成；合并后 merged/final receipt 是非评审类 `issue_sync_postmerge`，只由 `drive_state.py postmerge` 按固定字段写入。通用 `event` 子命令拒绝这三类。
 
 ```json
 {
@@ -67,14 +68,15 @@ Driver / Supervisor / Auditor 的完整提示词契约、状态文件规范、�
 }
 ```
 
-写时机：
-- 初始化（Step 5 首次派 Driver 前）
-- 每次 Supervisor liveness 醒来，更新 `last_snapshot`、`no_change_streak`
-- 每次 Driver 返回，append 一条 `history`
-- 父会话按 [Issue 同步流程](issue-sync.md) 回写并回读关联 Issue，在 history 追加 `kind=issue_sync` receipt
-- 用户确认某条完整性 FAIL 是有意为之后，父会话按 [豁免格式](merge-integrity.md#豁免) 追加 `merge_integrity_waivers`；Driver / Auditor 不得写入
-- Auditor 因完整性 FAIL 被拒时，父会话用 `<head_sha>:<target_sha>:<FAIL 检查与文件>` 作为 `merge_integrity_rejections.fingerprint`：与上次相同则 `count + 1`，否则重置为 1；`count >= 2` 时停止重派，按 `stuck` 交给用户
-- Auditor 结构化结果通过 `validate_drive_audit.py` 且当前 HEAD 的 Issue 提交 receipt 已回读后设 `completed: true`；它只表示可合并审计，不代表 merged 或 Issue closed
+写时机（`S="uv run <skill-path>/scripts/drive_state.py"`，`SCOPE=(--state "$STATE_FILE" --mr-iid "$MR_IID" --project-path "$PROJECT_PATH")`；exit 2 表示未写入）：
+- 初始化（Step 5 首次派 Driver 前）：`init_drive_state.py --output`，已有 history 的 state 不会被覆盖
+- 每次 Supervisor liveness 醒来：`$S snapshot "${SCOPE[@]}" --head-sha <sha> --pipeline-id <id> --unresolved-discussions <n>`，锁内比较并更新 `last_snapshot`、`no_change_streak`
+- 每次 Driver 返回、恢复决议或 post-merge cleanup 询问/决定：`$S event "${SCOPE[@]}" --json '<一条 history 对象>'`
+- 父会话按 [Issue 同步流程](issue-sync.md) 回写并回读关联 Issue；绑定准入/退休由 `record_issue_binding.py admit|retire --state`、submitted/revised receipt 由 `verify_issue_sync_receipt.py --state` 实时核验后追加到 history，不手写
+- 合并后 Issue 同步：父会话原生回读评论与 Issue 终态后，用 `$S postmerge "${SCOPE[@]}" --json '{"phase": "merged"|"final", "issue_url": ..., "revision": <merge SHA 或 final 的 sha256:<digest>>, "note_id": <id>, "disposition": "kept-open"|"closed"|"already-closed", "observed_state": "opened"|"closed"}'`（见 [issue-sync](issue-sync.md)）；脚本不读 GitLab，记录不证明合并、关闭或业务验收
+- 用户确认某条完整性 FAIL 是有意为之后，父会话按 [豁免格式](merge-integrity.md#豁免) 用 `$S waiver "${SCOPE[@]}" --json '<豁免>'` 追加 `merge_integrity_waivers`；Driver / Auditor 不得写入
+- Auditor 因完整性 FAIL 被拒时，父会话用 `$S rejection "${SCOPE[@]}" --fingerprint '<head_sha>:<target_sha>:<FAIL 检查与文件>'`：与上次相同则 `count + 1`，否则重置为 1（输出 `count`）；`count >= 2` 时停止重派，按 `stuck` 交给用户
+- Auditor 结构化结果通过 `validate_drive_audit.py` 且当前 HEAD 的 Issue 提交 receipt 已回读后 `$S complete "${SCOPE[@]}" --head-sha <审计的 HEAD>` 设 `completed: true`；它只表示可合并审计，不代表 merged 或 Issue closed
 
 ---
 
@@ -274,10 +276,12 @@ for d in json.load(sys.stdin):
     for n in d.get('notes', []):
         if n.get('resolvable') and not n.get('resolved'): c+=1
 print(c)"
-3. 对比三个维度：
-   - 任一变化 → 更新 last_snapshot，no_change_streak = 0
-   - 全部不变 → no_change_streak += 1
-4. 写回状态文件
+3. 用共享写入口记录三个维度（锁内重读并比较：任一变化 → no_change_streak = 0，全部不变 → += 1；
+   不要整体写回 JSON）：
+   uv run <skill-path>/scripts/drive_state.py snapshot --state /tmp/gitlab-mr-drive-{{MR_IID}}.json \
+     --mr-iid {{MR_IID}} --project-path {{PROJECT_PATH}} --head-sha <sha> --pipeline-id <id> \
+     --unresolved-discussions <n>
+4. 读取输出的 no_change_streak；exit 2 时报告错误码，不重试改写
 5. 返回:
    - no_change_streak < 3 → "OK: streak=<n>, sha=<short>, pipeline=<id>, unresolved=<n>"
    - no_change_streak >= 3 → "ALARM: Driver 已 ≥30 min 无任何 MR 状态变化 + 当前 snapshot"
@@ -361,8 +365,9 @@ print(c)"
 # Issue receipt 审计
 
 父会话提供当前 history 的 `kind=issue_sync` receipt。独立通过 GitLab Notes/Issue API
-核验当前 HEAD 的 submitted/revised receipt、Issue identity、作者与正文；仅 state 自报
-或旧 HEAD 不算通过。遗漏或写后回读不一致时返回 rejected 并列
+核验当前 HEAD 的 submitted/revised receipt、Issue identity、作者与正文以及评审状态
+（`status::in-review`；以 `closed-reference` 准入且实时 closed 时是 verifier 产出的 `NOT_APPLICABLE_CLOSED`，不要求标签、不重开）；仅评论回读、state 自报或旧 HEAD 不算通过。
+`validate_drive_audit.py` 会对每个活动绑定 Issue（已准入或已回执且未退休）重新实时 GET 并 fail closed，并实时复核已退休 Issue 的退休仍成立。遗漏或写后回读不一致时返回 rejected 并列
 `ISSUE_SYNC_UNVERIFIED`。如 GitLab 已为 merged，返回实际事实给父会话先做合并后
 update/close，不能把 mergeable 审计当作 Issue 已关闭。
 Verified Issue context JSON: {{ISSUE_SYNC_CONTEXT}}
@@ -504,7 +509,7 @@ Issue 同步待办使用 `pending_items` 中的 `kind=issue_sync`，另带 Issue
 
 ### 5.4 history 记录
 
-父会话在 state 文件的 `history` 里 append：
+父会话用共享写入口在 state 文件的 `history` 里 append（`drive_state.py event`，见第 1 节）：
 `{ "round": <n>, "status": "awaiting_confirmation", "pending_count": <len(pending_items)>, "resolved_count": <len(user_decisions)>, "ts": "..." }`
 
 ---

@@ -23,12 +23,22 @@ Deployment is treated only as a Service selector target (platform Deployments
 are rollout-exempt and not authored by this skill), so the app-label / name
 rules apply to Rollout and StatefulSet only.
 
+The only name-rule exception is the closed, time-bounded set of three legacy
+DEV/buildbarn SG entry Services in
+references/approved-exceptions/sg-buildbarn-entry-services.md. It skips only
+the {app}/{app}-<suffix> name assertion for those exact bytes at their exact
+tracked repository paths (or the skill's own fixtures); the selector-match rule
+and every other check still apply. It is never a caller-supplied waiver.
+
 Exit codes: 0 = ok, 1 = violation(s), 2 = usage / dependency error.
 """
 
 from __future__ import annotations
 
+import hashlib
+import subprocess
 import sys
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 try:
@@ -37,6 +47,7 @@ except ImportError:
     print("FAIL: PyYAML not installed. install: pip install pyyaml", file=sys.stderr)
     sys.exit(2)
 
+from _namespace_legacy_exceptions import containing_worktree, repository_origin, same_repository
 from _scan import ParseError, iter_docs, resolve_dir
 
 # Workload kinds whose pods a Service can select.
@@ -79,12 +90,99 @@ def workload_name_failures(path: Path, kind: str, doc: dict, labels: dict) -> li
     return []
 
 
-def service_name_failure(path: Path, sname: str, selector: dict) -> str | None:
+SCRIPT_DIR = Path(__file__).resolve().parent
+FIXTURE_DIR = SCRIPT_DIR.parent / "references" / "approved-exceptions"
+# DEV/buildbarn #4/#5, engineering/skills #396: three legacy SG SYS RBE entry
+# Services (ALB backends and the frontend scrape target) predate rule #32.
+# Renaming them is a separately reviewed entry migration; until then only these
+# exact bytes at these exact tracked paths in DEV/buildbarn skip the name rule.
+BUILDBARN_ENTRY_REPOSITORY = "https://gitlab.addx.ai/DEV/buildbarn.git"
+BUILDBARN_ENTRY_EXPIRES_ON = date(2026, 12, 31)
+BUILDBARN_ENTRY_SERVICES = {
+    # Service name: (selector app, repository-relative path, complete-file SHA-256)
+    "bb-cache": (
+        "bb-frontend",
+        ("k8s", "sg-devops", "rendered", "service-bb-cache.yaml"),
+        "c32aeee80de1a546bed098a189c80aeb75da52c1d804cf534ca9c2c47b708b70",
+    ),
+    "bb-cache-metrics": (
+        "bb-frontend",
+        ("k8s", "sg-devops", "rendered", "service-bb-cache-metrics.yaml"),
+        "bdbabd82c156361c29e9d9fef79f642943eaabecd6d48cddb1e24590997b7e7d",
+    ),
+    "bb-exec": (
+        "scheduler",
+        ("k8s", "sg-devops", "rendered", "service-bb-exec.yaml"),
+        "8429c205deb21c0955f9a350a421f446b1e41b3ea3a85e2d1db68732c11c3057",
+    ),
+}
+MAX_ENTRY_SERVICE_BYTES = 4096
+
+
+def utc_today() -> date:
+    return datetime.now(timezone.utc).date()
+
+
+def has_entry_service_bytes(path: Path, digest: str) -> bool:
+    try:
+        return (
+            not path.is_symlink()
+            and path.is_file()
+            and path.stat().st_size <= MAX_ENTRY_SERVICE_BYTES
+            and hashlib.sha256(path.read_bytes()).hexdigest() == digest
+        )
+    except OSError:
+        return False
+
+
+def is_tracked(worktree_root: Path, relative: tuple[str, ...]) -> bool:
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(worktree_root), "ls-files", "--error-unmatch", "--", "/".join(relative)],
+            capture_output=True, text=True, timeout=10, check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return result.returncode == 0
+
+
+def is_approved_entry_service(path: Path, sname: str, selector: dict, today: date) -> bool:
+    """Exact legacy DEV/buildbarn entry Service or its own skill fixture, until expiry."""
+    approved = BUILDBARN_ENTRY_SERVICES.get(sname)
+    if approved is None or today > BUILDBARN_ENTRY_EXPIRES_ON:
+        return False
+    selector_app, relative, digest = approved
+    if selector != {"app": selector_app} or not has_entry_service_bytes(path, digest):
+        return False
+    fixture = FIXTURE_DIR / f"sg-buildbarn-service-{sname}.yaml"
+    try:
+        if path.resolve(strict=True) == fixture.resolve(strict=True):
+            return True
+    except (OSError, RuntimeError):
+        return False
+    worktree = containing_worktree(path)
+    if worktree is None:
+        return False
+    resolved_file, worktree_root = worktree
+    try:
+        if resolved_file.relative_to(worktree_root).parts != relative:
+            return False
+    except ValueError:
+        return False
+    return (
+        same_repository(repository_origin(worktree_root), BUILDBARN_ENTRY_REPOSITORY)
+        and is_tracked(worktree_root, relative)
+    )
+
+
+def service_name_failure(path: Path, sname: str, selector: dict, today: date | None = None) -> str | None:
     """Service name must be {app} or {app}-<suffix>, where {app} = selector app."""
     sel_app = selector.get("app")
     if not (isinstance(sel_app, str) and sel_app):
         return None
     if sname == sel_app or sname.startswith(sel_app + "-"):
+        return None
+    if is_approved_entry_service(path, sname, selector, today or utc_today()):
         return None
     return (
         f"FAIL: {path}: Service/{sname}: name must be {sel_app!r} or "

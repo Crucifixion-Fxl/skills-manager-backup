@@ -38,6 +38,7 @@ state: opened
 assignee_ids: [400]
 snapshot_digest: sha256:...
 verified_at: 2026-09-28T00:00:00Z
+binding_role: new-work   # or closed-reference; declared at admission, never inferred from state
 ```
 
 Resolve from an explicit full URL or exact `project_id + issue_iid`, then read
@@ -45,7 +46,10 @@ GitLab live. Branch names, commit messages, free-text `#45`, chat messages, and
 copied webhook payloads are hints only. The Issue must exist, be readable by the
 actor doing the work, and have an assignee. Starting new work requires an `opened`
 Issue; the CI review gate also accepts `closed`, because release-flowback MRs
-legitimately reference an Issue that was already delivered and closed.
+legitimately reference an Issue that was already delivered and closed. That
+intent is recorded explicitly as `binding_role: closed-reference` (gitlab-mr
+`record_issue_binding.py admit`); a missing role means `new-work`, and a
+`new-work` Issue that closes during review is not a reference.
 
 ## MR binding and non-closing association
 
@@ -119,6 +123,12 @@ secrets, personal data, or short-lived local paths into an Issue.
 - Move to `status::in-progress` only after the bound Issue is
   assigned and implementation has started from its Issue-created branch.
 - Move to `status::in-review` only after the MR and review evidence are linked.
+  For MR submission/revision, the receipt is complete only when the gitlab-mr
+  `verify_issue_sync_receipt.py` live readback returns `VERIFIED`. Comment
+  readback alone, or a recorded project-mode gap, stays `ISSUE_SYNC_UNVERIFIED`/`BLOCKED`.
+  A live `closed` Issue admitted as `closed-reference` by a release-flowback MR is
+  not moved: the verifier returns `NOT_APPLICABLE_CLOSED`, and it is never reopened
+  or relabeled. A closed `new-work` Issue stays `ISSUE_SYNC_UNVERIFIED`.
 - Merge, a green pipeline, HTTP 200, or a successful sync is not closure.
 - Keep the Issue open while external release, production verification,
   business acceptance, observation windows, rollback follow-up, or required child

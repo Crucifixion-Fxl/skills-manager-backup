@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "capability": "ci-job-setup/v1",
+  "tool": "read_review_source",
+  "operation": "ci-job-setup",
+  "flag": "CODE_REVIEW_CI_JOB_SETUP_ENABLED"
+}

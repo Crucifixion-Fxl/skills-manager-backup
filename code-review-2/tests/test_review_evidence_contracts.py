@@ -37,7 +37,6 @@ class ReviewEvidenceContractTest(unittest.TestCase):
         )
 
     def test_skill_routes_to_the_contract_consumers(self):
-        skill = (SKILL / "SKILL.md").read_text(encoding="utf-8")
         design = (REFERENCES / "design-deliverable-review.md").read_text(
             encoding="utf-8"
         )
@@ -50,7 +49,8 @@ class ReviewEvidenceContractTest(unittest.TestCase):
         self.assertIn("review-evidence-checkpoint-contract.json", checkpoint)
         self.assertIn("CODE_REVIEW_SVG_PREVIEW_ENABLED", design)
         self.assertIn("CODE_REVIEW_EVIDENCE_CHECKPOINT_ENABLED", checkpoint)
-        self.assertIn("普通 technical review", skill)
+        intake = (REFERENCES / "step-0-intake.md").read_text(encoding="utf-8")
+        self.assertIn("普通 technical review", intake)
         self.assertIn("its `role` and `required_by` basis", report)
         self.assertIn("review-evidence-checkpoint.md", index)
 
