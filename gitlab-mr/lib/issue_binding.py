@@ -277,7 +277,14 @@ def _sop_validate(issue: Any, repository: str) -> list[str]:
     finally:
         if sys.path and sys.path[0] == str(SOP_SCRIPTS):
             sys.path.pop(0)
-    codes = sop.validate_binding(issue, issue, {}, repository, require_local_work=False)
+    import inspect
+
+    if "require_local_work" in inspect.signature(sop.validate_binding).parameters:
+        codes = sop.validate_binding(issue, issue, {}, repository, require_local_work=False)
+    else:
+        # Older gitlab-issue-sop: no local-work predicates exist, so calling
+        # without the flag runs exactly the checks require_local_work=False asks for.
+        codes = sop.validate_binding(issue, issue, {}, repository)
     return sorted({code.removeprefix("root_").removeprefix("work_") for code in codes})
 
 
